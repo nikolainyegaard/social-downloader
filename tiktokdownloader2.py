@@ -144,7 +144,7 @@ def CheckDeletedVideos(video_count, ratelimit):
                 append_videos.append(video_id)
 
     if counter > 0:
-        with open ("downloaded_videos.json","w") as file:
+        with open ("downloaded_videos.json","r") as file:
             data = json.load(file)
         with open('deleted_videos.txt', 'a') as file:
             file.write('\n' + f'[{timestamp}]' + '\n')
