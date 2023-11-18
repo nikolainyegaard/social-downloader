@@ -51,8 +51,6 @@ def LogVideoToJSON(video_array):
 
             data["authors"][authorId]["videos"].append(new_video)
             data["authors"][authorId]["videoCount"] = len(data["authors"][authorId]["videos"])
-        else:
-            pass
         
     with open("downloaded_videos.json", "w") as file:
         json.dump(data, file, indent=4)
@@ -156,11 +154,9 @@ def CheckUndeletedVideos():
         if video_id in GetVideoIDs(GetDeletedVideos()):
             undeleted_videos.append(video_id)
 
-    videos = asyncio.run(GetVideosInfo(undeleted_videos))
-
-    num_videos = len(undeleted_videos)
-    if num_videos != 0:
-        if num_videos == 1:
+    if len(undeleted_videos) > 0:
+        videos = asyncio.run(GetVideosInfo(undeleted_videos))
+        if len(undeleted_videos) == 1:
             video_plural = "video"
         else:
             video_plural = "videos"
@@ -173,7 +169,7 @@ def CheckUndeletedVideos():
                             json.dump(data, file, indent=4)
                         print(f"\n[{timestamp}] Video {video['id']} by @{data['authors'][authorId]['author']} has been marked as undeleted.")
         LogVideoToJSON(videos)
-        return f"\n[{timestamp}] Marked {num_videos} {video_plural} as undeleted."
+        return f"\n[{timestamp}] Marked {len(undeleted_videos)} {video_plural} as undeleted."
     else:
         return f"\n[{timestamp}] No new undeleted videos found.\n"
 
