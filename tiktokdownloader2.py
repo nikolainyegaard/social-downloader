@@ -25,21 +25,21 @@ def LogVideoToJSON(video_array):
 
     for video in video_array:
         if isinstance(video, dict):
-            authorId = video["authorId"]
+            authorId = video['author']['id']
 
             if authorId not in data["authors"]:
                 data["authors"][authorId] = {
-                    "author": video["author"],
+                    "author": video['author']['uniqueId'],
                     "oldUsernames": [],
                     "videoCount":0,
                     "videos": []
                 }
 
-            elif data["authors"][authorId]["author"] != video["author"]:
-                if video["author"] not in data["authors"][authorId]["oldUsernames"]:
+            elif data["authors"][authorId]["author"] != video['author']['uniqueId']:
+                if video['author']['uniqueId'] not in data["authors"][authorId]["oldUsernames"]:
                     data["authors"][authorId]["oldUsernames"].append(data["authors"][authorId]["author"])
 
-                data["authors"][authorId]["author"] = video["author"]
+                data["authors"][authorId]["author"] = video['author']['uniqueId']
 
             new_video = {
                 "id": video["id"],
@@ -346,7 +346,7 @@ def Main():
     successfully_downloaded = []
     videos = asyncio.run(GetVideosInfo(new_videos))
     for video in videos:
-        authorName = video['author']
+        authorName = video['author']['uniqueId']
         video_id = video['id']
         author_folder = os.path.join('../../Videos/TikTok', f"@{authorName}")
         os.makedirs(author_folder, exist_ok=True)
