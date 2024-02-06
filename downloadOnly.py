@@ -125,21 +125,21 @@ def LogVideoToJSON(video_array):
 
     for video in video_array:
         if isinstance(video, dict):
-            authorId = video["authorId"]
+            authorId = video['author']['id']
 
             if authorId not in data["authors"]:
                 data["authors"][authorId] = {
-                    "author": video["author"],
+                    "author": video['author']['uniqueId'],
                     "oldUsernames": [],
                     "videoCount":0,
                     "videos": []
                 }
 
-            elif data["authors"][authorId]["author"] != video["author"]:
-                if video["author"] not in data["authors"][authorId]["oldUsernames"]:
+            elif data["authors"][authorId]["author"] != video['author']['uniqueId']:
+                if video['author']['uniqueId'] not in data["authors"][authorId]["oldUsernames"]:
                     data["authors"][authorId]["oldUsernames"].append(data["authors"][authorId]["author"])
 
-                data["authors"][authorId]["author"] = video["author"]
+                data["authors"][authorId]["author"] = video['author']['uniqueId']
 
             new_video = {
                 "id": video["id"],
@@ -148,29 +148,10 @@ def LogVideoToJSON(video_array):
                 "deleted": False,
                 "deletedDate": ""
             }
+
             data["authors"][authorId]["videos"].append(new_video)
             data["authors"][authorId]["videoCount"] = len(data["authors"][authorId]["videos"])
-        elif isinstance(video, str):
-            authorId = "0000000000000000000"
-
-            if authorId not in data["authors"]:
-                data["authors"][authorId] = {
-                    "author": "unknown",
-                    "oldUsernames": "unknown",
-                    "videoCount":0,
-                    "videos": []
-                }
-            
-            new_video = {
-                "id": video,
-                "uploadDate": "unknown",
-                "musicId": "unknown",
-                "deleted": True,
-                "deletedDate": int(time.time())
-            }
-            data["authors"][authorId]["videos"].append(new_video)
-            data["authors"][authorId]["videoCount"] = len(data["authors"][authorId]["videos"])
-
+        
     with open("downloaded_videos.json", "w") as file:
         json.dump(data, file, indent=4)
 
@@ -198,7 +179,7 @@ def main(video_id):
         videos = asyncio.run(GetVideosInfo([video_id]))
         for video in videos:
             try:
-                authorName = video['author']
+                authorName = video['author']['uniqueId']
             except:
                 print(f"The following variable is not a valid video object.")
                 print(video)
