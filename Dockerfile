@@ -14,6 +14,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install Chromium (used by TikTokApi) plus all OS-level dependencies it needs
 RUN playwright install chromium --with-deps
 
+# Install Google Chrome on amd64 for better bot detection resistance.
+# On arm64 (e.g. Apple Silicon) Chrome isn't available; falls back to Playwright Chromium.
+RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+      apt-get update && \
+      apt-get install -y --no-install-recommends wget && \
+      wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+      apt-get install -y /tmp/chrome.deb && \
+      rm /tmp/chrome.deb && \
+      rm -rf /var/lib/apt/lists/*; \
+    fi
+
 COPY . .
 
 # Persistent volumes are mounted here at runtime

@@ -10,7 +10,7 @@ from collections import deque
 from datetime import datetime, timezone
 
 import database as db
-from config import get_ms_token, get_cookies_flat, COOKIES_PATH
+from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE
 from tiktok_api import get_user_info, get_user_videos, get_video_details
 from downloader import download_video, download_photos, prefix_video_files, unprefix_video_files
 
@@ -60,49 +60,54 @@ def _log(msg: str):
 
 # Core async logic
 
-async def _process_all_users(users: list[dict]):
+async def _fetch_user_info(username: str) -> dict:
+    """Open a fresh TikTokApi session, fetch profile info, and close it."""
     from TikTokApi import TikTokApi
 
     ms_token = get_ms_token()
-    cookies  = get_cookies_flat()
-
     async with TikTokApi() as api:
         await api.create_sessions(
             ms_tokens=[ms_token] if ms_token else [],
             num_sessions=1,
             sleep_after=3,
+            executable_path=CHROME_EXECUTABLE,
         )
+        return await get_user_info(api, username)
 
-        for idx, user in enumerate(users):
-            if idx > 0:
-                await asyncio.sleep(random.uniform(2, 5))
-            tiktok_id = user["tiktok_id"]
 
-            with _state_lock:
-                loop_state["current_user"] = user["username"]
+async def _process_all_users(users: list[dict]):
+    cookies = get_cookies_flat()
 
-            _log(f"Processing @{user['username']} (ID: {tiktok_id})")
+    for idx, user in enumerate(users):
+        if idx > 0:
+            await asyncio.sleep(random.uniform(2, 5))
+        tiktok_id = user["tiktok_id"]
 
-            try:
-                info = await get_user_info(api, user["username"])
-                db.update_user_info(
-                    tiktok_id,
-                    info["username"],
-                    info["display_name"],
-                    info["bio"],
-                    info["follower_count"],
-                    info["following_count"],
-                    info["video_count"],
-                    info["account_status"],
-                )
-                username     = info["username"]
-                display_name = info["display_name"] or username
-                if username != user["username"]:
-                    _log(f"  Username changed: @{user['username']} → @{username}")
-            except Exception as e:
-                _log(f"  Failed to fetch profile info: {e}")
-                username     = user["username"]
-                display_name = user.get("display_name") or username
+        with _state_lock:
+            loop_state["current_user"] = user["username"]
+
+        _log(f"Processing @{user['username']} (ID: {tiktok_id})")
+
+        try:
+            info = await _fetch_user_info(user["username"])
+            db.update_user_info(
+                tiktok_id,
+                info["username"],
+                info["display_name"],
+                info["bio"],
+                info["follower_count"],
+                info["following_count"],
+                info["video_count"],
+                info["account_status"],
+            )
+            username     = info["username"]
+            display_name = info["display_name"] or username
+            if username != user["username"]:
+                _log(f"  Username changed: @{user['username']} → @{username}")
+        except Exception as e:
+            _log(f"  Failed to fetch profile info: {e}")
+            username     = user["username"]
+            display_name = user.get("display_name") or username
 
             try:
                 remote_videos = get_user_videos(username, COOKIES_PATH)

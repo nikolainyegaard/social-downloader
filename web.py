@@ -10,7 +10,7 @@ import threading
 from flask import Flask, jsonify, request, render_template
 
 import database as db
-from config import get_ms_token, cookies_info, COOKIES_PATH, DATA_DIR
+from config import get_ms_token, cookies_info, COOKIES_PATH, DATA_DIR, CHROME_EXECUTABLE
 from tiktok_api import get_user_info
 from loop import is_running, get_state_snapshot, trigger_event
 
@@ -32,6 +32,7 @@ def _process_add(username: str) -> None:
                 ms_tokens=[ms_token] if ms_token else [],
                 num_sessions=1,
                 sleep_after=3,
+                executable_path=CHROME_EXECUTABLE,
             )
             return await get_user_info(api, username)
 

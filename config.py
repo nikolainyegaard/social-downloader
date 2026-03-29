@@ -4,6 +4,7 @@ All modules import paths and settings from here.
 """
 
 import os
+import shutil
 
 DATA_DIR    = os.environ.get("DATA_DIR",   "./data")
 VIDEOS_DIR  = os.environ.get("VIDEOS_DIR", "./videos")
@@ -11,6 +12,12 @@ COOKIES_PATH = os.path.join(DATA_DIR, "cookies.txt")
 
 LOOP_INTERVAL_MINUTES = int(os.environ.get("LOOP_INTERVAL_MINUTES", 30))
 WEB_PORT              = int(os.environ.get("WEB_PORT", 5000))
+
+# Use Google Chrome if available (better bot detection resistance than Playwright Chromium).
+# Falls back to None, which tells TikTokApi to use its bundled Chromium.
+CHROME_EXECUTABLE: str | None = (
+    shutil.which("google-chrome") or shutil.which("google-chrome-stable") or None
+)
 
 
 def get_ms_token() -> str | None:
