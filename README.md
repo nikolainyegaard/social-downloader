@@ -1,8 +1,8 @@
 # TikTok Downloader
 
-Automatically downloads all new videos from a list of TikTok accounts. Tracks deletions, username changes, and stores metadata both in a database and embedded directly in each video file.
+Automatically downloads new videos from a list of TikTok accounts. Tracks deletions and username changes. Stores metadata in the database and embedded in each video file.
 
-Managed through a small web UI. All state (users, cookies, download history) lives on the server, so the UI is just a window — open it from any device and it shows the same thing.
+Managed through a web UI. All state lives on the server, so opening it from any device shows the same thing.
 
 ---
 
@@ -19,7 +19,7 @@ A background loop runs on a fixed interval (default: 30 minutes, recommended: 3 
    - Marks any previously-seen videos that have disappeared as deleted
    - Marks any previously-deleted videos that have reappeared as restored
 
-The first run for an account with hundreds of videos can take a long time — this is expected. Subsequent runs are much faster since only new content is downloaded.
+The first run for an account with many videos will take a while. Subsequent runs are fast.
 
 ---
 
@@ -155,7 +155,7 @@ All configuration is via environment variables in `docker-compose.yml`.
 
 ```
 ./data/
-  tiktok.db        # SQLite database — users, videos, username history
+  tiktok.db        # SQLite database (users, videos, username history)
   cookies.txt      # TikTok session cookies (uploaded via UI)
   logs/
     transcript.log # Daily-rotating full output log
@@ -163,7 +163,7 @@ All configuration is via environment variables in `docker-compose.yml`.
 ./videos/
   @username/
     1234567890.mp4      # Video post, named by TikTok video ID
-    1234567890_01.jpg   # Photo post — one file per image
+    1234567890_01.jpg   # Photo post, one file per image
     1234567890_02.jpg
     ...
 ```
@@ -178,7 +178,7 @@ All configuration is via environment variables in `docker-compose.yml`.
 
 ### Metadata embedded in video files
 
-Each downloaded file has its **modification date set to the video's TikTok upload date**, so files sort by upload order in your file system.
+Each downloaded file has its **modification date set to the TikTok upload date**, so files sort chronologically in the file system.
 
 MP4 files also have the following tags written by ffmpeg:
 

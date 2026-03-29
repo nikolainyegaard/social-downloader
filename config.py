@@ -36,11 +36,7 @@ def get_ms_token() -> str | None:
 
 
 def get_cookies_flat() -> dict:
-    """
-    Return TikTok cookies as a flat {name: value} dict for TikTokApi's
-    cookies= parameter.  TikTokApi picks one element from the list you pass,
-    merges ms_token into it, then formats it for Playwright internally.
-    """
+    """Return cookies.txt as a flat {name: value} dict."""
     result = {}
     try:
         with open(COOKIES_PATH, encoding="utf-8", errors="ignore") as f:

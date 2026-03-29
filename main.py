@@ -13,7 +13,7 @@ from web import create_app
 LOGS_DIR = os.path.join(DATA_DIR, "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
 
-# ── Tee stdout/stderr to a daily-rotating transcript log ─────────────────────
+# Tee stdout/stderr to a daily-rotating transcript log
 
 class _Tee:
     def __init__(self, original, handler):
@@ -43,7 +43,7 @@ sys.stdout = _Tee(sys.__stdout__, _transcript_handler)
 sys.stderr = _Tee(sys.__stderr__, _transcript_handler)
 
 
-# ── Background loop thread ────────────────────────────────────────────────────
+# Background loop thread
 
 def _loop_thread():
     while True:
@@ -62,11 +62,11 @@ def _loop_thread():
         if triggered:
             print(
                 f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
-                " Manual trigger received — running loop now."
+                " Manual trigger received, running loop now."
             )
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# Entry point
 
 if __name__ == "__main__":
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Initialising database...")

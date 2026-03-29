@@ -15,7 +15,7 @@ from tiktok_api import get_user_info
 from loop import is_running, get_state_snapshot, trigger_event
 
 
-# ── Add-user queue ────────────────────────────────────────────────────────────
+# Add-user queue
 
 _add_queue:   _queue_module.Queue = _queue_module.Queue()
 _pending_lock = threading.Lock()
@@ -63,7 +63,7 @@ def _process_add(username: str) -> None:
         join_date=info["join_date"],
     )
     with _pending_lock:
-        del _pending[username]  # success — user is now in DB, frontend sees it via /api/users
+        del _pending[username]  # success: now in DB, frontend picks it up via /api/users
 
 
 def _add_worker() -> None:
@@ -84,13 +84,13 @@ threading.Thread(target=_add_worker, daemon=True, name="add-worker").start()
 def create_app() -> Flask:
     app = Flask(__name__)
 
-    # ── Pages ─────────────────────────────────────────────────────────────────
+    # Pages
 
     @app.route("/")
     def index():
         return render_template("index.html")
 
-    # ── Cookie API ────────────────────────────────────────────────────────────
+    # Cookie API
 
     @app.route("/api/cookies", methods=["GET"])
     def get_cookies():
@@ -114,7 +114,7 @@ def create_app() -> Flask:
             os.remove(COOKIES_PATH)
         return jsonify({"ok": True})
 
-    # ── User API ──────────────────────────────────────────────────────────────
+    # User API
 
     @app.route("/api/users", methods=["GET"])
     def list_users():
@@ -170,7 +170,7 @@ def create_app() -> Flask:
     def user_videos(tiktok_id: str):
         return jsonify(db.get_videos_for_user(tiktok_id))
 
-    # ── Loop API ──────────────────────────────────────────────────────────────
+    # Loop API
 
     @app.route("/api/status", methods=["GET"])
     def get_status():

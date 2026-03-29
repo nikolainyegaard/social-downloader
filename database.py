@@ -67,7 +67,7 @@ def init_db():
         """)
 
 
-# ── User operations ──────────────────────────────────────────────────────────
+# User operations
 
 def add_user(tiktok_id, username, display_name=None, bio=None,
              follower_count=0, following_count=0, video_count=0, join_date=None):
@@ -140,10 +140,10 @@ def update_user_info(tiktok_id, username, display_name, bio,
               video_count, account_status, int(time.time()), tiktok_id))
 
 
-# ── Video operations ──────────────────────────────────────────────────────────
+# Video operations
 
 def get_video_id_sets(tiktok_id) -> tuple[set, set]:
-    """Return (known_ids, active_ids) for a user in a single query."""
+    """Return (known_ids, active_ids) for a user."""
     with get_db() as conn:
         rows = conn.execute(
             "SELECT video_id, status FROM videos WHERE tiktok_id = ?", (tiktok_id,)
@@ -194,7 +194,7 @@ def get_videos_for_user(tiktok_id):
 
 
 def get_all_video_stats() -> dict:
-    """Return {tiktok_id: {video_total, video_downloaded, video_deleted, video_undeleted}} in one query."""
+    """Return video stats keyed by tiktok_id."""
     with get_db() as conn:
         rows = conn.execute("""
             SELECT
@@ -210,7 +210,7 @@ def get_all_video_stats() -> dict:
 
 
 def get_all_username_history() -> dict:
-    """Return {tiktok_id: [old_username, ...]} ordered oldest-first, for all users in one query."""
+    """Return all past usernames keyed by tiktok_id, oldest first."""
     with get_db() as conn:
         rows = conn.execute(
             "SELECT tiktok_id, old_username FROM username_history ORDER BY changed_at"

@@ -1,9 +1,4 @@
-"""
-TikTok data fetching.
-- get_user_info:    TikTokApi (Playwright) — user profile metadata
-- get_user_videos:  yt-dlp flat extraction — full video list, no Playwright
-- get_video_details: curl_cffi HTTP request — type + image URLs for a single video
-"""
+"""TikTok data fetching."""
 
 import json
 import re
@@ -34,14 +29,8 @@ async def get_user_info(api, username: str) -> dict:
 
 
 def get_user_videos(username: str, cookies_path: str | None = None) -> list[dict]:
-    """
-    List all visible videos from a TikTok user profile using yt-dlp.
-
-    Uses yt-dlp's flat playlist extraction which calls TikTok's
-    /api/creator/item_list/ JSON endpoint via curl_cffi — no Playwright needed.
-
+    """List all videos from a user's profile using yt-dlp flat extraction.
     Returns [{video_id, description, upload_date}].
-    Type and image_urls are resolved later by get_video_details() for new videos.
     """
     import yt_dlp
 
@@ -71,11 +60,7 @@ def get_user_videos(username: str, cookies_path: str | None = None) -> list[dict
 
 
 def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
-    """
-    Fetch type and image URLs for a single video via a direct HTTP request —
-    no Playwright. Parses TikTok's __UNIVERSAL_DATA_FOR_REHYDRATION__ JSON
-    embedded in the page HTML.
-
+    """Fetch type and image URLs for a single video by parsing the TikTok page HTML.
     Returns {type, description, upload_date, image_urls}.
     """
     from curl_cffi import requests as curl_requests

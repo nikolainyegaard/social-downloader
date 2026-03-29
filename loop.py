@@ -14,7 +14,7 @@ from config import get_ms_token, get_cookies_flat, COOKIES_PATH
 from tiktok_api import get_user_info, get_user_videos, get_video_details
 from downloader import download_video, download_photos
 
-# ── Shared state ──────────────────────────────────────────────────────────────
+# Shared state
 
 loop_state = {
     "running":        False,
@@ -28,7 +28,7 @@ _state_lock   = threading.Lock()
 trigger_event = threading.Event()
 
 
-# ── Public accessors (keeps _state_lock internal to this module) ──────────────
+# Public accessors
 
 def is_running() -> bool:
     with _state_lock:
@@ -48,7 +48,7 @@ def get_state_snapshot(log_lines: int = 200) -> dict:
     return state
 
 
-# ── Logging ───────────────────────────────────────────────────────────────────
+# Logging
 
 def _log(msg: str):
     ts   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -58,7 +58,7 @@ def _log(msg: str):
         loop_state["logs"].append(line)
 
 
-# ── Core async logic ──────────────────────────────────────────────────────────
+# Core async logic
 
 async def _process_all_users(users: list[dict]):
     from TikTokApi import TikTokApi
@@ -133,7 +133,7 @@ async def _process_all_users(users: list[dict]):
                 try:
                     details = get_video_details(vid_id, username, cookies)
                 except Exception as e:
-                    _log(f"  Could not fetch details for {vid_id}: {e} — assuming video type")
+                    _log(f"  Could not fetch details for {vid_id}: {e}, assuming video type")
                     details = {
                         "type":        "video",
                         "description": v["description"],
@@ -181,7 +181,7 @@ async def _process_all_users(users: list[dict]):
         loop_state["current_user"] = None
 
 
-# ── Public entry point ────────────────────────────────────────────────────────
+# Public entry point
 
 def run_loop():
     with _state_lock:
