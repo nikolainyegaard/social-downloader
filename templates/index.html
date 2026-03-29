@@ -536,8 +536,9 @@
     }).join('');
   }
 
-  function dismissPending(username) {
-    dismissed.add(username);
+  async function dismissPending(username) {
+    await apiJSON(`/api/queue/${encodeURIComponent(username)}`, { method: 'DELETE' });
+    delete pending[username];
     renderPending();
   }
 

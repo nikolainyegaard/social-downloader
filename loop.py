@@ -40,11 +40,11 @@ def set_next_run(iso: str) -> None:
         loop_state["next_run"] = iso
 
 
-def get_state_snapshot(log_lines: int = 200) -> dict:
+def get_state_snapshot() -> dict:
     """Return a serialisable copy of loop_state."""
     with _state_lock:
         state = {k: v for k, v in loop_state.items() if k != "logs"}
-        state["logs"] = list(loop_state["logs"])[-log_lines:]
+        state["logs"] = list(loop_state["logs"])
     return state
 
 

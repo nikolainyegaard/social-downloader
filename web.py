@@ -105,6 +105,8 @@ def create_app() -> Flask:
             return jsonify({"error": "Empty filename"}), 400
 
         os.makedirs(DATA_DIR, exist_ok=True)
+        if os.path.exists(COOKIES_PATH):
+            os.remove(COOKIES_PATH)
         f.save(COOKIES_PATH)
         return jsonify({"ok": True, **cookies_info()})
 
@@ -160,6 +162,15 @@ def create_app() -> Flask:
     def get_queue():
         with _pending_lock:
             return jsonify(dict(_pending))
+
+    @app.route("/api/queue/<username>", methods=["DELETE"])
+    def dismiss_queue_entry(username: str):
+        with _pending_lock:
+            entry = _pending.get(username)
+            if entry and entry.get("status") == "pending":
+                return jsonify({"error": "Cannot dismiss a pending lookup"}), 409
+            _pending.pop(username, None)
+        return jsonify({"ok": True})
 
     @app.route("/api/users/<tiktok_id>", methods=["DELETE"])
     def remove_user(tiktok_id: str):
