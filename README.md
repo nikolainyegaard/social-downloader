@@ -94,7 +94,7 @@ The loop runs automatically on startup and then on the interval you configured. 
 
 ## Caddy integration
 
-If Caddy runs on the same host as Docker:
+If Caddy runs directly on the host (not in Docker):
 
 ```caddy
 tiktok.yourdomain.com {
@@ -102,18 +102,32 @@ tiktok.yourdomain.com {
 }
 ```
 
-If Caddy is also a Docker container, put both on a shared network and remove the `ports` block from the compose file:
+If Caddy is a Docker container on the same host, attach the downloader to Caddy's network and drop the `ports` block:
 
+**docker-compose.yml**
 ```yaml
-# in docker-compose.yml
-networks:
-  - caddy_net         # must match the network Caddy is on
+services:
+  tiktok-downloader:
+    image: ghcr.io/nikolainyegaard/tiktok-downloader:latest
+    container_name: tiktok-downloader
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./videos:/app/videos
+    environment:
+      LOOP_INTERVAL_MINUTES: "180"
+      TZ: "Europe/Oslo"
+    expose:
+      - "5000"
+    networks:
+      - caddy_net
 
-# remove the ports block, use expose instead:
-expose:
-  - "5000"
+networks:
+  caddy_net:
+    external: true  # must match the name of the network Caddy is on
 ```
 
+**Caddyfile**
 ```caddy
 tiktok.yourdomain.com {
     reverse_proxy tiktok-downloader:5000
