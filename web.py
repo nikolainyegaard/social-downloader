@@ -10,7 +10,7 @@ import threading
 from flask import Flask, jsonify, request, render_template
 
 import database as db
-from config import get_ms_token, cookies_info, COOKIES_PATH, DATA_DIR, CHROME_EXECUTABLE
+from config import get_ms_token, cookies_info, COOKIES_PATH, DATA_DIR, CHROME_EXECUTABLE, APP_VERSION
 from tiktok_api import get_user_info
 from loop import is_running, get_state_snapshot, trigger_event
 
@@ -89,7 +89,7 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
-        return render_template("index.html")
+        return render_template("index.html", version=APP_VERSION)
 
     # Cookie API
 
