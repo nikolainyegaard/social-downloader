@@ -15,10 +15,14 @@ async def get_user_info(api, username: str | None = None,
     since TikTok does not redirect old usernames (they 404).
     TikTokApi's .info() accepts either username or (user_id + sec_uid).
     """
+    kwargs: dict = {}
+    if username:
+        kwargs["username"] = username
     if sec_uid:
-        user = api.user(sec_uid=sec_uid)
-    else:
-        user = api.user(username=username)
+        kwargs["sec_uid"] = sec_uid
+    if not kwargs:
+        raise ValueError("Must provide username or sec_uid")
+    user = api.user(**kwargs)
     data = await user.info()
     u = data.get("userInfo", {}).get("user", {})
     s = data.get("userInfo", {}).get("stats", {})

@@ -76,7 +76,7 @@ async def _fetch_user_info(username: str, sec_uid: str | None = None) -> dict:
             sleep_after=3,
             executable_path=CHROME_EXECUTABLE,
         )
-        return await get_user_info(api, sec_uid=sec_uid, username=username if not sec_uid else None)
+        return await get_user_info(api, username=username, sec_uid=sec_uid)
 
 
 async def _process_all_users(users: list[dict]):
