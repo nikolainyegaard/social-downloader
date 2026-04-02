@@ -55,6 +55,7 @@ def _process_add(username: str) -> None:
 
     db.add_user(
         tiktok_id=info["tiktok_id"],
+        sec_uid=info.get("sec_uid"),
         username=info["username"],
         display_name=info["display_name"],
         bio=info["bio"],

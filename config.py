@@ -5,7 +5,7 @@ All modules import paths and settings from here.
 
 import os
 
-APP_VERSION = "1.3.6"
+APP_VERSION = "1.3.7"
 import shutil
 
 DATA_DIR    = os.environ.get("DATA_DIR",   "./data")

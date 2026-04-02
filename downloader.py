@@ -183,6 +183,29 @@ def unprefix_video_files(video_id: str, username: str) -> str | None:
     return new_first
 
 
+def rename_user_folder(old_username: str, new_username: str) -> bool:
+    """Rename @old_username → @new_username on disk.
+    If the target folder already exists, files are moved individually (merge).
+    Returns True on success or if old folder doesn't exist; False on error.
+    """
+    old_folder = os.path.join(VIDEOS_DIR, f"@{old_username}")
+    new_folder = os.path.join(VIDEOS_DIR, f"@{new_username}")
+    if not os.path.isdir(old_folder):
+        return True
+    try:
+        if os.path.exists(new_folder):
+            for fname in os.listdir(old_folder):
+                os.rename(os.path.join(old_folder, fname),
+                          os.path.join(new_folder, fname))
+            os.rmdir(old_folder)
+        else:
+            os.rename(old_folder, new_folder)
+        return True
+    except Exception as e:
+        print(f"[{_ts()}] Failed to rename folder @{old_username} → @{new_username}: {e}")
+        return False
+
+
 def _find_output(folder: str, video_id: str) -> str | None:
     files = _get_video_files(folder, video_id)
     return files[0] if files else None

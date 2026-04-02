@@ -6,12 +6,17 @@ import json
 import re
 
 
-async def get_user_info(api, username: str | None = None, user_id: str | None = None) -> dict:
+async def get_user_info(api, username: str | None = None,
+                        sec_uid: str | None = None) -> dict:
     """Fetch user profile data. Returns a normalised dict.
-    Pass user_id when available — it works even after a username change.
+
+    Pass username= on first add (before sec_uid is known).
+    Pass sec_uid= in the loop — works even after the user changes their username,
+    since TikTok does not redirect old usernames (they 404).
+    TikTokApi's .info() accepts either username or (user_id + sec_uid).
     """
-    if user_id:
-        user = api.user(user_id=user_id)
+    if sec_uid:
+        user = api.user(sec_uid=sec_uid)
     else:
         user = api.user(username=username)
     data = await user.info()
@@ -19,10 +24,11 @@ async def get_user_info(api, username: str | None = None, user_id: str | None = 
     s = data.get("userInfo", {}).get("stats", {})
 
     if not u.get("id"):
-        raise ValueError(f"No user data returned for @{username}")
+        raise ValueError(f"No user data returned for @{username or sec_uid}")
 
     return {
         "tiktok_id":       u.get("id"),
+        "sec_uid":         u.get("secUid"),
         "username":        u.get("uniqueId", username),
         "display_name":    u.get("nickname"),
         "bio":             u.get("signature"),

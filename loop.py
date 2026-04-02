@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import database as db
 from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE
 from tiktok_api import get_user_info, get_user_videos, get_video_details
-from downloader import download_video, download_photos, prefix_video_files, unprefix_video_files
+from downloader import download_video, download_photos, prefix_video_files, unprefix_video_files, rename_user_folder
 
 # Shared state
 
@@ -61,8 +61,11 @@ def _log(msg: str):
 
 # Core async logic
 
-async def _fetch_user_info(user_id: str) -> dict:
-    """Open a fresh TikTokApi session, fetch profile info by ID, and close it."""
+async def _fetch_user_info(username: str, sec_uid: str | None = None) -> dict:
+    """Open a fresh TikTokApi session, fetch profile info, and close it.
+    Uses sec_uid when available (survives username changes).
+    Falls back to username for accounts not yet populated with sec_uid.
+    """
     from TikTokApi import TikTokApi
 
     ms_token = get_ms_token()
@@ -73,7 +76,7 @@ async def _fetch_user_info(user_id: str) -> dict:
             sleep_after=3,
             executable_path=CHROME_EXECUTABLE,
         )
-        return await get_user_info(api, user_id=user_id)
+        return await get_user_info(api, sec_uid=sec_uid, username=username if not sec_uid else None)
 
 
 async def _process_all_users(users: list[dict]):
@@ -90,7 +93,7 @@ async def _process_all_users(users: list[dict]):
         _log(f"Processing @{user['username']} (ID: {tiktok_id})")
 
         try:
-            info = await _fetch_user_info(tiktok_id)
+            info = await _fetch_user_info(user["username"], sec_uid=user.get("sec_uid"))
             db.update_user_info(
                 tiktok_id,
                 info["username"],
@@ -99,11 +102,16 @@ async def _process_all_users(users: list[dict]):
                 info["follower_count"],
                 info["following_count"],
                 info["video_count"],
+                sec_uid=info.get("sec_uid"),
             )
             username     = info["username"]
             display_name = info["display_name"] or username
             if username != user["username"]:
-                _log(f"  Username changed: @{user['username']} → @{username}")
+                old_username = user["username"]
+                _log(f"  Username changed: @{old_username} → @{username}")
+                if rename_user_folder(old_username, username):
+                    db.rename_user_video_paths(tiktok_id, old_username, username)
+                    _log(f"  Folder renamed and DB paths updated")
 
             # Account status: positive changes (banned → active) are immediate;
             # negative changes (active → banned) require _CONFIRM_THRESHOLD loops.

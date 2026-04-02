@@ -29,6 +29,7 @@ def init_db():
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS users (
                 tiktok_id           TEXT PRIMARY KEY,
+                sec_uid             TEXT,
                 username            TEXT NOT NULL,
                 display_name        TEXT,
                 bio                 TEXT,
@@ -75,6 +76,7 @@ def init_db():
 def _migrate_db(conn):
     """Add columns introduced after the initial schema. Safe to run on existing DBs."""
     migrations = [
+        "ALTER TABLE users  ADD COLUMN sec_uid            TEXT",
         "ALTER TABLE users  ADD COLUMN pending_ban_count  INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE users  ADD COLUMN pending_ban_since  INTEGER",
         "ALTER TABLE videos ADD COLUMN pending_deletion_count INTEGER NOT NULL DEFAULT 0",
@@ -90,14 +92,15 @@ def _migrate_db(conn):
 # User operations
 
 def add_user(tiktok_id, username, display_name=None, bio=None,
-             follower_count=0, following_count=0, video_count=0, join_date=None):
+             follower_count=0, following_count=0, video_count=0,
+             join_date=None, sec_uid=None):
     with get_db() as conn:
         conn.execute("""
             INSERT OR IGNORE INTO users
-                (tiktok_id, username, display_name, bio, follower_count,
+                (tiktok_id, sec_uid, username, display_name, bio, follower_count,
                  following_count, video_count, join_date, added_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (tiktok_id, username, display_name, bio,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (tiktok_id, sec_uid, username, display_name, bio,
               follower_count, following_count, video_count, join_date,
               int(time.time())))
 
@@ -135,7 +138,7 @@ def get_user(tiktok_id):
 
 
 def update_user_info(tiktok_id, username, display_name, bio,
-                     follower_count, following_count, video_count):
+                     follower_count, following_count, video_count, sec_uid=None):
     with get_db() as conn:
         existing = conn.execute(
             "SELECT username FROM users WHERE tiktok_id = ?", (tiktok_id,)
@@ -147,6 +150,7 @@ def update_user_info(tiktok_id, username, display_name, bio,
             """, (tiktok_id, existing["username"], username, int(time.time())))
         conn.execute("""
             UPDATE users SET
+                sec_uid         = COALESCE(?, sec_uid),
                 username        = ?,
                 display_name    = ?,
                 bio             = ?,
@@ -155,7 +159,7 @@ def update_user_info(tiktok_id, username, display_name, bio,
                 video_count     = ?,
                 last_checked    = ?
             WHERE tiktok_id = ?
-        """, (username, display_name, bio, follower_count, following_count,
+        """, (sec_uid, username, display_name, bio, follower_count, following_count,
               video_count, int(time.time()), tiktok_id))
 
 
@@ -303,6 +307,15 @@ def clear_video_pending_deletion(video_id: str):
             "UPDATE videos SET pending_deletion_count = 0, pending_deletion_since = NULL WHERE video_id = ?",
             (video_id,),
         )
+
+
+def rename_user_video_paths(tiktok_id: str, old_username: str, new_username: str):
+    """Update all file_path values in videos when a user's folder is renamed."""
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE videos SET file_path = REPLACE(file_path, ?, ?)
+            WHERE tiktok_id = ? AND file_path IS NOT NULL
+        """, (f"@{old_username}/", f"@{new_username}/", tiktok_id))
 
 
 def get_all_username_history() -> dict:
