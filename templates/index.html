@@ -115,18 +115,7 @@
       margin-bottom: 12px;
     }
 
-    /* ── Cookie card ─────────────────────────────────────────────────────────── */
-
-    .cookie-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px;
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
+    /* ── Cookie pill / meta / note (used inside settings modal) ─────────────── */
 
     .cookie-pill {
       display: inline-flex;
@@ -143,8 +132,6 @@
     .cookie-pill .dot    { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
     .cookie-meta { font-size: 12px; color: var(--text-dim); }
-
-    .cookie-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
     .cookie-upload-label {
       display: inline-flex;
@@ -569,6 +556,101 @@
       display: block; outline: none;
     }
 
+    /* ── Cookie indicator (header) ───────────────────────────────────────────── */
+
+    .cookie-indicator {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600;
+      cursor: default;
+    }
+    .cookie-indicator .ci-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .cookie-indicator.present { color: var(--green); }
+    .cookie-indicator.absent  { color: var(--red); cursor: pointer; }
+
+    /* ── Cookie warning banner ────────────────────────────────────────────────── */
+
+    .cookie-warning-banner {
+      background: rgba(224,82,82,.10);
+      border: 1px solid rgba(224,82,82,.35);
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .cookie-warning-banner:hover { background: rgba(224,82,82,.16); }
+    .cwb-body { flex: 1; }
+    .cwb-title { font-size: 13px; font-weight: 700; color: var(--red); }
+    .cwb-sub   { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+    .cwb-cta   { font-size: 12px; font-weight: 600; color: var(--red); opacity: .7; white-space: nowrap; }
+
+    /* ── Settings modal ───────────────────────────────────────────────────────── */
+
+    .settings-modal {
+      width: 700px; max-width: 94vw;
+      height: 540px; max-height: 90vh;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex; overflow: hidden; position: relative;
+      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+
+    .settings-nav {
+      width: 160px; flex-shrink: 0;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+      padding: 52px 8px 16px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+
+    .settings-nav-item {
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      font-size: 13px; font-weight: 600;
+      color: var(--text-dim);
+      cursor: pointer; user-select: none;
+      transition: background .1s, color .1s;
+    }
+    .settings-nav-item:hover { background: var(--surface2); color: var(--text); }
+    .settings-nav-item.active { background: var(--surface2); color: var(--text); }
+
+    .settings-content { flex: 1; overflow-y: auto; padding: 28px 24px; }
+
+    .settings-section-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 20px; }
+
+    /* ── Cleanup progress ─────────────────────────────────────────────────────── */
+
+    .cleanup-bar-track {
+      height: 4px; background: var(--surface2); border-radius: 2px;
+      overflow: hidden; margin-top: 16px;
+    }
+    .cleanup-bar-fill {
+      height: 100%; background: var(--accent); border-radius: 2px;
+      width: 30%; animation: bar-slide 1.2s ease-in-out infinite;
+    }
+    .cleanup-bar-fill.done { width: 100%; animation: none; }
+    @keyframes bar-slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+
+    .cleanup-current { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 18px; }
+    .cleanup-step-log { margin-top: 10px; display: flex; flex-direction: column; gap: 3px; }
+    .cleanup-step { font-size: 12px; color: var(--text-dim); }
+    .cleanup-step.done { color: var(--green); }
+
+    /* ── Gear button ──────────────────────────────────────────────────────────── */
+
+    .btn-gear {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-dim); font-size: 15px;
+      padding: 5px 9px; line-height: 1;
+      transition: background .15s, color .15s;
+    }
+    .btn-gear:hover { background: var(--border); color: var(--text); }
+
     /* ── Log panel ───────────────────────────────────────────────────────────── */
 
     .log-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
@@ -617,33 +699,19 @@
       <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
       <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
       <button class="btn-primary" id="triggerBtn" onclick="triggerLoop()">Run Now</button>
+      <span id="cookieIndicator" class="cookie-indicator" title="Open Settings"></span>
+      <button class="btn-gear" onclick="openSettings('cookies')" title="Settings">⚙</button>
     </div>
   </header>
 
-  <!-- Authentication -->
-  <section>
-    <div class="section-title">Authentication</div>
-    <div class="cookie-card" id="cookieCard">
-      <span class="cookie-pill absent" id="cookiePill">
-        <span class="dot"></span>
-        <span id="cookiePillText">No cookies file</span>
-      </span>
-      <span class="cookie-meta" id="cookieMeta"></span>
-      <div class="cookie-actions">
-        <label class="cookie-upload-label">
-          <input type="file" id="cookieFileInput" accept=".txt,text/plain" style="display:none" onchange="uploadCookies(this)">
-          Upload cookies.txt
-        </label>
-        <button class="btn-danger" id="cookieDeleteBtn" onclick="deleteCookies()" style="display:none">Remove</button>
-      </div>
-      <div class="cookie-note">
-        Export your TikTok cookies using a browser extension such as
-        <strong>Get cookies.txt LOCALLY</strong> (Chrome/Firefox).
-        The file must be in Netscape format and include the <code>msToken</code> cookie.
-        Cookies are stored server-side — uploading once from any device applies everywhere.
-      </div>
+  <!-- Cookie warning banner (shown only when cookies are absent) -->
+  <div id="cookieWarningBanner" style="display:none" class="cookie-warning-banner" onclick="openSettings('cookies')">
+    <div class="cwb-body">
+      <div class="cwb-title">No cookies file uploaded</div>
+      <div class="cwb-sub">Downloads and profile lookups will fail without a valid cookies.txt. Click here to upload one.</div>
     </div>
-  </section>
+    <span class="cwb-cta">Open Settings →</span>
+  </div>
 
   <!-- Add user -->
   <section>
@@ -704,6 +772,61 @@
   </section>
 
 </div>
+<!-- Settings modal -->
+<div id="settingsBackdrop" class="modal-backdrop" style="display:none;z-index:200" onclick="if(event.target===this)closeSettings()">
+  <div class="settings-modal">
+    <button class="modal-close" onclick="closeSettings()">✕</button>
+    <nav class="settings-nav">
+      <div class="settings-nav-item active" id="snav-cookies" onclick="switchSettingsSection('cookies')">Cookies</div>
+      <div class="settings-nav-item"        id="snav-database" onclick="switchSettingsSection('database')">Database</div>
+    </nav>
+    <div class="settings-content">
+
+      <!-- Cookies section -->
+      <div id="ssec-cookies">
+        <div class="settings-section-title">Authentication</div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+          <span class="cookie-pill absent" id="cookiePill">
+            <span class="dot"></span>
+            <span id="cookiePillText">No cookies file</span>
+          </span>
+          <span class="cookie-meta" id="cookieMeta"></span>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <label class="cookie-upload-label">
+              <input type="file" id="cookieFileInput" accept=".txt,text/plain" style="display:none" onchange="uploadCookies(this)">
+              Upload cookies.txt
+            </label>
+            <button class="btn-danger" id="cookieDeleteBtn" onclick="deleteCookies()" style="display:none">Remove</button>
+          </div>
+        </div>
+        <div class="cookie-note">
+          Export your TikTok cookies using a browser extension such as
+          <strong>Get cookies.txt LOCALLY</strong> (Chrome/Firefox).
+          The file must be in Netscape format and include the <code>msToken</code> cookie.
+          Cookies are stored server-side — uploading once from any device applies everywhere.
+        </div>
+      </div>
+
+      <!-- Database section -->
+      <div id="ssec-database" style="display:none">
+        <div class="settings-section-title">Database</div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:20px;">
+          Removes orphaned thumbnails and avatars left behind when users are removed from tracking.
+          Also runs <code style="font-family:var(--mono);font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px;">VACUUM</code>
+          on the SQLite database to compact freed space.
+        </p>
+        <button class="btn-primary" id="cleanupBtn" onclick="triggerCleanup()">Run Cleanup</button>
+        <div id="cleanupProgress" style="display:none">
+          <div class="cleanup-bar-track"><div class="cleanup-bar-fill" id="cleanupBarFill"></div></div>
+          <div class="cleanup-current" id="cleanupCurrent"></div>
+          <div class="cleanup-step-log" id="cleanupStepLog"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- Image preview modal -->
 <div id="imgModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeImgModal()">
   <div class="media-modal-inner">
@@ -787,21 +910,37 @@
   // ── Cookie management ─────────────────────────────────────────────────────────
 
   function renderCookies(info) {
+    // Settings modal elements
     const pill    = document.getElementById('cookiePill');
     const pillTxt = document.getElementById('cookiePillText');
     const meta    = document.getElementById('cookieMeta');
     const delBtn  = document.getElementById('cookieDeleteBtn');
 
+    // Header indicator
+    const indicator = document.getElementById('cookieIndicator');
+    // Warning banner
+    const banner    = document.getElementById('cookieWarningBanner');
+
     if (info.present) {
-      pill.className    = 'cookie-pill present';
+      pill.className      = 'cookie-pill present';
       pillTxt.textContent = 'Cookies loaded';
-      meta.textContent  = `Updated ${fmt.rel(new Date(info.updated_at * 1000).toISOString())}  ·  ${(info.size_bytes / 1024).toFixed(1)} KB`;
+      meta.textContent    = `Updated ${fmt.rel(new Date(info.updated_at * 1000).toISOString())}  ·  ${(info.size_bytes / 1024).toFixed(1)} KB`;
       delBtn.style.display = '';
+
+      indicator.className   = 'cookie-indicator present';
+      indicator.innerHTML   = '<span class="ci-dot"></span> Cookies';
+      indicator.onclick     = null;
+      if (banner) banner.style.display = 'none';
     } else {
-      pill.className    = 'cookie-pill absent';
+      pill.className      = 'cookie-pill absent';
       pillTxt.textContent = 'No cookies file';
-      meta.textContent  = '';
+      meta.textContent    = '';
       delBtn.style.display = 'none';
+
+      indicator.className   = 'cookie-indicator absent';
+      indicator.innerHTML   = '<span class="ci-dot"></span> No cookies';
+      indicator.onclick     = () => openSettings('cookies');
+      if (banner) banner.style.display = '';
     }
   }
 
@@ -829,6 +968,78 @@
   async function loadCookies() {
     const { ok, data } = await apiJSON('/api/cookies');
     if (ok) renderCookies(data);
+  }
+
+  // ── Settings modal ────────────────────────────────────────────────────────────
+
+  let _settingsSection = 'cookies';
+
+  function openSettings(section) {
+    switchSettingsSection(section || _settingsSection);
+    document.getElementById('settingsBackdrop').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeSettings() {
+    document.getElementById('settingsBackdrop').style.display = 'none';
+    document.body.style.overflow = '';
+  }
+
+  function switchSettingsSection(name) {
+    _settingsSection = name;
+    ['cookies', 'database'].forEach(s => {
+      document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
+      document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
+    });
+  }
+
+  // ── Database cleanup ──────────────────────────────────────────────────────────
+
+  let _cleanupPoll = null;
+
+  async function triggerCleanup() {
+    const btn = document.getElementById('cleanupBtn');
+    btn.disabled = true;
+    const { ok, data } = await apiJSON('/api/db/cleanup', { method: 'POST' });
+    if (!ok) {
+      alert(data.error || 'Could not start cleanup');
+      btn.disabled = false;
+      return;
+    }
+    _showCleanupProgress();
+    _startCleanupPoll();
+  }
+
+  function _showCleanupProgress() {
+    document.getElementById('cleanupProgress').style.display = '';
+    document.getElementById('cleanupBarFill').classList.remove('done');
+    document.getElementById('cleanupCurrent').textContent = '';
+    document.getElementById('cleanupStepLog').innerHTML = '';
+  }
+
+  function _startCleanupPoll() {
+    if (_cleanupPoll) return;
+    _cleanupPoll = setInterval(async () => {
+      const { ok, data } = await apiJSON('/api/db/cleanup');
+      if (!ok) return;
+      const btn    = document.getElementById('cleanupBtn');
+      const curEl  = document.getElementById('cleanupCurrent');
+      const logEl  = document.getElementById('cleanupStepLog');
+      const barEl  = document.getElementById('cleanupBarFill');
+
+      curEl.textContent = data.current || '';
+      logEl.innerHTML = (data.steps || []).map(s =>
+        `<div class="cleanup-step done">${esc(s)}</div>`
+      ).join('');
+
+      if (!data.running) {
+        clearInterval(_cleanupPoll);
+        _cleanupPoll = null;
+        btn.disabled = false;
+        barEl.classList.add('done');
+        curEl.textContent = `Done — ${data.removed} item${data.removed !== 1 ? 's' : ''} removed`;
+      }
+    }, 800);
   }
 
   // ── Users ─────────────────────────────────────────────────────────────────────
@@ -1207,7 +1418,10 @@
       closeVidModal(); return;
     }
     if (document.getElementById('modalBackdrop').style.display !== 'none') {
-      closeModal();
+      closeModal(); return;
+    }
+    if (document.getElementById('settingsBackdrop').style.display !== 'none') {
+      closeSettings();
     }
   });
 

@@ -11,7 +11,7 @@ import time
 from flask import Flask, jsonify, request, render_template, send_file
 
 import database as db
-from config import get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, COOKIES_TIMESTAMP_PATH, DATA_DIR, VIDEOS_DIR, CHROME_EXECUTABLE, APP_VERSION
+from config import get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, COOKIES_TIMESTAMP_PATH, DATA_DIR, VIDEOS_DIR, AVATARS_DIR, CHROME_EXECUTABLE, APP_VERSION
 from tiktok_api import get_user_info, get_video_details
 from loop import is_running, get_state_snapshot, trigger_event, enqueue_user_run
 from thumbnailer import thumb_path_for, avatar_path
@@ -103,6 +103,12 @@ _backfill_lock  = threading.Lock()
 _backfill_state: dict = {"running": False, "done": 0, "total": 0, "errors": 0}
 
 
+# Database cleanup
+
+_cleanup_lock  = threading.Lock()
+_cleanup_state: dict = {"running": False, "current": "", "steps": [], "removed": 0, "done": False}
+
+
 def _run_backfill() -> None:
     import time as _time
 
@@ -138,6 +144,84 @@ def _run_backfill() -> None:
 
     with _backfill_lock:
         _backfill_state["running"] = False
+
+
+def _run_cleanup() -> None:
+    import glob as _glob
+
+    with _cleanup_lock:
+        _cleanup_state.update({"running": True, "current": "Starting…", "steps": [], "removed": 0, "done": False})
+
+    removed = 0
+    steps: list[str] = []
+    try:
+        # 1. Orphaned DB records (videos + history for removed users)
+        with _cleanup_lock:
+            _cleanup_state["current"] = "Removing records for untracked users…"
+        record_count = db.delete_orphaned_records()
+        n = record_count
+        steps.append(f"Removed {n} orphaned DB record{'s' if n != 1 else ''} for untracked users")
+        removed += record_count
+        with _cleanup_lock:
+            _cleanup_state["steps"] = list(steps)
+
+        # 2. Orphaned thumbnails (run after DB purge so deleted video IDs are gone)
+        with _cleanup_lock:
+            _cleanup_state["current"] = "Scanning thumbnails…"
+        video_ids   = db.get_all_video_ids()
+        thumb_count = 0
+        for thumbs_dir in _glob.glob(os.path.join(VIDEOS_DIR, "*", "thumbs")):
+            for thumb in _glob.glob(os.path.join(thumbs_dir, "*.jpg")):
+                vid_id = os.path.splitext(os.path.basename(thumb))[0]
+                if vid_id not in video_ids:
+                    try:
+                        os.remove(thumb)
+                        thumb_count += 1
+                    except OSError:
+                        pass
+        n = thumb_count
+        msg = f"Removed {n} orphaned thumbnail{'s' if n != 1 else ''}"
+        steps.append(msg)
+        removed += thumb_count
+        with _cleanup_lock:
+            _cleanup_state["steps"] = list(steps)
+
+        # 3. Orphaned avatars
+        with _cleanup_lock:
+            _cleanup_state["current"] = "Scanning avatars…"
+        user_ids     = db.get_all_user_ids()
+        avatar_count = 0
+        if os.path.isdir(AVATARS_DIR):
+            for fname in os.listdir(AVATARS_DIR):
+                if not fname.endswith(".jpg"):
+                    continue
+                uid = fname[:-4]
+                if uid not in user_ids:
+                    try:
+                        os.remove(os.path.join(AVATARS_DIR, fname))
+                        avatar_count += 1
+                    except OSError:
+                        pass
+        n = avatar_count
+        msg = f"Removed {n} orphaned avatar{'s' if n != 1 else ''}"
+        steps.append(msg)
+        removed += avatar_count
+        with _cleanup_lock:
+            _cleanup_state["steps"] = list(steps)
+
+        # 4. Vacuum
+        with _cleanup_lock:
+            _cleanup_state["current"] = "Vacuuming database…"
+        db.vacuum()
+        steps.append("Database vacuumed")
+        with _cleanup_lock:
+            _cleanup_state["steps"] = list(steps)
+
+    except Exception as e:
+        steps.append(f"Error: {e}")
+
+    with _cleanup_lock:
+        _cleanup_state.update({"running": False, "current": "", "steps": steps, "removed": removed, "done": True})
 
 
 def create_app() -> Flask:
@@ -282,6 +366,19 @@ def create_app() -> Flask:
             if _backfill_state["running"]:
                 return jsonify({"error": "Already running"}), 409
         threading.Thread(target=_run_backfill, daemon=True, name="stats-backfill").start()
+        return jsonify({"ok": True})
+
+    @app.route("/api/db/cleanup", methods=["GET"])
+    def get_cleanup_status():
+        with _cleanup_lock:
+            return jsonify(dict(_cleanup_state))
+
+    @app.route("/api/db/cleanup", methods=["POST"])
+    def start_cleanup():
+        with _cleanup_lock:
+            if _cleanup_state["running"]:
+                return jsonify({"error": "Already running"}), 409
+        threading.Thread(target=_run_cleanup, daemon=True, name="db-cleanup").start()
         return jsonify({"ok": True})
 
     @app.route("/api/users/<tiktok_id>/run", methods=["POST"])

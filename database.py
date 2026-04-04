@@ -419,13 +419,15 @@ def get_videos_missing_stats() -> list[dict]:
 
 
 def count_videos_missing_stats() -> int:
-    """Count of downloaded, non-deleted videos that have never had a full stats fetch."""
+    """Count of downloaded, non-deleted videos that have never had a full stats fetch
+    and belong to a currently-tracked user (matches what get_videos_missing_stats returns)."""
     with get_db() as conn:
         row = conn.execute(
-            """SELECT COUNT(*) FROM videos
-               WHERE stats_backfilled_at IS NULL
-                 AND file_path IS NOT NULL
-                 AND status != 'deleted'"""
+            """SELECT COUNT(*) FROM videos v
+               JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.stats_backfilled_at IS NULL
+                 AND v.file_path IS NOT NULL
+                 AND v.status != 'deleted'"""
         ).fetchone()
     return row[0] if row else 0
 
@@ -453,3 +455,38 @@ def update_video_stats(video_id: str, view_count=None, like_count=None,
         """, (view_count, like_count, comment_count, share_count, save_count,
               duration, width, height, music_title, music_artist, raw_video_data,
               int(time.time()), video_id))
+
+
+def get_all_video_ids() -> set:
+    """Return the set of all video_ids currently in the database."""
+    with get_db() as conn:
+        return {row[0] for row in conn.execute("SELECT video_id FROM videos").fetchall()}
+
+
+def get_all_user_ids() -> set:
+    """Return the set of all tiktok_ids currently in the users table."""
+    with get_db() as conn:
+        return {row[0] for row in conn.execute("SELECT tiktok_id FROM users").fetchall()}
+
+
+def delete_orphaned_records() -> int:
+    """Delete video and username_history rows for users no longer in the users table.
+    Does NOT touch files on disk. Returns the number of rows deleted."""
+    with get_db() as conn:
+        videos   = conn.execute(
+            "DELETE FROM videos WHERE tiktok_id NOT IN (SELECT tiktok_id FROM users)"
+        ).rowcount
+        history  = conn.execute(
+            "DELETE FROM username_history WHERE tiktok_id NOT IN (SELECT tiktok_id FROM users)"
+        ).rowcount
+    return videos + history
+
+
+def vacuum() -> None:
+    """Run VACUUM on the database to reclaim freed space. Opens its own connection
+    because VACUUM cannot run inside an active transaction."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("VACUUM")
+    finally:
+        conn.close()

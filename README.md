@@ -81,7 +81,9 @@ The web UI will be available at `http://localhost:5000` (or via your reverse pro
 
 ### 3. Upload cookies
 
-Open the web UI and click **Upload cookies.txt** in the Authentication section. Select the file you exported from your browser. The status pill will turn green once it's stored.
+Open the web UI, click the **⚙ gear icon** in the top-right corner of the header to open Settings, then go to the **Cookies** section. Click **Upload cookies.txt** and select the file you exported from your browser. The status pill will turn green once it's stored.
+
+If no cookies file is present, a red warning banner appears below the header — clicking it opens the Cookies section directly.
 
 ### 4. Add accounts
 
