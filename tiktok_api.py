@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 
@@ -40,6 +41,9 @@ async def get_user_info(api, username: str | None = None,
         "video_count":     s.get("videoCount", 0),
         # 'secret' flag means the account is private (not necessarily banned)
         "is_private":      bool(u.get("secret")),
+        "verified":        bool(u.get("verified")),
+        "avatar_url":      u.get("avatarLarger") or u.get("avatarMedium") or u.get("avatarThumb"),
+        "_raw_user_data":  json.dumps(data),
     }
 
 
@@ -116,6 +120,22 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
     if not item:
         raise RuntimeError("No item data in TikTok page response")
 
+    stats = item.get("stats", {}) or {}
+    video_meta = item.get("video", {}) or {}
+    music = item.get("music", {}) or {}
+
+    # Build a cleaned raw blob: strip large/expiring fields
+    raw = copy.deepcopy(item)
+    _vid = raw.get("video", {})
+    for _k in ("bitrateInfo", "playAddr", "downloadAddr", "cover", "dynamicCover",
+               "originCover", "shareCover", "reflowCover", "codecType",
+               "videoQuality", "encodeUserTag", "encodedType"):
+        _vid.pop(_k, None)
+    for _k in ("avatarLarger", "avatarMedium", "avatarThumb",
+               "avatarLargerUrl", "avatarMediumUrl", "avatarThumbUrl"):
+        raw.get("author", {}).pop(_k, None)
+    _raw_video_data = json.dumps(raw)
+
     try:
         upload_date = int(item.get("createTime") or 0) or None
     except (ValueError, TypeError):
@@ -129,15 +149,37 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
             if img.get("imageURL", {}).get("urlList")
         ]
         return {
-            "type":        "photo",
-            "description": item.get("desc", ""),
-            "upload_date": upload_date,
-            "image_urls":  image_urls,
+            "type":          "photo",
+            "description":   item.get("desc", ""),
+            "upload_date":   upload_date,
+            "image_urls":    image_urls,
+            "view_count":    stats.get("playCount"),
+            "like_count":    stats.get("diggCount"),
+            "comment_count": stats.get("commentCount"),
+            "share_count":   stats.get("shareCount"),
+            "save_count":    stats.get("collectCount"),
+            "duration":      None,
+            "width":         None,
+            "height":        None,
+            "music_title":   music.get("title"),
+            "music_artist":  music.get("authorName"),
+            "_raw_video_data": _raw_video_data,
         }
 
     return {
-        "type":        "video",
-        "description": item.get("desc", ""),
-        "upload_date": upload_date,
-        "image_urls":  [],
+        "type":          "video",
+        "description":   item.get("desc", ""),
+        "upload_date":   upload_date,
+        "image_urls":    [],
+        "view_count":    stats.get("playCount"),
+        "like_count":    stats.get("diggCount"),
+        "comment_count": stats.get("commentCount"),
+        "share_count":   stats.get("shareCount"),
+        "save_count":    stats.get("collectCount"),
+        "duration":      video_meta.get("duration"),
+        "width":         video_meta.get("width"),
+        "height":        video_meta.get("height"),
+        "music_title":   music.get("title"),
+        "music_artist":  music.get("authorName"),
+        "_raw_video_data": _raw_video_data,
     }

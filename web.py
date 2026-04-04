@@ -7,12 +7,13 @@ import os
 import queue as _queue_module
 import re
 import threading
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, send_file
 
 import database as db
 from config import get_ms_token, cookies_info, COOKIES_PATH, DATA_DIR, CHROME_EXECUTABLE, APP_VERSION
 from tiktok_api import get_user_info
 from loop import is_running, get_state_snapshot, trigger_event, enqueue_user_run
+from thumbnailer import thumb_path_for, avatar_path
 
 
 # Add-user queue
@@ -194,6 +195,23 @@ def create_app() -> Flask:
     @app.route("/api/users/<tiktok_id>/videos", methods=["GET"])
     def user_videos(tiktok_id: str):
         return jsonify(db.get_videos_for_user(tiktok_id))
+
+    @app.route("/api/users/<tiktok_id>/avatar", methods=["GET"])
+    def user_avatar(tiktok_id: str):
+        path = avatar_path(tiktok_id)
+        if not os.path.exists(path):
+            return ("", 404)
+        return send_file(path, mimetype="image/jpeg")
+
+    @app.route("/api/videos/<video_id>/thumbnail", methods=["GET"])
+    def video_thumbnail(video_id: str):
+        video = db.get_video(video_id)
+        if not video or not video.get("file_path"):
+            return ("", 404)
+        path = thumb_path_for(video_id, video["file_path"])
+        if not os.path.exists(path):
+            return ("", 404)
+        return send_file(path, mimetype="image/jpeg")
 
     @app.route("/api/users/<tiktok_id>/run", methods=["POST"])
     def run_user(tiktok_id: str):

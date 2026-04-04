@@ -83,6 +83,21 @@ def _migrate_db(conn):
         "ALTER TABLE videos ADD COLUMN pending_deletion_count INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN pending_deletion_since INTEGER",
         "ALTER TABLE users  ADD COLUMN privacy_status TEXT DEFAULT 'public'",
+        "ALTER TABLE videos ADD COLUMN view_count     INTEGER",
+        "ALTER TABLE videos ADD COLUMN like_count     INTEGER",
+        "ALTER TABLE videos ADD COLUMN comment_count  INTEGER",
+        "ALTER TABLE videos ADD COLUMN share_count    INTEGER",
+        "ALTER TABLE videos ADD COLUMN save_count     INTEGER",
+        "ALTER TABLE videos ADD COLUMN duration       REAL",
+        "ALTER TABLE videos ADD COLUMN width          INTEGER",
+        "ALTER TABLE videos ADD COLUMN height         INTEGER",
+        "ALTER TABLE videos ADD COLUMN music_title    TEXT",
+        "ALTER TABLE videos ADD COLUMN music_artist   TEXT",
+        "ALTER TABLE videos ADD COLUMN raw_video_data TEXT",
+        "ALTER TABLE videos ADD COLUMN ytdlp_data     TEXT",
+        "ALTER TABLE users  ADD COLUMN verified       INTEGER DEFAULT 0",
+        "ALTER TABLE users  ADD COLUMN avatar_url     TEXT",
+        "ALTER TABLE users  ADD COLUMN raw_user_data  TEXT",
     ]
     for sql in migrations:
         try:
@@ -140,7 +155,8 @@ def get_user(tiktok_id):
 
 
 def update_user_info(tiktok_id, username, display_name, bio,
-                     follower_count, following_count, video_count, sec_uid=None):
+                     follower_count, following_count, video_count,
+                     sec_uid=None, verified=None, avatar_url=None, raw_user_data=None):
     with get_db() as conn:
         existing = conn.execute(
             "SELECT username FROM users WHERE tiktok_id = ?", (tiktok_id,)
@@ -159,10 +175,13 @@ def update_user_info(tiktok_id, username, display_name, bio,
                 follower_count  = ?,
                 following_count = ?,
                 video_count     = ?,
+                verified        = COALESCE(?, verified),
+                avatar_url      = COALESCE(?, avatar_url),
+                raw_user_data   = COALESCE(?, raw_user_data),
                 last_checked    = ?
             WHERE tiktok_id = ?
         """, (sec_uid, username, display_name, bio, follower_count, following_count,
-              video_count, int(time.time()), tiktok_id))
+              video_count, verified, avatar_url, raw_user_data, int(time.time()), tiktok_id))
 
 
 # Video operations
@@ -178,20 +197,30 @@ def get_video_id_sets(tiktok_id) -> tuple[set, set]:
     return known, active
 
 
-def add_video(video_id, tiktok_id, video_type, description, upload_date):
+def add_video(video_id, tiktok_id, video_type, description, upload_date,
+              view_count=None, like_count=None, comment_count=None,
+              share_count=None, save_count=None,
+              duration=None, width=None, height=None,
+              music_title=None, music_artist=None,
+              raw_video_data=None):
     with get_db() as conn:
         conn.execute("""
-            INSERT OR IGNORE INTO videos (video_id, tiktok_id, type, description, upload_date)
-            VALUES (?, ?, ?, ?, ?)
-        """, (video_id, tiktok_id, video_type, description, upload_date))
+            INSERT OR IGNORE INTO videos
+                (video_id, tiktok_id, type, description, upload_date,
+                 view_count, like_count, comment_count, share_count, save_count,
+                 duration, width, height, music_title, music_artist, raw_video_data)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (video_id, tiktok_id, video_type, description, upload_date,
+              view_count, like_count, comment_count, share_count, save_count,
+              duration, width, height, music_title, music_artist, raw_video_data))
 
 
-def update_video_downloaded(video_id, file_path):
+def update_video_downloaded(video_id, file_path, ytdlp_data=None):
     with get_db() as conn:
         conn.execute("""
-            UPDATE videos SET download_date = ?, file_path = ?
+            UPDATE videos SET download_date = ?, file_path = ?, ytdlp_data = ?
             WHERE video_id = ?
-        """, (int(time.time()), file_path, video_id))
+        """, (int(time.time()), file_path, ytdlp_data, video_id))
 
 
 def update_video_file_path(video_id, file_path):
@@ -232,6 +261,23 @@ def get_videos_for_user(tiktok_id):
             "SELECT * FROM videos WHERE tiktok_id = ? ORDER BY upload_date DESC",
             (tiktok_id,)
         ).fetchall()]
+
+
+def get_all_videos() -> list[dict]:
+    """Return all video rows — used by the thumbnail backfill scan."""
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT video_id, tiktok_id, type, file_path FROM videos"
+        ).fetchall()]
+
+
+def get_video(video_id: str) -> dict | None:
+    """Return a single video row by video_id."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM videos WHERE video_id = ?", (video_id,)
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def get_all_video_stats() -> dict:

@@ -247,8 +247,16 @@
     .user-card-top {
       display: flex;
       align-items: flex-start;
-      justify-content: space-between;
-      gap: 8px;
+      gap: 10px;
+    }
+
+    .user-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: var(--surface2);
     }
 
     .user-identity { min-width: 0; flex: 1; }
@@ -297,6 +305,189 @@
     .user-card-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
     .empty-state { color: var(--muted); padding: 32px 0; text-align: center; }
+
+    /* ── User card — clickable ───────────────────────────────────────────────── */
+
+    .user-card {
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .user-card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .user-card-current:hover { box-shadow: 0 0 0 2px var(--accent); }
+
+    /* ── Modal ───────────────────────────────────────────────────────────────── */
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.65);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal {
+      width: 82vw;
+      max-width: 1280px;
+      height: 84vh;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 14px; right: 14px;
+      width: 28px; height: 28px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      color: var(--text-dim);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1;
+      transition: background .15s, color .15s;
+      flex-shrink: 0;
+    }
+    .modal-close:hover { background: var(--border); color: var(--text); }
+
+    /* ── Modal header ─────────────────────────────────────────────────────────── */
+
+    .modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      flex-shrink: 0;
+    }
+
+    .modal-avatar {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: var(--surface2);
+    }
+
+    .modal-user-body  { flex: 1; min-width: 0; padding-right: 32px; }
+    .modal-name-row   { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .modal-name       { font-size: 20px; font-weight: 700; line-height: 1.2; word-break: break-word; }
+    .modal-verified   { font-size: 11px; color: var(--accent); font-weight: 700; }
+    .modal-handle     { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+    .modal-id-line    { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .modal-bio        { font-size: 13px; color: var(--text-dim); margin-top: 8px; line-height: 1.5;
+                        max-height: 72px; overflow-y: auto; }
+    .modal-stats-row  { display: flex; gap: 20px; margin-top: 10px; font-size: 12px;
+                        color: var(--text-dim); flex-wrap: wrap; }
+    .modal-stats-row strong { color: var(--text); font-size: 13px; }
+
+    /* ── Modal toolbar ────────────────────────────────────────────────────────── */
+
+    .modal-toolbar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg);
+    }
+
+    .filter-pills { display: flex; gap: 4px; }
+    .filter-pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 11px; font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 99px;
+      cursor: pointer;
+      transition: background .1s, color .1s, border-color .1s;
+    }
+    .filter-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .filter-pill:hover:not(.active) { background: var(--border); color: var(--text); }
+
+    .modal-vid-count { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+    /* ── Video list ───────────────────────────────────────────────────────────── */
+
+    /* Shared column layout for header + rows */
+    .vcols {
+      display: grid;
+      grid-template-columns: 90px minmax(120px,1fr) 76px 70px 92px 92px 92px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .video-list-hdr {
+      padding: 5px 16px 4px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--surface);
+    }
+
+    .col-hdr {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .col-hdr.sortable { cursor: pointer; user-select: none; }
+    .col-hdr.sortable:hover { color: var(--text-dim); }
+    .col-hdr.sort-asc  { color: var(--accent); }
+    .col-hdr.sort-asc::after  { content: ' ↑'; }
+    .col-hdr.sort-desc { color: var(--accent); }
+    .col-hdr.sort-desc::after { content: ' ↓'; }
+    /* Right-align all data columns except thumb+desc */
+    .col-hdr:nth-child(n+3) { text-align: right; }
+
+    .modal-video-list { flex: 1; overflow-y: auto; }
+
+    .video-row {
+      padding: 7px 16px;
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    .video-row:hover   { background: var(--surface2); }
+    .video-row:last-child { border-bottom: none; }
+
+    .video-thumb {
+      width: 90px; height: 51px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: var(--surface2);
+      display: block;
+    }
+
+    .video-desc {
+      font-size: 12px; color: var(--text); line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow: hidden;
+      word-break: break-word;
+    }
+    .video-desc-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+
+    .video-cell { font-size: 12px; color: var(--text-dim); text-align: right; white-space: nowrap; }
+
+    .vstatus {
+      display: inline-flex; align-items: center;
+      font-size: 10px; font-weight: 700;
+      padding: 2px 7px; border-radius: 99px; white-space: nowrap;
+    }
+    .vstatus.up        { background: rgba(76,175,125,.15);  color: var(--green); }
+    .vstatus.deleted   { background: rgba(224,82,82,.15);   color: var(--red); }
+    .vstatus.undeleted { background: rgba(224,168,58,.15);  color: var(--yellow); }
+
+    .vlist-empty   { padding: 48px; text-align: center; color: var(--muted); }
+    .vlist-loading { padding: 48px; text-align: center; color: var(--muted); font-style: italic; }
 
     /* ── Log panel ───────────────────────────────────────────────────────────── */
 
@@ -416,6 +607,17 @@
   </section>
 
 </div>
+<!-- User detail modal -->
+<div id="modalBackdrop" class="modal-backdrop" style="display:none" onclick="handleBackdropClick(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-header"  id="modalHeader"></div>
+    <div class="modal-toolbar" id="modalToolbar"></div>
+    <div class="video-list-hdr" id="videoListHdr"></div>
+    <div class="modal-video-list" id="modalVideoList"></div>
+  </div>
+</div>
+
 <script>
   const fmt = {
     rel: ts => {
@@ -553,8 +755,9 @@
       const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
       return `
-        <div class="user-card${isCurrent ? ' user-card-current' : ''}">
+        <div class="user-card${isCurrent ? ' user-card-current' : ''}" onclick="openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
           <div class="user-card-top">
+            <img class="user-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt="" onerror="this.style.display='none'">
             <div class="user-identity">
               <div class="user-display-name">${esc(u.display_name || u.username)}</div>
               <div class="user-handle">@${esc(u.username)}${oldNameTag}</div>
@@ -580,8 +783,8 @@
           <div class="user-card-footer">
             <span class="user-checked">${checked}</span>
             <div style="display:flex;gap:6px;">
-              <button class="btn-run" ${runDisabled} onclick="runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
-              <button class="btn-danger" onclick="removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
+              <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
+              <button class="btn-danger" onclick="event.stopPropagation();removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
             </div>
           </div>
         </div>
@@ -762,6 +965,249 @@
       renderStatus(data);
       renderLogs(data.logs);
       renderUsers();
+    }
+  }
+
+  // ── User detail modal ─────────────────────────────────────────────────────────
+
+  let _modalUserId   = null;
+  let _modalVideos   = [];
+  let _modalFilter   = 'all';
+  let _modalSort     = { field: 'upload_date', dir: 'desc' };
+  let _modalLoaded   = 0;
+  let _modalObs      = null;
+  const MODAL_PAGE   = 50;
+
+  const VCOLS = [
+    { field: null,             label: '' },
+    { field: null,             label: 'Description' },
+    { field: 'status',         label: 'Status' },
+    { field: 'view_count',     label: 'Views' },
+    { field: 'upload_date',    label: 'Uploaded' },
+    { field: 'download_date',  label: 'Saved' },
+    { field: 'deleted_at',     label: 'Deleted' },
+  ];
+
+  function fmtCount(n) {
+    if (n == null) return '—';
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return String(n);
+  }
+
+  function fmtDateShort(unix) {
+    if (!unix) return '—';
+    const d = new Date(unix * 1000);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function openUserModal(tiktokId) {
+    const u = users.find(u => u.tiktok_id === tiktokId);
+    if (!u) return;
+    _modalUserId = tiktokId;
+    _modalVideos = [];
+    _modalFilter = 'all';
+    _modalSort   = { field: 'upload_date', dir: 'desc' };
+    _modalLoaded = 0;
+    if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
+
+    document.getElementById('modalBackdrop').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    _renderModalHeader(u);
+    _renderModalToolbar([]);
+    _renderColumnHdrs();
+    document.getElementById('modalVideoList').innerHTML =
+      '<div class="vlist-loading">Loading videos…</div>';
+
+    _loadModalVideos(tiktokId);
+  }
+
+  function closeModal() {
+    document.getElementById('modalBackdrop').style.display = 'none';
+    document.body.style.overflow = '';
+    if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
+    _modalUserId = null;
+    _modalVideos = [];
+  }
+
+  function handleBackdropClick(e) {
+    if (e.target === e.currentTarget) closeModal();
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' &&
+        document.getElementById('modalBackdrop').style.display !== 'none') {
+      closeModal();
+    }
+  });
+
+  async function _loadModalVideos(tiktokId) {
+    const { ok, data } = await apiJSON(`/api/users/${tiktokId}/videos`);
+    if (!ok || _modalUserId !== tiktokId) return;
+    _modalVideos = data;
+    _renderModalToolbar(data);
+    _renderModalVideoList();
+  }
+
+  function _filteredSorted() {
+    let vids = _modalVideos;
+    if (_modalFilter === 'active')   vids = vids.filter(v => v.status === 'up');
+    if (_modalFilter === 'deleted')  vids = vids.filter(v => v.status === 'deleted');
+    if (_modalFilter === 'restored') vids = vids.filter(v => v.status === 'undeleted');
+    const { field, dir } = _modalSort;
+    return [...vids].sort((a, b) => {
+      const av = a[field] ?? (dir === 'asc' ? Infinity : -Infinity);
+      const bv = b[field] ?? (dir === 'asc' ? Infinity : -Infinity);
+      return dir === 'asc' ? (av < bv ? -1 : av > bv ? 1 : 0)
+                           : (av > bv ? -1 : av < bv ? 1 : 0);
+    });
+  }
+
+  function setModalSort(field) {
+    _modalSort = _modalSort.field === field
+      ? { field, dir: _modalSort.dir === 'asc' ? 'desc' : 'asc' }
+      : { field, dir: 'desc' };
+    _renderColumnHdrs();
+    _renderModalVideoList();
+  }
+
+  function setModalFilter(filter) {
+    _modalFilter = filter;
+    _renderModalToolbar(_modalVideos);
+    _renderModalVideoList();
+  }
+
+  function _renderModalHeader(u) {
+    const oldNames = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
+    const statusCls = { active: 'active', banned: 'banned' }[u.account_status] || 'unknown';
+    const statusLabel = (u.account_status || 'unknown');
+    const privacyMap = {
+      'public':             ['public',             'Public'],
+      'private_accessible': ['private-accessible', 'Private'],
+      'private_blocked':    ['private-blocked',    'Private'],
+    };
+    const [privCls, privLabel] = privacyMap[u.privacy_status] || [];
+    const joinStr = u.join_date
+      ? ' · Joined ' + new Date(u.join_date * 1000)
+          .toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+      : '';
+
+    document.getElementById('modalHeader').innerHTML = `
+      <img class="modal-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
+           onerror="this.style.visibility='hidden'">
+      <div class="modal-user-body">
+        <div class="modal-name-row">
+          <span class="modal-name">${esc(u.display_name || u.username)}</span>
+          ${u.verified ? '<span class="modal-verified">✓ Verified</span>' : ''}
+          <span class="account-status ${statusCls}">${statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1)}</span>
+          ${privCls ? `<span class="privacy-status ${privCls}">${privLabel}</span>` : ''}
+        </div>
+        <div class="modal-handle">
+          @${esc(u.username)}
+          ${oldNames ? `<span class="user-old-names">· ${oldNames}</span>` : ''}
+        </div>
+        <div class="modal-id-line">id:${esc(u.tiktok_id)}${joinStr}</div>
+        ${u.bio ? `<div class="modal-bio">${esc(u.bio)}</div>` : ''}
+        <div class="modal-stats-row">
+          <span><strong>${(u.follower_count || 0).toLocaleString()}</strong> followers</span>
+          ${u.following_count != null ? `<span><strong>${u.following_count.toLocaleString()}</strong> following</span>` : ''}
+          ${u.video_count     != null ? `<span><strong>${u.video_count.toLocaleString()}</strong> on TikTok</span>` : ''}
+          <span><strong>${u.video_total || 0}</strong> saved locally</span>
+          ${u.video_deleted   ? `<span style="color:var(--red)"><strong>${u.video_deleted}</strong> deleted</span>` : ''}
+          ${u.video_undeleted ? `<span style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  function _renderModalToolbar(vids) {
+    const counts = {
+      all:      vids.length,
+      active:   vids.filter(v => v.status === 'up').length,
+      deleted:  vids.filter(v => v.status === 'deleted').length,
+      restored: vids.filter(v => v.status === 'undeleted').length,
+    };
+    const pill = (key, label) => {
+      const active = _modalFilter === key ? ' active' : '';
+      const n      = counts[key];
+      return `<button class="filter-pill${active}" onclick="setModalFilter('${key}')">`
+           + `${label}${n ? ` <span style="opacity:.65">(${n})</span>` : ''}</button>`;
+    };
+    const shown = _filteredSorted().length;
+    document.getElementById('modalToolbar').innerHTML =
+      `<div class="filter-pills">`
+      + pill('all', 'All')
+      + pill('active', 'Active')
+      + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
+      + (counts.restored ? pill('restored', 'Restored') : '')
+      + `</div>`
+      + `<span class="modal-vid-count">${shown.toLocaleString()} video${shown !== 1 ? 's' : ''}</span>`;
+  }
+
+  function _renderColumnHdrs() {
+    document.getElementById('videoListHdr').innerHTML =
+      '<div class="vcols">'
+      + VCOLS.map(col => {
+          if (!col.field) return `<div class="col-hdr">${col.label}</div>`;
+          const isSorted = _modalSort.field === col.field;
+          const cls = isSorted ? ` sort-${_modalSort.dir}` : '';
+          return `<div class="col-hdr sortable${cls}" onclick="setModalSort('${col.field}')">${col.label}</div>`;
+        }).join('')
+      + '</div>';
+  }
+
+  function _renderModalVideoList() {
+    _modalLoaded = 0;
+    if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
+    const list = document.getElementById('modalVideoList');
+    list.innerHTML = '';
+    list.scrollTop = 0;
+    const vids = _filteredSorted();
+    if (!vids.length) {
+      list.innerHTML = '<div class="vlist-empty">No videos match this filter.</div>';
+      return;
+    }
+    _appendModalVideos(vids);
+  }
+
+  function _appendModalVideos(vids) {
+    const list  = document.getElementById('modalVideoList');
+    const batch = vids.slice(_modalLoaded, _modalLoaded + MODAL_PAGE);
+    _modalLoaded += batch.length;
+
+    batch.forEach(v => {
+      const row = document.createElement('div');
+      row.className = 'video-row vcols';
+      const statusLabel = v.status === 'deleted' ? 'Deleted'
+                        : v.status === 'undeleted' ? 'Restored' : 'Active';
+      row.innerHTML = `
+        <img class="video-thumb" src="/api/videos/${esc(v.video_id)}/thumbnail" alt=""
+             onerror="this.style.opacity='.15'">
+        <div>${v.description
+          ? `<div class="video-desc">${esc(v.description)}</div>`
+          : `<div class="video-desc-empty">(no description)</div>`}</div>
+        <div class="video-cell" style="text-align:center">
+          <span class="vstatus ${v.status}">${statusLabel}</span>
+        </div>
+        <div class="video-cell">${fmtCount(v.view_count)}</div>
+        <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
+        <div class="video-cell">${fmtDateShort(v.download_date)}</div>
+        <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
+      `;
+      list.appendChild(row);
+    });
+
+    if (_modalLoaded < vids.length) {
+      const sentinel = document.createElement('div');
+      sentinel.style.height = '1px';
+      list.appendChild(sentinel);
+      _modalObs = new IntersectionObserver(entries => {
+        if (!entries[0].isIntersecting) return;
+        _modalObs.disconnect(); _modalObs = null;
+        _appendModalVideos(vids);
+      }, { root: list, rootMargin: '300px' });
+      _modalObs.observe(sentinel);
     }
   }
 

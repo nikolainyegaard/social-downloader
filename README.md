@@ -93,6 +93,8 @@ The loop does not run automatically on startup — it waits for the first interv
 
 To process a single user immediately, click the **Run** button on their card. Multiple users can be queued this way — they run in order, one at a time.
 
+Click anywhere on a user card (other than the Run/Remove buttons) to open a detail view showing their full profile info and a complete, sortable, filterable list of all their downloaded videos with thumbnails.
+
 ---
 
 ## Caddy integration
@@ -161,8 +163,10 @@ All configuration is via environment variables in `docker-compose.yml`.
 |---|---|---|
 | `LOOP_INTERVAL_MINUTES` | `30` | Minutes between download loop runs. `180` is recommended for large libraries. |
 | `WEB_PORT` | `5000` | Port the web UI listens on inside the container. |
-| `DATA_DIR` | `/app/data` | Where the database and cookies.txt are stored. |
+| `DATA_DIR` | `/app/data` | Where the database, cookies.txt, and avatars are stored. |
 | `VIDEOS_DIR` | `/app/videos` | Where downloaded videos are saved. |
+| `THUMBNAIL_WORKERS` | `min(cpu_count, 12)` | Parallel ffmpeg workers for thumbnail generation. |
+| `THUMBNAIL_USE_GPU` | `0` | Set to `1` to use NVDEC hardware decode for thumbnail extraction (requires CUDA-enabled ffmpeg). |
 | `TZ` | `UTC` | Container timezone for log timestamps, e.g. `Europe/Oslo`. |
 | `ms_token` | — | Fallback: provide the raw `msToken` cookie value if not using a cookies file. |
 
@@ -174,24 +178,31 @@ All configuration is via environment variables in `docker-compose.yml`.
 ./data/
   tiktok.db        # SQLite database (users, videos, username history)
   cookies.txt      # TikTok session cookies (uploaded via UI)
+  avatars/
+    {tiktok_id}.jpg  # Cached profile pictures, refreshed each loop run
   logs/
-    transcript.log # Daily-rotating full output log
+    transcript.log   # Daily-rotating full output log
 
 ./videos/
   @username/
     1234567890.mp4      # Video post, named by TikTok video ID
     1234567890_01.jpg   # Photo post, one file per image
     1234567890_02.jpg
+    thumbs/
+      1234567890.jpg    # Auto-generated JPEG thumbnail (360px wide)
+      ...
     ...
 ```
 
+On first startup, a background thread scans all existing video files and generates any missing thumbnails in parallel. Progress is logged to the console.
+
 ### What's stored in the database
 
-**Users:** TikTok ID, current username, display name, bio, follower/following/video counts, join date, account status (active / banned), date added, date last checked.
+**Users:** TikTok ID, current username, display name, bio, follower/following/video counts, join date, verified status, account status (active / banned), date added, date last checked. The full raw API response is stored as a JSON blob for future use.
 
 **Username history:** Every username change is recorded with a timestamp, so you always know what an account used to be called.
 
-**Videos:** Video ID, type (video or photo carousel), description, upload date, download date, file path, and status — `up`, `deleted` (disappeared from TikTok), or `undeleted` (reappeared after being deleted), with timestamps for each status change.
+**Videos:** Video ID, type (video or photo carousel), description, upload date, download date, file path, status (`up` / `deleted` / `undeleted`), engagement stats (views, likes, comments, shares, saves), dimensions (width, height, duration), music info (title and artist), and the full raw TikTok page data + yt-dlp metadata as JSON blobs. Stats are captured at download time from the TikTok page — existing videos added before v1.5.0 will have NULL for these fields.
 
 ### Metadata embedded in video files
 
