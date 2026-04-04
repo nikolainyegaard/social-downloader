@@ -122,6 +122,12 @@ def _run_backfill() -> None:
                 comment_count=details.get("comment_count"),
                 share_count=details.get("share_count"),
                 save_count=details.get("save_count"),
+                duration=details.get("duration"),
+                width=details.get("width"),
+                height=details.get("height"),
+                music_title=details.get("music_title"),
+                music_artist=details.get("music_artist"),
+                raw_video_data=details.get("_raw_video_data"),
             )
         except Exception:
             with _backfill_lock:
@@ -290,7 +296,9 @@ def create_app() -> Flask:
 
     @app.route("/api/status", methods=["GET"])
     def get_status():
-        return jsonify(get_state_snapshot())
+        state = get_state_snapshot()
+        state["missing_stats_count"] = db.count_videos_missing_stats()
+        return jsonify(state)
 
     @app.route("/api/trigger", methods=["POST"])
     def trigger_now():

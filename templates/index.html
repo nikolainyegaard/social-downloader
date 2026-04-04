@@ -614,6 +614,7 @@
       <span id="lastRun"></span>
       <span id="nextRun"></span>
       <button class="btn-ghost" id="backfillBtn" onclick="triggerBackfill()" style="font-size:12px;padding:5px 10px;">Backfill Stats</button>
+      <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
       <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
       <button class="btn-primary" id="triggerBtn" onclick="triggerLoop()">Run Now</button>
     </div>
@@ -1073,6 +1074,12 @@
       ? `Next: ${fmt.relFuture(state.next_run)}` : '';
 
     document.getElementById('triggerBtn').disabled = isRunning;
+
+    const missingEl = document.getElementById('missingStatsCount');
+    if (missingEl) {
+      const n = state.missing_stats_count ?? 0;
+      missingEl.textContent = n > 0 ? `${n.toLocaleString()} missing` : '';
+    }
   }
 
   function clearLog() {

@@ -98,12 +98,26 @@ def _migrate_db(conn):
         "ALTER TABLE users  ADD COLUMN verified       INTEGER DEFAULT 0",
         "ALTER TABLE users  ADD COLUMN avatar_url     TEXT",
         "ALTER TABLE users  ADD COLUMN raw_user_data  TEXT",
+        "ALTER TABLE videos ADD COLUMN stats_backfilled_at INTEGER",
     ]
     for sql in migrations:
         try:
             conn.execute(sql)
         except sqlite3.OperationalError:
             pass  # column already exists
+
+    # One-time stamp for videos that are already fully complete (have both view_count
+    # and raw_video_data, meaning they were downloaded with v1.5.0+ and already have
+    # all backfillable fields). Leaves v1-backfill victims and pre-stats videos as
+    # NULL so they get one re-run to fill the fields the old backfill missed.
+    conn.execute("""
+        UPDATE videos
+        SET stats_backfilled_at = COALESCE(download_date, CAST(strftime('%s','now') AS INTEGER))
+        WHERE stats_backfilled_at IS NULL
+          AND view_count    IS NOT NULL
+          AND raw_video_data IS NOT NULL
+          AND file_path IS NOT NULL
+    """)
 
 
 # User operations
@@ -208,11 +222,13 @@ def add_video(video_id, tiktok_id, video_type, description, upload_date,
             INSERT OR IGNORE INTO videos
                 (video_id, tiktok_id, type, description, upload_date,
                  view_count, like_count, comment_count, share_count, save_count,
-                 duration, width, height, music_title, music_artist, raw_video_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 duration, width, height, music_title, music_artist, raw_video_data,
+                 stats_backfilled_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (video_id, tiktok_id, video_type, description, upload_date,
               view_count, like_count, comment_count, share_count, save_count,
-              duration, width, height, music_title, music_artist, raw_video_data))
+              duration, width, height, music_title, music_artist, raw_video_data,
+              int(time.time())))
 
 
 def update_video_downloaded(video_id, file_path, ytdlp_data=None):
@@ -388,26 +404,52 @@ def get_all_username_history() -> dict:
 
 
 def get_videos_missing_stats() -> list[dict]:
-    """Return downloaded videos with no view_count, joined to get the owner's current username."""
+    """Return downloaded, non-deleted videos that have never had a full stats fetch,
+    joined to get the owner's current username."""
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
             """SELECT v.video_id, v.tiktok_id, u.username
                FROM videos v
                JOIN users u ON u.tiktok_id = v.tiktok_id
-               WHERE v.view_count IS NULL AND v.file_path IS NOT NULL
+               WHERE v.stats_backfilled_at IS NULL
+                 AND v.file_path IS NOT NULL
+                 AND v.status != 'deleted'
                ORDER BY v.download_date"""
         ).fetchall()]
 
 
+def count_videos_missing_stats() -> int:
+    """Count of downloaded, non-deleted videos that have never had a full stats fetch."""
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT COUNT(*) FROM videos
+               WHERE stats_backfilled_at IS NULL
+                 AND file_path IS NOT NULL
+                 AND status != 'deleted'"""
+        ).fetchone()
+    return row[0] if row else 0
+
+
 def update_video_stats(video_id: str, view_count=None, like_count=None,
-                       comment_count=None, share_count=None, save_count=None):
+                       comment_count=None, share_count=None, save_count=None,
+                       duration=None, width=None, height=None,
+                       music_title=None, music_artist=None, raw_video_data=None):
     with get_db() as conn:
         conn.execute("""
             UPDATE videos SET
-                view_count    = ?,
-                like_count    = ?,
-                comment_count = ?,
-                share_count   = ?,
-                save_count    = ?
+                view_count         = ?,
+                like_count         = ?,
+                comment_count      = ?,
+                share_count        = ?,
+                save_count         = ?,
+                duration           = COALESCE(?, duration),
+                width              = COALESCE(?, width),
+                height             = COALESCE(?, height),
+                music_title        = COALESCE(?, music_title),
+                music_artist       = COALESCE(?, music_artist),
+                raw_video_data     = COALESCE(?, raw_video_data),
+                stats_backfilled_at = ?
             WHERE video_id = ?
-        """, (view_count, like_count, comment_count, share_count, save_count, video_id))
+        """, (view_count, like_count, comment_count, share_count, save_count,
+              duration, width, height, music_title, music_artist, raw_video_data,
+              int(time.time()), video_id))

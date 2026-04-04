@@ -100,7 +100,7 @@ Click anywhere on a user card (other than the Run/Remove buttons) to open a deta
 - **Click a thumbnail** to preview the image full-size in an overlay.
 - **Click the ▶ button** (video posts only) to play the video directly in the browser.
 
-If you have videos downloaded before v1.5.0, their view/like/comment counts will be missing. Click **Backfill Stats** in the page header to fetch the missing stats from TikTok without re-downloading any files. Progress is shown inline; the operation runs in the background and does not interrupt the download loop.
+If you have videos downloaded before v1.5.0, their engagement stats and technical metadata will be missing. The header shows how many videos need backfilling (e.g. `942 missing`). Click **Backfill Stats** to fetch the missing data from TikTok without re-downloading any files — this covers views, likes, comments, shares, saves, duration, dimensions, and music info. Progress is shown inline; the operation runs in the background and does not interrupt the download loop. Videos downloaded with the current version are never eligible for backfill as all fields are captured at download time.
 
 ---
 
