@@ -15,7 +15,7 @@ A background loop runs on a fixed interval (default: 30 minutes, recommended: 3 
    - Fetches their profile info via TikTokApi (Playwright/Chromium) and detects profile changes (username, display name, bio, avatar)
    - Fetches their full public video list via yt-dlp — no browser session needed
    - Compares it against the database
-   - Downloads any new videos via yt-dlp, embedding metadata into the file; photo posts are downloaded as individual `.jpg` images
+   - Downloads any new videos via yt-dlp, embedding metadata into the file; photo posts are downloaded as individual AVIF images
    - Tracks videos that have disappeared — after 3 consecutive loop runs without the video appearing, it is marked as deleted and its file is prefixed with `del_`
    - Tracks banned accounts similarly — confirmed after 3 consecutive checks
    - Immediately marks any previously-deleted videos or banned accounts as restored/active if they reappear
@@ -108,6 +108,8 @@ The **Recent** panel on the main page shows the last few deleted videos, profile
 
 If you have videos downloaded before v1.5.0, their engagement stats and technical metadata will be missing. The header shows how many videos need backfilling (e.g. `942 missing`). Click **Backfill Stats** to fetch the missing data from TikTok without re-downloading any files — this covers views, likes, comments, shares, saves, duration, dimensions, and music info. Progress is shown inline; the operation runs in the background and does not interrupt the download loop. Videos downloaded with the current version are never eligible for backfill as all fields are captured at download time.
 
+All profile pictures, thumbnails, and photo posts are stored as **AVIF** images (50–70% smaller than JPEG at equivalent quality). On first startup, a background job automatically converts any existing JPEG images to AVIF. You can also trigger this manually from the **Jobs** section in Settings.
+
 ---
 
 ## Caddy integration
@@ -192,23 +194,23 @@ All configuration is via environment variables in `docker-compose.yml`.
   tiktok.db        # SQLite database (users, videos, username history)
   cookies.txt      # TikTok session cookies (uploaded via UI)
   avatars/
-    {tiktok_id}.jpg           # Current cached profile picture, refreshed each loop run
-    {tiktok_id}_{ts}.jpg      # Archived previous avatars (created on change detection)
+    {tiktok_id}.avif           # Current cached profile picture, refreshed each loop run
+    {tiktok_id}_{ts}.avif      # Archived previous avatars (created on change detection)
   logs/
     transcript.log   # Daily-rotating full output log
 
 ./videos/
   @username/
-    1234567890.mp4      # Video post, named by TikTok video ID
-    1234567890_01.jpg   # Photo post, one file per image
-    1234567890_02.jpg
+    1234567890.mp4       # Video post, named by TikTok video ID
+    1234567890_01.avif   # Photo post, one file per image (AVIF format)
+    1234567890_02.avif
     thumbs/
-      1234567890.jpg    # Auto-generated JPEG thumbnail (360px wide)
+      1234567890.avif    # Auto-generated AVIF thumbnail (360px wide)
       ...
     ...
 ```
 
-On first startup, a background thread scans all existing video files and generates any missing thumbnails in parallel. Progress is logged to the console.
+On first startup, a background thread scans all existing video files and generates any missing thumbnails in parallel, and a second background job converts any existing JPEG photos/thumbnails/avatars to AVIF. Progress for both is logged to the console.
 
 ### What's stored in the database
 

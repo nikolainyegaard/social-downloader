@@ -27,6 +27,11 @@ def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     with get_db() as conn:
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS users (
                 tiktok_id           TEXT PRIMARY KEY,
                 sec_uid             TEXT,
@@ -681,6 +686,30 @@ def vacuum() -> None:
         conn.execute("VACUUM")
     finally:
         conn.close()
+
+
+# Settings (generic key/value store)
+
+def get_setting(key: str, default: str | None = None) -> str | None:
+    with get_db() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def set_setting(key: str, value: str | None) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value)
+        )
+
+
+def update_video_file_path(video_id: str, file_path: str) -> None:
+    """Update the stored file path for a video (e.g. after format conversion)."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE videos SET file_path = ? WHERE video_id = ?",
+            (file_path, video_id),
+        )
 
 
 def migrate_del_prefix() -> int:

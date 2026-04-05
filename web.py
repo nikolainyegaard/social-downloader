@@ -15,6 +15,7 @@ from config import get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, C
 from tiktok_api import get_user_info, get_video_details
 from loop import is_running, get_state_snapshot, trigger_event, enqueue_user_run
 from thumbnailer import thumb_path_for, avatar_path
+import photo_converter as _photo_converter
 
 
 # Add-user queue
@@ -341,21 +342,24 @@ def create_app() -> Flask:
 
     @app.route("/api/users/<tiktok_id>/avatar", methods=["GET"])
     def user_avatar(tiktok_id: str):
-        path = avatar_path(tiktok_id)
-        if not os.path.exists(path):
-            return ("", 404)
-        return send_file(path, mimetype="image/jpeg")
+        avif = avatar_path(tiktok_id)                 # .avif
+        jpg  = avif.replace(".avif", ".jpg")          # legacy fallback
+        if os.path.exists(avif):
+            return send_file(avif, mimetype="image/avif")
+        if os.path.exists(jpg):
+            return send_file(jpg, mimetype="image/jpeg")
+        return ("", 404)
 
     @app.route("/api/users/<tiktok_id>/avatar-history/<filename>", methods=["GET"])
     def user_avatar_history(tiktok_id: str, filename: str):
-        # Restrict to safe filenames: only {tiktok_id}_{digits}.jpg
         import re as _re
-        if not _re.fullmatch(r"[0-9]+_[0-9]+\.jpg", filename):
+        if not _re.fullmatch(r"[0-9]+_[0-9]+\.(jpg|avif)", filename):
             return ("", 400)
         path = os.path.join(AVATARS_DIR, filename)
         if not os.path.exists(path):
             return ("", 404)
-        return send_file(path, mimetype="image/jpeg")
+        mime = "image/avif" if filename.endswith(".avif") else "image/jpeg"
+        return send_file(path, mimetype=mime)
 
     @app.route("/api/users/<tiktok_id>/profile-history", methods=["GET"])
     def user_profile_history(tiktok_id: str):
@@ -366,10 +370,13 @@ def create_app() -> Flask:
         video = db.get_video(video_id)
         if not video or not video.get("file_path"):
             return ("", 404)
-        path = thumb_path_for(video_id, video["file_path"])
-        if not os.path.exists(path):
-            return ("", 404)
-        return send_file(path, mimetype="image/jpeg")
+        avif = thumb_path_for(video_id, video["file_path"])   # .avif
+        jpg  = avif.replace(".avif", ".jpg")                  # legacy fallback
+        if os.path.exists(avif):
+            return send_file(avif, mimetype="image/avif")
+        if os.path.exists(jpg):
+            return send_file(jpg, mimetype="image/jpeg")
+        return ("", 404)
 
     @app.route("/api/videos/<video_id>/file", methods=["GET"])
     def video_file(video_id: str):
@@ -459,6 +466,18 @@ def create_app() -> Flask:
         if is_running():
             return jsonify({"error": "Loop is already running"}), 409
         trigger_event.set()
+        return jsonify({"ok": True})
+
+    # Jobs API
+
+    @app.route("/api/jobs/photo-converter/status", methods=["GET"])
+    def get_photo_converter_status():
+        return jsonify(_photo_converter.get_state())
+
+    @app.route("/api/jobs/photo-converter/start", methods=["POST"])
+    def start_photo_converter():
+        if not _photo_converter.start():
+            return jsonify({"error": "Already running"}), 409
         return jsonify({"ok": True})
 
     return app

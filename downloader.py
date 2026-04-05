@@ -10,6 +10,7 @@ from yt_dlp.utils import DownloadError
 
 from config import VIDEOS_DIR, COOKIES_PATH
 from thumbnailer import generate_thumbnail
+from photo_converter import encode_avif, CRF_PHOTO
 
 MIN_VALID_SIZE_BYTES = 10_000
 
@@ -147,17 +148,31 @@ def download_photos(*, video_id: str, username: str,
     total      = len(image_urls)
 
     for i, url in enumerate(image_urls, 1):
-        fpath = os.path.join(author_folder, f"{video_id}_{i:02d}.jpg")
+        jpg_path  = os.path.join(author_folder, f"{video_id}_{i:02d}.jpg")
+        avif_path = os.path.join(author_folder, f"{video_id}_{i:02d}.avif")
         try:
             resp = requests.get(url, cookies=cookies, timeout=30)
             resp.raise_for_status()
-            with open(fpath, "wb") as f:
+            with open(jpg_path, "wb") as f:
                 f.write(resp.content)
             if upload_date:
-                os.utime(fpath, (upload_date, upload_date))
+                os.utime(jpg_path, (upload_date, upload_date))
+
+            # Convert to AVIF immediately; keep JPEG only as fallback if encode fails
+            if encode_avif(jpg_path, avif_path, CRF_PHOTO):
+                if upload_date:
+                    os.utime(avif_path, (upload_date, upload_date))
+                try:
+                    os.remove(jpg_path)
+                except OSError:
+                    pass
+                saved_path = avif_path
+            else:
+                saved_path = jpg_path  # keep JPEG; photo_converter will retry later
+
             if first_path is None:
-                first_path = fpath
-            print(f"[{_ts()}] Photo {i}/{total} saved → {fpath}")
+                first_path = saved_path
+            print(f"[{_ts()}] Photo {i}/{total} saved → {saved_path}")
         except Exception as e:
             print(f"[{_ts()}] Failed to download photo {i}/{total} for {video_id}: {e}")
 

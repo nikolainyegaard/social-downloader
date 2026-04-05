@@ -16,6 +16,7 @@ from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTAB
 from tiktok_api import get_user_info, get_user_videos, get_video_details
 from downloader import download_video, download_photos, rename_user_folder
 from thumbnailer import backfill_thumbnails, cache_avatar
+import photo_converter as _photo_converter  # noqa: F401 — starts conversion thread on import
 
 # Shared state
 

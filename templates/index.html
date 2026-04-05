@@ -851,6 +851,69 @@
     .cleanup-step { font-size: 12px; color: var(--text-dim); }
     .cleanup-step.done { color: var(--green); }
 
+    /* ── Transcoding settings ────────────────────────────────────────────────── */
+
+    .tc-toggle-row {
+      display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;
+    }
+    .tc-toggle-label { font-size: 13px; color: var(--text-dim); flex: 1; }
+    .tc-toggle-row input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
+    .tc-toggle-switch {
+      position: relative; width: 36px; height: 20px; flex-shrink: 0;
+      background: var(--surface2); border-radius: 10px; transition: background .2s;
+    }
+    .tc-toggle-switch::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--muted); transition: transform .2s, background .2s;
+    }
+    .tc-toggle-row input:checked ~ .tc-toggle-switch { background: var(--accent); }
+    .tc-toggle-row input:checked ~ .tc-toggle-switch::after { transform: translateX(16px); background: #fff; }
+
+    .tc-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
+
+    .tc-bar-track {
+      height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden;
+    }
+    .tc-bar-fill {
+      height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s;
+    }
+
+    .tc-encoder-badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 10px; font-family: var(--mono);
+      border: 1px solid currentColor;
+    }
+    .tc-encoder-badge.ok      { color: var(--green); }
+    .tc-encoder-badge.missing { color: var(--red);   }
+
+    .job-card {
+      border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
+      margin-bottom: 16px;
+    }
+    .job-card-hdr  { display: flex; align-items: flex-start; gap: 16px; }
+    .job-card-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+    .job-card-desc  { font-size: 12px; color: var(--text-dim); line-height: 1.55; }
+
+    .tc-info {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+      font-size: 9px; font-weight: 700; font-style: normal; line-height: 1;
+      background: var(--surface2); color: var(--muted);
+      border: 1px solid var(--border);
+      cursor: help; position: relative; vertical-align: middle; margin-left: 5px;
+    }
+    .tc-info::before {
+      content: attr(data-tip);
+      position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
+      background: var(--surface1, var(--surface2)); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 7px 10px; font-size: 11px; line-height: 1.55; font-weight: 400;
+      width: 230px; white-space: normal;
+      pointer-events: none; opacity: 0; transition: opacity .15s;
+      z-index: 300;
+    }
+    .tc-info:hover::before { opacity: 1; }
+
     /* ── Gear button ──────────────────────────────────────────────────────────── */
 
     .btn-gear {
@@ -1025,9 +1088,10 @@
   <div class="settings-modal">
     <button class="modal-close" onclick="closeSettings()">✕</button>
     <nav class="settings-nav">
-      <div class="settings-nav-item active" id="snav-cookies"  onclick="switchSettingsSection('cookies')">Cookies</div>
-      <div class="settings-nav-item"        id="snav-backfill" onclick="switchSettingsSection('backfill')">Backfill</div>
-      <div class="settings-nav-item"        id="snav-database" onclick="switchSettingsSection('database')">Database</div>
+      <div class="settings-nav-item active" id="snav-cookies"   onclick="switchSettingsSection('cookies')">Cookies</div>
+      <div class="settings-nav-item"        id="snav-backfill"  onclick="switchSettingsSection('backfill')">Backfill</div>
+      <div class="settings-nav-item"        id="snav-database"  onclick="switchSettingsSection('database')">Database</div>
+      <div class="settings-nav-item"        id="snav-jobs"      onclick="switchSettingsSection('jobs')">Jobs</div>
     </nav>
     <div class="settings-content">
 
@@ -1102,6 +1166,34 @@
           <div class="cleanup-bar-track"><div class="cleanup-bar-fill" id="cleanupBarFill"></div></div>
           <div class="cleanup-current" id="cleanupCurrent"></div>
           <div class="cleanup-step-log" id="cleanupStepLog"></div>
+        </div>
+      </div>
+
+      <!-- Jobs section -->
+      <div id="ssec-jobs" style="display:none">
+        <div class="settings-section-title">Jobs</div>
+
+        <div class="job-card">
+          <div class="job-card-hdr">
+            <div style="flex:1">
+              <div class="job-card-title">Convert photos to AVIF</div>
+              <div class="job-card-desc">
+                Converts all existing photo post images, thumbnails, and profile avatars
+                from JPEG to AVIF. Runs automatically at startup — already-converted files
+                are skipped. New downloads are saved as AVIF directly.
+              </div>
+            </div>
+            <button class="btn-primary" id="jobAvifBtn" onclick="triggerAvifJob()" style="flex-shrink:0;align-self:flex-start">Run</button>
+          </div>
+          <div id="jobAvifProgress">
+            <div class="tc-bar-track" style="margin-top:14px">
+              <div class="tc-bar-fill" id="jobAvifBar" style="width:0%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;">
+              <span id="jobAvifPhase"></span>
+              <span><span id="jobAvifCount"></span> <span id="jobAvifPct" style="font-weight:600"></span></span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1469,14 +1561,17 @@
   function closeSettings() {
     document.getElementById('settingsBackdrop').style.display = 'none';
     document.body.style.overflow = '';
+    _stopJobsPoll();
   }
 
   function switchSettingsSection(name) {
     _settingsSection = name;
-    ['cookies', 'backfill', 'database'].forEach(s => {
+    ['cookies', 'backfill', 'database', 'jobs'].forEach(s => {
       document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
       document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
     });
+    if (name === 'jobs') { _jobsLoadStatus(); _startJobsPoll(); }
+    else                 { _stopJobsPoll(); }
   }
 
   // ── Database cleanup ──────────────────────────────────────────────────────────
@@ -1526,6 +1621,68 @@
         curEl.textContent = `Done — ${data.removed} item${data.removed !== 1 ? 's' : ''} removed`;
       }
     }, 800);
+  }
+
+  // ── Jobs settings ─────────────────────────────────────────────────────────────
+
+  let _jobsPoll = null;
+
+  const _PHASE_LABELS = { photos: 'Photo posts…', thumbnails: 'Thumbnails…', avatars: 'Avatars…', counting: 'Counting…' };
+
+  async function _jobsLoadStatus() {
+    const { ok, data } = await apiJSON('/api/jobs/photo-converter/status');
+    if (!ok) return;
+
+    const btn     = document.getElementById('jobAvifBtn');
+    const barEl   = document.getElementById('jobAvifBar');
+    const phaseEl = document.getElementById('jobAvifPhase');
+    const countEl = document.getElementById('jobAvifCount');
+    const pctEl   = document.getElementById('jobAvifPct');
+
+    btn.disabled = data.running;
+
+    const total = data.total || 0;
+    const done  = data.done  || 0;
+    const pct   = total > 0 ? Math.round(done / total * 100) : (data.running ? 0 : 100);
+
+    barEl.style.width = pct + '%';
+
+    if (data.running) {
+      phaseEl.textContent = _PHASE_LABELS[data.phase] || '';
+      countEl.textContent = total > 0 ? `${done.toLocaleString()} / ${total.toLocaleString()}` : '';
+      pctEl.textContent   = total > 0 ? `${pct}%` : '';
+    } else if (done > 0 || data.errors > 0) {
+      const parts = [];
+      if (done > 0)         parts.push(`${done.toLocaleString()} converted`);
+      if (data.errors > 0)  parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
+      phaseEl.textContent = parts.join(' · ');
+      countEl.textContent = '';
+      pctEl.textContent   = '';
+    } else {
+      phaseEl.textContent = total === 0 ? 'All images already in AVIF.' : '';
+      countEl.textContent = '';
+      pctEl.textContent   = '';
+    }
+
+    if (!data.running) _stopJobsPoll();
+  }
+
+  async function triggerAvifJob() {
+    const btn = document.getElementById('jobAvifBtn');
+    btn.disabled = true;
+    const { ok, data } = await apiJSON('/api/jobs/photo-converter/start', { method: 'POST' });
+    if (!ok) { alert(data.error || 'Failed to start'); btn.disabled = false; return; }
+    _jobsLoadStatus();
+    _startJobsPoll();
+  }
+
+  function _startJobsPoll() {
+    if (_jobsPoll) return;
+    _jobsPoll = setInterval(_jobsLoadStatus, 1500);
+  }
+
+  function _stopJobsPoll() {
+    if (_jobsPoll) { clearInterval(_jobsPoll); _jobsPoll = null; }
   }
 
   // ── Users ─────────────────────────────────────────────────────────────────────
