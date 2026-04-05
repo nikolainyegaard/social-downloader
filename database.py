@@ -594,6 +594,44 @@ def get_recent_activity() -> dict:
     return {"deletions": deletions, "profile_changes": profile_changes, "bans": bans}
 
 
+def get_deletion_history(offset: int = 0, limit: int = 50) -> list[dict]:
+    """Return paginated video deletion history (newest first)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id
+               FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+               ORDER BY v.deleted_at DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_profile_change_history(offset: int = 0, limit: int = 50) -> list[dict]:
+    """Return paginated profile change history (newest first)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT ph.field, ph.old_value, ph.changed_at, u.username, u.tiktok_id
+               FROM profile_history ph JOIN users u ON u.tiktok_id = ph.tiktok_id
+               ORDER BY ph.changed_at DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_ban_history(offset: int = 0, limit: int = 50) -> list[dict]:
+    """Return paginated ban history (newest first)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT tiktok_id, username, banned_at
+               FROM users
+               WHERE account_status = 'banned' AND banned_at IS NOT NULL
+               ORDER BY banned_at DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_aggregate_stats() -> dict:
     """Return aggregate statistics across all tracked users and downloaded videos."""
     with get_db() as conn:

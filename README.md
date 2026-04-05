@@ -104,6 +104,8 @@ Click anywhere on a user card (other than the Run/Remove buttons) to open a deta
 - **Click a thumbnail** to preview the image full-size in an overlay.
 - **Click the ▶ button** (video posts only) to play the video directly in the browser.
 
+The **Recent** panel on the main page shows the last few deleted videos, profile changes, and bans. Click any entry to jump straight to the relevant user and video. Click a section heading (e.g. "Recently deleted") to open a full scrollable log of all historical events of that type.
+
 If you have videos downloaded before v1.5.0, their engagement stats and technical metadata will be missing. The header shows how many videos need backfilling (e.g. `942 missing`). Click **Backfill Stats** to fetch the missing data from TikTok without re-downloading any files — this covers views, likes, comments, shares, saves, duration, dimensions, and music info. Progress is shown inline; the operation runs in the background and does not interrupt the download loop. Videos downloaded with the current version are never eligible for backfill as all fields are captured at download time.
 
 ---

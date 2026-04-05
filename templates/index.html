@@ -167,6 +167,14 @@
       margin-top: 4px;
       line-height: 1.5;
     }
+    .browser-ext-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--text-dim); text-decoration: none;
+      background: var(--surface2); padding: 5px 11px 5px 8px;
+      border-radius: 6px; transition: background .15s, color .15s;
+      border: 1px solid var(--border);
+    }
+    .browser-ext-link:hover { background: var(--border); color: var(--text); }
     .cookie-note code {
       font-family: var(--mono);
       background: var(--surface2);
@@ -431,26 +439,41 @@
     }
     .phist-empty { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
     .phist-entry {
-      display: flex; align-items: flex-start; gap: 12px;
       padding: 10px 12px;
       border-radius: var(--radius);
       background: var(--surface);
       border: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 8px;
     }
+    .phist-entry-hdr { font-size: 13px; }
+    .phist-date { font-size: 11px; color: var(--muted); }
+    .phist-diff {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+    .phist-side { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .phist-side-hdr { font-size: 12px; line-height: 1.3; }
+    .phist-side-label { color: var(--muted); font-weight: 400; }
+    .phist-arrow {
+      color: var(--muted); font-size: 16px; padding-top: 18px;
+      flex-shrink: 0; user-select: none;
+    }
+    .phist-value {
+      font-size: 13px; color: var(--text); word-break: break-word;
+      white-space: pre-wrap; line-height: 1.5;
+      background: var(--surface2); border-radius: 4px;
+      padding: 5px 8px; min-height: 30px;
+    }
+    .phist-value.empty { color: var(--muted); font-style: italic; }
     .phist-avatar-thumb {
-      width: 48px; height: 48px; border-radius: 50%;
+      width: 56px; height: 56px; border-radius: 50%;
       object-fit: cover; flex-shrink: 0;
       background: var(--surface2); cursor: pointer;
       transition: opacity .15s;
     }
     .phist-avatar-thumb:hover { opacity: .75; }
-    .phist-text { flex: 1; min-width: 0; }
-    .phist-value {
-      font-size: 13px; color: var(--text); word-break: break-word;
-      white-space: pre-wrap; line-height: 1.5;
-    }
-    .phist-value.empty { color: var(--muted); font-style: italic; }
-    .phist-date { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
     /* ── Modal toolbar ────────────────────────────────────────────────────────── */
 
@@ -483,7 +506,7 @@
     /* Shared column layout for header + rows */
     .vcols {
       display: grid;
-      grid-template-columns: 90px minmax(120px,1fr) 76px 70px 92px 92px 92px 32px;
+      grid-template-columns: 90px minmax(120px,1fr) 76px 70px 130px 130px 130px 32px;
       gap: 10px;
       align-items: center;
     }
@@ -519,11 +542,7 @@
     }
     .video-row:hover   { background: var(--surface2); }
     .video-row:last-child { border-bottom: none; }
-    @keyframes highlight-fade {
-      0%   { background: rgba(224,168,58,.30); }
-      100% { background: transparent; }
-    }
-    .video-row-highlight { animation: highlight-fade 2.5s ease-out forwards; }
+    .video-row-highlight { background: rgba(224,168,58,.22); }
 
     .video-thumb {
       width: 90px; height: 51px;
@@ -716,6 +735,38 @@
     .recent-name   { color: var(--accent); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .recent-detail { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
     .recent-empty  { font-size: 11px; color: var(--muted); padding: 2px 6px; }
+    .recent-section-hdr {
+      font-size: 10px; font-weight: 700; letter-spacing: .07em;
+      text-transform: uppercase; color: var(--muted);
+      cursor: pointer; padding: 2px 6px; border-radius: 4px;
+      transition: color .15s;
+    }
+    .recent-section-hdr:hover { color: var(--text); }
+
+    /* Recent log modal */
+    .recent-log-modal {
+      width: min(580px, 94vw);
+      height: 70vh;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+    .recent-log-modal-hdr {
+      padding: 14px 44px 12px 18px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .recent-log-modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 8px 8px;
+    }
 
     /* Control sections */
     .ctrl-section {
@@ -998,8 +1049,24 @@
           </div>
         </div>
         <div class="cookie-note">
-          Export your TikTok cookies using a browser extension such as
-          <strong>Get cookies.txt LOCALLY</strong> (Chrome/Firefox).
+          Export your TikTok cookies using the <strong>Get cookies.txt LOCALLY</strong> extension:
+          <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
+            <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
+               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+              <img src="/static/icons/chrome.svg" width="16" height="16" alt="">
+              Chrome
+            </a>
+            <a href="https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp"
+               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+              <img src="/static/icons/edge.svg" width="16" height="16" alt="">
+              Edge
+            </a>
+            <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/"
+               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+              <img src="/static/icons/firefox.svg" width="16" height="16" alt="">
+              Firefox
+            </a>
+          </div>
           The file must be in Netscape format and include the <code>msToken</code> cookie.
           Cookies are stored server-side — uploading once from any device applies everywhere.
         </div>
@@ -1059,6 +1126,14 @@
 </div>
 
 <!-- User detail modal -->
+<div id="recentLogBackdrop" class="modal-backdrop" style="display:none;z-index:190" onclick="if(event.target===this)closeRecentLog()">
+  <div class="recent-log-modal">
+    <button class="modal-close" onclick="closeRecentLog()">✕</button>
+    <div class="recent-log-modal-hdr" id="recentLogTitle"></div>
+    <div class="recent-log-modal-body" id="recentLogBody"></div>
+  </div>
+</div>
+
 <div id="modalBackdrop" class="modal-backdrop" style="display:none" onclick="handleBackdropClick(event)">
   <div class="modal">
     <button class="modal-close" onclick="closeModal()">✕</button>
@@ -1237,7 +1312,7 @@
     let html = '';
 
     // Recently deleted
-    html += `<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Recently deleted</div>`;
+    html += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('deletions')" title="View all deleted videos">Recently deleted</div>`;
     if (data.deletions.length) {
       html += data.deletions.map(d =>
         `<div class="recent-entry" onclick="openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')" title="Open @${esc(d.username)}">
@@ -1251,7 +1326,7 @@
     }
 
     // Recently changed profile
-    html += `<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:8px 0 2px">Recently changed profile</div>`;
+    html += `<div class="recent-section-hdr" style="margin:8px 0 2px" onclick="openRecentLog('profile-changes')" title="View all profile changes">Recently changed profile</div>`;
     if (data.profile_changes.length) {
       html += data.profile_changes.map(p =>
         `<div class="recent-entry" onclick="openUserModalWithHistory('${esc(p.tiktok_id)}','${esc(p.field)}')" title="Open @${esc(p.username)} · ${esc(_FIELD_LABELS[p.field] || p.field)} history">
@@ -1265,7 +1340,7 @@
     }
 
     // Recently banned
-    html += `<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:8px 0 2px">Recently banned</div>`;
+    html += `<div class="recent-section-hdr" style="margin:8px 0 2px" onclick="openRecentLog('bans')" title="View all banned accounts">Recently banned</div>`;
     if (data.bans.length) {
       const b = data.bans[0];
       html += `<div class="recent-entry" onclick="openUserModal('${esc(b.tiktok_id)}')" title="Open @${esc(b.username)}">
@@ -1283,6 +1358,102 @@
   async function loadRecent() {
     const { ok, data } = await apiJSON('/api/recent');
     if (ok) renderRecent(data);
+  }
+
+  // ── Recent log modal ──────────────────────────────────────────────────────────
+
+  const _RECENT_LOG_TITLES = {
+    'deletions':       'All Deleted Videos',
+    'profile-changes': 'All Profile Changes',
+    'bans':            'All Banned Accounts',
+  };
+
+  let _recentLogType    = null;
+  let _recentLogOffset  = 0;
+  let _recentLogDone    = false;
+  let _recentLogLoading = false;
+  let _recentLogObs     = null;
+
+  function openRecentLog(type) {
+    _recentLogType    = type;
+    _recentLogOffset  = 0;
+    _recentLogDone    = false;
+    _recentLogLoading = false;
+
+    document.getElementById('recentLogTitle').textContent = _RECENT_LOG_TITLES[type] || type;
+    document.getElementById('recentLogBody').innerHTML = '';
+    document.getElementById('recentLogBackdrop').style.display = 'flex';
+
+    _setupRecentLogScroll();
+    // Initial load is triggered by the IntersectionObserver firing on the
+    // newly-added sentinel (which is immediately visible in the empty container).
+    // No explicit call here to avoid a double-fetch race.
+  }
+
+  function closeRecentLog() {
+    document.getElementById('recentLogBackdrop').style.display = 'none';
+    if (_recentLogObs) { _recentLogObs.disconnect(); _recentLogObs = null; }
+    _recentLogType    = null;
+    _recentLogLoading = false;
+  }
+
+  function _setupRecentLogScroll() {
+    if (_recentLogObs) _recentLogObs.disconnect();
+    const sentinel = document.createElement('div');
+    sentinel.id = 'recentLogSentinel';
+    sentinel.style.height = '1px';
+    document.getElementById('recentLogBody').appendChild(sentinel);
+    _recentLogObs = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && !_recentLogDone) _loadRecentLogBatch();
+    }, { threshold: 0 });
+    _recentLogObs.observe(sentinel);
+  }
+
+  async function _loadRecentLogBatch() {
+    if (_recentLogDone || !_recentLogType || _recentLogLoading) return;
+    _recentLogLoading = true;
+    const url = `/api/recent/${_recentLogType}?offset=${_recentLogOffset}&limit=50`;
+    const { ok, data } = await apiJSON(url);
+    if (!ok || !_recentLogType) { _recentLogLoading = false; return; }
+    if (!data.length) { _recentLogDone = true; _recentLogLoading = false; return; }
+    _recentLogOffset += data.length;
+    if (data.length < 50) _recentLogDone = true;
+
+    const body = document.getElementById('recentLogBody');
+    const sentinel = document.getElementById('recentLogSentinel');
+    const frag = document.createDocumentFragment();
+
+    data.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'recent-entry';
+      if (_recentLogType === 'deletions') {
+        row.title = `Open @${item.username}`;
+        row.onclick = () => { closeRecentLog(); openUserModalAndHighlight(item.tiktok_id, item.video_id); };
+        row.innerHTML = `
+          <span class="recent-date">${_recentDate(item.deleted_at)}</span>
+          <span class="recent-name">@${esc(item.username)}</span>
+          <span class="recent-detail">${esc(item.video_id)}</span>`;
+      } else if (_recentLogType === 'profile-changes') {
+        const label = _FIELD_LABELS[item.field] || item.field;
+        row.title = `Open @${item.username} · ${label} history`;
+        row.onclick = () => { closeRecentLog(); openUserModalWithHistory(item.tiktok_id, item.field); };
+        row.innerHTML = `
+          <span class="recent-date">${_recentDate(item.changed_at)}</span>
+          <span class="recent-name">@${esc(item.username)}</span>
+          <span class="recent-detail">${esc(label)}</span>`;
+      } else {
+        row.title = `Open @${item.username}`;
+        row.onclick = () => { closeRecentLog(); openUserModal(item.tiktok_id); };
+        row.innerHTML = `
+          <span class="recent-date">${_recentDate(item.banned_at)}</span>
+          <span class="recent-name">@${esc(item.username)}</span>
+          <span class="recent-detail" style="color:var(--red)">Banned</span>`;
+      }
+      frag.appendChild(row);
+    });
+
+    body.insertBefore(frag, sentinel);
+    _recentLogLoading = false;
   }
 
   // ── Settings modal ────────────────────────────────────────────────────────────
@@ -1710,6 +1881,7 @@
   // ── User detail modal ─────────────────────────────────────────────────────────
 
   let _modalUserId          = null;
+  let _modalUser            = null;   // full user object for the open modal
   let _modalVideos          = [];
   let _modalFilter          = 'all';
   let _modalSort            = { field: 'upload_date', dir: 'desc' };
@@ -1739,13 +1911,15 @@
   function fmtDateShort(unix) {
     if (!unix) return '—';
     const d = new Date(unix * 1000);
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric',
+                                       hour: '2-digit', minute: '2-digit' });
   }
 
   function openUserModal(tiktokId) {
     const u = users.find(u => u.tiktok_id === tiktokId);
     if (!u) return;
     _modalUserId = tiktokId;
+    _modalUser   = u;
     _modalVideos = [];
     _modalFilter = 'all';
     _modalSort   = { field: 'upload_date', dir: 'desc' };
@@ -1787,6 +1961,7 @@
     document.body.style.overflow = '';
     if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
     _modalUserId = null;
+    _modalUser   = null;
     _modalVideos = [];
   }
 
@@ -1801,6 +1976,9 @@
     }
     if (document.getElementById('vidModal').style.display !== 'none') {
       closeVidModal(); return;
+    }
+    if (document.getElementById('recentLogBackdrop').style.display !== 'none') {
+      closeRecentLog(); return;
     }
     if (document.getElementById('modalBackdrop').style.display !== 'none') {
       closeModal(); return;
@@ -1859,10 +2037,15 @@
       if (row) {
         row.scrollIntoView({ block: 'center' });
         row.classList.add('video-row-highlight');
+        row.addEventListener('mouseenter', () => row.classList.remove('video-row-highlight'), { once: true });
       }
     } else {
-      _renderModalToolbar(data);
-      _renderModalVideoList();
+      // Don't overwrite the toolbar/list if profile history is already open
+      const historyOpen = document.getElementById('phistPanel').style.display !== 'none';
+      if (!historyOpen) {
+        _renderModalToolbar(data);
+        _renderModalVideoList();
+      }
     }
   }
 
@@ -2014,8 +2197,12 @@
     document.getElementById('phistPanel').style.display     = 'none';
     document.getElementById('videoListHdr').style.display   = '';
     document.getElementById('modalVideoList').style.display = '';
-    // Restore normal toolbar
-    if (_modalVideos.length) _renderModalToolbar(_modalVideos);
+    if (_modalVideos.length) {
+      _renderModalToolbar(_modalVideos);
+      _renderModalVideoList();
+    }
+    // If _modalVideos is still empty the load is still in flight; the
+    // historyOpen guard in _loadModalVideos will now pass and render normally.
   }
 
   function setHistoryField(field) {
@@ -2046,31 +2233,63 @@
       return;
     }
 
+    // Pre-compute the "new" value for each entry.
+    // _phistData is newest-first. For each field, the most-recent entry's "new"
+    // value is the current profile value; older entries' "new" value is the
+    // old_value of the next-newer entry for that same field.
+    const u = _modalUser;
+    const _currentVal = {
+      username:     u?.username     || null,
+      display_name: u?.display_name || null,
+      bio:          u?.bio          || null,
+      avatar:       '__current__',
+    };
+    const newValMap = new Map();
+    ['username', 'display_name', 'bio', 'avatar'].forEach(field => {
+      const fe = _phistData.filter(e => e.field === field); // newest-first
+      fe.forEach((e, fi) => {
+        newValMap.set(e, fi === 0 ? _currentVal[field] : fe[fi - 1].old_value);
+      });
+    });
+
+    const sideHdr = (side) =>
+      `<div class="phist-side-hdr"><span class="phist-side-label">${side}</span></div>`;
+
     panel.innerHTML = entries.map(e => {
       const dateStr = new Date(e.changed_at * 1000)
         .toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric',
                                    hour: '2-digit', minute: '2-digit' });
       const fieldLabel = _PHIST_FIELD_LABELS[e.field] || e.field;
+      const newVal = newValMap.get(e);
 
       if (e.field === 'avatar') {
-        const src = `/api/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(e.old_value)}`;
-        return `<div class="phist-entry">
-          <img class="phist-avatar-thumb" src="${src}" alt=""
+        const oldSrc = `/api/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(e.old_value)}`;
+        const newSrc = newVal === '__current__'
+          ? `/api/users/${encodeURIComponent(_phistUserId)}/avatar`
+          : `/api/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(newVal)}`;
+        const img = (src) =>
+          `<img class="phist-avatar-thumb" src="${src}" alt=""
                onerror="this.style.visibility='hidden';this.style.cursor='default';this.onclick=null"
-               onclick="openImgModalUrl('${src}')">
-          <div class="phist-text">
-            <div class="phist-date">${fieldLabel} · Changed ${dateStr}</div>
+               onclick="openImgModalUrl('${src}')">`;
+        return `<div class="phist-entry">
+          <div class="phist-entry-hdr"><strong>${esc(fieldLabel)}</strong> <span class="phist-date">· Changed ${dateStr}</span></div>
+          <div class="phist-diff">
+            <div class="phist-side">${sideHdr('Old')}${img(oldSrc)}</div>
+            <div class="phist-arrow">→</div>
+            <div class="phist-side">${sideHdr('New')}${img(newSrc)}</div>
           </div>
         </div>`;
       }
 
-      const valueHtml = e.old_value
-        ? `<div class="phist-value">${esc(e.old_value)}</div>`
+      const valHtml = (v) => v
+        ? `<div class="phist-value">${esc(v)}</div>`
         : `<div class="phist-value empty">(empty)</div>`;
       return `<div class="phist-entry">
-        <div class="phist-text">
-          <div class="phist-date">${fieldLabel} · Changed ${dateStr}</div>
-          ${valueHtml}
+        <div class="phist-entry-hdr"><strong>${esc(fieldLabel)}</strong> <span class="phist-date">· Changed ${dateStr}</span></div>
+        <div class="phist-diff">
+          <div class="phist-side">${sideHdr('Old')}${valHtml(e.old_value)}</div>
+          <div class="phist-arrow">→</div>
+          <div class="phist-side">${sideHdr('New')}${valHtml(newVal)}</div>
         </div>
       </div>`;
     }).join('');

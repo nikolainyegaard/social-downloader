@@ -406,6 +406,24 @@ def create_app() -> Flask:
     def get_recent():
         return jsonify(db.get_recent_activity())
 
+    @app.route("/api/recent/deletions", methods=["GET"])
+    def get_recent_deletions():
+        offset = int(request.args.get("offset", 0))
+        limit  = int(request.args.get("limit",  50))
+        return jsonify(db.get_deletion_history(offset=offset, limit=limit))
+
+    @app.route("/api/recent/profile-changes", methods=["GET"])
+    def get_recent_profile_changes():
+        offset = int(request.args.get("offset", 0))
+        limit  = int(request.args.get("limit",  50))
+        return jsonify(db.get_profile_change_history(offset=offset, limit=limit))
+
+    @app.route("/api/recent/bans", methods=["GET"])
+    def get_recent_bans():
+        offset = int(request.args.get("offset", 0))
+        limit  = int(request.args.get("limit",  50))
+        return jsonify(db.get_ban_history(offset=offset, limit=limit))
+
     @app.route("/api/db/cleanup", methods=["GET"])
     def get_cleanup_status():
         with _cleanup_lock:
