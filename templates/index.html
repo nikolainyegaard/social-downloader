@@ -2300,8 +2300,7 @@
     const shown  = _soundFilteredSorted().length;
     const label  = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
     document.getElementById('soundModalToolbar').innerHTML =
-      `<div style="display:flex;flex-direction:column;gap:4px">`
-      + `<div class="filter-pills">`
+        `<div class="filter-pills">`
       + pill('all', 'All')
       + pill('active', 'Active')
       + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
@@ -2314,7 +2313,6 @@
             + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
             + `</div>`
           : '')
-      + `</div>`
       + `<span class="modal-vid-count">${label}</span>`;
   }
 
@@ -2886,8 +2884,7 @@
     const shown = _filteredSorted().length;
     const label = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
     document.getElementById('modalToolbar').innerHTML =
-      `<div style="display:flex;flex-direction:column;gap:4px">`
-      + `<div class="filter-pills">`
+        `<div class="filter-pills">`
       + pill('all', 'All')
       + pill('active', 'Active')
       + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
@@ -2900,7 +2897,6 @@
             + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
             + `</div>`
           : '')
-      + `</div>`
       + `<span class="modal-vid-count">${label}</span>`
       + `<button class="filter-pill" style="margin-left:auto" onclick="openProfileHistory()">Profile history</button>`;
   }
