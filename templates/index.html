@@ -726,10 +726,11 @@
 
     .top-panels {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 24px;
     }
-    @media (max-width: 720px) { .top-panels { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { .top-panels { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 600px) { .top-panels { grid-template-columns: 1fr; } }
 
     .panel-card {
       background: var(--surface);
@@ -1069,31 +1070,8 @@
       </div>
     </div>
 
-  </div>
-
-  <!-- Add user + Loop control -->
-  <section style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
-
-    <div style="flex:1;min-width:220px">
-      <div class="section-title">Track a user</div>
-      <div class="add-form">
-        <div
-          class="handle-input"
-          id="handleInput"
-          contenteditable="true"
-          role="textbox"
-          aria-label="TikTok username"
-          data-placeholder="@username"
-          spellcheck="false"
-        ></div>
-        <button class="btn-primary" id="addBtn" onclick="addUser()">Add</button>
-      </div>
-      <div class="add-status" id="addStatus"></div>
-      <div class="pending-list" id="pendingList"></div>
-    </div>
-
-    <!-- Loop control card -->
-    <div class="panel-card" style="flex:0 0 auto;min-width:240px">
+    <!-- Loops panel -->
+    <div class="panel-card">
       <div class="panel-header">
         <span class="section-title" style="margin-bottom:0">Loops</span>
       </div>
@@ -1126,6 +1104,25 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- Add user -->
+  <section>
+    <div class="section-title">Track a user</div>
+    <div class="add-form">
+      <div
+        class="handle-input"
+        id="handleInput"
+        contenteditable="true"
+        role="textbox"
+        aria-label="TikTok username"
+        data-placeholder="@username"
+        spellcheck="false"
+      ></div>
+      <button class="btn-primary" id="addBtn" onclick="addUser()">Add</button>
+    </div>
+    <div class="add-status" id="addStatus"></div>
+    <div class="pending-list" id="pendingList"></div>
   </section>
 
   <!-- Sounds -->

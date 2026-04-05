@@ -104,7 +104,7 @@ Type a TikTok username (with or without `@`) into the **Track a user** field and
 
 ### 5. Wait or trigger a run
 
-Neither loop runs automatically on startup — each waits for its first interval to elapse. A **Loops** card sits next to the Track a user form showing the last run time, next scheduled run, and a **Run Now** button for each loop independently.
+Neither loop runs automatically on startup — each waits for its first interval to elapse. A **Loops** panel in the top dashboard row shows the last run time, next scheduled run, and a **Run Now** button for each loop independently.
 
 To process a single user immediately, click the **Run** button on their card. Multiple users can be queued this way — they run in order, one at a time.
 
