@@ -654,6 +654,43 @@
       display: block; outline: none;
     }
 
+    /* ── Photo carousel modal ──────────────────────────────────────────────── */
+
+    .carousel-inner {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .carousel-inner img {
+      max-width: min(78vw, 520px);
+      max-height: 85vh;
+      border-radius: 8px;
+      display: block;
+    }
+    .carousel-nav {
+      flex-shrink: 0;
+      width: 36px; height: 36px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 50%;
+      color: #fff;
+      font-size: 22px; line-height: 1;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+      user-select: none;
+    }
+    .carousel-nav:hover { background: rgba(255,255,255,.2); }
+    .carousel-nav:disabled { opacity: .2; cursor: default; }
+    .carousel-counter {
+      position: absolute;
+      bottom: -24px; left: 50%; transform: translateX(-50%);
+      font-size: 12px; color: rgba(255,255,255,.5);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
     /* ── Top panels (stats + controls) ──────────────────────────────────────── */
 
     .top-panels {
@@ -1214,6 +1251,17 @@
   <div class="media-modal-inner">
     <button class="media-modal-close" onclick="closeVidModal()">✕</button>
     <video id="vidModalPlayer" controls autoplay></video>
+  </div>
+</div>
+
+<!-- Photo carousel modal -->
+<div id="carouselModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeCarousel()">
+  <div class="carousel-inner">
+    <button class="media-modal-close" onclick="closeCarousel()">✕</button>
+    <button class="carousel-nav" id="carouselPrev" onclick="carouselStep(-1)">&#8249;</button>
+    <img id="carouselImg" src="" alt="">
+    <button class="carousel-nav" id="carouselNext" onclick="carouselStep(1)">&#8250;</button>
+    <div class="carousel-counter" id="carouselCounter"></div>
   </div>
 </div>
 
@@ -2041,6 +2089,7 @@
   let _modalUser            = null;   // full user object for the open modal
   let _modalVideos          = [];
   let _modalFilter          = 'all';
+  let _modalTypeFilter      = 'all';
   let _modalSort            = { field: 'upload_date', dir: 'desc' };
   let _modalPendingHighlight = null;   // video_id to scroll-to after load
   let _modalLoaded   = 0;
@@ -2078,9 +2127,10 @@
     _modalUserId = tiktokId;
     _modalUser   = u;
     _modalVideos = [];
-    _modalFilter = 'all';
-    _modalSort   = { field: 'upload_date', dir: 'desc' };
-    _modalLoaded = 0;
+    _modalFilter     = 'all';
+    _modalTypeFilter = 'all';
+    _modalSort       = { field: 'upload_date', dir: 'desc' };
+    _modalLoaded     = 0;
     if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
 
     // Reset history panel state
@@ -2127,6 +2177,12 @@
   }
 
   document.addEventListener('keydown', e => {
+    if (document.getElementById('carouselModal').style.display !== 'none') {
+      if (e.key === 'ArrowLeft')  { carouselStep(-1); return; }
+      if (e.key === 'ArrowRight') { carouselStep(1);  return; }
+      if (e.key === 'Escape')     { closeCarousel();  return; }
+      return;
+    }
     if (e.key !== 'Escape') return;
     if (document.getElementById('imgModal').style.display !== 'none') {
       closeImgModal(); return;
@@ -2177,6 +2233,41 @@
     document.getElementById('vidModal').style.display = 'none';
   }
 
+  // ── Photo carousel modal ──────────────────────────────────────────────────
+
+  let _carouselUrls = [];
+  let _carouselIdx  = 0;
+
+  async function openCarousel(videoId) {
+    const { ok, data } = await apiJSON(`/api/videos/${encodeURIComponent(videoId)}/photos`);
+    if (!ok || !data.urls || !data.urls.length) return;
+    _carouselUrls = data.urls;
+    _showCarouselSlide(0);
+    document.getElementById('carouselModal').style.display = 'flex';
+  }
+
+  function _showCarouselSlide(idx) {
+    _carouselIdx = idx;
+    document.getElementById('carouselImg').src = _carouselUrls[idx];
+    document.getElementById('carouselCounter').textContent =
+      _carouselUrls.length > 1 ? `${idx + 1} / ${_carouselUrls.length}` : '';
+    document.getElementById('carouselPrev').disabled = idx === 0;
+    document.getElementById('carouselNext').disabled = idx === _carouselUrls.length - 1;
+  }
+
+  function carouselStep(dir) {
+    const next = _carouselIdx + dir;
+    if (next < 0 || next >= _carouselUrls.length) return;
+    _showCarouselSlide(next);
+  }
+
+  function closeCarousel() {
+    document.getElementById('carouselModal').style.display = 'none';
+    document.getElementById('carouselImg').src = '';
+    _carouselUrls = [];
+    _carouselIdx  = 0;
+  }
+
   async function _loadModalVideos(tiktokId) {
     const { ok, data } = await apiJSON(`/api/users/${tiktokId}/videos`);
     if (!ok || _modalUserId !== tiktokId) return;
@@ -2185,8 +2276,9 @@
     if (_modalPendingHighlight) {
       const vid = _modalPendingHighlight;
       _modalPendingHighlight = null;
-      _modalFilter = 'deleted';
-      _modalSort   = { field: 'deleted_at', dir: 'desc' };
+      _modalFilter     = 'deleted';
+      _modalTypeFilter = 'all';
+      _modalSort       = { field: 'deleted_at', dir: 'desc' };
       _renderColumnHdrs();
       _renderModalToolbar(data);
       _renderModalVideoList();
@@ -2208,9 +2300,11 @@
 
   function _filteredSorted() {
     let vids = _modalVideos;
-    if (_modalFilter === 'active')   vids = vids.filter(v => v.status === 'up');
-    if (_modalFilter === 'deleted')  vids = vids.filter(v => v.status === 'deleted');
-    if (_modalFilter === 'restored') vids = vids.filter(v => v.status === 'undeleted');
+    if (_modalFilter === 'active')        vids = vids.filter(v => v.status === 'up');
+    if (_modalFilter === 'deleted')       vids = vids.filter(v => v.status === 'deleted');
+    if (_modalFilter === 'restored')      vids = vids.filter(v => v.status === 'undeleted');
+    if (_modalTypeFilter === 'video')     vids = vids.filter(v => v.type === 'video');
+    if (_modalTypeFilter === 'photo')     vids = vids.filter(v => v.type === 'photo');
     const { field, dir } = _modalSort;
     return [...vids].sort((a, b) => {
       const av = a[field] ?? (dir === 'asc' ? Infinity : -Infinity);
@@ -2230,6 +2324,12 @@
 
   function setModalFilter(filter) {
     _modalFilter = filter;
+    _renderModalToolbar(_modalVideos);
+    _renderModalVideoList();
+  }
+
+  function setModalTypeFilter(type) {
+    _modalTypeFilter = type;
     _renderModalToolbar(_modalVideos);
     _renderModalVideoList();
   }
@@ -2288,21 +2388,39 @@
       deleted:  vids.filter(v => v.status === 'deleted').length,
       restored: vids.filter(v => v.status === 'undeleted').length,
     };
+    const typeCounts = {
+      video: vids.filter(v => v.type === 'video').length,
+      photo: vids.filter(v => v.type === 'photo').length,
+    };
+    const hasMultipleTypes = typeCounts.video > 0 && typeCounts.photo > 0;
+
     const pill = (key, label) => {
       const active = _modalFilter === key ? ' active' : '';
       const n      = counts[key];
       return `<button class="filter-pill${active}" onclick="setModalFilter('${key}')">`
            + `${label}${n ? ` <span style="opacity:.65">(${n})</span>` : ''}</button>`;
     };
+    const typePill = (key, label) => {
+      const active = _modalTypeFilter === key ? ' active' : '';
+      return `<button class="filter-pill${active}" onclick="setModalTypeFilter('${key}')">${label}</button>`;
+    };
+
     const shown = _filteredSorted().length;
+    const label = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
     document.getElementById('modalToolbar').innerHTML =
       `<div class="filter-pills">`
       + pill('all', 'All')
       + pill('active', 'Active')
       + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
       + (counts.restored ? pill('restored', 'Restored') : '')
+      + (hasMultipleTypes
+          ? `</div><div class="filter-pills" style="margin-top:4px">`
+            + typePill('all',   'All types')
+            + typePill('video', `Videos (${typeCounts.video.toLocaleString()})`)
+            + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
+          : '')
       + `</div>`
-      + `<span class="modal-vid-count">${shown.toLocaleString()} video${shown !== 1 ? 's' : ''}</span>`
+      + `<span class="modal-vid-count">${label}</span>`
       + `<button class="filter-pill" style="margin-left:auto" onclick="openProfileHistory()">Profile history</button>`;
   }
 
@@ -2504,7 +2622,12 @@
         <div class="video-cell">${fmtDateShort(v.download_date)}</div>
         <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
         <div class="video-cell" style="padding:0">
-          ${v.type === 'video' ? `<button class="play-btn" onclick="event.stopPropagation();openVidModal('${esc(v.video_id)}')" title="Play video">▶</button>` : ''}
+          ${v.type === 'video'
+            ? `<button class="play-btn" onclick="event.stopPropagation();openVidModal('${esc(v.video_id)}')" title="Play video">▶</button>`
+            : v.type === 'photo'
+            ? `<button class="play-btn" onclick="event.stopPropagation();openCarousel('${esc(v.video_id)}')" title="View photos"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg></button>`
+            : ''
+          }
         </div>
       `;
       list.appendChild(row);

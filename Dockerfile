@@ -1,7 +1,8 @@
 FROM python:3.12-slim
 
-# ffmpeg  — required by yt-dlp to merge streams and embed metadata
-# Playwright/Chromium system deps are installed by `playwright install --with-deps`
+# ffmpeg  — required by yt-dlp to merge streams and embed metadata, and by
+# photo_converter/thumbnailer for AVIF encoding (libaom-av1 is included in
+# the standard Debian Bookworm ffmpeg package).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
     && rm -rf /var/lib/apt/lists/*

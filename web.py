@@ -388,6 +388,44 @@ def create_app() -> Flask:
             return ("", 404)
         return send_file(path, conditional=True)
 
+    @app.route("/api/videos/<video_id>/photos", methods=["GET"])
+    def video_photos(video_id: str):
+        """Return a list of photo-post image URLs for a given video_id."""
+        video = db.get_video(video_id)
+        if not video or video.get("type") != "photo" or not video.get("file_path"):
+            return ("", 404)
+        folder = os.path.dirname(video["file_path"])
+        urls: list[str] = []
+        for i in range(1, 51):  # TikTok caps photo posts well below 50
+            found = False
+            for ext in ("avif", "jpg", "jpeg"):
+                path = os.path.join(folder, f"{video_id}_{i:02d}.{ext}")
+                if os.path.exists(path):
+                    urls.append(f"/api/videos/{video_id}/photo/{i}")
+                    found = True
+                    break
+            if not found:
+                break
+        if not urls:
+            return ("", 404)
+        return jsonify({"urls": urls, "count": len(urls)})
+
+    @app.route("/api/videos/<video_id>/photo/<int:n>", methods=["GET"])
+    def video_photo(video_id: str, n: int):
+        """Serve the nth image (1-indexed) of a photo post."""
+        if n < 1 or n > 50:
+            return ("", 400)
+        video = db.get_video(video_id)
+        if not video or not video.get("file_path"):
+            return ("", 404)
+        folder = os.path.dirname(video["file_path"])
+        for ext in ("avif", "jpg", "jpeg"):
+            path = os.path.join(folder, f"{video_id}_{n:02d}.{ext}")
+            if os.path.exists(path):
+                mime = "image/avif" if ext == "avif" else "image/jpeg"
+                return send_file(path, mimetype=mime)
+        return ("", 404)
+
     @app.route("/api/backfill", methods=["GET"])
     def get_backfill_status():
         with _backfill_lock:

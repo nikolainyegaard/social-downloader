@@ -91,6 +91,7 @@ def encode_avif(src: str, dst: str, crf: int) -> bool:
                 "-b:v", "0",
                 "-cpu-used", "6",
                 "-loglevel", "error",
+                "-f", "avif",   # explicit format — .tmp extension can't be auto-detected
                 tmp,
             ],
             capture_output=True,
@@ -98,6 +99,9 @@ def encode_avif(src: str, dst: str, crf: int) -> bool:
         )
         if result.returncode != 0 or not os.path.exists(tmp):
             _try_remove(tmp)
+            if result.returncode != 0:
+                stderr = (result.stderr or b"").decode(errors="replace").strip()
+                print(f"[{_ts()}] [converter] ffmpeg failed (rc={result.returncode}) for {src}: {stderr[:300]}")
             return False
         try:
             st = os.stat(src)
