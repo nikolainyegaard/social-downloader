@@ -8,7 +8,9 @@ Managed through a web UI. All state lives on the server, so opening it from any 
 
 ## How it works
 
-A background loop runs on a fixed interval (default: 30 minutes, recommended: 3 hours for large libraries). Each iteration:
+Two independent background loops run on separate intervals (user loop default: 3 hours, sound loop default: 1 hour). Intervals are configurable per-loop in the Settings panel and are persisted across restarts. If both loops are due at the same time, the second waits for the first to finish plus a 5-minute buffer before starting.
+
+The **user loop** runs on its own schedule. Each iteration:
 
 1. Loads all tracked users from the database
 2. For each user:
@@ -21,6 +23,8 @@ A background loop runs on a fixed interval (default: 30 minutes, recommended: 3 
    - Immediately marks any previously-deleted videos or banned accounts as restored/active if they reappear
 
 The first run for an account with many videos will take a while. Subsequent runs are fast.
+
+The **sound loop** runs independently on its own schedule:
 
 3. Loads all tracked sounds from the database
 4. For each tracked sound:
@@ -72,7 +76,8 @@ services:
       - ./data:/app/data      # database + cookies.txt
       - ./videos:/app/videos  # downloaded video files
     environment:
-      LOOP_INTERVAL_MINUTES: "180"
+      USER_LOOP_INTERVAL_MINUTES: "180"
+      SOUND_LOOP_INTERVAL_MINUTES: "60"
     ports:
       - "127.0.0.1:5000:5000"
 ```
@@ -99,7 +104,7 @@ Type a TikTok username (with or without `@`) into the **Track a user** field and
 
 ### 5. Wait or trigger a run
 
-The loop does not run automatically on startup — it waits for the first interval to elapse. Click **Run Now** in the header to trigger an immediate full run without waiting.
+Neither loop runs automatically on startup — each waits for its first interval to elapse. A **Loops** card sits next to the Track a user form showing the last run time, next scheduled run, and a **Run Now** button for each loop independently.
 
 To process a single user immediately, click the **Run** button on their card. Multiple users can be queued this way — they run in order, one at a time.
 
@@ -151,7 +156,8 @@ services:
       - ./data:/app/data
       - ./videos:/app/videos
     environment:
-      LOOP_INTERVAL_MINUTES: "180"
+      USER_LOOP_INTERVAL_MINUTES: "180"
+      SOUND_LOOP_INTERVAL_MINUTES: "60"
       TZ: "Europe/Oslo"
     expose:
       - "5000"
@@ -192,7 +198,9 @@ All configuration is via environment variables in `docker-compose.yml`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `LOOP_INTERVAL_MINUTES` | `30` | Minutes between download loop runs. `180` is recommended for large libraries. |
+| `USER_LOOP_INTERVAL_MINUTES` | `180` | Minutes between user loop runs. |
+| `SOUND_LOOP_INTERVAL_MINUTES` | `60` | Minutes between sound loop runs. |
+| `LOOP_INTERVAL_MINUTES` | — | Legacy alias for `USER_LOOP_INTERVAL_MINUTES`. Ignored if `USER_LOOP_INTERVAL_MINUTES` is set. |
 | `WEB_PORT` | `5000` | Port the web UI listens on inside the container. |
 | `DATA_DIR` | `/app/data` | Where the database, cookies.txt, and avatars are stored. |
 | `VIDEOS_DIR` | `/app/videos` | Where downloaded videos are saved. |

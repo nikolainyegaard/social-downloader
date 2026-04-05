@@ -11,10 +11,12 @@ services:
       - ./videos:/app/videos
 
     environment:
-      LOOP_INTERVAL_MINUTES: "180"
-      TZ: "Europe/Oslo"          # set your timezone so log timestamps are in local time
+      USER_LOOP_INTERVAL_MINUTES:  "180"   # how often to check tracked users (minutes)
+      SOUND_LOOP_INTERVAL_MINUTES: "60"    # how often to check tracked sounds (minutes)
+      TZ: "Europe/Oslo"                    # set your timezone so log timestamps are in local time
       # WEB_PORT: "5000"         # change if needed (also update the expose below)
       # VIDEOS_DIR: /app/videos  # override video storage path inside the container
+      # LOOP_INTERVAL_MINUTES: "180"  # legacy alias for USER_LOOP_INTERVAL_MINUTES
 
     # Bind only to localhost so Caddy (running on the host) can reach the service
     # but it is not directly exposed to the internet.

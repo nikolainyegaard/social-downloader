@@ -11,9 +11,13 @@ import time
 from flask import Flask, jsonify, request, render_template, send_file
 
 import database as db
-from config import get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, COOKIES_TIMESTAMP_PATH, DATA_DIR, VIDEOS_DIR, AVATARS_DIR, CHROME_EXECUTABLE, APP_VERSION
+from config import (get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, COOKIES_TIMESTAMP_PATH,
+                    DATA_DIR, VIDEOS_DIR, AVATARS_DIR, CHROME_EXECUTABLE, APP_VERSION,
+                    USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES)
 from tiktok_api import get_user_info, get_video_details
-from loop import is_running, get_state_snapshot, trigger_event, enqueue_user_run, enqueue_sound_run
+from loop import (is_user_loop_running, is_sound_loop_running, get_state_snapshot,
+                  trigger_user_event, trigger_sound_event,
+                  enqueue_user_run, enqueue_sound_run)
 from thumbnailer import thumb_path_for, avatar_path
 import photo_converter as _photo_converter
 
@@ -509,9 +513,35 @@ def create_app() -> Flask:
 
     @app.route("/api/trigger", methods=["POST"])
     def trigger_now():
-        if is_running():
-            return jsonify({"error": "Loop is already running"}), 409
-        trigger_event.set()
+        if is_user_loop_running():
+            return jsonify({"error": "User loop is already running"}), 409
+        trigger_user_event.set()
+        return jsonify({"ok": True})
+
+    @app.route("/api/trigger/sounds", methods=["POST"])
+    def trigger_sounds_now():
+        if is_sound_loop_running():
+            return jsonify({"error": "Sound loop is already running"}), 409
+        trigger_sound_event.set()
+        return jsonify({"ok": True})
+
+    @app.route("/api/settings", methods=["GET"])
+    def get_settings():
+        return jsonify({
+            "user_loop_interval_minutes":  int(db.get_setting("user_loop_interval_minutes",  USER_LOOP_INTERVAL_MINUTES)),
+            "sound_loop_interval_minutes": int(db.get_setting("sound_loop_interval_minutes", SOUND_LOOP_INTERVAL_MINUTES)),
+        })
+
+    @app.route("/api/settings", methods=["PATCH"])
+    def update_settings():
+        body    = request.get_json(silent=True) or {}
+        allowed = ("user_loop_interval_minutes", "sound_loop_interval_minutes")
+        for key in allowed:
+            if key in body:
+                val = body[key]
+                if not isinstance(val, int) or val < 1:
+                    return jsonify({"error": f"{key} must be a positive integer"}), 400
+                db.set_setting(key, val)
         return jsonify({"ok": True})
 
     # Jobs API

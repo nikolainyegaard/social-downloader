@@ -1042,9 +1042,6 @@
       <span class="backfill-pill" id="hdrBackfillPill" style="display:none" onclick="openSettings('backfill')" title="Videos with missing stats">
         <span id="hdrBackfillCount"></span> missing stats
       </span>
-      <span id="lastRun"></span>
-      <span id="nextRun"></span>
-      <button class="btn-primary" id="triggerBtn" onclick="triggerLoop()">Run Now</button>
       <button class="btn-gear" onclick="openSettings('cookies')" title="Settings">⚙</button>
     </div>
   </header>
@@ -1074,23 +1071,61 @@
 
   </div>
 
-  <!-- Add user -->
-  <section>
-    <div class="section-title">Track a user</div>
-    <div class="add-form">
-      <div
-        class="handle-input"
-        id="handleInput"
-        contenteditable="true"
-        role="textbox"
-        aria-label="TikTok username"
-        data-placeholder="@username"
-        spellcheck="false"
-      ></div>
-      <button class="btn-primary" id="addBtn" onclick="addUser()">Add</button>
+  <!-- Add user + Loop control -->
+  <section style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+
+    <div style="flex:1;min-width:220px">
+      <div class="section-title">Track a user</div>
+      <div class="add-form">
+        <div
+          class="handle-input"
+          id="handleInput"
+          contenteditable="true"
+          role="textbox"
+          aria-label="TikTok username"
+          data-placeholder="@username"
+          spellcheck="false"
+        ></div>
+        <button class="btn-primary" id="addBtn" onclick="addUser()">Add</button>
+      </div>
+      <div class="add-status" id="addStatus"></div>
+      <div class="pending-list" id="pendingList"></div>
     </div>
-    <div class="add-status" id="addStatus"></div>
-    <div class="pending-list" id="pendingList"></div>
+
+    <!-- Loop control card -->
+    <div class="panel-card" style="flex:0 0 auto;min-width:240px">
+      <div class="panel-header">
+        <span class="section-title" style="margin-bottom:0">Loops</span>
+      </div>
+      <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:0">
+
+        <div style="margin-bottom:10px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">User Loop</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div>
+              <div id="userLoopLast" style="font-size:12px;color:var(--text-dim)">Never run</div>
+              <div id="userLoopNext" style="font-size:11px;color:var(--muted)"></div>
+            </div>
+            <button class="btn-run" id="triggerUserBtn" onclick="triggerUserLoop()" style="font-size:11px;padding:3px 10px">Run Now</button>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:0 -16px;padding:10px 0 0"></div>
+
+        <div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Sound Loop</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div>
+              <div id="soundLoopLast" style="font-size:12px;color:var(--text-dim)">Never run</div>
+              <div id="soundLoopNext" style="font-size:11px;color:var(--muted)"></div>
+            </div>
+            <button class="btn-run" id="triggerSoundBtn" onclick="triggerSoundLoop()" style="font-size:11px;padding:3px 10px">Run Now</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </section>
 
   <!-- Sounds -->
@@ -1178,6 +1213,7 @@
     <button class="modal-close" onclick="closeSettings()">✕</button>
     <nav class="settings-nav">
       <div class="settings-nav-item active" id="snav-cookies"   onclick="switchSettingsSection('cookies')">Cookies</div>
+      <div class="settings-nav-item"        id="snav-loops"     onclick="switchSettingsSection('loops')">Loops</div>
       <div class="settings-nav-item"        id="snav-backfill"  onclick="switchSettingsSection('backfill')">Backfill</div>
       <div class="settings-nav-item"        id="snav-database"  onclick="switchSettingsSection('database')">Database</div>
       <div class="settings-nav-item"        id="snav-jobs"      onclick="switchSettingsSection('jobs')">Jobs</div>
@@ -1222,6 +1258,35 @@
           </div>
           The file must be in Netscape format and include the <code>msToken</code> cookie.
           Cookies are stored server-side — uploading once from any device applies everywhere.
+        </div>
+      </div>
+
+      <!-- Loops section -->
+      <div id="ssec-loops" style="display:none">
+        <div class="settings-section-title">Loop Intervals</div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+          Each loop runs independently. If both are due at the same time, the second one waits
+          for the first to finish plus a 5-minute buffer. Changes take effect at the next scheduled run.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:340px">
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>User loop every</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="userLoopIntervalInput" min="1" max="9999" style="width:72px;font-size:13px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:right">
+              <span style="color:var(--muted)">min</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Sound loop every</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="soundLoopIntervalInput" min="1" max="9999" style="width:72px;font-size:13px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:right">
+              <span style="color:var(--muted)">min</span>
+            </div>
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+          <button class="btn-primary" onclick="saveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
+          <span id="loopSettingsSaved" style="font-size:12px;color:var(--green);display:none">Saved.</span>
         </div>
       </div>
 
@@ -1687,12 +1752,13 @@
 
   function switchSettingsSection(name) {
     _settingsSection = name;
-    ['cookies', 'backfill', 'database', 'jobs'].forEach(s => {
+    ['cookies', 'loops', 'backfill', 'database', 'jobs'].forEach(s => {
       document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
       document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
     });
-    if (name === 'jobs') { _jobsLoadStatus(); _startJobsPoll(); }
-    else                 { _stopJobsPoll(); }
+    if (name === 'loops') { loadSettings(); }
+    if (name === 'jobs')  { _jobsLoadStatus(); _startJobsPoll(); }
+    else                  { _stopJobsPoll(); }
   }
 
   // ── Database cleanup ──────────────────────────────────────────────────────────
@@ -2462,14 +2528,14 @@
   // ── Loop ──────────────────────────────────────────────────────────────────────
 
   function renderStatus(state) {
-    isRunning   = state.running;
-    currentUser = state.current_user;
+    isRunning   = state.user_loop_running;
+    currentUser = state.user_loop_current_user;
     runQueue         = state.run_queue         || [];
     runCurrent       = state.run_current       || null;
     soundRunQueue    = state.sound_run_queue   || [];
     soundRunCurrent  = state.sound_run_current || null;
 
-    const anyActive = isRunning || !!runCurrent || !!soundRunCurrent;
+    const anyActive = isRunning || state.sound_loop_running || !!runCurrent || !!soundRunCurrent;
     const badge = document.getElementById('statusBadge');
     const text  = document.getElementById('statusText');
     badge.className = `status-badge${anyActive ? ' running' : ''}`;
@@ -2477,12 +2543,25 @@
       ? (currentUser ? `Downloading @${currentUser}` : 'Running…')
       : 'Idle';
 
-    document.getElementById('lastRun').textContent = state.last_run_end
-      ? `Last: ${fmt.rel(state.last_run_end)}` : 'Never run';
-    document.getElementById('nextRun').textContent = (!isRunning && state.next_run)
-      ? `Next: ${fmt.relFuture(state.next_run)}` : '';
+    // User loop card
+    const uLast = document.getElementById('userLoopLast');
+    const uNext = document.getElementById('userLoopNext');
+    const uBtn  = document.getElementById('triggerUserBtn');
+    if (uLast) uLast.textContent = state.user_loop_last_end ? `Last: ${fmt.rel(state.user_loop_last_end)}` : 'Never run';
+    if (uNext) uNext.textContent = state.user_loop_running
+      ? (currentUser ? `Downloading @${currentUser}` : 'Running…')
+      : (state.user_loop_next ? `Next: ${fmt.relFuture(state.user_loop_next)}` : '');
+    if (uBtn) uBtn.disabled = state.user_loop_running;
 
-    document.getElementById('triggerBtn').disabled = isRunning;
+    // Sound loop card
+    const sLast = document.getElementById('soundLoopLast');
+    const sNext = document.getElementById('soundLoopNext');
+    const sBtn  = document.getElementById('triggerSoundBtn');
+    if (sLast) sLast.textContent = state.sound_loop_last_end ? `Last: ${fmt.rel(state.sound_loop_last_end)}` : 'Never run';
+    if (sNext) sNext.textContent = state.sound_loop_running
+      ? 'Running…'
+      : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');
+    if (sBtn) sBtn.disabled = state.sound_loop_running;
 
     const missingEl = document.getElementById('missingStatsCount');
     if (missingEl) {
@@ -2536,14 +2615,49 @@
     if (autoScroll) body.scrollTop = body.scrollHeight;
   }
 
-  async function triggerLoop() {
-    const btn = document.getElementById('triggerBtn');
+  async function triggerUserLoop() {
+    const btn = document.getElementById('triggerUserBtn');
     btn.disabled = true;
     const { ok, data } = await apiJSON('/api/trigger', { method: 'POST' });
     if (!ok) {
-      alert(data.error || 'Could not trigger loop');
+      alert(data.error || 'Could not trigger user loop');
       btn.disabled = false;
     }
+  }
+
+  async function triggerSoundLoop() {
+    const btn = document.getElementById('triggerSoundBtn');
+    btn.disabled = true;
+    const { ok, data } = await apiJSON('/api/trigger/sounds', { method: 'POST' });
+    if (!ok) {
+      alert(data.error || 'Could not trigger sound loop');
+      btn.disabled = false;
+    }
+  }
+
+  async function loadSettings() {
+    const { ok, data } = await apiJSON('/api/settings');
+    if (!ok) return;
+    const uEl = document.getElementById('userLoopIntervalInput');
+    const sEl = document.getElementById('soundLoopIntervalInput');
+    if (uEl) uEl.value = data.user_loop_interval_minutes;
+    if (sEl) sEl.value = data.sound_loop_interval_minutes;
+  }
+
+  async function saveLoopSettings() {
+    const uVal = parseInt(document.getElementById('userLoopIntervalInput')?.value, 10);
+    const sVal = parseInt(document.getElementById('soundLoopIntervalInput')?.value, 10);
+    if (!uVal || !sVal || uVal < 1 || sVal < 1) {
+      alert('Intervals must be positive integers.');
+      return;
+    }
+    const { ok, data } = await apiJSON('/api/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ user_loop_interval_minutes: uVal, sound_loop_interval_minutes: sVal }),
+    });
+    if (!ok) { alert(data.error || 'Could not save settings'); return; }
+    const saved = document.getElementById('loopSettingsSaved');
+    if (saved) { saved.style.display = ''; setTimeout(() => saved.style.display = 'none', 2500); }
   }
 
   async function loadStatus() {

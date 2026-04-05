@@ -1,5 +1,5 @@
 """
-Main download loop and shared state used by both the loop thread and the web server.
+Download loops (user and sound) and shared state used by both loop threads and the web server.
 """
 
 import asyncio
@@ -12,64 +12,106 @@ from collections import deque
 from datetime import datetime, timezone
 
 import database as db
-from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE, DATA_DIR, LAST_RUN_PATH
+from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE, DATA_DIR
 from tiktok_api import get_user_info, get_user_videos, get_video_details
 from downloader import download_video, download_photos, rename_user_folder
 from thumbnailer import backfill_thumbnails, cache_avatar
 import photo_converter as _photo_converter  # noqa: F401 — starts conversion thread on import
 from sound_tracker import process_all_sounds, process_sound
 
-# Shared state
+USER_LAST_RUN_PATH  = os.path.join(DATA_DIR, "last_run.timestamp")
+SOUND_LAST_RUN_PATH = os.path.join(DATA_DIR, "sound_last_run.timestamp")
 
-def _load_last_run() -> str | None:
-    """Read the persisted last-run timestamp from disk, if present."""
+_CONFIRM_THRESHOLD = 3  # loops a negative change must persist before it's made official
+
+
+def _load_last_run(path: str) -> str | None:
     try:
-        with open(LAST_RUN_PATH, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return f.read().strip() or None
     except FileNotFoundError:
         return None
 
 
-loop_state = {
-    "running":        False,
-    "last_run_start": None,
-    "last_run_end":   _load_last_run(),
-    "next_run":       None,
-    "current_user":   None,
-    "logs":           deque(maxlen=1000),
-}
-_state_lock        = threading.Lock()
-trigger_event      = threading.Event()
-_CONFIRM_THRESHOLD = 3  # loops a negative change must persist before it's made official
+# ── User loop state ───────────────────────────────────────────────────────────
 
-# Single-user run queue (for manual "Run" button)
+user_loop_state = {
+    "running":      False,
+    "last_run_end": _load_last_run(USER_LAST_RUN_PATH),
+    "next_run":     None,
+    "current_user": None,
+    "logs":         deque(maxlen=1000),
+}
+_user_state_lock = threading.Lock()
+
+trigger_user_event = threading.Event()
+
+# ── Sound loop state ──────────────────────────────────────────────────────────
+
+sound_loop_state = {
+    "running":      False,
+    "last_run_end": _load_last_run(SOUND_LAST_RUN_PATH),
+    "next_run":     None,
+}
+_sound_state_lock = threading.Lock()
+
+trigger_sound_event = threading.Event()
+
+# ── Single-user run queue ─────────────────────────────────────────────────────
+
 _run_queue:      _queue_module.Queue = _queue_module.Queue()
 _run_state_lock  = threading.Lock()
-_run_state: dict = {"current": None, "queue": []}  # tiktok_ids
+_run_state: dict = {"current": None, "queue": []}
 
-# Single-sound run queue
+# ── Single-sound run queue ────────────────────────────────────────────────────
+
 _sound_run_queue:      _queue_module.Queue = _queue_module.Queue()
 _sound_run_state_lock  = threading.Lock()
-_sound_run_state: dict = {"current": None, "queue": []}  # sound_ids
+_sound_run_state: dict = {"current": None, "queue": []}
 
 
-# Public accessors
+# ── Public accessors ──────────────────────────────────────────────────────────
 
-def is_running() -> bool:
-    with _state_lock:
-        return loop_state["running"]
+def is_user_loop_running() -> bool:
+    with _user_state_lock:
+        return user_loop_state["running"]
+
+# Backward-compat alias (used in older web.py import)
+is_running = is_user_loop_running
 
 
-def set_next_run(iso: str) -> None:
-    with _state_lock:
-        loop_state["next_run"] = iso
+def is_sound_loop_running() -> bool:
+    with _sound_state_lock:
+        return sound_loop_state["running"]
+
+
+def set_user_loop_next_run(iso: str | None) -> None:
+    with _user_state_lock:
+        user_loop_state["next_run"] = iso
+
+# Backward-compat alias
+set_next_run = set_user_loop_next_run
+
+
+def set_sound_loop_next_run(iso: str | None) -> None:
+    with _sound_state_lock:
+        sound_loop_state["next_run"] = iso
 
 
 def get_state_snapshot() -> dict:
-    """Return a serialisable copy of loop_state plus run-queue state."""
-    with _state_lock:
-        state = {k: v for k, v in loop_state.items() if k != "logs"}
-        state["logs"] = list(loop_state["logs"])
+    """Return a serialisable snapshot of both loop states plus run-queue state."""
+    with _user_state_lock:
+        state = {
+            "user_loop_running":      user_loop_state["running"],
+            "user_loop_last_end":     user_loop_state["last_run_end"],
+            "user_loop_next":         user_loop_state["next_run"],
+            "user_loop_current_user": user_loop_state["current_user"],
+            "logs":                   list(user_loop_state["logs"]),
+        }
+    with _sound_state_lock:
+        state["sound_loop_running"]  = sound_loop_state["running"]
+        state["sound_loop_last_end"] = sound_loop_state["last_run_end"]
+        state["sound_loop_next"]     = sound_loop_state["next_run"]
     with _run_state_lock:
         state["run_current"] = _run_state["current"]
         state["run_queue"]   = list(_run_state["queue"])
@@ -99,17 +141,17 @@ def enqueue_sound_run(sound_id: str) -> bool:
     return True
 
 
-# Logging
+# ── Logging ───────────────────────────────────────────────────────────────────
 
 def _log(msg: str):
     ts   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
     print(line)
-    with _state_lock:
-        loop_state["logs"].append(line)
+    with _user_state_lock:
+        user_loop_state["logs"].append(line)
 
 
-# Core async logic
+# ── Core async logic ──────────────────────────────────────────────────────────
 
 async def _fetch_user_info(username: str, sec_uid: str | None = None) -> dict:
     """Open a fresh TikTokApi session, fetch profile info, and close it.
@@ -137,8 +179,8 @@ async def _fetch_user_info(username: str, sec_uid: str | None = None) -> dict:
 async def _process_single_user(user: dict, cookies: dict):
     tiktok_id = user["tiktok_id"]
 
-    with _state_lock:
-        loop_state["current_user"] = user["username"]
+    with _user_state_lock:
+        user_loop_state["current_user"] = user["username"]
 
     try:
         _log(f"Processing @{user['username']} (ID: {tiktok_id})")
@@ -299,8 +341,8 @@ async def _process_single_user(user: dict, cookies: dict):
             _log(f"  Marked undeleted: {vid_id}")
 
     finally:
-        with _state_lock:
-            loop_state["current_user"] = None
+        with _user_state_lock:
+            user_loop_state["current_user"] = None
 
 
 async def _process_all_users(users: list[dict]):
@@ -311,6 +353,8 @@ async def _process_all_users(users: list[dict]):
             await asyncio.sleep(random.uniform(2, 5))
         await _process_single_user(user, cookies)
 
+
+# ── Manual run workers ────────────────────────────────────────────────────────
 
 def _run_worker():
     while True:
@@ -360,14 +404,14 @@ threading.Thread(target=_sound_run_worker,  daemon=True, name="sound-run-worker"
 threading.Thread(target=backfill_thumbnails, daemon=True, name="thumb-backfill").start()
 
 
-# Public entry point
+# ── Public entry points ───────────────────────────────────────────────────────
 
-def run_loop():
-    with _state_lock:
-        loop_state["running"]        = True
-        loop_state["last_run_start"] = datetime.now(timezone.utc).isoformat()
+def run_user_loop():
+    """Process all enabled tracked users. Called by the user loop scheduler thread."""
+    with _user_state_lock:
+        user_loop_state["running"] = True
 
-    _log("=== Loop started ===")
+    _log("=== User loop started ===")
     users = db.get_all_users()
 
     if not users:
@@ -376,18 +420,34 @@ def run_loop():
         try:
             asyncio.run(_process_all_users(users))
         except Exception as e:
-            _log(f"Unhandled loop error: {e}")
+            _log(f"Unhandled user loop error: {e}")
 
+    _log("=== User loop complete ===")
+    last_run_end = datetime.now(timezone.utc).isoformat()
+    with _user_state_lock:
+        user_loop_state["running"]      = False
+        user_loop_state["last_run_end"] = last_run_end
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(USER_LAST_RUN_PATH, "w", encoding="utf-8") as f:
+        f.write(last_run_end)
+
+
+def run_sound_loop():
+    """Process all tracked sounds. Called by the sound loop scheduler thread."""
+    with _sound_state_lock:
+        sound_loop_state["running"] = True
+
+    _log("=== Sound loop started ===")
     try:
         asyncio.run(process_all_sounds(_log))
     except Exception as e:
-        _log(f"Unhandled sound tracking error: {e}")
+        _log(f"Unhandled sound loop error: {e}")
 
-    _log("=== Loop complete ===")
+    _log("=== Sound loop complete ===")
     last_run_end = datetime.now(timezone.utc).isoformat()
-    with _state_lock:
-        loop_state["running"]      = False
-        loop_state["last_run_end"] = last_run_end
+    with _sound_state_lock:
+        sound_loop_state["running"]      = False
+        sound_loop_state["last_run_end"] = last_run_end
     os.makedirs(DATA_DIR, exist_ok=True)
-    with open(LAST_RUN_PATH, "w", encoding="utf-8") as f:
+    with open(SOUND_LAST_RUN_PATH, "w", encoding="utf-8") as f:
         f.write(last_run_end)

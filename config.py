@@ -5,7 +5,7 @@ All modules import paths and settings from here.
 
 import os
 
-APP_VERSION = "1.15.1"
+APP_VERSION = "1.16.0"
 import shutil
 
 DATA_DIR     = os.environ.get("DATA_DIR",   "./data")
@@ -13,10 +13,12 @@ VIDEOS_DIR   = os.environ.get("VIDEOS_DIR", "./videos")
 AVATARS_DIR  = os.path.join(DATA_DIR, "avatars")
 COOKIES_PATH           = os.path.join(DATA_DIR, "cookies.txt")
 COOKIES_TIMESTAMP_PATH = os.path.join(DATA_DIR, "cookies.timestamp")
-LAST_RUN_PATH          = os.path.join(DATA_DIR, "last_run.timestamp")
 
-LOOP_INTERVAL_MINUTES = int(os.environ.get("LOOP_INTERVAL_MINUTES", 30))
-WEB_PORT              = int(os.environ.get("WEB_PORT", 5000))
+# LOOP_INTERVAL_MINUTES kept for backward compatibility — maps to USER_LOOP_INTERVAL_MINUTES.
+LOOP_INTERVAL_MINUTES       = int(os.environ.get("LOOP_INTERVAL_MINUTES", 180))
+USER_LOOP_INTERVAL_MINUTES  = int(os.environ.get("USER_LOOP_INTERVAL_MINUTES",  LOOP_INTERVAL_MINUTES))
+SOUND_LOOP_INTERVAL_MINUTES = int(os.environ.get("SOUND_LOOP_INTERVAL_MINUTES", 60))
+WEB_PORT                    = int(os.environ.get("WEB_PORT", 5000))
 
 THUMBNAIL_WORKERS  = int(os.environ.get("THUMBNAIL_WORKERS", min(os.cpu_count() or 4, 12)))
 THUMBNAIL_USE_GPU  = os.environ.get("THUMBNAIL_USE_GPU", "").lower() in ("1", "true", "yes")

@@ -166,6 +166,25 @@ def _migrate_db(conn):
     """)
 
 
+# Settings
+
+def get_setting(key: str, default=None):
+    """Return a persisted setting value, or default if not set."""
+    with get_db() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+
+def set_setting(key: str, value) -> None:
+    """Persist a setting value (upsert)."""
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?)"
+            " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, str(value)),
+        )
+
+
 # User operations
 
 def add_user(tiktok_id, username, display_name=None, bio=None,
