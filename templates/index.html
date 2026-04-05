@@ -155,6 +155,11 @@
     }
     .sound-add-form input { flex: 1; min-width: 180px; }
 
+    /* Hide number input spinners — values like 180 are typed, not incremented */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
     .cookie-upload-label {
       display: inline-flex;
       align-items: center;
@@ -3128,7 +3133,7 @@
       if (e.field === 'avatar') {
         const oldSrc = `/api/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(e.old_value)}`;
         const newSrc = newVal === '__current__'
-          ? `/api/users/${encodeURIComponent(_phistUserId)}/avatar`
+          ? `/api/users/${encodeURIComponent(_phistUserId)}/avatar?t=${e.changed_at}`
           : `/api/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(newVal)}`;
         const img = (src) =>
           `<img class="phist-avatar-thumb" src="${src}" alt=""
