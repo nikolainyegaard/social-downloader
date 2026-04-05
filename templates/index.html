@@ -150,10 +150,18 @@
       display: flex; align-items: center; justify-content: center;
     }
     .sound-icon-letter { font-size: 22px; color: var(--accent); pointer-events: none; user-select: none; }
-    .sound-add-form {
-      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    .text-input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 14px;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
     }
-    .sound-add-form input { flex: 1; min-width: 180px; }
+    .text-input:focus { border-color: var(--accent); }
 
     /* Hide number input spinners — values like 180 are typed, not incremented */
     input[type="number"]::-webkit-inner-spin-button,
@@ -1134,21 +1142,21 @@
     <div class="pending-list" id="pendingList"></div>
   </section>
 
-  <!-- Sounds -->
+  <!-- Track a sound -->
   <section>
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-      <div class="section-title" style="margin-bottom:0">Tracked sounds (<span id="soundCount">0</span>)</div>
-      <button class="btn-run" style="font-size:12px;padding:4px 12px" onclick="toggleSoundAddForm()">+ Add sound</button>
+    <div class="section-title">Track a sound</div>
+    <div class="add-form">
+      <input type="text" id="soundInput" class="text-input" style="flex:1;min-width:180px" placeholder="Sound ID or TikTok sound URL" spellcheck="false">
+      <input type="text" id="soundLabelInput" class="text-input" style="flex:0 0 160px" placeholder="Label (optional)" spellcheck="false">
+      <button class="btn-primary" onclick="addSound()">Add</button>
     </div>
-    <div id="soundsAddForm" style="display:none;margin-bottom:12px;">
-      <div class="sound-add-form">
-        <input type="text" id="soundInput" placeholder="Sound ID or TikTok sound URL"
-               style="font-size:13px;padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);">
-        <input type="text" id="soundLabelInput" placeholder="Label (optional)"
-               style="flex:0 0 160px;font-size:13px;padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);">
-        <button class="btn-primary" onclick="addSound()" style="font-size:12px;padding:5px 14px;">Add</button>
-      </div>
-      <div id="soundAddStatus" style="font-size:12px;color:var(--muted);margin-top:6px;min-height:16px;"></div>
+    <div class="add-status" id="soundAddStatus"></div>
+  </section>
+
+  <!-- Sounds grid -->
+  <section>
+    <div style="display:flex;align-items:center;margin-bottom:10px;">
+      <div class="section-title" style="margin-bottom:0">Tracked sounds (<span id="soundCount">0</span>)</div>
     </div>
     <div class="users-grid" id="soundsGrid">
       <div class="empty-state">No sounds tracked yet.</div>
@@ -2196,37 +2204,27 @@
     if (ok) { sounds = data; renderSounds(); }
   }
 
-  function toggleSoundAddForm() {
-    const form = document.getElementById('soundsAddForm');
-    const visible = form.style.display !== 'none';
-    form.style.display = visible ? 'none' : '';
-    if (!visible) document.getElementById('soundInput').focus();
-  }
-
   async function addSound() {
     const input      = document.getElementById('soundInput');
     const labelInput = document.getElementById('soundLabelInput');
     const statusEl   = document.getElementById('soundAddStatus');
     const raw        = input.value.trim();
     const label      = labelInput.value.trim() || null;
-    if (!raw) { statusEl.textContent = 'Enter a sound ID or URL.'; return; }
+    if (!raw) { statusEl.className = 'add-status info'; statusEl.textContent = 'Enter a sound ID or URL.'; return; }
 
-    statusEl.textContent = 'Adding…';
-    statusEl.style.color = 'var(--muted)';
+    statusEl.className = 'add-status info'; statusEl.textContent = 'Adding…';
     const { ok, data } = await apiJSON('/api/sounds', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sound_id: raw, label }),
     });
     if (!ok) {
-      statusEl.textContent = data.error || 'Failed.';
-      statusEl.style.color = 'var(--red)';
+      statusEl.className = 'add-status error'; statusEl.textContent = data.error || 'Failed.';
     } else {
       input.value      = '';
       labelInput.value = '';
-      statusEl.textContent = `Sound ${data.sound_id} added.`;
-      statusEl.style.color = 'var(--green)';
-      setTimeout(() => { statusEl.textContent = ''; }, 5000);
+      statusEl.className = 'add-status ok'; statusEl.textContent = `Sound ${data.sound_id} added.`;
+      setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'add-status'; }, 5000);
       loadSounds();
     }
   }
@@ -2608,12 +2606,12 @@
 
     newLines.forEach(line => {
       const span = document.createElement('span');
-      if      (line.includes('=== Loop'))                   span.className = 'log-sep';
-      else if (/\] Processing @/.test(line))                span.className = 'log-user';
-      else if (/error|failed|unexpected/i.test(line))       span.className = 'log-err';
-      else if (/warn|deleted|corrupt/i.test(line))          span.className = 'log-warn';
-      else if (/download|saved/i.test(line))                span.className = 'log-dl';
-      else if (/Profile change:|avatar changed/i.test(line)) span.className = 'log-profile';
+      if      (/=== \w+ loop (started|complete)/i.test(line))                          span.className = 'log-sep';
+      else if (/\] Processing @/.test(line) || /\[sound\] Processing sound/i.test(line)) span.className = 'log-user';
+      else if (/error|failed|unexpected/i.test(line))                                  span.className = 'log-err';
+      else if (/warn|deleted|corrupt/i.test(line))                                     span.className = 'log-warn';
+      else if (/download|saved/i.test(line))                                           span.className = 'log-dl';
+      else if (/Profile change:|avatar changed|\[sound\] Discovered/i.test(line))      span.className = 'log-profile';
       span.textContent = line + '\n';
       body.appendChild(span);
     });
