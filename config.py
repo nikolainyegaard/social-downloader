@@ -5,7 +5,7 @@ All modules import paths and settings from here.
 
 import os
 
-APP_VERSION = "1.12.0"
+APP_VERSION = "1.12.1"
 import shutil
 
 DATA_DIR     = os.environ.get("DATA_DIR",   "./data")
@@ -13,6 +13,7 @@ VIDEOS_DIR   = os.environ.get("VIDEOS_DIR", "./videos")
 AVATARS_DIR  = os.path.join(DATA_DIR, "avatars")
 COOKIES_PATH           = os.path.join(DATA_DIR, "cookies.txt")
 COOKIES_TIMESTAMP_PATH = os.path.join(DATA_DIR, "cookies.timestamp")
+LAST_RUN_PATH          = os.path.join(DATA_DIR, "last_run.timestamp")
 
 LOOP_INTERVAL_MINUTES = int(os.environ.get("LOOP_INTERVAL_MINUTES", 30))
 WEB_PORT              = int(os.environ.get("WEB_PORT", 5000))

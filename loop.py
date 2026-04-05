@@ -3,6 +3,7 @@ Main download loop and shared state used by both the loop thread and the web ser
 """
 
 import asyncio
+import os
 import queue as _queue_module
 import random
 import threading
@@ -11,17 +12,26 @@ from collections import deque
 from datetime import datetime, timezone
 
 import database as db
-from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE
+from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE, DATA_DIR, LAST_RUN_PATH
 from tiktok_api import get_user_info, get_user_videos, get_video_details
 from downloader import download_video, download_photos, rename_user_folder
 from thumbnailer import backfill_thumbnails, cache_avatar
 
 # Shared state
 
+def _load_last_run() -> str | None:
+    """Read the persisted last-run timestamp from disk, if present."""
+    try:
+        with open(LAST_RUN_PATH, encoding="utf-8") as f:
+            return f.read().strip() or None
+    except FileNotFoundError:
+        return None
+
+
 loop_state = {
     "running":        False,
     "last_run_start": None,
-    "last_run_end":   None,
+    "last_run_end":   _load_last_run(),
     "next_run":       None,
     "current_user":   None,
     "logs":           deque(maxlen=1000),
@@ -326,6 +336,10 @@ def run_loop():
             _log(f"Unhandled loop error: {e}")
 
     _log("=== Loop complete ===")
+    last_run_end = datetime.now(timezone.utc).isoformat()
     with _state_lock:
         loop_state["running"]      = False
-        loop_state["last_run_end"] = datetime.now(timezone.utc).isoformat()
+        loop_state["last_run_end"] = last_run_end
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(LAST_RUN_PATH, "w", encoding="utf-8") as f:
+        f.write(last_run_end)
