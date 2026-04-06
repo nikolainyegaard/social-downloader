@@ -15,7 +15,7 @@ import database as db
 from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE, DATA_DIR
 from tiktok_api import get_user_info, get_user_videos, get_video_details
 from downloader import download_video, download_photos, rename_user_folder
-from thumbnailer import backfill_thumbnails, cache_avatar
+from thumbnailer import backfill_thumbnails, cache_avatar, generate_thumbnail
 import photo_converter as _photo_converter  # noqa: F401 — starts conversion thread on import
 from sound_tracker import process_all_sounds, process_sound
 
@@ -337,6 +337,12 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
                     image_urls=details["image_urls"],
                     upload_date=details["upload_date"],
                 )
+                if path:
+                    thumb = generate_thumbnail(vid_id, path)
+                    if thumb:
+                        _log(f"  Thumbnail OK: {os.path.basename(thumb)}")
+                    else:
+                        _log(f"  Thumbnail FAILED for {vid_id} — see [thumb] lines above")
                 dl_result = {"file_path": path, "ytdlp_data": None} if path else None
             else:
                 _log(f"  Downloading video {vid_id}...")

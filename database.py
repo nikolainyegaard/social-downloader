@@ -159,6 +159,18 @@ def _migrate_db(conn):
           AND file_path IS NOT NULL
     """)
 
+    # Clear the backfill stamp on any rows that were incorrectly marked as done
+    # but are actually missing stats (view_count NULL). This surfaces them in the
+    # header pill and makes them eligible for the next backfill run.
+    conn.execute("""
+        UPDATE videos
+        SET stats_backfilled_at = NULL
+        WHERE stats_backfilled_at IS NOT NULL
+          AND view_count IS NULL
+          AND COALESCE(stats_error_count, 0) < 3
+          AND file_path IS NOT NULL
+    """)
+
     # Backfill music_id from the stored raw JSON blob for any rows that have it
     conn.execute("""
         UPDATE videos
@@ -335,7 +347,8 @@ def add_video(video_id, tiktok_id, video_type, description, upload_date,
         """, (video_id, tiktok_id, video_type, description, upload_date,
               view_count, like_count, comment_count, share_count, save_count,
               duration, width, height, music_title, music_artist, music_id,
-              raw_video_data, int(time.time())))
+              raw_video_data,
+              int(time.time()) if (view_count is not None and raw_video_data is not None) else None))
 
 
 def update_video_downloaded(video_id, file_path, ytdlp_data=None):

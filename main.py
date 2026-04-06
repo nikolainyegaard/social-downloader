@@ -4,7 +4,6 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone
-from logging.handlers import TimedRotatingFileHandler
 
 import database as db
 from config import DATA_DIR, USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, WEB_PORT
@@ -27,84 +26,104 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 # retrieve.  Old run files beyond _RUN_LOG_KEEP are deleted automatically.
 # The current run is always at the predictable path run_current.log.
 
-_RUN_LOG_KEEP   = 10
-_run_current    = os.path.join(LOGS_DIR, "run_current.log")
+_RUN_LOG_KEEP = 10
+_run_current  = os.path.join(LOGS_DIR, "run_current.log")
 
+
+def _prune_old_runs() -> None:
+    old = sorted(f for f in os.listdir(LOGS_DIR)
+                 if f.startswith("run_") and f != "run_current.log")
+    for name in old[:-_RUN_LOG_KEEP]:
+        try:
+            os.remove(os.path.join(LOGS_DIR, name))
+        except OSError:
+            pass
+
+
+# Startup rotation: rename any leftover run_current.log from the previous run.
 if os.path.exists(_run_current):
     _run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     try:
         os.rename(_run_current, os.path.join(LOGS_DIR, f"run_{_run_ts}.log"))
     except OSError:
         pass
-    _old_runs = sorted(
-        f for f in os.listdir(LOGS_DIR)
-        if f.startswith("run_") and f != "run_current.log"
-    )
-    for _old in _old_runs[:-_RUN_LOG_KEEP]:  # keep the newest _RUN_LOG_KEEP
+    _prune_old_runs()
+
+
+# ── Application log: stdout/stderr → run_current.log ─────────────────────────
+#
+# _RunLog owns run_current.log and handles two kinds of rotation:
+#   • Midnight rotation  — at the first write after midnight the file is closed,
+#     renamed run_YYYYMMDD.log, and a fresh run_current.log is opened.
+#   • Startup rotation   — handled above before _RunLog is created.
+#
+# _Tee wraps stdout/stderr so every print() goes to the terminal AND _RunLog.
+# Both wrappers share the same _RunLog instance, so midnight rotation is
+# coordinated automatically.  _tee_lock prevents interleaved writes from
+# concurrent loop threads.
+
+_tee_lock = threading.Lock()
+
+
+class _RunLog:
+    def __init__(self, path: str) -> None:
+        self._path = path
+        self._date = datetime.now().strftime("%Y%m%d")
+        self._file = open(path, "w", encoding="utf-8", buffering=1)
+
+    def write(self, msg: str) -> None:
+        today = datetime.now().strftime("%Y%m%d")
+        if today != self._date:
+            self._rotate(self._date)
+            self._date = today
         try:
-            os.remove(os.path.join(LOGS_DIR, _old))
-        except OSError:
+            self._file.write(msg)
+        except Exception:
             pass
 
-_run_file = open(_run_current, "w", encoding="utf-8", buffering=1)  # line-buffered
+    def flush(self) -> None:
+        try:
+            self._file.flush()
+        except Exception:
+            pass
+
+    def _rotate(self, old_date: str) -> None:
+        try:
+            self._file.flush()
+            self._file.close()
+        except Exception:
+            pass
+        try:
+            os.rename(self._path, os.path.join(LOGS_DIR, f"run_{old_date}.log"))
+        except OSError:
+            pass
+        self._file = open(self._path, "w", encoding="utf-8", buffering=1)
+        _prune_old_runs()
 
 
-# ── Application log: stdout/stderr → daily-rotating transcript.log ────────────
-#
-# _Tee intercepts all print() output and writes it to the rotating file AND
-# the per-run file.  We call shouldRollover/doRollover manually because
-# writing directly to .stream bypasses the emit() path that normally triggers
-# rotation.
+_run_log = _RunLog(_run_current)
 
-_tee_lock = threading.Lock()   # prevents interleaved writes from concurrent threads
 
 class _Tee:
-    def __init__(self, original, handler, run_file):
+    def __init__(self, original) -> None:
         self._original = original
-        self._handler  = handler
-        self._run_file = run_file
 
-    def write(self, msg):
+    def write(self, msg: str) -> None:
         self._original.write(msg)
         if msg:
             with _tee_lock:
-                try:
-                    # TimedRotatingFileHandler.shouldRollover() checks time only,
-                    # so the LogRecord argument is ignored — a dummy is fine.
-                    _dummy = logging.LogRecord("", logging.INFO, "", 0, "", [], None)
-                    if self._handler.shouldRollover(_dummy):
-                        self._handler.doRollover()
-                    self._handler.stream.write(msg)
-                    self._handler.stream.flush()
-                except Exception:
-                    pass  # never let log I/O crash the application
-                try:
-                    self._run_file.write(msg)
-                except Exception:
-                    pass
+                _run_log.write(msg)
 
-    def flush(self):
+    def flush(self) -> None:
         self._original.flush()
-        try:
-            self._handler.stream.flush()
-        except Exception:
-            pass
-        try:
-            self._run_file.flush()
-        except Exception:
-            pass
+        _run_log.flush()
 
     def __getattr__(self, name):
         return getattr(self._original, name)
 
 
-_transcript_handler = TimedRotatingFileHandler(
-    os.path.join(LOGS_DIR, "transcript.log"),
-    when="midnight", backupCount=30, encoding="utf-8",
-)
-_transcript_handler.setFormatter(logging.Formatter("%(message)s"))
-sys.stdout = _Tee(sys.__stdout__, _transcript_handler, _run_file)
-sys.stderr = _Tee(sys.__stderr__, _transcript_handler, _run_file)
+sys.stdout = _Tee(sys.__stdout__)
+sys.stderr = _Tee(sys.__stderr__)
 
 # ── HTTP access log filter ─────────────────────────────────────────────────────
 #
