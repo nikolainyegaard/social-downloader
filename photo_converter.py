@@ -24,10 +24,9 @@ import re as _re
 import subprocess
 import threading
 import time
-from datetime import datetime
 
 import database as db
-from config import VIDEOS_DIR, AVATARS_DIR
+from config import VIDEOS_DIR, AVATARS_DIR, _ts
 
 CRF_PHOTO  = 30
 CRF_THUMB  = 40
@@ -64,10 +63,6 @@ def _inc_done() -> None:
 def _inc_errors() -> None:
     with _state_lock:
         _state["errors"] += 1
-
-
-def _ts() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ── Core encoder ─────────────────────────────────────────────────────────────

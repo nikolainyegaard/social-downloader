@@ -3,11 +3,16 @@ Flask web application — user management UI and API.
 """
 
 import asyncio
+import glob as _glob
+import io
+import json
 import os
 import queue as _queue_module
 import re
 import threading
 import time
+import traceback
+import zipfile
 from flask import Flask, jsonify, request, render_template, send_file
 
 import database as db
@@ -147,9 +152,6 @@ _audio_cleanup_state: dict = {
 
 
 def _run_audio_cleanup() -> None:
-    import glob as _glob2
-    import time as _time
-
     with _audio_cleanup_lock:
         if _audio_cleanup_state["running"]:
             return
@@ -158,7 +160,7 @@ def _run_audio_cleanup() -> None:
     print(f"[audio-cleanup] Scanning {VIDEOS_DIR} for audio-only files…")
     try:
         audio_files = [
-            p for p in _glob2.glob(os.path.join(VIDEOS_DIR, "@*", "*"))
+            p for p in _glob.glob(os.path.join(VIDEOS_DIR, "@*", "*"))
             if os.path.isfile(p) and os.path.splitext(p)[1].lower() in _AUDIO_EXTENSIONS
         ]
 
@@ -190,12 +192,10 @@ def _run_audio_cleanup() -> None:
     finally:
         with _audio_cleanup_lock:
             _audio_cleanup_state["running"]  = False
-            _audio_cleanup_state["last_run"] = _time.strftime("%Y-%m-%d %H:%M:%S")
+            _audio_cleanup_state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _run_backfill() -> None:
-    import time as _time
-
     videos  = db.get_videos_missing_stats()
     cookies = get_cookies_flat()
 
@@ -226,15 +226,13 @@ def _run_backfill() -> None:
                 _backfill_state["errors"] += 1
         with _backfill_lock:
             _backfill_state["done"] += 1
-        _time.sleep(1.5)
+        time.sleep(1.5)
 
     with _backfill_lock:
         _backfill_state["running"] = False
 
 
 def _run_cleanup() -> None:
-    import glob as _glob
-
     with _cleanup_lock:
         _cleanup_state.update({"running": True, "current": "Starting…", "steps": [], "removed": 0, "done": False})
 
@@ -435,8 +433,7 @@ def create_app() -> Flask:
 
     @app.route("/api/users/<tiktok_id>/avatar-history/<filename>", methods=["GET"])
     def user_avatar_history(tiktok_id: str, filename: str):
-        import re as _re
-        if not _re.fullmatch(r"[0-9]+_[0-9]+\.(jpg|avif)", filename):
+        if not re.fullmatch(r"[0-9]+_[0-9]+\.(jpg|avif)", filename):
             return ("", 400)
         path = os.path.join(AVATARS_DIR, filename)
         if not os.path.exists(path):
@@ -496,15 +493,13 @@ def create_app() -> Flask:
     @app.route("/api/videos/<video_id>/photos/zip", methods=["GET"])
     def video_photos_zip(video_id: str):
         """Stream all images of a photo post as a zip file."""
-        import io
-        import zipfile as _zipfile
         video = db.get_video(video_id)
         if not video or video.get("type") != "photo" or not video.get("file_path"):
             return ("", 404)
         folder = os.path.dirname(video["file_path"])
         buf = io.BytesIO()
         added = 0
-        with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_STORED) as zf:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
             for i in range(1, 51):
                 for ext in ("avif", "jpg", "jpeg"):
                     path = os.path.join(folder, f"{video_id}_{i:02d}.{ext}")
@@ -590,6 +585,12 @@ def create_app() -> Flask:
         offset = int(request.args.get("offset", 0))
         limit  = int(request.args.get("limit",  50))
         return jsonify(db.get_ban_history(offset=offset, limit=limit))
+
+    @app.route("/api/recent/saved", methods=["GET"])
+    def get_recent_saved():
+        offset = int(request.args.get("offset", 0))
+        limit  = int(request.args.get("limit",  50))
+        return jsonify(db.get_saved_history(offset=offset, limit=limit))
 
     @app.route("/api/db/cleanup", methods=["GET"])
     def get_cleanup_status():
@@ -695,8 +696,7 @@ def create_app() -> Flask:
         label    = str(body.get("label", "")).strip() or None
 
         # Accept full TikTok sound URLs — extract the trailing numeric ID
-        import re as _re
-        m = _re.search(r'(\d{10,25})(?:[^0-9]|$)', raw)
+        m = re.search(r'(\d{10,25})(?:[^0-9]|$)', raw)
         sound_id = m.group(1) if m else raw
 
         if not sound_id.isdigit():
@@ -768,8 +768,6 @@ def create_app() -> Flask:
 
     @app.route("/api/debug/fetch", methods=["POST"])
     def debug_fetch():
-        import json, traceback as _tb
-
         body   = request.get_json(silent=True) or {}
         source = body.get("source", "")
         action = body.get("action", "")
@@ -816,6 +814,6 @@ def create_app() -> Flask:
                 return jsonify({"ok": False, "output": f"Unknown source/action: {source}/{action}"})
 
         except Exception as e:
-            return jsonify({"ok": False, "output": f"Error: {e}\n\n{_tb.format_exc()}"})
+            return jsonify({"ok": False, "output": f"Error: {e}\n\n{traceback.format_exc()}"})
 
     return app

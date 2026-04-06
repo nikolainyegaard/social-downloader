@@ -12,7 +12,6 @@ DB_PATH = os.path.join(DATA_DIR, "tiktok.db")
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     try:
         yield conn
         conn.commit()
@@ -25,6 +24,13 @@ def get_db():
 
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
+    # WAL mode is a persistent property — set it once here rather than on every connection.
+    _conn = sqlite3.connect(DB_PATH)
+    try:
+        _conn.execute("PRAGMA journal_mode=WAL")
+        _conn.commit()
+    finally:
+        _conn.close()
     with get_db() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -104,6 +110,18 @@ def init_db():
 
             CREATE INDEX IF NOT EXISTS idx_sound_videos_sound
                 ON sound_videos(sound_id);
+
+            CREATE INDEX IF NOT EXISTS idx_videos_tiktok_id
+                ON videos(tiktok_id);
+
+            CREATE INDEX IF NOT EXISTS idx_videos_status
+                ON videos(status);
+
+            CREATE INDEX IF NOT EXISTS idx_videos_stats_backfilled_at
+                ON videos(stats_backfilled_at);
+
+            CREATE INDEX IF NOT EXISTS idx_profile_history_tiktok_id
+                ON profile_history(tiktok_id);
         """)
         _migrate_db(conn)
 
@@ -178,25 +196,6 @@ def _migrate_db(conn):
         WHERE music_id IS NULL
           AND raw_video_data IS NOT NULL
     """)
-
-
-# Settings
-
-def get_setting(key: str, default=None):
-    """Return a persisted setting value, or default if not set."""
-    with get_db() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-        return row["value"] if row else default
-
-
-def set_setting(key: str, value) -> None:
-    """Persist a setting value (upsert)."""
-    with get_db() as conn:
-        conn.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?)"
-            " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, str(value)),
-        )
 
 
 # Tracking toggle
@@ -367,7 +366,7 @@ def mark_video_deleted(video_id):
                 deleted_at             = COALESCE(pending_deletion_since, ?),
                 pending_deletion_count = 0,
                 pending_deletion_since = NULL
-            WHERE video_id = ? AND status = 'up'
+            WHERE video_id = ? AND status IN ('up', 'undeleted')
         """, (int(time.time()), video_id))
 
 
@@ -675,7 +674,7 @@ def get_all_user_ids() -> set:
 
 
 def get_recent_activity() -> dict:
-    """Return recent deletions, profile changes, and bans for the Recent panel."""
+    """Return recent deletions, profile changes, bans, and saves for the Recent panel."""
     with get_db() as conn:
         deletions = [dict(r) for r in conn.execute(
             """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id
@@ -694,7 +693,13 @@ def get_recent_activity() -> dict:
                WHERE account_status = 'banned' AND banned_at IS NOT NULL
                ORDER BY banned_at DESC LIMIT 1"""
         ).fetchall()]
-    return {"deletions": deletions, "profile_changes": profile_changes, "bans": bans}
+        saved = [dict(r) for r in conn.execute(
+            """SELECT v.video_id, v.download_date, v.type, u.username, u.tiktok_id
+               FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
+               ORDER BY v.download_date DESC LIMIT 9"""
+        ).fetchall()]
+    return {"deletions": deletions, "profile_changes": profile_changes, "bans": bans, "saved": saved}
 
 
 def get_deletion_history(offset: int = 0, limit: int = 50) -> list[dict]:
@@ -735,6 +740,19 @@ def get_ban_history(offset: int = 0, limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_saved_history(offset: int = 0, limit: int = 50) -> list[dict]:
+    """Return paginated download history (newest first)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT v.video_id, v.download_date, v.type, u.username, u.tiktok_id
+               FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
+               ORDER BY v.download_date DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_aggregate_stats() -> dict:
     """Return aggregate statistics across all tracked users and downloaded videos."""
     with get_db() as conn:
@@ -764,8 +782,8 @@ def get_aggregate_stats() -> dict:
 
 
 def delete_orphaned_records() -> int:
-    """Delete video and username_history rows for users no longer in the users table.
-    Does NOT touch files on disk. Returns the number of rows deleted."""
+    """Delete video, username_history, and profile_history rows for users no longer in
+    the users table. Does NOT touch files on disk. Returns the number of rows deleted."""
     with get_db() as conn:
         videos   = conn.execute(
             "DELETE FROM videos WHERE tiktok_id NOT IN (SELECT tiktok_id FROM users)"
@@ -773,7 +791,10 @@ def delete_orphaned_records() -> int:
         history  = conn.execute(
             "DELETE FROM username_history WHERE tiktok_id NOT IN (SELECT tiktok_id FROM users)"
         ).rowcount
-    return videos + history
+        profile  = conn.execute(
+            "DELETE FROM profile_history WHERE tiktok_id NOT IN (SELECT tiktok_id FROM users)"
+        ).rowcount
+    return videos + history + profile
 
 
 def reset_backfill_status() -> int:

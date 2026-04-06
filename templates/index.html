@@ -511,13 +511,35 @@
       padding: 5px 8px; min-height: 30px;
     }
     .phist-value.empty { color: var(--muted); font-style: italic; }
-    .phist-avatar-thumb {
-      width: 56px; height: 56px; border-radius: 50%;
-      object-fit: cover; flex-shrink: 0;
-      background: var(--surface2); cursor: pointer;
-      transition: opacity .15s;
+    .phist-avatar-diff {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 10px 4px 4px;
     }
-    .phist-avatar-thumb:hover { opacity: .75; }
+    .phist-avatar-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .phist-avatar-col .phist-side-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .phist-avatar-lg {
+      width: 100px; height: 100px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--surface2);
+      cursor: pointer;
+      border: 2px solid var(--border);
+      transition: opacity .15s, border-color .15s;
+    }
+    .phist-avatar-lg:hover { opacity: .8; border-color: var(--accent); }
 
     /* ── Modal toolbar ────────────────────────────────────────────────────────── */
 
@@ -754,15 +776,64 @@
       pointer-events: none;
     }
 
-    /* ── Top panels (stats + controls) ──────────────────────────────────────── */
+    /* ── Top panels (stats + recent) ────────────────────────────────────────── */
 
     .top-panels {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 2fr;
       gap: 24px;
     }
     @media (max-width: 900px) { .top-panels { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 600px) { .top-panels { grid-template-columns: 1fr; } }
+
+    /* ── Track + Loops layout ────────────────────────────────────────────────── */
+
+    .track-panels {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 24px;
+    }
+    @media (max-width: 700px) { .track-panels { grid-template-columns: 1fr; } }
+
+    .track-panels .loops-card {
+      grid-row: 1 / 3;
+      grid-column: 2;
+    }
+    @media (max-width: 700px) {
+      .track-panels .loops-card {
+        grid-row: auto;
+        grid-column: auto;
+      }
+    }
+
+    /* Recent panel two-column split */
+    .recent-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 12px;
+      flex: 1;
+    }
+    @media (max-width: 700px) { .recent-split { grid-template-columns: 1fr; } }
+
+    .recent-col {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .recent-col + .recent-col {
+      border-left: 1px solid var(--border);
+      padding-left: 12px;
+    }
+    @media (max-width: 700px) {
+      .recent-col + .recent-col {
+        border-left: none;
+        padding-left: 0;
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+      }
+    }
 
     .panel-card {
       background: var(--surface);
@@ -1081,7 +1152,7 @@
     </div>
   </header>
 
-  <!-- Top panels: Stats + Recent -->
+  <!-- Top panels: Stats (1/3) + Recent (2/3) -->
   <div class="top-panels">
 
     <!-- Statistics panel -->
@@ -1094,18 +1165,48 @@
       </div>
     </div>
 
-    <!-- Recent panel -->
+    <!-- Recent panel (wide) -->
     <div class="panel-card">
       <div class="panel-header">
         <span class="section-title" style="margin-bottom:0">Recent</span>
       </div>
-      <div class="panel-body" style="gap:10px" id="recentPanel">
-        <div style="color:var(--muted);font-size:12px">Loading…</div>
+      <div class="panel-body" style="padding:12px 16px">
+        <div class="recent-split">
+          <div class="recent-col" id="recentLeft">
+            <div style="color:var(--muted);font-size:12px">Loading…</div>
+          </div>
+          <div class="recent-col" id="recentRight">
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Loops panel -->
-    <div class="panel-card">
+  </div>
+
+  <!-- Track panels: (Track user + Track sound) on left, Loops on right spanning both -->
+  <div class="track-panels">
+
+    <!-- Track a user -->
+    <section>
+      <div class="section-title">Track a user</div>
+      <div class="add-form">
+        <div
+          class="handle-input"
+          id="handleInput"
+          contenteditable="true"
+          role="textbox"
+          aria-label="TikTok username"
+          data-placeholder="@username"
+          spellcheck="false"
+        ></div>
+        <button class="btn-primary" id="addBtn" onclick="addUser()">Add</button>
+      </div>
+      <div class="add-status" id="addStatus"></div>
+      <div class="pending-list" id="pendingList"></div>
+    </section>
+
+    <!-- Loops panel (spans both track rows) -->
+    <div class="panel-card loops-card">
       <div class="panel-header">
         <span class="section-title" style="margin-bottom:0">Loops</span>
       </div>
@@ -1138,37 +1239,18 @@
       </div>
     </div>
 
+    <!-- Track a sound -->
+    <section>
+      <div class="section-title">Track a sound</div>
+      <div class="add-form">
+        <input type="text" id="soundInput" class="text-input" style="flex:1;min-width:180px" placeholder="Sound ID or TikTok sound URL" spellcheck="false">
+        <input type="text" id="soundLabelInput" class="text-input" style="flex:0 0 160px" placeholder="Label (optional)" spellcheck="false">
+        <button class="btn-primary" onclick="addSound()">Add</button>
+      </div>
+      <div class="add-status" id="soundAddStatus"></div>
+    </section>
+
   </div>
-
-  <!-- Add user -->
-  <section>
-    <div class="section-title">Track a user</div>
-    <div class="add-form">
-      <div
-        class="handle-input"
-        id="handleInput"
-        contenteditable="true"
-        role="textbox"
-        aria-label="TikTok username"
-        data-placeholder="@username"
-        spellcheck="false"
-      ></div>
-      <button class="btn-primary" id="addBtn" onclick="addUser()">Add</button>
-    </div>
-    <div class="add-status" id="addStatus"></div>
-    <div class="pending-list" id="pendingList"></div>
-  </section>
-
-  <!-- Track a sound -->
-  <section>
-    <div class="section-title">Track a sound</div>
-    <div class="add-form">
-      <input type="text" id="soundInput" class="text-input" style="flex:1;min-width:180px" placeholder="Sound ID or TikTok sound URL" spellcheck="false">
-      <input type="text" id="soundLabelInput" class="text-input" style="flex:0 0 160px" placeholder="Label (optional)" spellcheck="false">
-      <button class="btn-primary" onclick="addSound()">Add</button>
-    </div>
-    <div class="add-status" id="soundAddStatus"></div>
-  </section>
 
   <!-- Sounds grid -->
   <section>
@@ -1214,6 +1296,7 @@
           </select>
           <button class="sort-dir-btn" id="userSortDirBtn" onclick="toggleUserSortDir()">A → Z</button>
         </div>
+        <button class="sort-dir-btn" onclick="resetUserFilters()" title="Reset all filters and sort to default">Reset</button>
       </div>
     </div>
     <div class="users-grid" id="usersGrid">
@@ -1672,14 +1755,19 @@
   }
 
   function renderRecent(data) {
-    const panel = document.getElementById('recentPanel');
-    if (!panel) return;
-    let html = '';
+    const leftEl  = document.getElementById('recentLeft');
+    const rightEl = document.getElementById('recentRight');
+    if (!leftEl || !rightEl) return;
+
+    // ── Left column ───────────────────────────────────────────────────────────
+
+    let left = '';
 
     // Recently deleted
-    html += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('deletions')" title="View all deleted videos">Recently deleted</div>`;
+    left += `<div>`;
+    left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('deletions')" title="View all deleted videos">Recently deleted</div>`;
     if (data.deletions.length) {
-      html += data.deletions.map(d =>
+      left += data.deletions.map(d =>
         `<div class="recent-entry" onclick="openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')" title="Open @${esc(d.username)}">
           <span class="recent-date">${_recentDate(d.deleted_at)}</span>
           <span class="recent-name">@${esc(d.username)}</span>
@@ -1687,13 +1775,15 @@
         </div>`
       ).join('');
     } else {
-      html += `<div class="recent-empty">No deleted videos yet</div>`;
+      left += `<div class="recent-empty">No deleted videos yet</div>`;
     }
+    left += `</div>`;
 
     // Recently changed profile
-    html += `<div class="recent-section-hdr" style="margin:8px 0 2px" onclick="openRecentLog('profile-changes')" title="View all profile changes">Recently changed profile</div>`;
+    left += `<div>`;
+    left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('profile-changes')" title="View all profile changes">Recently changed profile</div>`;
     if (data.profile_changes.length) {
-      html += data.profile_changes.map(p =>
+      left += data.profile_changes.map(p =>
         `<div class="recent-entry" onclick="openUserModalWithHistory('${esc(p.tiktok_id)}','${esc(p.field)}')" title="Open @${esc(p.username)} · ${esc(_FIELD_LABELS[p.field] || p.field)} history">
           <span class="recent-date">${_recentDate(p.changed_at)}</span>
           <span class="recent-name">@${esc(p.username)}</span>
@@ -1701,23 +1791,46 @@
         </div>`
       ).join('');
     } else {
-      html += `<div class="recent-empty">No profile changes recorded yet</div>`;
+      left += `<div class="recent-empty">No profile changes recorded yet</div>`;
     }
+    left += `</div>`;
 
     // Recently banned
-    html += `<div class="recent-section-hdr" style="margin:8px 0 2px" onclick="openRecentLog('bans')" title="View all banned accounts">Recently banned</div>`;
-    if (data.bans.length) {
+    left += `<div>`;
+    left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('bans')" title="View all banned accounts">Recently banned</div>`;
+    if (data.bans && data.bans.length) {
       const b = data.bans[0];
-      html += `<div class="recent-entry" onclick="openUserModal('${esc(b.tiktok_id)}')" title="Open @${esc(b.username)}">
+      left += `<div class="recent-entry" onclick="openUserModal('${esc(b.tiktok_id)}')" title="Open @${esc(b.username)}">
         <span class="recent-date">${_recentDate(b.banned_at)}</span>
         <span class="recent-name">@${esc(b.username)}</span>
         <span class="recent-detail" style="color:var(--red)">Banned</span>
       </div>`;
     } else {
-      html += `<div class="recent-empty">No banned accounts</div>`;
+      left += `<div class="recent-empty">No banned accounts</div>`;
     }
+    left += `</div>`;
 
-    panel.innerHTML = html;
+    leftEl.innerHTML = left;
+
+    // ── Right column: Recently saved ──────────────────────────────────────────
+
+    let right = '';
+    right += `<div>`;
+    right += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('saved')" title="View all saved videos">Recently saved</div>`;
+    if (data.saved && data.saved.length) {
+      right += data.saved.map(s =>
+        `<div class="recent-entry" onclick="openUserModalAndHighlight('${esc(s.tiktok_id)}','${esc(s.video_id)}','all','download_date','desc')" title="Open @${esc(s.username)}">
+          <span class="recent-date">${_recentDate(s.download_date)}</span>
+          <span class="recent-name">@${esc(s.username)}</span>
+          <span class="recent-detail">${esc(s.video_id)}${s.type === 'photo' ? ' <span style="color:var(--muted)">[photo]</span>' : ''}</span>
+        </div>`
+      ).join('');
+    } else {
+      right += `<div class="recent-empty">No videos saved yet</div>`;
+    }
+    right += `</div>`;
+
+    rightEl.innerHTML = right;
   }
 
   async function loadRecent() {
@@ -1731,6 +1844,7 @@
     'deletions':       'All Deleted Videos',
     'profile-changes': 'All Profile Changes',
     'bans':            'All Banned Accounts',
+    'saved':           'All Saved Videos',
   };
 
   let _recentLogType    = null;
@@ -1806,6 +1920,13 @@
           <span class="recent-date">${_recentDate(item.changed_at)}</span>
           <span class="recent-name">@${esc(item.username)}</span>
           <span class="recent-detail">${esc(label)}</span>`;
+      } else if (_recentLogType === 'saved') {
+        row.title = `Open @${item.username}`;
+        row.onclick = () => { closeRecentLog(); openUserModalAndHighlight(item.tiktok_id, item.video_id, 'all', 'download_date', 'desc'); };
+        row.innerHTML = `
+          <span class="recent-date">${_recentDate(item.download_date)}</span>
+          <span class="recent-name">@${esc(item.username)}</span>
+          <span class="recent-detail">${esc(item.video_id)}${item.type === 'photo' ? ' <span style="color:var(--muted)">[photo]</span>' : ''}</span>`;
       } else {
         row.title = `Open @${item.username}`;
         row.onclick = () => { closeRecentLog(); openUserModal(item.tiktok_id); };
@@ -2078,6 +2199,19 @@
     userSort.field = field;
     userSort.dir   = (field === 'username' || field === 'display_name') ? 'asc' : 'desc';
     _updateUserSortBtn();
+    renderUsers();
+  }
+
+  function resetUserFilters() {
+    userSort   = { field: 'username', dir: 'asc' };
+    userFilter = { priv: 'all', stat: 'all' };
+    const sel = document.getElementById('userSortField');
+    if (sel) sel.value = 'username';
+    _updateUserSortBtn();
+    const privIds = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', banned: 'ufPrivBanned' };
+    const statIds = { all: 'ufStatAll', active: 'ufStatActive', inactive: 'ufStatInactive' };
+    Object.entries(privIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
+    Object.entries(statIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     renderUsers();
   }
 
@@ -2785,7 +2919,7 @@
 
     newLines.forEach(line => {
       const span = document.createElement('span');
-      if      (/=== \w+ loop (started|complete)/i.test(line))                          span.className = 'log-sep';
+      if      (/=== .+ (started|complete)/i.test(line))                               span.className = 'log-sep';
       else if (/\] Processing @/.test(line) || /\[sound\] Processing sound/i.test(line)) span.className = 'log-user';
       else if (/error|failed|unexpected/i.test(line))                                  span.className = 'log-err';
       else if (/warn|deleted|corrupt/i.test(line))                                     span.className = 'log-warn';
@@ -2914,7 +3048,7 @@
   let _modalFilter          = 'all';
   let _modalTypeFilter      = 'all';
   let _modalSort            = { field: 'upload_date', dir: 'desc' };
-  let _modalPendingHighlight = null;   // video_id to scroll-to after load
+  let _modalPendingHighlight = null;   // { videoId, filter, sortField, sortDir } or null
   let _modalLoaded   = 0;
   let _modalObs      = null;
   const MODAL_PAGE   = 50;
@@ -2976,8 +3110,13 @@
     _loadModalVideos(tiktokId);
   }
 
-  function openUserModalAndHighlight(tiktokId, videoId) {
-    _modalPendingHighlight = videoId;
+  function openUserModalAndHighlight(tiktokId, videoId, filter, sortField, sortDir) {
+    _modalPendingHighlight = {
+      videoId,
+      filter:    filter    || 'deleted',
+      sortField: sortField || 'deleted_at',
+      sortDir:   sortDir   || 'desc',
+    };
     openUserModal(tiktokId);
   }
 
@@ -3100,15 +3239,15 @@
     _modalVideos = data;
 
     if (_modalPendingHighlight) {
-      const vid = _modalPendingHighlight;
+      const { videoId, filter, sortField, sortDir } = _modalPendingHighlight;
       _modalPendingHighlight = null;
-      _modalFilter     = 'deleted';
+      _modalFilter     = filter;
       _modalTypeFilter = 'all';
-      _modalSort       = { field: 'deleted_at', dir: 'desc' };
+      _modalSort       = { field: sortField, dir: sortDir };
       _renderColumnHdrs();
       _renderModalToolbar(data);
       _renderModalVideoList();
-      const row = document.querySelector(`[data-video-id="${CSS.escape(vid)}"]`);
+      const row = document.querySelector(`[data-video-id="${CSS.escape(videoId)}"]`);
       if (row) {
         row.scrollIntoView({ block: 'center' });
         row.classList.add('video-row-highlight');
@@ -3384,16 +3523,19 @@
         const newSrc = newVal === '__current__'
           ? `/api/users/${encodeURIComponent(_phistUserId)}/avatar?t=${e.changed_at}`
           : `/api/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(newVal)}`;
-        const img = (src) =>
-          `<img class="phist-avatar-thumb" src="${src}" alt=""
-               onerror="this.style.visibility='hidden';this.style.cursor='default';this.onclick=null"
-               onclick="openImgModalUrl('${src}')">`;
+        const img = (src, label) =>
+          `<div class="phist-avatar-col">
+            <span class="phist-side-label">${label}</span>
+            <img class="phist-avatar-lg" src="${src}" alt="${label}"
+                 onerror="this.style.visibility='hidden';this.style.cursor='default';this.onclick=null"
+                 onclick="openImgModalUrl('${src}')">
+          </div>`;
         return `<div class="phist-entry">
           <div class="phist-entry-hdr"><strong>${esc(fieldLabel)}</strong> <span class="phist-date">· Changed ${dateStr}</span></div>
-          <div class="phist-diff">
-            <div class="phist-side">${sideHdr('Old')}${img(oldSrc)}</div>
+          <div class="phist-avatar-diff">
+            ${img(oldSrc, 'Old')}
             <div class="phist-arrow">→</div>
-            <div class="phist-side">${sideHdr('New')}${img(newSrc)}</div>
+            ${img(newSrc, 'New')}
           </div>
         </div>`;
       }
@@ -3564,6 +3706,7 @@
 
   // ── Init ──────────────────────────────────────────────────────────────────────
 
+  resetUserFilters();   // clear any browser-restored form state
   loadCookies();
   loadUsers();
   loadSounds();

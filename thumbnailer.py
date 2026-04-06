@@ -24,17 +24,11 @@ import shutil
 import subprocess
 import time
 import urllib.request
-from datetime import datetime
-
 import database as db
-from config import VIDEOS_DIR, AVATARS_DIR, THUMBNAIL_WORKERS, THUMBNAIL_USE_GPU
+from config import VIDEOS_DIR, AVATARS_DIR, THUMBNAIL_WORKERS, THUMBNAIL_USE_GPU, _ts
 from photo_converter import encode_avif, CRF_THUMB, CRF_AVATAR
 
 THUMB_WIDTH = 360   # px
-
-
-def _ts() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ── Path helpers ──────────────────────────────────────────────────────────────
@@ -131,8 +125,12 @@ def generate_thumbnail(video_id: str, file_path: str) -> str | None:
         return None
 
     if _thumb_exists(video_id, file_path):
-        # Already have a thumbnail — AVIF or JPEG (JPEG will be converted by photo_converter)
-        return thumb_path_for(video_id, file_path)
+        # Already have a thumbnail — return whichever format exists.
+        # JPEG thumbnails will eventually be converted to AVIF by photo_converter;
+        # return the JPEG path now so callers don't get a nonexistent AVIF path.
+        avif = thumb_path_for(video_id, file_path)
+        jpg  = avif.replace(".avif", ".jpg")
+        return avif if os.path.exists(avif) else jpg
 
     print(f"[{_ts()}] [thumb] Generating thumbnail for {video_id} ({os.path.basename(file_path)})")
     out_path = thumb_path_for(video_id, file_path)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 import requests
@@ -8,7 +9,7 @@ from datetime import datetime
 from typing import Any
 from yt_dlp.utils import DownloadError
 
-from config import VIDEOS_DIR, COOKIES_PATH
+from config import VIDEOS_DIR, COOKIES_PATH, _ts
 from thumbnailer import generate_thumbnail
 from photo_converter import encode_avif, CRF_PHOTO
 
@@ -21,20 +22,16 @@ _YTDLP_STRIP_KEYS = frozenset({
     "protocol", "__files_to_move", "__postprocessors",
 })
 
+
 def _clean_ytdlp_info(info: dict | None) -> str | None:
     """Return a JSON string of the yt-dlp info dict with large/expiring fields removed."""
     if not info:
         return None
-    import json
     cleaned = {k: v for k, v in info.items() if k not in _YTDLP_STRIP_KEYS}
     try:
         return json.dumps(cleaned, default=str)
     except Exception:
         return None
-
-
-def _ts():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def download_video(*, video_id: str, username: str, tiktok_id: str,
@@ -224,9 +221,14 @@ def rename_user_folder(old_username: str, new_username: str) -> bool:
         return False
 
 
+_VIDEO_EXTS = (".mp4", ".mkv", ".webm", ".mov")
+
+
 def _find_output(folder: str, video_id: str) -> str | None:
     files = _get_video_files(folder, video_id)
-    return files[0] if files else None
+    # Prefer recognised video containers over .part, .ytdl, audio, or other temp files.
+    video_files = [f for f in files if f.lower().endswith(_VIDEO_EXTS)]
+    return video_files[0] if video_files else (files[0] if files else None)
 
 
 def _remove_corrupt(folder: str, video_id: str):

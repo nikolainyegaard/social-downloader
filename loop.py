@@ -416,8 +416,11 @@ def _run_worker():
         try:
             user = db.get_user(tiktok_id)
             if user:
+                label = f"@{user['username']}"
+                _log(f"=== Manual user run started: {label} ===")
                 cookies = get_cookies_flat()
                 asyncio.run(_process_single_user(user, cookies))
+                _log(f"=== Manual user run complete: {label} ===")
             else:
                 _log(f"Manual run: user {tiktok_id} not found in DB")
         except Exception as e:
@@ -438,7 +441,10 @@ def _sound_run_worker():
         try:
             sound = db.get_sound(sound_id)
             if sound:
+                label = sound.get("label") or sound_id
+                _log(f"=== Manual sound run started: {label} ===")
                 asyncio.run(process_sound(sound, _log))
+                _log(f"=== Manual sound run complete: {label} ===")
             else:
                 _log(f"Manual sound run: {sound_id} not found in DB")
         except Exception as e:

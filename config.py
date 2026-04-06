@@ -4,9 +4,10 @@ All modules import paths and settings from here.
 """
 
 import os
-
-APP_VERSION = os.environ.get("APP_VERSION", "dev")  # v1.18.1
 import shutil
+from datetime import datetime
+
+APP_VERSION = os.environ.get("APP_VERSION", "dev")  # v1.19.0
 
 DATA_DIR     = os.environ.get("DATA_DIR",   "./data")
 VIDEOS_DIR   = os.environ.get("VIDEOS_DIR", "./videos")
@@ -28,6 +29,11 @@ THUMBNAIL_USE_GPU  = os.environ.get("THUMBNAIL_USE_GPU", "").lower() in ("1", "t
 CHROME_EXECUTABLE: str | None = (
     shutil.which("google-chrome") or shutil.which("google-chrome-stable") or None
 )
+
+
+def _ts() -> str:
+    """Current local time as a formatted string, used in log lines across modules."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def get_ms_token() -> str | None:
