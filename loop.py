@@ -294,11 +294,14 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
                 if cache_avatar(tiktok_id, info["avatar_url"]) == "changed":
                     _log(f"  Profile change: avatar changed")
         except UserBannedException:
-            _log(f"  Account banned/removed (TikTok 10202), marking as banned")
-            db.set_user_account_status(tiktok_id, "banned")
-            n = db.ban_user_videos(tiktok_id)
-            if n:
-                _log(f"  {n} active video(s) marked deleted (user_banned)")
+            if _was_banned:
+                _log(f"  No changes (still banned)")
+            else:
+                _log(f"  Account banned/removed (TikTok 10202), marking as banned")
+                db.set_user_account_status(tiktok_id, "banned")
+                n = db.ban_user_videos(tiktok_id)
+                if n:
+                    _log(f"  {n} active video(s) marked deleted (user_banned)")
             return
         except Exception as e:
             _log(f"  Failed to fetch profile info: {e}")
