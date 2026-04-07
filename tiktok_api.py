@@ -8,20 +8,21 @@ import re
 
 
 async def get_user_info(api, username: str | None = None,
+                        user_id: str | None = None,
                         sec_uid: str | None = None) -> dict:
     """Fetch user profile data. Returns a normalised dict.
 
     Pass username= on first add (before sec_uid is known).
-    Pass sec_uid= in the loop — works even after the user changes their username,
-    since TikTok does not redirect old usernames (they 404).
-    TikTokApi's .info() accepts either username or (user_id + sec_uid).
+    Pass user_id= + sec_uid= in the loop to survive username changes; TikTok does
+    not redirect old usernames (they 404). TikTokApi's .info() requires either
+    username OR (user_id + sec_uid) together; sec_uid alone is not valid.
     """
-    if sec_uid:
-        user = api.user(sec_uid=sec_uid)
+    if user_id and sec_uid:
+        user = api.user(user_id=user_id, sec_uid=sec_uid)
     elif username:
         user = api.user(username=username)
     else:
-        raise ValueError("Must provide username or sec_uid")
+        raise ValueError("Must provide username or (user_id + sec_uid)")
     try:
         data = await user.info()
     except KeyError as exc:
@@ -55,9 +56,14 @@ async def get_user_info(api, username: str | None = None,
     }
 
 
-def get_user_videos(tiktok_id: str, cookies_path: str | None = None) -> list[dict]:
+def get_user_videos(tiktok_id: str, sec_uid: str | None = None,
+                    cookies_path: str | None = None) -> list[dict]:
     """List all videos from a user's profile using yt-dlp flat extraction.
-    Uses the numeric TikTok ID so lookups survive username changes.
+
+    Prefers tiktokuser:{sec_uid} when sec_uid is available: yt-dlp can use it
+    directly without needing to resolve the "secondary user ID" internally, so it
+    survives username changes without an extra lookup. Falls back to
+    tiktokuser:{tiktok_id} when sec_uid is absent (e.g. newly added users).
     Returns [{video_id, description, upload_date}].
     """
     import yt_dlp
@@ -70,21 +76,34 @@ def get_user_videos(tiktok_id: str, cookies_path: str | None = None) -> list[dic
     if cookies_path:
         ydl_opts["cookiefile"] = cookies_path
 
-    url    = f"tiktokuser:{tiktok_id}"
-    videos = []
+    # sec_uid is the "channel_id" in yt-dlp terms. Using it directly avoids the
+    # "Unable to extract secondary user ID" error yt-dlp raises when it can't
+    # resolve a sec_uid from a numeric-only lookup (common after username changes).
+    urls_to_try = []
+    if sec_uid:
+        urls_to_try.append(f"tiktokuser:{sec_uid}")
+    urls_to_try.append(f"tiktokuser:{tiktok_id}")
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        for entry in (info or {}).get("entries") or []:
-            if not entry or not entry.get("id"):
-                continue
-            videos.append({
-                "video_id":    entry["id"],
-                "description": entry.get("title") or "",
-                "upload_date": entry.get("timestamp"),
-            })
+    last_exc: Exception | None = None
+    for url in urls_to_try:
+        try:
+            videos = []
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                for entry in (info or {}).get("entries") or []:
+                    if not entry or not entry.get("id"):
+                        continue
+                    videos.append({
+                        "video_id":    entry["id"],
+                        "description": entry.get("title") or "",
+                        "upload_date": entry.get("timestamp"),
+                    })
+            return videos
+        except Exception as exc:
+            last_exc = exc
+            continue
 
-    return videos
+    raise last_exc  # type: ignore[misc]
 
 
 async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,

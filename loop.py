@@ -192,9 +192,11 @@ def _log(msg: str):
 
 # ── Core async logic ──────────────────────────────────────────────────────────
 
-async def _fetch_user_info(username: str, sec_uid: str | None = None) -> dict:
+async def _fetch_user_info(username: str, tiktok_id: str | None = None,
+                           sec_uid: str | None = None) -> dict:
     """Open a fresh TikTokApi session, fetch profile info, and close it.
-    Uses sec_uid when available (survives username changes).
+    Uses user_id + sec_uid when both are available (survives username changes).
+    TikTokApi requires both IDs together; sec_uid alone is not valid.
     Falls back to username for accounts not yet populated with sec_uid.
     """
     from TikTokApi import TikTokApi
@@ -207,11 +209,11 @@ async def _fetch_user_info(username: str, sec_uid: str | None = None) -> dict:
             sleep_after=3,
             executable_path=CHROME_EXECUTABLE,
         )
-        if sec_uid:
+        if tiktok_id and sec_uid:
             try:
-                return await get_user_info(api, sec_uid=sec_uid)
+                return await get_user_info(api, user_id=tiktok_id, sec_uid=sec_uid)
             except Exception:
-                pass  # sec_uid lookup failed; fall back to username
+                pass  # ID-based lookup failed; fall back to username
         return await get_user_info(api, username=username)
 
 
@@ -226,8 +228,12 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
 
         is_private: bool | None = None
 
+        # Best sec_uid we have: from DB initially, refreshed if the profile fetch returns a newer one
+        sec_uid = user.get("sec_uid")
+
         try:
-            info = await _fetch_user_info(user["username"], sec_uid=user.get("sec_uid"))
+            info = await _fetch_user_info(user["username"], tiktok_id=tiktok_id,
+                                          sec_uid=sec_uid)
 
             # Record profile field changes before overwriting stored values.
             # Skip bio detection if the account was private_blocked last run: the bio
@@ -264,6 +270,8 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
             )
             username     = info["username"]
             display_name = info["display_name"] or username
+            if info.get("sec_uid"):
+                sec_uid = info["sec_uid"]
             if username != user["username"]:
                 old_username = user["username"]
                 _log(f"  Username changed: @{old_username} → @{username}")
@@ -284,7 +292,8 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
             return
 
         try:
-            remote_videos = get_user_videos(tiktok_id, COOKIES_PATH)
+            remote_videos = get_user_videos(tiktok_id, sec_uid=sec_uid,
+                                            cookies_path=COOKIES_PATH)
             _log(f"  {len(remote_videos)} videos visible on TikTok")
             if is_private is True:
                 db.update_user_privacy_status(tiktok_id, "private_accessible")

@@ -2372,14 +2372,21 @@
     const { ok, data } = await apiJSON('/api/queue');
     if (!ok) return;
     // Remove entries that are no longer in server pending (successfully added)
+    let anyResolved = false;
     for (const u of Object.keys(pending)) {
-      if (!(u in data) && !dismissed.has(u)) delete pending[u];
+      if (!(u in data) && !dismissed.has(u)) {
+        delete pending[u];
+        anyResolved = true;
+      }
     }
     // Merge in current server state
     for (const [u, info] of Object.entries(data)) {
       if (!dismissed.has(u)) pending[u] = info;
     }
     renderPending();
+    // A pending lookup just completed; refresh the user list immediately
+    // rather than waiting for the next 15-second interval.
+    if (anyResolved) loadUsers();
   }
 
   // Sanitise contenteditable input: strip invalid chars, keep cursor at end
