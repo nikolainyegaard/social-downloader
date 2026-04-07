@@ -7,31 +7,58 @@ import json
 import re
 
 
+class UserBannedException(Exception):
+    """Raised when TikTok returns statusCode 10202 (account banned or removed)."""
+
+
 async def get_user_info(api, username: str | None = None,
-                        user_id: str | None = None,
                         sec_uid: str | None = None) -> dict:
     """Fetch user profile data. Returns a normalised dict.
 
-    Pass username= on first add (before sec_uid is known).
-    Pass user_id= + sec_uid= in the loop to survive username changes; TikTok does
-    not redirect old usernames (they 404). TikTokApi's .info() requires either
-    username OR (user_id + sec_uid) together; sec_uid alone is not valid.
+    When sec_uid is available it is used as the primary lookup key via
+    api.make_request() directly, bypassing TikTokApi's user.info() username guard
+    and resolving the account by secUid alone. The service survives username
+    changes transparently.
+
+    Falls back to user.info() with username when sec_uid is absent (e.g. on the
+    very first add before a sec_uid has been stored in the DB).
     """
-    if user_id and sec_uid:
-        user = api.user(user_id=user_id, sec_uid=sec_uid)
-    elif username:
-        user = api.user(username=username)
+    if not sec_uid and not username:
+        raise ValueError("Must provide username or sec_uid")
+
+    if sec_uid:
+        # Primary path: resolve by secUid via make_request (no username required).
+        # Passing username alongside when available does no harm and may help
+        # TikTok disambiguate, but is not required.
+        data = await api.make_request(
+            url="https://www.tiktok.com/api/user/detail/",
+            params={"secUid": sec_uid, "uniqueId": username or ""},
+        )
+        if data is None:
+            raise RuntimeError(
+                f"TikTokApi returned None for sec_uid={sec_uid} "
+                f"-- TikTok may have blocked the request or cookies are stale"
+            )
+        if data.get("statusCode") == 10202:
+            raise UserBannedException(
+                f"TikTok returned statusCode 10202 for sec_uid={sec_uid} "
+                f"-- account is banned or permanently removed"
+            )
     else:
-        raise ValueError("Must provide username or (user_id + sec_uid)")
-    try:
-        data = await user.info()
-    except KeyError as exc:
-        # TikTokApi's __extract_from_data does hard dict access and raises KeyError
-        # when TikTok returns a partial/empty response (deleted account, bot block, etc.)
-        raise RuntimeError(
-            f"TikTokApi returned incomplete data for @{username or sec_uid} "
-            f"(missing key {exc}) -- account may not exist or cookies may be stale"
-        ) from exc
+        # Fallback path: username-only lookup via user.info() (first-time adds).
+        user = api.user(username=username)
+        try:
+            data = await user.info()
+        except KeyError as exc:
+            raise RuntimeError(
+                f"TikTokApi returned incomplete data for @{username} "
+                f"(missing key {exc}) -- account may not exist or cookies may be stale"
+            ) from exc
+        if data.get("statusCode") == 10202:
+            raise UserBannedException(
+                f"TikTok returned statusCode 10202 for @{username} "
+                f"-- account is banned or permanently removed"
+            )
     u = data.get("userInfo", {}).get("user", {})
     s = data.get("userInfo", {}).get("stats", {})
 

@@ -3,7 +3,7 @@ import sys
 import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import database as db
 from config import DATA_DIR, USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, WEB_PORT
@@ -227,6 +227,37 @@ def _sound_loop_thread():
         run_sound_loop()
 
 
+# ── File integrity check (twice daily: 00:00 and 12:00) ──────────────────────
+
+def _next_check_time() -> float:
+    """Return the Unix timestamp of the next 00:00 or 12:00 (local time)."""
+    now  = datetime.now()
+    noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
+    midn = now.replace(hour=0,  minute=0, second=0, microsecond=0) + timedelta(days=1)
+    candidates = [t for t in (noon, midn) if t > now]
+    return min(candidates).timestamp()
+
+
+def _file_check_thread():
+    while True:
+        wait = _next_check_time() - time.time()
+        time.sleep(max(wait, 0))
+
+        # Back off 10 min at a time while either loop is active
+        while is_user_loop_running() or is_sound_loop_running():
+            time.sleep(10 * 60)
+
+        print(f"{_ts()} File integrity check: scanning for missing video files...")
+        try:
+            removed = db.delete_missing_video_files()
+            if removed:
+                print(f"{_ts()} File integrity check: removed {removed} DB record(s) with no file on disk.")
+            else:
+                print(f"{_ts()} File integrity check: all files accounted for.")
+        except Exception as e:
+            print(f"{_ts()} File integrity check error: {e}")
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def _check_config() -> None:
@@ -267,6 +298,7 @@ if __name__ == "__main__":
     print(f"{_ts()} Starting loop threads...")
     threading.Thread(target=_user_loop_thread,  daemon=True, name="user-loop-thread").start()
     threading.Thread(target=_sound_loop_thread, daemon=True, name="sound-loop-thread").start()
+    threading.Thread(target=_file_check_thread, daemon=True, name="file-check-thread").start()
 
     print(f"{_ts()} Web UI available at http://0.0.0.0:{WEB_PORT}")
     try:

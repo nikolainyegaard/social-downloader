@@ -134,6 +134,102 @@ _cleanup_lock  = threading.Lock()
 _cleanup_state: dict = {"running": False, "current": "", "steps": [], "removed": 0, "done": False}
 
 
+# Job reports
+
+REPORTS_DIR = os.path.join(DATA_DIR, "reports")
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+
+def _write_report(slug: str, header: str, lines: list[str]) -> str:
+    """Write a plain-text report file and return its filename (not full path).
+
+    slug:   short identifier used in the filename, e.g. "file-check-scan"
+    header: first line(s) written before the file list
+    lines:  one entry per line (e.g. file paths)
+    """
+    ts       = time.strftime("%Y%m%d-%H%M%S")
+    filename = f"{slug}-{ts}.txt"
+    path     = os.path.join(REPORTS_DIR, filename)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(header + "\n\n")
+        for line in lines:
+            f.write(line + "\n")
+    return filename
+
+
+# Missing file check
+
+_file_check_lock  = threading.Lock()
+_file_check_state: dict = {
+    "running":     False,
+    "mode":        None,   # "scan" | "purge"
+    "found":       0,
+    "removed":     0,
+    "preview":     [],     # first 10 file paths
+    "report_file": None,   # filename in REPORTS_DIR
+    "last_run":    None,
+}
+
+
+def _run_file_scan() -> None:
+    """Dry-run: find missing files, write a report, update state. No deletions."""
+    with _file_check_lock:
+        if _file_check_state["running"]:
+            return
+        _file_check_state.update({"running": True, "mode": "scan",
+                                   "found": 0, "removed": 0,
+                                   "preview": [], "report_file": None})
+
+    print("[file-check] Scanning for missing video files...")
+    try:
+        missing  = db.find_missing_video_files()
+        paths    = [e["file_path"] for e in missing]
+        count    = len(missing)
+        header   = f"Missing file check - scan - {time.strftime('%Y-%m-%d %H:%M:%S')}\n{count} missing file(s) found"
+        filename = _write_report("file-check-scan", header, paths)
+        with _file_check_lock:
+            _file_check_state.update({"found": count, "preview": paths[:10],
+                                       "report_file": filename})
+        print(f"[file-check] Scan done: {count} missing.")
+    except Exception as e:
+        print(f"[file-check] Scan error: {e}")
+    finally:
+        with _file_check_lock:
+            _file_check_state["running"]  = False
+            _file_check_state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _run_file_purge() -> None:
+    """Find missing files, delete their DB rows, write a report, update state."""
+    with _file_check_lock:
+        if _file_check_state["running"]:
+            return
+        _file_check_state.update({"running": True, "mode": "purge",
+                                   "found": 0, "removed": 0,
+                                   "preview": [], "report_file": None})
+
+    print("[file-check] Purging missing video file records...")
+    try:
+        missing  = db.find_missing_video_files()
+        paths    = [e["file_path"] for e in missing]
+        count    = len(missing)
+        for entry in missing:
+            db.delete_video(entry["video_id"])
+        header   = f"Missing file check - purge - {time.strftime('%Y-%m-%d %H:%M:%S')}\n{count} record(s) removed from database"
+        filename = _write_report("file-check-purge", header, paths)
+        with _file_check_lock:
+            _file_check_state.update({"found": count, "removed": count,
+                                       "preview": paths[:10],
+                                       "report_file": filename})
+        print(f"[file-check] Purge done: {count} record(s) removed.")
+    except Exception as e:
+        print(f"[file-check] Purge error: {e}")
+    finally:
+        with _file_check_lock:
+            _file_check_state["running"]  = False
+            _file_check_state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+
 # Audio file cleanup
 
 _AUDIO_EXTENSIONS = frozenset([".mp3", ".m4a", ".m4b", ".aac", ".ogg", ".wav", ".flac", ".opus"])
@@ -794,6 +890,40 @@ def create_app() -> Flask:
         threading.Thread(target=_run_audio_cleanup, daemon=True, name="audio-cleanup").start()
         return jsonify({"ok": True})
 
+    @app.route("/api/jobs/file-check/status", methods=["GET"])
+    def get_file_check_status():
+        with _file_check_lock:
+            return jsonify(dict(_file_check_state))
+
+    @app.route("/api/jobs/file-check/scan", methods=["POST"])
+    def start_file_scan():
+        with _file_check_lock:
+            if _file_check_state["running"]:
+                return jsonify({"error": "Already running"}), 409
+        threading.Thread(target=_run_file_scan, daemon=True, name="file-check").start()
+        return jsonify({"ok": True})
+
+    @app.route("/api/jobs/file-check/purge", methods=["POST"])
+    def start_file_purge():
+        with _file_check_lock:
+            if _file_check_state["running"]:
+                return jsonify({"error": "Already running"}), 409
+        threading.Thread(target=_run_file_purge, daemon=True, name="file-check").start()
+        return jsonify({"ok": True})
+
+    @app.route("/api/reports/<path:filename>", methods=["GET"])
+    def download_report(filename: str):
+        # Prevent path traversal
+        if "/" in filename or "\\" in filename or ".." in filename:
+            return ("", 400)
+        path = os.path.join(REPORTS_DIR, filename)
+        if not os.path.exists(path):
+            return ("", 404)
+        as_attachment = request.args.get("download") == "1"
+        return send_file(path, mimetype="text/plain",
+                         as_attachment=as_attachment,
+                         download_name=filename)
+
     # ── Diagnostics API ───────────────────────────────────────────────────────────
 
     @app.route("/api/debug/fetch", methods=["POST"])
@@ -832,13 +962,43 @@ def create_app() -> Flask:
                     info = ydl.sanitize_info(ydl.extract_info(inp, download=False))
                 return jsonify({"ok": True, "output": json.dumps(info, indent=2, default=str)})
 
-            # ── TikTokApi user profile ────────────────────────────────────────
+            # ── TikTokApi user profile by username ────────────────────────────
             elif source == "tiktokapi" and action == "user_info":
                 from loop import _fetch_user_info
-                # inp can be @username or username
-                username = inp.lstrip("@")
+                username = inp.lstrip("@").strip()
                 result   = asyncio.run(_fetch_user_info(username))
                 return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
+
+            # ── TikTok user detail API: Playwright session, sec_uid only ─────────
+            # Uses TikTokApi's make_request() (Playwright + X-Bogus signing) but
+            # bypasses the username guard in user.info(). Tests whether TikTok
+            # resolves a user by secUid alone when uniqueId is empty.
+            elif source == "tiktokapi" and action == "user_info_by_id":
+                from TikTokApi import TikTokApi as _TikTokApi
+                if ":" not in inp:
+                    return jsonify({"ok": False, "output": "Error: input must be tiktok_id:sec_uid"})
+                tiktok_id, sec_uid = inp.split(":", 1)
+                tiktok_id = tiktok_id.strip()
+                sec_uid   = sec_uid.strip()
+                ms_token  = get_ms_token()
+
+                async def _fetch_by_sec_uid():
+                    async with _TikTokApi() as _api:
+                        await _api.create_sessions(
+                            ms_tokens=[ms_token] if ms_token else [],
+                            num_sessions=1,
+                            sleep_after=3,
+                            executable_path=CHROME_EXECUTABLE,
+                        )
+                        return await _api.make_request(
+                            url="https://www.tiktok.com/api/user/detail/",
+                            params={"secUid": sec_uid, "uniqueId": ""},
+                        )
+
+                data = asyncio.run(_fetch_by_sec_uid())
+                if data is None:
+                    data = {"error": "TikTok returned no data (None)"}
+                return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
 
             else:
                 return jsonify({"ok": False, "output": f"Unknown source/action: {source}/{action}"})

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 import database as db
 from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE, DATA_DIR
-from tiktok_api import get_user_info, get_user_videos, get_video_details
+from tiktok_api import get_user_info, get_user_videos, get_video_details, UserBannedException
 from downloader import download_video, download_photos, rename_user_folder
 from thumbnailer import backfill_thumbnails, cache_avatar, generate_thumbnail
 import photo_converter as _photo_converter  # noqa: F401 — starts conversion thread on import
@@ -192,13 +192,17 @@ def _log(msg: str):
 
 # ── Core async logic ──────────────────────────────────────────────────────────
 
-async def _fetch_user_info(username: str, tiktok_id: str | None = None,
+async def _fetch_user_info(username: str | None = None,
                            sec_uid: str | None = None) -> dict:
     """Open a fresh TikTokApi session, fetch profile info, and close it.
-    Uses user_id + sec_uid when both are available (survives username changes).
-    TikTokApi requires both IDs together; sec_uid alone is not valid.
-    Falls back to username for accounts not yet populated with sec_uid.
+
+    When sec_uid is available the lookup is done purely by secUid, so it
+    survives username changes. username is only required for first-time adds
+    before a sec_uid has been stored.
     """
+    if not sec_uid and not username:
+        raise ValueError("Must provide username or sec_uid")
+
     from TikTokApi import TikTokApi
 
     ms_token = get_ms_token()
@@ -209,12 +213,7 @@ async def _fetch_user_info(username: str, tiktok_id: str | None = None,
             sleep_after=3,
             executable_path=CHROME_EXECUTABLE,
         )
-        if tiktok_id and sec_uid:
-            try:
-                return await get_user_info(api, user_id=tiktok_id, sec_uid=sec_uid)
-            except Exception:
-                pass  # ID-based lookup failed; fall back to username
-        return await get_user_info(api, username=username)
+        return await get_user_info(api, username=username, sec_uid=sec_uid)
 
 
 async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = True):
@@ -231,9 +230,21 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
         # Best sec_uid we have: from DB initially, refreshed if the profile fetch returns a newer one
         sec_uid = user.get("sec_uid")
 
+        _was_banned = user.get("account_status") == "banned"
+
         try:
-            info = await _fetch_user_info(user["username"], tiktok_id=tiktok_id,
-                                          sec_uid=sec_uid)
+            # If sec_uid is known, resolve purely by secUid (username not needed).
+            # For new users (no sec_uid yet), fall back to username lookup.
+            info = await _fetch_user_info(
+                username=None if sec_uid else user["username"],
+                sec_uid=sec_uid,
+            )
+
+            # Account recovered from a ban: restore all ban-deleted videos.
+            if _was_banned:
+                restored = db.restore_banned_videos(tiktok_id)
+                db.set_user_account_status(tiktok_id, "active")
+                _log(f"  Account restored: ban cleared, {restored} video(s) re-activated")
 
             # Record profile field changes before overwriting stored values.
             # Skip bio detection if the account was private_blocked last run: the bio
@@ -282,6 +293,13 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
             if info.get("avatar_url"):
                 if cache_avatar(tiktok_id, info["avatar_url"]) == "changed":
                     _log(f"  Profile change: avatar changed")
+        except UserBannedException:
+            _log(f"  Account banned/removed (TikTok 10202), marking as banned")
+            db.set_user_account_status(tiktok_id, "banned")
+            n = db.ban_user_videos(tiktok_id)
+            if n:
+                _log(f"  {n} active video(s) marked deleted (user_banned)")
+            return
         except Exception as e:
             _log(f"  Failed to fetch profile info: {e}")
             username     = user["username"]
@@ -300,9 +318,6 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
             elif is_private is False:
                 db.update_user_privacy_status(tiktok_id, "public")
             # if is_private is None (profile fetch failed), leave privacy_status unchanged
-            if user.get("account_status") == "banned":
-                db.set_user_account_status(tiktok_id, "active")
-                _log("  Account status cleared (videos accessible)")
         except Exception as e:
             _log(f"  Failed to fetch video list: {e}")
             if "private" in str(e).lower():

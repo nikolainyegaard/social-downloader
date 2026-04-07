@@ -154,12 +154,21 @@ def _migrate_db(conn):
         "ALTER TABLE videos ADD COLUMN music_id           TEXT",
         "ALTER TABLE users  ADD COLUMN tracking_enabled   INTEGER NOT NULL DEFAULT 1",
         "ALTER TABLE sounds ADD COLUMN tracking_enabled   INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE videos ADD COLUMN deleted_reason     TEXT",
     ]
     for sql in migrations:
         try:
             conn.execute(sql)
         except sqlite3.OperationalError:
             pass  # column already exists
+
+    # Assign deleted_reason to all previously deleted videos that predate this column.
+    # Only touches rows where deleted_reason IS NULL so user_banned rows are never overwritten.
+    conn.execute("""
+        UPDATE videos
+        SET deleted_reason = 'video_deleted'
+        WHERE status = 'deleted' AND deleted_reason IS NULL
+    """)
 
     # Index depends on stats_backfilled_at which may have been added by migration above.
     conn.execute("""
@@ -366,6 +375,7 @@ def mark_video_deleted(video_id):
         conn.execute("""
             UPDATE videos
             SET status                 = 'deleted',
+                deleted_reason         = 'video_deleted',
                 deleted_at             = COALESCE(pending_deletion_since, ?),
                 pending_deletion_count = 0,
                 pending_deletion_since = NULL
@@ -449,26 +459,43 @@ def set_user_account_status(tiktok_id: str, status: str):
             )
 
 
-def increment_user_pending_ban(tiktok_id: str) -> int:
+def ban_user_videos(tiktok_id: str) -> int:
+    """Mark all active videos for a user as deleted with reason 'user_banned'.
+    Only affects videos with status 'up' or 'undeleted'. Already-deleted videos
+    (deleted_reason='video_deleted') are left untouched.
+    Returns the number of videos affected.
+    """
     with get_db() as conn:
         conn.execute("""
-            UPDATE users
-            SET pending_ban_count = pending_ban_count + 1,
-                pending_ban_since = COALESCE(pending_ban_since, ?)
-            WHERE tiktok_id = ?
+            UPDATE videos
+            SET status         = 'deleted',
+                deleted_reason = 'user_banned',
+                deleted_at     = ?
+            WHERE tiktok_id = ? AND status IN ('up', 'undeleted')
         """, (int(time.time()), tiktok_id))
         row = conn.execute(
-            "SELECT pending_ban_count FROM users WHERE tiktok_id = ?", (tiktok_id,)
+            "SELECT changes() AS n"
         ).fetchone()
-    return row["pending_ban_count"] if row else 0
+    return row["n"] if row else 0
 
 
-def clear_user_pending_ban(tiktok_id: str):
+def restore_banned_videos(tiktok_id: str) -> int:
+    """Re-activate all videos deleted by a ban (deleted_reason='user_banned').
+    Videos individually deleted before the ban (deleted_reason='video_deleted')
+    are left untouched. Returns the number of videos restored.
+    """
     with get_db() as conn:
-        conn.execute(
-            "UPDATE users SET pending_ban_count = 0, pending_ban_since = NULL WHERE tiktok_id = ?",
-            (tiktok_id,),
-        )
+        conn.execute("""
+            UPDATE videos
+            SET status         = 'undeleted',
+                deleted_reason = NULL,
+                undeleted_at   = ?
+            WHERE tiktok_id = ? AND deleted_reason = 'user_banned'
+        """, (int(time.time()), tiktok_id))
+        row = conn.execute(
+            "SELECT changes() AS n"
+        ).fetchone()
+    return row["n"] if row else 0
 
 
 def get_sound_active_video_ids(sound_id: str) -> set:
@@ -982,6 +1009,35 @@ def update_video_file_path(video_id: str, file_path: str) -> None:
             "UPDATE videos SET file_path = ? WHERE video_id = ?",
             (file_path, video_id),
         )
+
+
+def find_missing_video_files() -> list[dict]:
+    """Return a list of DB rows whose local file no longer exists on disk.
+
+    Each entry: {video_id, file_path}. Does not modify the database.
+    """
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT video_id, file_path FROM videos WHERE file_path IS NOT NULL"
+        ).fetchall()
+
+    return [
+        {"video_id": row[0], "file_path": row[1]}
+        for row in rows
+        if not os.path.exists(row[1])
+    ]
+
+
+def delete_missing_video_files() -> int:
+    """Delete DB rows for videos whose local file no longer exists on disk.
+
+    Calls find_missing_video_files() then hard-deletes each via delete_video()
+    (which also removes sound_videos junction entries). Returns the count removed.
+    """
+    missing = find_missing_video_files()
+    for entry in missing:
+        delete_video(entry["video_id"])
+    return len(missing)
 
 
 def migrate_del_prefix() -> int:

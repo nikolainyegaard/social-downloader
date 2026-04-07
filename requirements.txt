@@ -1,4 +1,4 @@
-TikTokApi>=6.0.0
+TikTokApi
 yt-dlp[default]
 curl_cffi
 flask

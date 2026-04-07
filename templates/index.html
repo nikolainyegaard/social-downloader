@@ -334,6 +334,10 @@
     .user-card-inactive .user-bio-area,
     .user-card-inactive .user-stats { opacity: 0.4; }
 
+    /* Banned card: muted red border, content dimmed same as inactive */
+    .user-card-banned { border-color: rgba(224,82,82,.4) !important; box-shadow: 0 0 0 1px rgba(224,82,82,.4); }
+    .user-card-banned:hover { box-shadow: 0 0 0 2px rgba(224,82,82,.4) !important; }
+
     /* Tracking toggle switch */
     .tracking-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; vertical-align: middle; }
     .tracking-toggle input { display: none; }
@@ -915,6 +919,76 @@
     }
     .recent-section-hdr:hover { color: var(--text); }
 
+    /* Report view modal */
+    .report-view-modal {
+      width: min(640px, 94vw);
+      height: 72vh;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+    .report-view-hdr {
+      padding: 14px 44px 10px 18px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .report-view-hdr-sub {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .report-view-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 14px;
+      margin: 0;
+      font-family: monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    /* Report widget (embedded in job cards) */
+    .report-widget {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .report-preview {
+      font-family: monospace;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 6px;
+    }
+    .report-preview-more {
+      font-style: italic;
+      color: var(--muted);
+      opacity: .7;
+    }
+    .report-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .btn-report {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 3px 10px;
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background .1s, color .1s;
+    }
+    .btn-report:hover { background: var(--bg-hover); color: var(--text); }
+
     /* Recent log modal */
     .recent-log-modal {
       width: min(580px, 94vw);
@@ -1472,6 +1546,37 @@
         <div class="job-card">
           <div class="job-card-hdr">
             <div style="flex:1">
+              <div class="job-card-title">Missing file check</div>
+              <div class="job-card-desc">
+                Scans saved video records for files no longer present on disk.
+                Scan reports what would be removed. Purge removes the DB records,
+                after which videos will be re-downloaded on the next loop run.
+                Purge also runs automatically at midnight and noon.
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
+              <button class="btn-primary" id="job-filecheck-scan-btn" onclick="triggerFileScan()">Scan</button>
+              <button class="btn-danger"  id="job-filecheck-purge-btn" onclick="triggerFilePurge()">Purge</button>
+            </div>
+          </div>
+          <div class="job-status" id="job-filecheck-status" style="display:none">
+            <div id="job-filecheck-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-filecheck-bar"></div></div></div>
+            <div class="job-status-text" id="job-filecheck-text"></div>
+            <div class="report-widget" id="job-filecheck-report" style="display:none">
+              <div class="report-preview" id="job-filecheck-preview"></div>
+              <div class="report-actions">
+                <button class="btn-report" id="job-filecheck-view-btn" onclick="openReportView(_filecheckReportFile, 'Missing file check')">View full report</button>
+                <a id="job-filecheck-download-link" style="display:none">
+                  <button class="btn-report">Download report</button>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="job-card">
+          <div class="job-card-hdr">
+            <div style="flex:1">
               <div class="job-card-title">Remove audio-only files</div>
               <div class="job-card-desc">
                 Scans the videos folder for audio-only files (.mp3, .m4a, etc.) that were
@@ -1502,7 +1607,7 @@
             <option value="ytdlp">yt-dlp</option>
             <option value="tiktokapi">TikTokApi</option>
           </select>
-          <select id="diagAction" style="flex:1;min-width:160px">
+          <select id="diagAction" onchange="diagActionChanged()" style="flex:1;min-width:160px">
             <option value="">(paste a URL below)</option>
           </select>
         </div>
@@ -1560,6 +1665,17 @@
 </div>
 
 <!-- User detail modal -->
+<div id="reportViewBackdrop" class="modal-backdrop" style="display:none;z-index:210" onclick="if(event.target===this)closeReportView()">
+  <div class="report-view-modal">
+    <button class="modal-close" onclick="closeReportView()">&#x2715;</button>
+    <div class="report-view-hdr">
+      <span id="reportViewTitle"></span>
+      <span class="report-view-hdr-sub" id="reportViewSub"></span>
+    </div>
+    <pre class="report-view-body" id="reportViewBody">Loading...</pre>
+  </div>
+</div>
+
 <div id="recentLogBackdrop" class="modal-backdrop" style="display:none;z-index:190" onclick="if(event.target===this)closeRecentLog()">
   <div class="recent-log-modal">
     <button class="modal-close" onclick="closeRecentLog()">✕</button>
@@ -2010,9 +2126,10 @@
   let _cleanupPoll = null;
   let _audioPoll   = null;
 
-  const _avifWidget    = _makeJobWidget('avif');
-  const _cleanupWidget = _makeJobWidget('cleanup');
-  const _audioWidget   = _makeJobWidget('audio');
+  const _avifWidget      = _makeJobWidget('avif');
+  const _cleanupWidget   = _makeJobWidget('cleanup');
+  const _audioWidget     = _makeJobWidget('audio');
+  const _filecheckWidget = _makeJobWidget('filecheck');
 
   // AVIF converter
 
@@ -2112,26 +2229,150 @@
     }, 1000);
   }
 
+  // ── Report view modal ─────────────────────────────────────────────────────────
+
+  async function openReportView(filename, title) {
+    if (!filename) return;
+    document.getElementById('reportViewTitle').textContent = title;
+    document.getElementById('reportViewSub').textContent   = filename;
+    document.getElementById('reportViewBody').textContent  = 'Loading...';
+    document.getElementById('reportViewBackdrop').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    const resp = await fetch(`/api/reports/${encodeURIComponent(filename)}`);
+    document.getElementById('reportViewBody').textContent =
+      resp.ok ? await resp.text() : 'Failed to load report.';
+  }
+
+  function closeReportView() {
+    document.getElementById('reportViewBackdrop').style.display = 'none';
+    document.body.style.overflow = '';
+  }
+
+  // ── _makeReportWidget — reusable report preview + download + view buttons ────
+  //
+  // Expects elements: #job-{id}-report, #job-{id}-preview,
+  //                   #job-{id}-view-btn, #job-{id}-download-link
+  //
+  // show(filename, previewLines, totalCount) — renders preview and wires buttons
+  // hide()                                  — hides the widget area
+
+  function _makeReportWidget(id) {
+    const reportEl   = document.getElementById(`job-${id}-report`);
+    const previewEl  = document.getElementById(`job-${id}-preview`);
+    const dlLink     = document.getElementById(`job-${id}-download-link`);
+    return {
+      show(filename, previewLines, totalCount) {
+        if (!reportEl) return;
+        reportEl.style.display = '';
+        const shown   = previewLines.length;
+        const more    = totalCount - shown;
+        let html = previewLines.map(p => esc(p)).join('\n');
+        if (more > 0) html += `\n<span class="report-preview-more">...and ${more} more. View or download the full report.</span>`;
+        previewEl.innerHTML = html || '<span style="opacity:.5">No entries.</span>';
+        if (dlLink && filename) {
+          dlLink.href = `/api/reports/${encodeURIComponent(filename)}?download=1`;
+          dlLink.download = filename;
+          dlLink.style.display = '';
+        }
+      },
+      hide() { if (reportEl) reportEl.style.display = 'none'; },
+    };
+  }
+
+  // Missing file check
+
+  let _filecheckPoll       = null;
+  let _filecheckReportFile = null;
+  const _filecheckReport   = _makeReportWidget('filecheck');
+
+  function _setFilecheckBtns(disabled) {
+    document.getElementById('job-filecheck-scan-btn').disabled  = disabled;
+    document.getElementById('job-filecheck-purge-btn').disabled = disabled;
+  }
+
+  function _startFilecheckPoll() {
+    if (_filecheckPoll) return;
+    _filecheckPoll = setInterval(async () => {
+      const { ok, data } = await apiJSON('/api/jobs/file-check/status');
+      if (!ok) return;
+      if (data.running) {
+        const label = data.mode === 'purge' ? 'Purging...' : 'Scanning...';
+        _filecheckWidget.update({ barPct: null, label });
+        return;
+      }
+      clearInterval(_filecheckPoll); _filecheckPoll = null;
+      _setFilecheckBtns(false);
+      _filecheckReportFile = data.report_file || null;
+
+      if (data.mode === 'scan') {
+        if (data.found === 0) {
+          _filecheckWidget.update({ label: `All files present. ${data.last_run}` });
+          _filecheckReport.hide();
+        } else {
+          _filecheckWidget.update({ label: `${data.found} missing file${data.found !== 1 ? 's' : ''} found. ${data.last_run}` });
+          _filecheckReport.show(data.report_file, data.preview, data.found);
+        }
+      } else if (data.mode === 'purge') {
+        if (data.removed === 0) {
+          _filecheckWidget.update({ label: `No missing files. Nothing removed. ${data.last_run}` });
+          _filecheckReport.hide();
+        } else {
+          _filecheckWidget.update({ label: `${data.removed} record${data.removed !== 1 ? 's' : ''} removed from DB. ${data.last_run}` });
+          _filecheckReport.show(data.report_file, data.preview, data.removed);
+        }
+      }
+    }, 1000);
+  }
+
+  async function triggerFileScan() {
+    _setFilecheckBtns(true);
+    const { ok, data } = await apiJSON('/api/jobs/file-check/scan', { method: 'POST' });
+    if (!ok) { alert(data.error || 'Failed to start'); _setFilecheckBtns(false); return; }
+    _filecheckWidget.update({ barPct: null, label: 'Scanning...' });
+    _filecheckReport.hide();
+    _startFilecheckPoll();
+  }
+
+  async function triggerFilePurge() {
+    if (!confirm('Remove all DB records for files that are missing on disk?\nThis cannot be undone.')) return;
+    _setFilecheckBtns(true);
+    const { ok, data } = await apiJSON('/api/jobs/file-check/purge', { method: 'POST' });
+    if (!ok) { alert(data.error || 'Failed to start'); _setFilecheckBtns(false); return; }
+    _filecheckWidget.update({ barPct: null, label: 'Purging...' });
+    _filecheckReport.hide();
+    _startFilecheckPoll();
+  }
+
   // ── Diagnostics ────────────────────────────────────────────────────────────────
 
   const _DIAG_ACTIONS = {
-    get_video_details: [{ value: "",              label: "Fetch post details (paste TikTok URL)" }],
-    ytdlp:            [{ value: "user_videos",    label: "List user videos (paste tiktok_id)" },
-                       { value: "video_info",     label: "Raw video info (paste TikTok URL)" }],
-    tiktokapi:        [{ value: "user_info",      label: "User profile (paste @username or username)" }],
+    get_video_details: [{ value: "",                 label: "Fetch post details (paste TikTok URL)" }],
+    ytdlp:            [{ value: "user_videos",       label: "List user videos (paste tiktok_id)" },
+                       { value: "video_info",        label: "Raw video info (paste TikTok URL)" }],
+    tiktokapi:        [{ value: "user_info",         label: "User profile by username (paste @username)" },
+                       { value: "user_info_by_id",   label: "User profile by ID (paste tiktok_id:sec_uid)" }],
   };
 
   function diagSourceChanged() {
-    const source  = document.getElementById('diagSource').value;
+    const source   = document.getElementById('diagSource').value;
     const actionEl = document.getElementById('diagAction');
     actionEl.innerHTML = (_DIAG_ACTIONS[source] || [])
       .map(a => `<option value="${a.value}">${a.label}</option>`).join('');
+    diagActionChanged();
+  }
+
+  function diagActionChanged() {
+    const source = document.getElementById('diagSource').value;
+    const action = document.getElementById('diagAction').value;
     const placeholders = {
-      get_video_details: 'https://www.tiktok.com/@user/video/123…',
-      ytdlp:             'tiktok_id (numeric) or TikTok URL',
-      tiktokapi:         '@username or username',
+      'get_video_details:':          'https://www.tiktok.com/@user/video/123…',
+      'ytdlp:user_videos':           'tiktok_id (numeric)',
+      'ytdlp:video_info':            'https://www.tiktok.com/@user/video/123…',
+      'tiktokapi:user_info':         '@username or username',
+      'tiktokapi:user_info_by_id':   'tiktok_id:sec_uid',
     };
-    document.getElementById('diagInput').placeholder = placeholders[source] || '';
+    document.getElementById('diagInput').placeholder =
+      placeholders[`${source}:${action}`] || '';
   }
 
   async function diagRun() {
@@ -2278,6 +2519,7 @@
     grid.innerHTML = _sortedUsers().map(u => {
       const isCurrent  = u.username === currentUser;
       const isInactive = u.tracking_enabled === 0;
+      const isBanned   = u.account_status === 'banned';
 
       // Tracking pill (was account-status active/banned)
       const trackingCls   = isInactive ? 'inactive' : 'active';
@@ -2308,7 +2550,7 @@
       const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
       return `
-        <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive ? ' user-card-inactive' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
+        <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned ? ' user-card-inactive' : ''}${isBanned ? ' user-card-banned' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
           <div class="user-card-top">
             <div class="avatar-wrap">
               <span class="avatar-letter">${esc((u.username||'?')[0])}</span>

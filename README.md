@@ -18,9 +18,9 @@ The **user loop** runs on its own schedule. Each iteration:
    - Fetches their full public video list via yt-dlp (no browser session needed)
    - Compares it against the database
    - Downloads any new videos via yt-dlp, embedding metadata into the file; photo posts are downloaded as individual AVIF images
-   - Tracks videos that have disappeared. After 3 consecutive loop runs without the video appearing, it is marked as deleted and its file is prefixed with `del_`
-   - Tracks banned accounts similarly — confirmed after 3 consecutive checks
-   - Immediately marks any previously-deleted videos or banned accounts as restored/active if they reappear
+   - Tracks videos that have disappeared. After 3 consecutive loop runs without the video appearing, it is marked as deleted
+   - Detects banned or removed accounts immediately (TikTok API status 10202). All active videos are marked deleted. If the account becomes reachable again in a future run, those videos are automatically restored
+   - Immediately marks any previously-deleted videos as restored if they reappear
 
 The first run for an account with many videos will take a while. Subsequent runs are fast.
 
@@ -132,6 +132,8 @@ The **Recent** panel on the main page shows the last few deleted videos, profile
 If you have videos downloaded before v1.5.0, their engagement stats and technical metadata will be missing. The header shows how many videos need backfilling (e.g. `942 missing`). Click **Backfill Stats** to fetch the missing data from TikTok without re-downloading any files — this covers views, likes, comments, shares, saves, duration, dimensions, and music info. Progress is shown inline; the operation runs in the background and does not interrupt the download loop. Videos downloaded with the current version are never eligible for backfill as all fields are captured at download time.
 
 All profile pictures, thumbnails, and photo posts are stored as **AVIF** images (50–70% smaller than JPEG at equivalent quality). On first startup, a background job automatically converts any existing JPEG images to AVIF. You can also trigger this manually from the **Jobs** section in Settings.
+
+The **Jobs** section also has a **File integrity check**: a **Scan** button shows which videos have a database record but no file on disk (dry run, no changes). A **Purge** button removes those records from the database, allowing the loop to re-download them. A full report is written to disk and can be downloaded or viewed in the UI. The same check runs automatically at midnight and noon each day.
 
 ---
 
