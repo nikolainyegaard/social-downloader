@@ -39,10 +39,10 @@ async def get_user_info(api, username: str | None = None,
                 f"TikTokApi returned None for sec_uid={sec_uid} "
                 f"-- TikTok may have blocked the request or cookies are stale"
             )
-        if data.get("statusCode") == 10202:
+        if data.get("statusCode") in (10202, 10223):
             raise UserBannedException(
-                f"TikTok returned statusCode 10202 for sec_uid={sec_uid} "
-                f"-- account is banned or permanently removed"
+                f"TikTok returned statusCode {data.get('statusCode')} for sec_uid={sec_uid} "
+                f"-- account is banned, removed, or FTC-restricted"
             )
     else:
         # Fallback path: username-only lookup via user.info() (first-time adds).
@@ -54,16 +54,17 @@ async def get_user_info(api, username: str | None = None,
                 f"TikTokApi returned incomplete data for @{username} "
                 f"(missing key {exc}) -- account may not exist or cookies may be stale"
             ) from exc
-        if data.get("statusCode") == 10202:
+        if data.get("statusCode") in (10202, 10223):
             raise UserBannedException(
-                f"TikTok returned statusCode 10202 for @{username} "
-                f"-- account is banned or permanently removed"
+                f"TikTok returned statusCode {data.get('statusCode')} for @{username} "
+                f"-- account is banned, removed, or FTC-restricted"
             )
     u = data.get("userInfo", {}).get("user", {})
     s = data.get("userInfo", {}).get("stats", {})
 
     if not u.get("id"):
-        raise ValueError(f"No user data returned for @{username or sec_uid}")
+        ident = f"@{username}" if username else f"sec_uid={sec_uid}"
+        raise ValueError(f"No user data returned for {ident}")
 
     return {
         "tiktok_id":       u.get("id"),
