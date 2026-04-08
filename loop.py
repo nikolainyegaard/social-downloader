@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 
 import database as db
 from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE, DATA_DIR
-from tiktok_api import get_user_info, get_user_videos, get_video_details, UserBannedException
+from tiktok_api import (get_user_info, get_user_videos, get_user_videos_with_stats,
+                         get_video_details, UserBannedException)
 from downloader import download_video, download_photos, rename_user_folder
 from thumbnailer import backfill_thumbnails, cache_avatar, generate_thumbnail
 import photo_converter as _photo_converter  # noqa: F401 — starts conversion thread on import
@@ -183,6 +184,7 @@ def enqueue_sound_run(sound_id: str) -> bool:
 # ── Logging ───────────────────────────────────────────────────────────────────
 
 def _log(msg: str):
+    """Log to both the terminal and the in-app log shown in the UI."""
     ts   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
     print(line)
@@ -190,244 +192,294 @@ def _log(msg: str):
         user_loop_state["logs"].append(line)
 
 
+def _logd(msg: str):
+    """Log to the terminal only — implementation detail not shown in the UI."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{ts}] {msg}")
+
+
 # ── Core async logic ──────────────────────────────────────────────────────────
 
-async def _fetch_user_info(username: str | None = None,
-                           sec_uid: str | None = None) -> dict:
-    """Open a fresh TikTokApi session, fetch profile info, and close it.
-
-    When sec_uid is available the lookup is done purely by secUid, so it
-    survives username changes. username is only required for first-time adds
-    before a sec_uid has been stored.
-    """
-    if not sec_uid and not username:
-        raise ValueError("Must provide username or sec_uid")
-
+async def _process_single_user(user: dict, cookies: dict,
+                               fetch_videos: bool = True):
     from TikTokApi import TikTokApi
 
-    ms_token = get_ms_token()
-    async with TikTokApi() as api:
-        await api.create_sessions(
-            ms_tokens=[ms_token] if ms_token else [],
-            num_sessions=1,
-            sleep_after=3,
-            executable_path=CHROME_EXECUTABLE,
-        )
-        return await get_user_info(api, username=username, sec_uid=sec_uid)
-
-
-async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = True):
     tiktok_id = user["tiktok_id"]
 
     with _user_state_lock:
         user_loop_state["current_user"] = user["username"]
 
+    # Each user gets a fresh session: profile info + item_list are fetched within
+    # it, then it closes. This prevents a single heavy user from contaminating
+    # session state for everyone that follows in the loop.
+    ms_token = get_ms_token()
     try:
-        _log(f"Processing @{user['username']} (ID: {tiktok_id})")
+        async with TikTokApi() as api:
+            try:
+                await api.create_sessions(
+                    ms_tokens=[ms_token] if ms_token else [],
+                    num_sessions=1,
+                    sleep_after=3,
+                    executable_path=CHROME_EXECUTABLE,
+                    cookies=[cookies] if cookies else None,
+                )
+            except Exception as e:
+                _log(f"Processing @{user['username']} — session failed, skipping: {e}")
+                return
+            await asyncio.sleep(3)
 
-        is_private: bool | None = None
+            _log(f"Processing @{user['username']} (ID: {tiktok_id})")
 
-        # Best sec_uid we have: from DB initially, refreshed if the profile fetch returns a newer one
-        sec_uid = user.get("sec_uid")
+            is_private: bool | None = None
 
-        _was_banned = user.get("account_status") == "banned"
+            # Best sec_uid we have: from DB initially, refreshed if profile fetch returns a newer one
+            sec_uid = user.get("sec_uid")
 
-        try:
-            # If sec_uid is known, resolve purely by secUid (username not needed).
-            # For new users (no sec_uid yet), fall back to username lookup.
-            info = await _fetch_user_info(
-                username=None if sec_uid else user["username"],
-                sec_uid=sec_uid,
-            )
+            _was_banned = user.get("account_status") == "banned"
 
-            # Account recovered from a ban: restore all ban-deleted videos.
-            if _was_banned:
-                restored = db.restore_banned_videos(tiktok_id)
-                db.set_user_account_status(tiktok_id, "active")
-                _log(f"  Account restored: ban cleared, {restored} video(s) re-activated")
+            try:
+                # If sec_uid is known, resolve purely by secUid (username not needed).
+                # For new users (no sec_uid yet), fall back to username lookup.
+                info = await get_user_info(
+                    api,
+                    username=None if sec_uid else user["username"],
+                    sec_uid=sec_uid,
+                )
 
-            # Record profile field changes before overwriting stored values.
-            # Skip bio detection if the account was private_blocked last run: the bio
-            # is hidden from us, so a missing bio just means no access, not a real change.
-            # private_accessible accounts (yellow pill) have accessible bios — track normally.
-            _bio_blocked = user.get("privacy_status") == "private_blocked"
-            _is_private_now = info.get("is_private", False)
-            _field_labels = {"username": "Username", "display_name": "Display name", "bio": "Bio"}
-            _profile_fields = {
-                "username":     (user.get("username"),     info.get("username")),
-                "display_name": (user.get("display_name"), info.get("display_name")),
-                "bio":          (user.get("bio"),          info.get("bio")),
-            }
-            for _field, (_old, _new) in _profile_fields.items():
-                if _field == "bio" and _bio_blocked:
-                    continue
-                if _new is not None and _new != _old:
-                    db.record_profile_change(tiktok_id, _field, _old)
-                    if _field != "username":  # username gets its own log line below
-                        _log(f"  Profile change: {_field_labels[_field]} updated")
+                # Account recovered from a ban: restore all ban-deleted videos.
+                if _was_banned:
+                    restored = db.restore_banned_videos(tiktok_id)
+                    db.set_user_account_status(tiktok_id, "active")
+                    _log(f"  Account restored: ban cleared, {restored} video(s) re-activated")
 
-            db.update_user_info(
-                tiktok_id,
-                info["username"],
-                info["display_name"],
-                info["bio"],
-                info["follower_count"],
-                info["following_count"],
-                info["video_count"],
-                sec_uid=info.get("sec_uid"),
-                verified=int(info.get("verified", False)),
-                avatar_url=info.get("avatar_url"),
-                raw_user_data=info.get("_raw_user_data"),
-            )
-            username     = info["username"]
-            display_name = info["display_name"] or username
-            if info.get("sec_uid"):
-                sec_uid = info["sec_uid"]
-            if username != user["username"]:
-                old_username = user["username"]
-                _log(f"  Username changed: @{old_username} → @{username}")
-                if rename_user_folder(old_username, username):
-                    db.rename_user_video_paths(tiktok_id, old_username, username)
-                    _log(f"  Folder renamed and DB paths updated")
-            is_private = _is_private_now
-            if info.get("avatar_url"):
-                if cache_avatar(tiktok_id, info["avatar_url"]) == "changed":
-                    _log(f"  Profile change: avatar changed")
-        except UserBannedException:
-            if _was_banned:
-                _log(f"  No changes (still banned)")
-                banned_at = user.get("banned_at")
-                if (banned_at
-                        and time.time() - banned_at >= 14 * 86400
-                        and user.get("tracking_enabled", 1)):
-                    db.set_user_tracking_enabled(tiktok_id, False)
-                    _log(f"  Banned for 14+ consecutive days — tracking disabled")
-            else:
-                _log(f"  Account banned/removed (TikTok 10202), marking as banned")
-                db.set_user_account_status(tiktok_id, "banned")
-                n = db.ban_user_videos(tiktok_id)
-                if n:
-                    _log(f"  {n} active video(s) marked deleted (user_banned)")
-            return
-        except Exception as e:
-            _log(f"  Failed to fetch profile info: {e}")
-            username     = user["username"]
-            display_name = user.get("display_name") or username
+                # Record profile field changes before overwriting stored values.
+                # Skip bio detection if the account was private_blocked last run: the bio
+                # is hidden from us, so a missing bio just means no access, not a real change.
+                # private_accessible accounts (yellow pill) have accessible bios — track normally.
+                _bio_blocked = user.get("privacy_status") == "private_blocked"
+                _is_private_now = info.get("is_private", False)
+                _field_labels = {"username": "Username", "display_name": "Display name", "bio": "Bio"}
+                _profile_fields = {
+                    "username":     (user.get("username"),     info.get("username")),
+                    "display_name": (user.get("display_name"), info.get("display_name")),
+                    "bio":          (user.get("bio"),          info.get("bio")),
+                }
+                for _field, (_old, _new) in _profile_fields.items():
+                    if _field == "bio" and _bio_blocked:
+                        continue
+                    if _new is not None and _new != _old:
+                        db.record_profile_change(tiktok_id, _field, _old)
+                        if _field != "username":  # username gets its own log line below
+                            _log(f"  Profile change: {_field_labels[_field]} updated")
 
-        if not fetch_videos:
-            _log(f"  Video fetch skipped (tracking disabled for @{username})")
-            return
+                db.update_user_info(
+                    tiktok_id,
+                    info["username"],
+                    info["display_name"],
+                    info["bio"],
+                    info["follower_count"],
+                    info["following_count"],
+                    info["video_count"],
+                    sec_uid=info.get("sec_uid"),
+                    verified=int(info.get("verified", False)),
+                    avatar_url=info.get("avatar_url"),
+                    raw_user_data=info.get("_raw_user_data"),
+                )
+                username     = info["username"]
+                display_name = info["display_name"] or username
+                if info.get("sec_uid"):
+                    sec_uid = info["sec_uid"]
+                if username != user["username"]:
+                    old_username = user["username"]
+                    _log(f"  Username changed: @{old_username} → @{username}")
+                    if rename_user_folder(old_username, username):
+                        db.rename_user_video_paths(tiktok_id, old_username, username)
+                        _log(f"  Folder renamed and DB paths updated")
+                is_private = _is_private_now
+                if info.get("avatar_url"):
+                    if cache_avatar(tiktok_id, info["avatar_url"]) == "changed":
+                        _log(f"  Profile change: avatar changed")
+            except UserBannedException:
+                if _was_banned:
+                    _log(f"  No changes (still banned)")
+                    banned_at = user.get("banned_at")
+                    if (banned_at
+                            and time.time() - banned_at >= 14 * 86400
+                            and user.get("tracking_enabled", 1)):
+                        db.set_user_tracking_enabled(tiktok_id, False)
+                        _log(f"  Banned for 14+ consecutive days — tracking disabled")
+                else:
+                    _log(f"  Account banned/removed (TikTok 10202), marking as banned")
+                    db.set_user_account_status(tiktok_id, "banned")
+                    n = db.ban_user_videos(tiktok_id)
+                    if n:
+                        _log(f"  {n} active video(s) marked deleted (user_banned)")
+                return
+            except Exception as e:
+                _log(f"  Failed to fetch profile info: {e}")
+                username     = user["username"]
+                display_name = user.get("display_name") or username
 
-        try:
-            remote_videos = get_user_videos(tiktok_id, sec_uid=sec_uid,
-                                            cookies_path=COOKIES_PATH)
-            _log(f"  {len(remote_videos)} videos visible on TikTok")
+            if not fetch_videos:
+                _log(f"  Video fetch skipped (tracking disabled for @{username})")
+                return
+
+            # ── Primary: item_list (has stats, paginated with inter-page delay) ──
+            # sec_uid is required: without it the library calls self.info() to
+            # resolve it, making a redundant round-trip that can return 0 results.
+            item_list_map: dict = {}
+            ydlp_map:      dict = {}
+
+            if sec_uid:
+                try:
+                    item_list_videos = await get_user_videos_with_stats(
+                        api, sec_uid=sec_uid
+                    )
+                    item_list_map = {v["video_id"]: v for v in item_list_videos}
+                    _log(f"  {len(item_list_map)} videos found")
+                    _logd(f"  [{tiktok_id}] {len(item_list_map)} videos via item_list (sec_uid={sec_uid})")
+                except Exception as e:
+                    _log(f"  Video fetch failed, trying fallback...")
+                    _logd(f"  [{tiktok_id}] item_list error: {e}")
+
+            # ── Fallback: yt-dlp flat extraction ─────────────────────────────────
+            # Only runs when item_list returned nothing (failed or no sec_uid).
+            if not item_list_map:
+                try:
+                    ydlp_videos = get_user_videos(tiktok_id, sec_uid=sec_uid,
+                                                  cookies_path=COOKIES_PATH)
+                    ydlp_map = {v["video_id"]: v for v in ydlp_videos}
+                    _log(f"  {len(ydlp_map)} videos found")
+                    _logd(f"  [{tiktok_id}] {len(ydlp_map)} videos via yt-dlp fallback")
+                except Exception as e:
+                    _log(f"  Video fetch failed — skipping user")
+                    _logd(f"  [{tiktok_id}] yt-dlp fallback error: {e}")
+                    if "private" in str(e).lower():
+                        db.update_user_privacy_status(tiktok_id, "private_blocked")
+                    return  # both sources failed
+
+            remote_ids = set(item_list_map) | set(ydlp_map)
+
             if is_private is True:
                 db.update_user_privacy_status(tiktok_id, "private_accessible")
             elif is_private is False:
                 db.update_user_privacy_status(tiktok_id, "public")
             # if is_private is None (profile fetch failed), leave privacy_status unchanged
-        except Exception as e:
-            _log(f"  Failed to fetch video list: {e}")
-            if "private" in str(e).lower():
-                db.update_user_privacy_status(tiktok_id, "private_blocked")
-            return
 
-        remote_ids            = {v["video_id"] for v in remote_videos}
-        known_ids, active_ids = db.get_video_id_sets(tiktok_id)
+            known_ids, active_ids = db.get_video_id_sets(tiktok_id)
 
-        new_ids       = remote_ids - known_ids
-        deleted_ids   = active_ids - remote_ids
-        undeleted_ids = (known_ids - active_ids) & remote_ids
+            new_ids       = remote_ids - known_ids
+            deleted_ids   = active_ids - remote_ids
+            undeleted_ids = (known_ids - active_ids) & remote_ids
 
-        # Pending-deletion videos that reappeared — clear their counters immediately
-        pending_deletion_ids = db.get_pending_deletion_video_ids(tiktok_id)
-        recovered_pending    = pending_deletion_ids & remote_ids
-        for vid_id in recovered_pending:
-            db.clear_video_pending_deletion(vid_id)
-            _log(f"  Deletion check cleared: {vid_id} (back on TikTok)")
+            # Pending-deletion videos that reappeared — clear their counters immediately
+            pending_deletion_ids = db.get_pending_deletion_video_ids(tiktok_id)
+            recovered_pending    = pending_deletion_ids & remote_ids
+            for vid_id in recovered_pending:
+                db.clear_video_pending_deletion(vid_id)
+                _log(f"  Deletion check cleared: {vid_id} (back on TikTok)")
 
-        if new_ids:
-            _log(f"  New: {len(new_ids)}")
-        if deleted_ids:
-            _log(f"  Missing (checking for deletion): {len(deleted_ids)}")
-        if undeleted_ids:
-            _log(f"  Undeleted: {len(undeleted_ids)}")
-        if not (new_ids or deleted_ids or undeleted_ids or recovered_pending):
-            _log("  No changes.")
+            if new_ids:
+                _log(f"  New: {len(new_ids)}")
+            if deleted_ids:
+                _log(f"  Missing (checking for deletion): {len(deleted_ids)}")
+            if undeleted_ids:
+                _log(f"  Undeleted: {len(undeleted_ids)}")
+            if not (new_ids or deleted_ids or undeleted_ids or recovered_pending):
+                _log("  No changes.")
 
-        video_map = {v["video_id"]: v for v in remote_videos}
-        for vid_id in new_ids:
-            v = video_map[vid_id]
-            try:
-                details = get_video_details(vid_id, username, cookies)
-            except Exception as e:
-                _log(f"  Could not fetch details for {vid_id}: {e}, assuming video type")
-                details = {
-                    "type":        "video",
-                    "description": v["description"],
-                    "upload_date": v["upload_date"],
-                    "image_urls":  [],
-                }
-            if details["type"] == "photo" and details.get("image_urls"):
-                _log(f"  Downloading photo post {vid_id} ({len(details['image_urls'])} images)...")
-                path = download_photos(
-                    video_id=vid_id,
-                    username=username,
-                    image_urls=details["image_urls"],
-                    upload_date=details["upload_date"],
-                )
-                if path:
-                    thumb = generate_thumbnail(vid_id, path)
-                    if thumb:
-                        _log(f"  Thumbnail OK: {os.path.basename(thumb)}")
-                    else:
-                        _log(f"  Thumbnail FAILED for {vid_id} — see [thumb] lines above")
-                dl_result = {"file_path": path, "ytdlp_data": None} if path else None
-            else:
-                _log(f"  Downloading video {vid_id}...")
-                dl_result = download_video(
-                    video_id=vid_id,
-                    username=username,
-                    tiktok_id=tiktok_id,
-                    display_name=display_name,
-                    description=details["description"],
-                    upload_date=details["upload_date"],
-                    download_date=int(time.time()),
-                )
-            if dl_result:
-                db.add_video(
-                    vid_id, tiktok_id, details["type"],
-                    details["description"], details["upload_date"],
-                    view_count=details.get("view_count"),
-                    like_count=details.get("like_count"),
-                    comment_count=details.get("comment_count"),
-                    share_count=details.get("share_count"),
-                    save_count=details.get("save_count"),
-                    duration=details.get("duration"),
-                    width=details.get("width"),
-                    height=details.get("height"),
-                    music_title=details.get("music_title"),
-                    music_artist=details.get("music_artist"),
-                    music_id=details.get("music_id"),
-                    raw_video_data=details.get("_raw_video_data"),
-                )
-                _log(f"  Saved {vid_id} → {dl_result['file_path']}")
-                db.update_video_downloaded(vid_id, dl_result["file_path"], dl_result.get("ytdlp_data"))
-            else:
-                _log(f"  Failed to download {vid_id}")
+            for vid_id in new_ids:
+                if vid_id in item_list_map:
+                    # Already have full details from item_list — no page scrape needed.
+                    details = item_list_map[vid_id]
+                else:
+                    # Not in item_list (very new, or beyond pagination depth).
+                    # Fall back to curl_cffi page scrape.
+                    try:
+                        details = get_video_details(vid_id, username, cookies)
+                    except Exception as e:
+                        _log(f"  Could not fetch details for {vid_id}: {e}, assuming video type")
+                        v = ydlp_map.get(vid_id, {})
+                        details = {
+                            "type":        "video",
+                            "description": v.get("description", ""),
+                            "upload_date": v.get("upload_date"),
+                            "image_urls":  [],
+                        }
+                if details["type"] == "photo" and details.get("image_urls"):
+                    _log(f"  Downloading photo post {vid_id} ({len(details['image_urls'])} images)...")
+                    path = download_photos(
+                        video_id=vid_id,
+                        username=username,
+                        image_urls=details["image_urls"],
+                        upload_date=details["upload_date"],
+                    )
+                    if path:
+                        thumb = generate_thumbnail(vid_id, path)
+                        if thumb:
+                            _log(f"  Thumbnail OK: {os.path.basename(thumb)}")
+                        else:
+                            _log(f"  Thumbnail FAILED for {vid_id} — see [thumb] lines above")
+                    dl_result = {"file_path": path, "ytdlp_data": None} if path else None
+                else:
+                    _log(f"  Downloading video {vid_id}...")
+                    dl_result = download_video(
+                        video_id=vid_id,
+                        username=username,
+                        tiktok_id=tiktok_id,
+                        display_name=display_name,
+                        description=details["description"],
+                        upload_date=details["upload_date"],
+                        download_date=int(time.time()),
+                    )
+                if dl_result:
+                    db.add_video(
+                        vid_id, tiktok_id, details["type"],
+                        details["description"], details["upload_date"],
+                        view_count=details.get("view_count"),
+                        like_count=details.get("like_count"),
+                        comment_count=details.get("comment_count"),
+                        share_count=details.get("share_count"),
+                        save_count=details.get("save_count"),
+                        duration=details.get("duration"),
+                        width=details.get("width"),
+                        height=details.get("height"),
+                        music_title=details.get("music_title"),
+                        music_artist=details.get("music_artist"),
+                        music_id=details.get("music_id"),
+                        raw_video_data=details.get("_raw_video_data"),
+                    )
+                    _log(f"  Saved {vid_id} → {dl_result['file_path']}")
+                    db.update_video_downloaded(vid_id, dl_result["file_path"], dl_result.get("ytdlp_data"))
+                else:
+                    _log(f"  Failed to download {vid_id}")
 
-        for vid_id in deleted_ids:
-            count = db.increment_video_pending_deletion(vid_id)
-            if count >= _CONFIRM_THRESHOLD:
-                db.mark_video_deleted(vid_id)
-                _log(f"  Marked deleted (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD}): {vid_id}")
-            else:
-                _log(f"  Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
+            for vid_id in deleted_ids:
+                count = db.increment_video_pending_deletion(vid_id)
+                if count >= _CONFIRM_THRESHOLD:
+                    db.mark_video_deleted(vid_id)
+                    _log(f"  Marked deleted (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD}): {vid_id}")
+                else:
+                    _log(f"  Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
 
-        for vid_id in undeleted_ids:
-            db.mark_video_undeleted(vid_id)
-            _log(f"  Marked undeleted: {vid_id}")
+            for vid_id in undeleted_ids:
+                db.mark_video_undeleted(vid_id)
+                _log(f"  Marked undeleted: {vid_id}")
+
+            # ── Stats upsert for already-known videos from item_list ─────────────
+            # item_list returned stats for free — update them in the DB at no extra cost.
+            # Uses COALESCE to avoid overwriting with None; does not set stats_backfilled_at
+            # so the backfill worker can still run a full fetch for videos needing raw_video_data.
+            for vid_id, details in item_list_map.items():
+                if vid_id in known_ids and vid_id not in new_ids:
+                    db.update_video_stats_loop(
+                        vid_id,
+                        details.get("view_count"),
+                        details.get("like_count"),
+                        details.get("comment_count"),
+                        details.get("share_count"),
+                        details.get("save_count"),
+                    )
 
     finally:
         with _user_state_lock:
@@ -436,12 +488,14 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
 
 async def _process_all_users(users: list[dict]):
     cookies = get_cookies_flat()
-
     for idx, user in enumerate(users):
         if idx > 0:
             await asyncio.sleep(random.uniform(2, 5))
         fetch_videos = bool(user.get("tracking_enabled", 1))
-        await _process_single_user(user, cookies, fetch_videos=fetch_videos)
+        try:
+            await _process_single_user(user, cookies, fetch_videos=fetch_videos)
+        except Exception as e:
+            _log(f"Unhandled error for @{user['username']}: {e}")
 
 
 # ── Manual run workers ────────────────────────────────────────────────────────

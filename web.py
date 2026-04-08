@@ -34,7 +34,8 @@ _pending: dict = {}  # username → {"status": "pending"|"error", "message": str
 
 
 def _process_add(username: str) -> None:
-    ms_token = get_ms_token()
+    ms_token     = get_ms_token()
+    cookies_flat = get_cookies_flat()
 
     async def _lookup():
         from TikTokApi import TikTokApi
@@ -44,6 +45,7 @@ def _process_add(username: str) -> None:
                 num_sessions=1,
                 sleep_after=3,
                 executable_path=CHROME_EXECUTABLE,
+                cookies=[cookies_flat] if cookies_flat else None,
             )
             return await get_user_info(api, username=username)
 
@@ -996,9 +998,24 @@ def create_app() -> Flask:
 
             # ── TikTokApi user profile by username ────────────────────────────
             elif source == "tiktokapi" and action == "user_info":
-                from loop import _fetch_user_info
+                from TikTokApi import TikTokApi as _TikTokApi
+                from tiktok_api import get_user_info as _get_user_info
                 username = inp.lstrip("@").strip()
-                result   = asyncio.run(_fetch_user_info(username))
+
+                async def _fetch_user_info_adhoc():
+                    ms_token     = get_ms_token()
+                    cookies_flat = get_cookies_flat()
+                    async with _TikTokApi() as _api:
+                        await _api.create_sessions(
+                            ms_tokens=[ms_token] if ms_token else [],
+                            num_sessions=1,
+                            sleep_after=3,
+                            executable_path=CHROME_EXECUTABLE,
+                            cookies=[cookies_flat] if cookies_flat else None,
+                        )
+                        return await _get_user_info(_api, username=username)
+
+                result = asyncio.run(_fetch_user_info_adhoc())
                 return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
 
             # ── TikTok user detail API: Playwright session, sec_uid only ─────────
@@ -1015,12 +1032,14 @@ def create_app() -> Flask:
                 ms_token  = get_ms_token()
 
                 async def _fetch_by_sec_uid():
+                    cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
                         await _api.create_sessions(
                             ms_tokens=[ms_token] if ms_token else [],
                             num_sessions=1,
                             sleep_after=3,
                             executable_path=CHROME_EXECUTABLE,
+                            cookies=[cookies_flat] if cookies_flat else None,
                         )
                         return await _api.make_request(
                             url="https://www.tiktok.com/api/user/detail/",
@@ -1031,6 +1050,97 @@ def create_app() -> Flask:
                 if data is None:
                     data = {"error": "TikTok returned no data (None)"}
                 return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
+
+            # ── item_list — by raw username (library resolves sec_uid internally) ──
+            elif source == "tiktokapi" and action == "item_list_username":
+                from TikTokApi import TikTokApi as _TikTokApi
+                from tiktok_api import get_user_videos_with_stats as _get_vws
+                username = inp.lstrip("@").strip()
+
+                async def _item_list_by_username():
+                    ms_token     = get_ms_token()
+                    cookies_flat = get_cookies_flat()
+                    async with _TikTokApi() as _api:
+                        await _api.create_sessions(
+                            ms_tokens=[ms_token] if ms_token else [],
+                            num_sessions=1,
+                            sleep_after=3,
+                            executable_path=CHROME_EXECUTABLE,
+                            cookies=[cookies_flat] if cookies_flat else None,
+                        )
+                        await asyncio.sleep(3)
+                        user_obj = _api.user(username=username)
+                        await user_obj.info()  # resolve sec_uid
+                        sec_uid = getattr(user_obj, "sec_uid", None)
+                        results = await _get_vws(_api, sec_uid=sec_uid)
+                        return {"sec_uid_resolved": sec_uid, "count": len(results), "videos": results}
+
+                result = asyncio.run(_item_list_by_username())
+                return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
+
+            # ── item_list — by explicit tiktok_id:sec_uid pair ────────────────
+            elif source == "tiktokapi" and action == "item_list_by_id":
+                from TikTokApi import TikTokApi as _TikTokApi
+                from tiktok_api import get_user_videos_with_stats as _get_vws
+                if ":" not in inp:
+                    return jsonify({"ok": False, "output": "Error: input must be tiktok_id:sec_uid"})
+                tiktok_id, sec_uid = inp.split(":", 1)
+                tiktok_id = tiktok_id.strip()
+                sec_uid   = sec_uid.strip()
+
+                async def _item_list_by_id():
+                    ms_token     = get_ms_token()
+                    cookies_flat = get_cookies_flat()
+                    async with _TikTokApi() as _api:
+                        await _api.create_sessions(
+                            ms_tokens=[ms_token] if ms_token else [],
+                            num_sessions=1,
+                            sleep_after=3,
+                            executable_path=CHROME_EXECUTABLE,
+                            cookies=[cookies_flat] if cookies_flat else None,
+                        )
+                        await asyncio.sleep(3)
+                        results = await _get_vws(_api, sec_uid=sec_uid)
+                        return {"tiktok_id": tiktok_id, "sec_uid": sec_uid,
+                                "count": len(results), "videos": results}
+
+                result = asyncio.run(_item_list_by_id())
+                return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
+
+            # ── item_list — from DB (mirrors exact loop behaviour) ─────────────
+            elif source == "tiktokapi" and action == "item_list_from_db":
+                from TikTokApi import TikTokApi as _TikTokApi
+                from tiktok_api import get_user_videos_with_stats as _get_vws
+                username = inp.lstrip("@").strip()
+                user = db.get_user_by_username(username)
+                if not user:
+                    return jsonify({"ok": False,
+                                    "output": f"Error: @{username} not found in database"})
+                sec_uid   = user.get("sec_uid")
+                tiktok_id = user.get("tiktok_id")
+                if not sec_uid:
+                    return jsonify({"ok": False,
+                                    "output": f"Error: @{username} has no sec_uid stored — "
+                                              f"loop would skip item_list for this user"})
+
+                async def _item_list_from_db():
+                    ms_token     = get_ms_token()
+                    cookies_flat = get_cookies_flat()
+                    async with _TikTokApi() as _api:
+                        await _api.create_sessions(
+                            ms_tokens=[ms_token] if ms_token else [],
+                            num_sessions=1,
+                            sleep_after=3,
+                            executable_path=CHROME_EXECUTABLE,
+                            cookies=[cookies_flat] if cookies_flat else None,
+                        )
+                        await asyncio.sleep(3)
+                        results = await _get_vws(_api, sec_uid=sec_uid)
+                        return {"tiktok_id": tiktok_id, "username": username,
+                                "sec_uid": sec_uid, "count": len(results), "videos": results}
+
+                result = asyncio.run(_item_list_from_db())
+                return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
 
             else:
                 return jsonify({"ok": False, "output": f"Unknown source/action: {source}/{action}"})

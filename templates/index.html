@@ -2454,8 +2454,11 @@
     get_video_details: [{ value: "",                 label: "Fetch post details (paste TikTok URL)" }],
     ytdlp:            [{ value: "user_videos",       label: "List user videos (paste tiktok_id)" },
                        { value: "video_info",        label: "Raw video info (paste TikTok URL)" }],
-    tiktokapi:        [{ value: "user_info",         label: "User profile by username (paste @username)" },
-                       { value: "user_info_by_id",   label: "User profile by ID (paste tiktok_id:sec_uid)" }],
+    tiktokapi:        [{ value: "user_info",            label: "User profile by username (paste @username)" },
+                       { value: "user_info_by_id",     label: "User profile by ID (paste tiktok_id:sec_uid)" },
+                       { value: "item_list_username",  label: "item_list by username (library resolves sec_uid)" },
+                       { value: "item_list_by_id",     label: "item_list by tiktok_id:sec_uid" },
+                       { value: "item_list_from_db",   label: "item_list from DB (mirrors loop — paste @username)" }],
   };
 
   function diagSourceChanged() {
@@ -2473,8 +2476,11 @@
       'get_video_details:':          'https://www.tiktok.com/@user/video/123…',
       'ytdlp:user_videos':           'tiktok_id (numeric)',
       'ytdlp:video_info':            'https://www.tiktok.com/@user/video/123…',
-      'tiktokapi:user_info':         '@username or username',
-      'tiktokapi:user_info_by_id':   'tiktok_id:sec_uid',
+      'tiktokapi:user_info':              '@username or username',
+      'tiktokapi:user_info_by_id':        'tiktok_id:sec_uid',
+      'tiktokapi:item_list_username':     '@username or username',
+      'tiktokapi:item_list_by_id':        'tiktok_id:sec_uid',
+      'tiktokapi:item_list_from_db':      '@username (must exist in DB)',
     };
     document.getElementById('diagInput').placeholder =
       placeholders[`${source}:${action}`] || '';
@@ -2490,7 +2496,10 @@
     if (!inp) { outEl.textContent = 'Error: enter a URL or ID first.'; return; }
 
     btn.disabled  = true;
-    outEl.textContent = 'Running… (this may take up to 30 s for TikTokApi calls)';
+    const isItemList = action.startsWith('item_list');
+    outEl.textContent = isItemList
+      ? 'Running… item_list paginates with delays — allow several minutes for large accounts'
+      : 'Running… (this may take up to 30 s for TikTokApi calls)';
 
     const { ok, data } = await apiJSON('/api/debug/fetch', {
       method: 'POST',

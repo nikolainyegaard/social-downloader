@@ -155,6 +155,7 @@ def _migrate_db(conn):
         "ALTER TABLE users  ADD COLUMN tracking_enabled   INTEGER NOT NULL DEFAULT 1",
         "ALTER TABLE sounds ADD COLUMN tracking_enabled   INTEGER NOT NULL DEFAULT 1",
         "ALTER TABLE videos ADD COLUMN deleted_reason     TEXT",
+        "ALTER TABLE videos ADD COLUMN stats_updated_at   INTEGER",
     ]
     for sql in migrations:
         try:
@@ -302,6 +303,14 @@ def get_user(tiktok_id):
     with get_db() as conn:
         row = conn.execute(
             "SELECT * FROM users WHERE tiktok_id = ?", (tiktok_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_user_by_username(username: str):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE username = ?", (username,)
         ).fetchone()
         return dict(row) if row else None
 
@@ -701,6 +710,29 @@ def update_video_stats(video_id: str, view_count=None, like_count=None,
             WHERE video_id = ?
         """, (view_count, like_count, comment_count, share_count, save_count,
               duration, width, height, music_title, music_artist, raw_video_data,
+              int(time.time()), video_id))
+
+
+def update_video_stats_loop(video_id: str, view_count=None, like_count=None,
+                            comment_count=None, share_count=None,
+                            save_count=None) -> None:
+    """Lightweight stats upsert called during the user loop (from item_list data).
+
+    Uses COALESCE so a None from TikTok never overwrites an existing stored value.
+    Sets stats_updated_at but does NOT touch stats_backfilled_at, so the backfill
+    worker can still run a full fetch on videos that need raw_video_data / dimensions.
+    """
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE videos SET
+                view_count    = COALESCE(?, view_count),
+                like_count    = COALESCE(?, like_count),
+                comment_count = COALESCE(?, comment_count),
+                share_count   = COALESCE(?, share_count),
+                save_count    = COALESCE(?, save_count),
+                stats_updated_at = ?
+            WHERE video_id = ?
+        """, (view_count, like_count, comment_count, share_count, save_count,
               int(time.time()), video_id))
 
 

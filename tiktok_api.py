@@ -134,8 +134,88 @@ def get_user_videos(tiktok_id: str, sec_uid: str | None = None,
     raise last_exc  # type: ignore[misc]
 
 
+async def get_user_videos_with_stats(api, sec_uid: str,
+                                     max_count: int = 2000) -> list[dict]:
+    """Page through /api/post/item_list/ and return all reachable videos with stats.
+
+    Uses the already-open TikTokApi session (no new browser launch).
+    Stops when hasMore=False or max_count reached.
+    Returns a list of normalised dicts in the same shape as get_video_details().
+
+    A randomised delay is inserted after every 10 items (~every 3 items within a
+    30-item page) to avoid triggering TikTok rate-limiting on the shared session.
+    The sleep lands before the generator issues its next request.
+    """
+    import asyncio
+    import random
+
+    results = []
+    async for video in api.user(sec_uid=sec_uid).videos(count=max_count):
+        results.append(_normalise_item_list_entry(video.as_dict))
+        if len(results) % 10 == 0:
+            await asyncio.sleep(round(random.uniform(1, 3), 2))
+    return results
+
+
+def _normalise_item_list_entry(item: dict) -> dict:
+    """Map a raw /api/post/item_list/ item to the same shape as get_video_details().
+
+    Handles both statsV2 (nested string values) and stats (direct integers).
+    """
+    def _stat(v):
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return int(v.get("count", 0) or 0)
+        return int(v)
+
+    raw_stats  = item.get("statsV2") or item.get("stats") or {}
+    image_post = item.get("imagePost")
+    video_meta = item.get("video") or {}
+    music      = item.get("music") or {}
+    author     = item.get("author") or {}
+
+    image_urls = []
+    if image_post:
+        image_urls = [
+            img["imageURL"]["urlList"][0]
+            for img in image_post.get("images", [])
+            if img.get("imageURL", {}).get("urlList")
+        ]
+
+    try:
+        upload_date = int(item["createTime"]) if item.get("createTime") else None
+    except (ValueError, TypeError):
+        upload_date = None
+
+    return {
+        "video_id":            str(item["id"]),
+        "description":         item.get("desc", ""),
+        "upload_date":         upload_date,
+        "type":                "photo" if image_post else "video",
+        "image_urls":          image_urls,
+        "view_count":          _stat(raw_stats.get("playCount")),
+        "like_count":          _stat(raw_stats.get("diggCount")),
+        "comment_count":       _stat(raw_stats.get("commentCount")),
+        "share_count":         _stat(raw_stats.get("shareCount")),
+        "save_count":          _stat(raw_stats.get("collectCount")),
+        "duration":            video_meta.get("duration"),
+        "width":               video_meta.get("width"),
+        "height":              video_meta.get("height"),
+        "music_title":         music.get("title"),
+        "music_artist":        music.get("authorName"),
+        "music_id":            str(music["id"]) if music.get("id") else None,
+        "author_id":           author.get("id"),
+        "author_username":     author.get("uniqueId"),
+        "author_sec_uid":      author.get("secUid"),
+        "author_display_name": author.get("nickname"),
+        "_raw_video_data":     None,
+    }
+
+
 async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
-                                chrome_executable: str | None) -> list[str]:
+                                chrome_executable: str | None,
+                                cookies_flat: dict | None = None) -> list[str]:
     """Fetch all video IDs that use a given TikTok sound.
     Returns a list of video ID strings (up to ~3000).
     Opens its own TikTokApi session.
@@ -149,6 +229,7 @@ async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
             num_sessions=1,
             sleep_after=3,
             executable_path=chrome_executable,
+            cookies=[cookies_flat] if cookies_flat else None,
         )
         async for video in api.sound(id=sound_id).videos(count=3000):
             video_ids.append(str(video.id))

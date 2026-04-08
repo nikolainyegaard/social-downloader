@@ -36,7 +36,8 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
 
     try:
         ms_token   = get_ms_token()
-        remote_ids = await fetch_sound_video_ids(sound_id, ms_token, CHROME_EXECUTABLE)
+        remote_ids = await fetch_sound_video_ids(sound_id, ms_token, CHROME_EXECUTABLE,
+                                                  cookies_flat=get_cookies_flat())
     except Exception as e:
         log(f"[sound] Failed to fetch videos for sound {sound_id}: {e}")
         db.update_sound_last_checked(sound_id)
