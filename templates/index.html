@@ -2464,7 +2464,7 @@
     document.getElementById('tvSounds').classList.toggle('active', view === 'sounds');
     document.getElementById('usersGrid').style.display  = view === 'users'  ? '' : 'none';
     document.getElementById('soundsGrid').style.display = view === 'sounds' ? '' : 'none';
-    document.getElementById('userControls').style.display = view === 'users' ? 'flex' : 'none';
+    document.getElementById('userControls').style.visibility = view === 'users' ? '' : 'hidden';
   }
 
   function setUserFilter(group, value) {
