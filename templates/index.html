@@ -607,9 +607,9 @@
     .col-hdr.sort-asc::after  { content: ' ↑'; }
     .col-hdr.sort-desc { color: var(--accent); }
     .col-hdr.sort-desc::after { content: ' ↓'; }
-    /* Centre all data columns except thumb+desc (and author in sound-vcols) */
+    /* Centre all data columns except thumb+desc */
     .vcols       .col-hdr:nth-child(n+3) { text-align: center; }
-    .sound-vcols .col-hdr:nth-child(n+4) { text-align: center; }
+    .sound-vcols .col-hdr:nth-child(n+3) { text-align: center; }
     .author-chip {
       display: inline-block; max-width: 100%;
       font-size: 11px; font-weight: 600;
@@ -1349,6 +1349,7 @@
       <div class="filter-pills">
         <button class="filter-pill active" id="tvUsers"  onclick="setTrackingView('users')">Users (<span id="userCount">0</span>)</button>
         <button class="filter-pill"        id="tvSounds" onclick="setTrackingView('sounds')">Sounds (<span id="soundCount">0</span>)</button>
+        <button class="filter-pill"        id="tvLog"    onclick="setTrackingView('log')">Log</button>
       </div>
       <div id="userControls" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:4px;">
@@ -1379,8 +1380,8 @@
             <option value="added_at">Date added</option>
           </select>
           <button class="sort-dir-btn" id="userSortDirBtn" onclick="toggleUserSortDir()">A → Z</button>
+          <button class="sort-dir-btn" onclick="resetUserFilters()" title="Reset all filters and sort to default">Reset</button>
         </div>
-        <button class="sort-dir-btn" onclick="resetUserFilters()" title="Reset all filters and sort to default">Reset</button>
       </div>
     </div>
     <div class="users-grid" id="usersGrid">
@@ -1389,22 +1390,19 @@
     <div class="users-grid" id="soundsGrid" style="display:none">
       <div class="empty-state">No sounds tracked yet.</div>
     </div>
-  </section>
-
-  <!-- Log -->
-  <section>
-    <div class="log-panel">
-      <div class="log-header">
-        <span class="section-title">Log</span>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
-            <input type="checkbox" id="autoScroll" checked style="accent-color:var(--accent)">
-            Auto-scroll
-          </label>
-          <button class="btn-ghost" onclick="clearLog()" style="font-size:11px;padding:3px 8px;">Clear</button>
+    <div id="logPanel" style="display:none">
+      <div class="log-panel">
+        <div class="log-header">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+              <input type="checkbox" id="autoScroll" checked style="accent-color:var(--accent)">
+              Auto-scroll
+            </label>
+            <button class="btn-ghost" onclick="clearLog()" style="font-size:11px;padding:3px 8px;">Clear</button>
+          </div>
         </div>
+        <div class="log-body" id="logBody"></div>
       </div>
-      <div class="log-body" id="logBody"></div>
     </div>
   </section>
 
@@ -1952,13 +1950,16 @@
     left += `<div>`;
     left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('deletions')" title="View all deleted videos">Recently deleted</div>`;
     if (data.deletions.length) {
-      left += data.deletions.map(d =>
-        `<div class="recent-entry" onclick="openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')" title="Open @${esc(d.username)}">
+      left += data.deletions.map(d => {
+        const onclick = d.enabled !== 0
+          ? `openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')`
+          : d.sound_id ? `openSoundModalAndHighlight('${esc(d.sound_id)}','${esc(d.video_id)}','deleted')` : '';
+        return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.username)}">
           <span class="recent-date">${_recentDate(d.deleted_at)}</span>
-          <span class="recent-name">@${esc(d.username)}</span>
+          <span class="recent-name" ${d.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(d.username)}</span>
           <span class="recent-detail">${esc(d.video_id.slice(0, 10))}\u2026</span>
-        </div>`
-      ).join('');
+        </div>`;
+      }).join('');
     } else {
       left += `<div class="recent-empty">No deleted videos yet</div>`;
     }
@@ -2003,13 +2004,17 @@
     right += `<div>`;
     right += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('saved')" title="View all saved videos">Recently saved</div>`;
     if (data.saved && data.saved.length) {
-      right += data.saved.map(g =>
-        `<div class="recent-entry" onclick="openUserModal('${esc(g.tiktok_id)}')" title="Open @${esc(g.username)}">
+      right += data.saved.map(g => {
+        const onclick = g.enabled !== 0
+          ? `openUserModal('${esc(g.tiktok_id)}')`
+          : g.sound_id ? `openSoundModalAndHighlight('${esc(g.sound_id)}','${esc(g.video_id)}')` : '';
+        const nameStyle = g.enabled !== 0 ? '' : 'style="color:var(--text-dim)"';
+        return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(g.username)}">
           <span class="recent-date">${_recentDate(g.download_date)}</span>
-          <span class="recent-name">@${esc(g.username)}</span>
+          <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>
           <span class="recent-detail">${g.count}x</span>
-        </div>`
-      ).join('');
+        </div>`;
+      }).join('');
     } else {
       right += `<div class="recent-empty">No videos saved yet</div>`;
     }
@@ -2111,10 +2116,14 @@
         const row = document.createElement('div');
         row.className = 'recent-entry';
         row.title = `Open @${g.username}`;
-        row.onclick = () => { closeRecentLog(); openUserModal(g.tiktok_id); };
+        if (g.enabled !== 0) {
+          row.onclick = () => { closeRecentLog(); openUserModal(g.tiktok_id); };
+        } else if (g.sound_id) {
+          row.onclick = () => { closeRecentLog(); openSoundModalAndHighlight(g.sound_id, g.video_id); };
+        }
         row.innerHTML = `
           <span class="recent-date">${_recentDate(g.download_date)}</span>
-          <span class="recent-name">@${esc(g.username)}</span>
+          <span class="recent-name" ${g.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(g.username)}</span>
           <span class="recent-detail">${g.count}x</span>`;
         frag.appendChild(row);
         _recentLogLastGroup = { tiktok_id: g.tiktok_id, el: row, count: g.count };
@@ -2125,10 +2134,14 @@
         row.className = 'recent-entry';
         if (_recentLogType === 'deletions') {
           row.title = `Open @${item.username}`;
-          row.onclick = () => { closeRecentLog(); openUserModalAndHighlight(item.tiktok_id, item.video_id); };
+          if (item.enabled !== 0) {
+            row.onclick = () => { closeRecentLog(); openUserModalAndHighlight(item.tiktok_id, item.video_id); };
+          } else if (item.sound_id) {
+            row.onclick = () => { closeRecentLog(); openSoundModalAndHighlight(item.sound_id, item.video_id, 'deleted'); };
+          }
           row.innerHTML = `
             <span class="recent-date">${_recentDate(item.deleted_at)}</span>
-            <span class="recent-name">@${esc(item.username)}</span>
+            <span class="recent-name" ${item.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(item.username)}</span>
             <span class="recent-detail">${esc(item.video_id.slice(0, 10))}\u2026</span>`;
         } else if (_recentLogType === 'profile-changes') {
           const label = _FIELD_LABELS[item.field] || item.field;
@@ -2577,8 +2590,10 @@
     _trackingView = view;
     document.getElementById('tvUsers').classList.toggle('active', view === 'users');
     document.getElementById('tvSounds').classList.toggle('active', view === 'sounds');
+    document.getElementById('tvLog').classList.toggle('active', view === 'log');
     document.getElementById('usersGrid').style.display  = view === 'users'  ? '' : 'none';
     document.getElementById('soundsGrid').style.display = view === 'sounds' ? '' : 'none';
+    document.getElementById('logPanel').style.display   = view === 'log'    ? '' : 'none';
     document.getElementById('userControls').style.visibility = view === 'users' ? '' : 'hidden';
   }
 
@@ -2966,14 +2981,15 @@
 
   // ── Sound modal ────────────────────────────────────────────────────────────────
 
-  let _soundModalId      = null;
-  let _soundModal        = null;
-  let _soundModalVideos  = [];
-  let _soundModalFilter  = 'all';
-  let _soundModalTypeFilter = 'all';
-  let _soundModalSort    = { field: 'upload_date', dir: 'desc' };
-  let _soundModalLoaded  = 0;
-  let _soundModalObs     = null;
+  let _soundModalId              = null;
+  let _soundModal                = null;
+  let _soundModalVideos          = [];
+  let _soundModalFilter          = 'all';
+  let _soundModalTypeFilter      = 'all';
+  let _soundModalSort            = { field: 'upload_date', dir: 'desc' };
+  let _soundModalLoaded          = 0;
+  let _soundModalObs             = null;
+  let _soundModalPendingHighlight = null; // { videoId, filter? }
   const SOUND_MODAL_PAGE = 50;
 
   function openSoundModal(soundId) {
@@ -2998,6 +3014,11 @@
       '<div class="vlist-loading">Loading videos…</div>';
 
     _loadSoundModalVideos(soundId);
+  }
+
+  function openSoundModalAndHighlight(soundId, videoId, filter) {
+    _soundModalPendingHighlight = { videoId, filter: filter || null };
+    openSoundModal(soundId);
   }
 
   function closeSoundModal() {
@@ -3238,8 +3259,26 @@
     const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/videos`);
     if (!ok || _soundModalId !== soundId) return;
     _soundModalVideos = data;
-    _renderSoundModalToolbar(data);
-    _renderSoundModalVideoList();
+    if (_soundModalPendingHighlight) {
+      const { videoId, filter } = _soundModalPendingHighlight;
+      _soundModalPendingHighlight = null;
+      if (filter) {
+        _soundModalFilter = filter;
+        _soundModalSort   = { field: 'deleted_at', dir: 'desc' };
+        _renderSoundColumnHdrs();
+      }
+      _renderSoundModalToolbar(data);
+      _renderSoundModalVideoList();
+      const row = document.querySelector(`[data-video-id="${CSS.escape(videoId)}"]`);
+      if (row) {
+        row.scrollIntoView({ block: 'center' });
+        row.classList.add('video-row-highlight');
+        row.addEventListener('mouseenter', () => row.classList.remove('video-row-highlight'), { once: true });
+      }
+    } else {
+      _renderSoundModalToolbar(data);
+      _renderSoundModalVideoList();
+    }
   }
 
   async function editSoundLabel(soundId) {

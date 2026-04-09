@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Missing" counter on user cards, shown only when non-zero (same behaviour as "Deleted")
 - "Profile Updates" count in the user modal stats bar; clickable, opens profile change history
 - Play button moved immediately right of the thumbnail in the video list; download button remains in the action column
+- Reset button grouped with Sort controls (Sort / direction / Reset form one unit)
+- Sound modal Author column header now centred to match the chips in data rows
+- Untracked users in Recently Saved and Recently Deleted now appear in grey and route to the relevant sound modal (with video highlighted) instead of doing nothing
+- Log moved from a standalone bottom section into the nav bar as a third view pill alongside Users and Sounds
 - `DELETION_CONFIRM_THRESHOLD` centralised to `config.py` (env-var overridable via `DELETION_CONFIRM_THRESHOLD`); the deletion confirmation check and the "Missing" label threshold now share the same value
 - Video listing via TikTokApi's `item_list` endpoint as primary source; returns full stats and photo detection in one pass; yt-dlp kept as fallback
 - Shared TikTokApi browser session across all users in a loop run (per-user sessions added 8-20 min overhead for large libraries)

@@ -814,6 +814,9 @@ def _group_consecutive_by_user(rows: list[dict], date_key: str) -> list[dict]:
             groups.append({
                 "tiktok_id": row["tiktok_id"],
                 "username":  row["username"],
+                "enabled":   row.get("enabled", 1),
+                "video_id":  row.get("video_id"),
+                "sound_id":  row.get("sound_id"),
                 date_key:    row[date_key],
                 "count":     1,
             })
@@ -824,7 +827,8 @@ def get_recent_activity() -> dict:
     """Return recent deletions, profile changes, bans, and saves for the Recent panel."""
     with get_db() as conn:
         deletions = [dict(r) for r in conn.execute(
-            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id
+            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled,
+                      (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
                  AND v.deleted_reason = 'video_deleted'
@@ -842,7 +846,8 @@ def get_recent_activity() -> dict:
                ORDER BY banned_at DESC LIMIT 1"""
         ).fetchall()]
         saved_rows = [dict(r) for r in conn.execute(
-            """SELECT v.download_date, u.username, u.tiktok_id
+            """SELECT v.download_date, u.username, u.tiktok_id, u.enabled, v.video_id,
+                      (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
                ORDER BY v.download_date DESC LIMIT 2000"""
@@ -855,7 +860,8 @@ def get_deletion_history(offset: int = 0, limit: int = 50) -> list[dict]:
     """Return paginated video deletion history (newest first), excluding user_banned."""
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id
+            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled,
+                      (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
                  AND v.deleted_reason = 'video_deleted'
@@ -902,7 +908,8 @@ def get_saved_history(offset: int = 0, limit: int = 50) -> dict:
     """
     with get_db() as conn:
         rows = [dict(r) for r in conn.execute(
-            """SELECT v.download_date, u.username, u.tiktok_id
+            """SELECT v.download_date, u.username, u.tiktok_id, u.enabled, v.video_id,
+                      (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
                ORDER BY v.download_date DESC LIMIT ? OFFSET ?""",
