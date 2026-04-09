@@ -662,6 +662,7 @@
     .vstatus.up        { background: rgba(76,175,125,.15);  color: var(--green); }
     .vstatus.deleted   { background: rgba(224,82,82,.15);   color: var(--red); }
     .vstatus.undeleted { background: rgba(224,168,58,.15);  color: var(--yellow); }
+    .vstatus.missing   { background: rgba(255,152,0,.15);   color: #ff9800; }
 
     .vlist-empty   { padding: 48px; text-align: center; color: var(--muted); }
     .vlist-loading { padding: 48px; text-align: center; color: var(--muted); font-style: italic; }
@@ -1203,6 +1204,20 @@
     .log-body .log-warn    { color: var(--yellow); }
     .log-body .log-dl      { color: var(--green); }
     .log-body .log-profile { color: #c084fc; }
+
+    /* ── Back to top ─────────────────────────────────────────────────────────── */
+
+    .back-to-top {
+      position: fixed; bottom: 24px; right: 24px; z-index: 100;
+      display: none;
+      width: 36px; height: 36px;
+      border: 1px solid var(--border); border-radius: 50%;
+      background: var(--surface); color: var(--text-dim);
+      font-size: 16px; cursor: pointer;
+      align-items: center; justify-content: center;
+      transition: background .15s, color .15s;
+    }
+    .back-to-top:hover { background: var(--surface2); color: var(--text); }
   </style>
 </head>
 <body>
@@ -1753,6 +1768,9 @@
   </div>
 </div>
 
+<button id="backToTopBtn" class="back-to-top"
+        onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top">↑</button>
+
 <script>
   const fmt = {
     rel: ts => {
@@ -1788,6 +1806,7 @@
   let currentUser   = null;
   let isRunning     = false;
   let logLines      = [];
+  let _deletionConfirmThreshold = 3;  // synced from /api/status
   let logClearIndex = 0;
   let pending       = {};
   const dismissed   = new Set();
@@ -2708,6 +2727,7 @@
             <span class="stat-item"><span class="stat-item-label">followers</span><span class="stat-item-value">${(u.follower_count||0).toLocaleString()}</span></span>
             <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${u.video_total||0}</span></span>
             ${u.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${u.video_deleted}</span></span>` : ''}
+            ${u.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:#ff9800">${u.video_missing}</span></span>` : ''}
             ${u.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${u.video_undeleted}</span></span>` : ''}
           </div>
 
@@ -3160,8 +3180,15 @@
       const row = document.createElement('div');
       row.className = 'video-row sound-vcols';
       row.dataset.videoId = v.video_id;
-      const statusLabel = v.status === 'deleted' ? 'Deleted'
-                        : v.status === 'undeleted' ? 'Restored' : 'Active';
+      const isMissing_s  = v.status === 'up' && v.pending_deletion_count > 0;
+      const statusLabel  = v.status === 'deleted'   ? 'Deleted'
+                         : v.status === 'undeleted' ? 'Restored'
+                         : isMissing_s              ? 'Missing'
+                         :                           'Active';
+      const statusCls_s  = v.status === 'deleted'   ? 'deleted'
+                         : v.status === 'undeleted' ? 'undeleted'
+                         : isMissing_s              ? 'missing'
+                         :                           'up';
 
       const authorName  = v.author_username || v.tiktok_id || '?';
       const isTracked   = v.author_enabled === 1;
@@ -3173,12 +3200,15 @@
         <img class="video-thumb" src="/api/videos/${esc(v.video_id)}/thumbnail" alt=""
              onerror="this.style.opacity='.15'"
              onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')">
-        <div>${v.description
-          ? `<div class="video-desc">${esc(v.description)}</div>`
-          : `<div class="video-desc-empty">(no description)</div>`}</div>
+        <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
+          ${_videoPlayBtn(v)}
+          <div style="flex:1;min-width:0">${v.description
+            ? `<div class="video-desc">${esc(v.description)}</div>`
+            : `<div class="video-desc-empty">(no description)</div>`}</div>
+        </div>
         <div class="video-cell">${authorChip}</div>
         <div class="video-cell">
-          <span class="vstatus ${v.status}">${statusLabel}</span>
+          <span class="vstatus ${statusCls_s}">${statusLabel}</span>
         </div>
         <div class="video-cell">${fmtCount(v.view_count)}</div>
         <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
@@ -3234,6 +3264,7 @@
   function renderStatus(state) {
     isRunning   = state.user_loop_running;
     currentUser = state.user_loop_current_user;
+    if (state.deletion_confirm_threshold != null) _deletionConfirmThreshold = state.deletion_confirm_threshold;
     runQueue         = state.run_queue         || [];
     runCurrent       = state.run_current       || null;
     soundRunQueue    = state.sound_run_queue   || [];
@@ -3748,7 +3779,9 @@
           ${u.video_count     != null ? `<span><strong>${u.video_count.toLocaleString()}</strong> on TikTok</span>` : ''}
           <span><strong>${u.video_total || 0}</strong> saved locally</span>
           ${u.video_deleted   ? `<span style="color:var(--red)"><strong>${u.video_deleted}</strong> deleted</span>` : ''}
+          ${u.video_missing   ? `<span style="color:#ff9800"><strong>${u.video_missing}</strong> missing</span>` : ''}
           ${u.video_undeleted ? `<span style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
+          ${u.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="openProfileHistory()" title="Open profile change history"><strong>${u.profile_history_count}</strong> profile updates</span>` : ''}
         </div>
       </div>
     `;
@@ -3961,23 +3994,26 @@
 
   const _dlIcon = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1v7M3.5 5.5l3 3 3-3M1.5 10.5h10"/></svg>`;
 
+  function _videoPlayBtn(v) {
+    const id = esc(v.video_id);
+    if (v.type === 'video') {
+      return `<button class="play-btn" onclick="event.stopPropagation();openVidModal('${id}')" title="Play video">▶</button>`;
+    } else if (v.type === 'photo') {
+      return `<button class="play-btn" onclick="event.stopPropagation();openCarousel('${id}')" title="View photos"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg></button>`;
+    }
+    return '';
+  }
+
   function _videoActionBtns(v) {
     const id = esc(v.video_id);
-    let dl = '';
     if (v.type === 'video' && v.file_path) {
-      dl = `<a class="play-btn" href="/api/videos/${id}/file" download="${id}.mp4"
+      return `<a class="play-btn" href="/api/videos/${id}/file" download="${id}.mp4"
                onclick="event.stopPropagation()" title="Download video">${_dlIcon}</a>`;
     } else if (v.type === 'photo' && v.file_path) {
-      dl = `<a class="play-btn" href="/api/videos/${id}/photos/zip" download="${id}_photos.zip"
+      return `<a class="play-btn" href="/api/videos/${id}/photos/zip" download="${id}_photos.zip"
                onclick="event.stopPropagation()" title="Download all photos as zip">${_dlIcon}</a>`;
     }
-    let play = '';
-    if (v.type === 'video') {
-      play = `<button class="play-btn" onclick="event.stopPropagation();openVidModal('${id}')" title="Play video">▶</button>`;
-    } else if (v.type === 'photo') {
-      play = `<button class="play-btn" onclick="event.stopPropagation();openCarousel('${id}')" title="View photos"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg></button>`;
-    }
-    return dl + play;
+    return '';
   }
 
   function _renderModalVideoList() {
@@ -4003,17 +4039,27 @@
       const row = document.createElement('div');
       row.className = 'video-row vcols';
       row.dataset.videoId = v.video_id;
-      const statusLabel = v.status === 'deleted' ? 'Deleted'
-                        : v.status === 'undeleted' ? 'Restored' : 'Active';
+      const isMissing    = v.status === 'up' && v.pending_deletion_count > 0;
+      const statusLabel  = v.status === 'deleted'   ? 'Deleted'
+                         : v.status === 'undeleted' ? 'Restored'
+                         : isMissing                ? 'Missing'
+                         :                           'Active';
+      const statusCls    = v.status === 'deleted'   ? 'deleted'
+                         : v.status === 'undeleted' ? 'undeleted'
+                         : isMissing                ? 'missing'
+                         :                           'up';
       row.innerHTML = `
         <img class="video-thumb" src="/api/videos/${esc(v.video_id)}/thumbnail" alt=""
              onerror="this.style.opacity='.15'"
              onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')">
-        <div>${v.description
-          ? `<div class="video-desc">${esc(v.description)}</div>`
-          : `<div class="video-desc-empty">(no description)</div>`}</div>
+        <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
+          ${_videoPlayBtn(v)}
+          <div style="flex:1;min-width:0">${v.description
+            ? `<div class="video-desc">${esc(v.description)}</div>`
+            : `<div class="video-desc-empty">(no description)</div>`}</div>
+        </div>
         <div class="video-cell">
-          <span class="vstatus ${v.status}">${statusLabel}</span>
+          <span class="vstatus ${statusCls}">${statusLabel}</span>
         </div>
         <div class="video-cell">${fmtCount(v.view_count)}</div>
         <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
@@ -4182,6 +4228,14 @@
       document.getElementById('backfillStatus').textContent = `Backfilling… ${data.done}/${data.total}`;
       _startBackfillPoll();
     }
+  })();
+
+  // ── Back to top ───────────────────────────────────────────────────────────────
+  (function() {
+    const btn = document.getElementById('backToTopBtn');
+    window.addEventListener('scroll', () => {
+      btn.style.display = window.scrollY > 200 ? 'flex' : 'none';
+    }, { passive: true });
   })();
 </script>
 </body>

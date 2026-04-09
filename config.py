@@ -21,6 +21,8 @@ USER_LOOP_INTERVAL_MINUTES  = int(os.environ.get("USER_LOOP_INTERVAL_MINUTES",  
 SOUND_LOOP_INTERVAL_MINUTES = int(os.environ.get("SOUND_LOOP_INTERVAL_MINUTES", 60))
 WEB_PORT                    = int(os.environ.get("WEB_PORT", 5000))
 
+DELETION_CONFIRM_THRESHOLD = int(os.environ.get("DELETION_CONFIRM_THRESHOLD", 3))
+
 THUMBNAIL_WORKERS  = int(os.environ.get("THUMBNAIL_WORKERS", min((os.cpu_count() or 4) // 4, 4) or 1))
 THUMBNAIL_USE_GPU  = os.environ.get("THUMBNAIL_USE_GPU", "").lower() in ("1", "true", "yes")
 

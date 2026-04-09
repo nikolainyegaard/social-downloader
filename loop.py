@@ -12,7 +12,7 @@ from collections import deque
 from datetime import datetime, timezone
 
 import database as db
-from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE, DATA_DIR
+from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE, DATA_DIR, DELETION_CONFIRM_THRESHOLD
 from tiktok_api import (get_user_info, get_user_videos, get_user_videos_with_stats,
                          get_video_details, UserBannedException)
 from downloader import download_video, download_photos, rename_user_folder
@@ -25,7 +25,7 @@ USER_LAST_DURATION_PATH  = os.path.join(DATA_DIR, "last_run_duration.txt")
 SOUND_LAST_RUN_PATH      = os.path.join(DATA_DIR, "sound_last_run.timestamp")
 SOUND_LAST_DURATION_PATH = os.path.join(DATA_DIR, "sound_last_run_duration.txt")
 
-_CONFIRM_THRESHOLD    = 3  # loops a negative change must persist before it's made official
+_CONFIRM_THRESHOLD    = DELETION_CONFIRM_THRESHOLD  # loops a negative change must persist before it's made official
 _MAX_BOT_FAILURES     = 3  # consecutive post-reset bot detections before aborting the run
 
 

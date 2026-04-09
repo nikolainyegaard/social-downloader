@@ -6,11 +6,11 @@ import time
 from typing import Callable
 
 import database as db
-from config import get_ms_token, get_cookies_flat, CHROME_EXECUTABLE
+from config import get_ms_token, get_cookies_flat, CHROME_EXECUTABLE, DELETION_CONFIRM_THRESHOLD
 from tiktok_api import fetch_sound_video_ids, get_video_details
 from downloader import download_video, download_photos
 
-_CONFIRM_THRESHOLD = 3
+_CONFIRM_THRESHOLD = DELETION_CONFIRM_THRESHOLD
 
 
 async def process_all_sounds(log: Callable[[str], None]) -> None:

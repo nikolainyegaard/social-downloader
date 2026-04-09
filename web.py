@@ -16,7 +16,7 @@ from flask import Flask, jsonify, request, render_template, send_file
 import database as db
 from config import (get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, COOKIES_TIMESTAMP_PATH,
                     DATA_DIR, VIDEOS_DIR, AVATARS_DIR, CHROME_EXECUTABLE, APP_VERSION,
-                    USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES)
+                    USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, DELETION_CONFIRM_THRESHOLD)
 from tiktok_api import get_user_info, get_video_details
 from loop import (is_user_loop_running, is_sound_loop_running, get_state_snapshot,
                   trigger_user_event, trigger_sound_event,
@@ -480,17 +480,20 @@ def create_app() -> Flask:
 
     @app.route("/api/users", methods=["GET"])
     def list_users():
-        users       = db.get_all_users()
-        all_stats   = db.get_all_video_stats()
-        all_history = db.get_all_username_history()
+        users          = db.get_all_users()
+        all_stats      = db.get_all_video_stats()
+        all_history    = db.get_all_username_history()
+        all_ph_counts  = db.get_all_profile_history_counts()
 
         for user in users:
             tid   = user["tiktok_id"]
             stats = all_stats.get(tid, {})
-            user["video_total"]      = stats.get("video_total",      0)
-            user["video_downloaded"] = stats.get("video_downloaded",  0)
-            user["video_deleted"]    = stats.get("video_deleted",     0)
-            user["video_undeleted"]  = stats.get("video_undeleted",   0)
+            user["video_total"]            = stats.get("video_total",      0)
+            user["video_downloaded"]       = stats.get("video_downloaded",  0)
+            user["video_deleted"]          = stats.get("video_deleted",     0)
+            user["video_undeleted"]        = stats.get("video_undeleted",   0)
+            user["video_missing"]          = stats.get("video_missing",     0)
+            user["profile_history_count"]  = all_ph_counts.get(tid, 0)
             cur  = user["username"]
             user["old_usernames"] = list(dict.fromkeys(
                 u for u in all_history.get(tid, []) if u != cur
@@ -768,8 +771,9 @@ def create_app() -> Flask:
     @app.route("/api/status", methods=["GET"])
     def get_status():
         state = get_state_snapshot()
-        state["missing_stats_count"]  = db.count_videos_missing_stats()
-        state["stats_failed_count"]   = db.count_videos_stats_failed()
+        state["missing_stats_count"]        = db.count_videos_missing_stats()
+        state["stats_failed_count"]         = db.count_videos_stats_failed()
+        state["deletion_confirm_threshold"] = DELETION_CONFIRM_THRESHOLD
         return jsonify(state)
 
     @app.route("/api/trigger", methods=["POST"])

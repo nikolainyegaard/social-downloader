@@ -332,6 +332,15 @@ def get_profile_history(tiktok_id: str) -> list[dict]:
         ).fetchall()]
 
 
+def get_all_profile_history_counts() -> dict:
+    """Return a dict of {tiktok_id: count} for all profile_history entries."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT tiktok_id, COUNT(*) AS cnt FROM profile_history GROUP BY tiktok_id"
+        ).fetchall()
+    return {r["tiktok_id"]: r["cnt"] for r in rows}
+
+
 def get_user(tiktok_id):
     with get_db() as conn:
         row = conn.execute(
@@ -468,10 +477,11 @@ def get_all_video_stats() -> dict:
         rows = conn.execute("""
             SELECT
                 tiktok_id,
-                COUNT(*)                                              AS video_total,
-                COUNT(download_date)                                  AS video_downloaded,
-                SUM(CASE WHEN status = 'deleted'   THEN 1 ELSE 0 END) AS video_deleted,
-                SUM(CASE WHEN status = 'undeleted' THEN 1 ELSE 0 END) AS video_undeleted
+                COUNT(*)                                                                          AS video_total,
+                COUNT(download_date)                                                              AS video_downloaded,
+                SUM(CASE WHEN status = 'deleted'                              THEN 1 ELSE 0 END) AS video_deleted,
+                SUM(CASE WHEN status = 'undeleted'                            THEN 1 ELSE 0 END) AS video_undeleted,
+                SUM(CASE WHEN status = 'up' AND pending_deletion_count > 0    THEN 1 ELSE 0 END) AS video_missing
             FROM videos
             GROUP BY tiktok_id
         """).fetchall()
