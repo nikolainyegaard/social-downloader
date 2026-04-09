@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Video search in the user modal toolbar; filters by video ID or description text and shows "N of M posts" when active
+- Database settings tab with a SQL query runner; SELECT results rendered as tab-separated rows with a preview, full-report viewer, and download; other statements (INSERT, UPDATE, DELETE, etc.) are committed and report rows affected
+- Search bar in the nav bar filters Users (by username, display name, or user ID) and Sounds (by label or sound ID); shows "N of M" count when a filter is active
+- Ghost cards pad the Users and Sounds grids to a minimum of 9 cards, preventing layout shift and scroll-jump during search filtering
+- Loop run state (last run time, duration, new-video count for both user and sound loops) consolidated into a single `loop_state.json` file, replacing four separate text files
 - Back-to-top button in the lower-right corner; appears after scrolling 200px and scrolls smoothly to the top
 - "Missing" video status label in user and sound modals for videos absent from the latest scrape but not yet confirmed deleted
 - "Missing" counter on user cards, shown only when non-zero (same behaviour as "Deleted")
@@ -17,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sound modal Author column header now centred to match the chips in data rows
 - Untracked users in Recently Saved and Recently Deleted now appear in grey and route to the relevant sound modal (with video highlighted) instead of doing nothing
 - Log moved from a standalone bottom section into the nav bar as a third view pill alongside Users and Sounds
+- Loop panel shows a "N new" counter after each run (user loop and sound loop independently)
 - `DELETION_CONFIRM_THRESHOLD` centralised to `config.py` (env-var overridable via `DELETION_CONFIRM_THRESHOLD`); the deletion confirmation check and the "Missing" label threshold now share the same value
 - Video listing via TikTokApi's `item_list` endpoint as primary source; returns full stats and photo detection in one pass; yt-dlp kept as fallback
 - Shared TikTokApi browser session across all users in a loop run (per-user sessions added 8-20 min overhead for large libraries)
@@ -26,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `avatar_cached` flag on the `users` table; avatar images are only requested when a file is confirmed to exist on disk, eliminating repeated 404 requests for users without a cached avatar
 - Startup scan sets `avatar_cached` for any avatar files already on disk, so existing deployments are not affected by the new column's default of 0
 - "Include banned users" toggle on the Delete all avatars utility; banned users are excluded by default since their avatars cannot be re-fetched from TikTok
+
+### Fixed
+- "Profile updates" counter in user modal now uses singular "update" when the count is 1
+- Video search in user modal no longer loses focus on each keystroke; the toolbar rebuilds around the active input without destroying it
+- Switching tracking views now clears the active search filter; previously the filter remained applied even though the search box appeared empty
+- Sounds nav pill count now resets to the total when leaving the Sounds view; previously a filtered count ("0 of 2") persisted after switching away
 
 ### Changed
 - Recently Deleted panel now only shows individually deleted videos, not those cleared by an account ban

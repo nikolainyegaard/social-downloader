@@ -666,6 +666,11 @@ def get_videos_missing_stats() -> list[dict]:
         ).fetchall()]
 
 
+def count_downloaded_videos() -> int:
+    with get_db() as conn:
+        return conn.execute("SELECT COUNT(*) FROM videos WHERE file_path IS NOT NULL").fetchone()[0]
+
+
 def count_videos_missing_stats() -> int:
     """Count of downloaded, non-deleted videos that have never had a full stats fetch
     and belong to a currently-tracked user (matches what get_videos_missing_stats returns)."""

@@ -1307,6 +1307,7 @@
             <div>
               <div id="userLoopLast" style="font-size:12px;color:var(--text-dim)">Never run</div>
               <div id="userLoopDuration" style="font-size:11px;color:var(--muted)"></div>
+              <div id="userLoopNewVideos" style="font-size:11px;color:var(--muted)"></div>
               <div id="userLoopNext" style="font-size:11px;color:var(--muted)"></div>
             </div>
             <button class="btn-run" id="triggerUserBtn" onclick="triggerUserLoop()" style="font-size:11px;padding:3px 10px">Run Now</button>
@@ -1321,6 +1322,7 @@
             <div>
               <div id="soundLoopLast" style="font-size:12px;color:var(--text-dim)">Never run</div>
               <div id="soundLoopDuration" style="font-size:11px;color:var(--muted)"></div>
+              <div id="soundLoopNewVideos" style="font-size:11px;color:var(--muted)"></div>
               <div id="soundLoopNext" style="font-size:11px;color:var(--muted)"></div>
             </div>
             <button class="btn-run" id="triggerSoundBtn" onclick="triggerSoundLoop()" style="font-size:11px;padding:3px 10px">Run Now</button>
@@ -1346,10 +1348,15 @@
   <!-- Tracking list (users / sounds) -->
   <section>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-      <div class="filter-pills">
-        <button class="filter-pill active" id="tvUsers"  onclick="setTrackingView('users')">Users (<span id="userCount">0</span>)</button>
-        <button class="filter-pill"        id="tvSounds" onclick="setTrackingView('sounds')">Sounds (<span id="soundCount">0</span>)</button>
-        <button class="filter-pill"        id="tvLog"    onclick="setTrackingView('log')">Log</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="filter-pills">
+          <button class="filter-pill active" id="tvUsers"  onclick="setTrackingView('users')">Users (<span id="userCount">0</span>)</button>
+          <button class="filter-pill"        id="tvSounds" onclick="setTrackingView('sounds')">Sounds (<span id="soundCount">0</span>)</button>
+          <button class="filter-pill"        id="tvLog"    onclick="setTrackingView('log')">Log</button>
+        </div>
+        <input id="trackingSearch" type="search" placeholder="Search…"
+               oninput="onTrackingSearch(this.value)"
+               style="width:160px;font-size:12px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
       </div>
       <div id="userControls" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:4px;">
@@ -1418,6 +1425,7 @@
       <div class="settings-nav-item"        id="snav-jobs"      onclick="switchSettingsSection('jobs')">Jobs</div>
       <div class="settings-nav-item"        id="snav-utils"     onclick="switchSettingsSection('utils')">Utilities</div>
       <div class="settings-nav-item"        id="snav-diag"      onclick="switchSettingsSection('diag')">Diagnostics</div>
+      <div class="settings-nav-item"        id="snav-database"  onclick="switchSettingsSection('database')">Database</div>
     </nav>
     <div class="settings-content">
 
@@ -1690,6 +1698,32 @@
             position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
             border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
           ">Copy</button>
+        </div>
+      </div>
+
+      <!-- Database section -->
+      <div id="ssec-database" style="display:none">
+        <div class="settings-section-title">Database Query</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+          Run raw SQLite commands against the database. SELECT returns rows; other statements are committed immediately.
+        </div>
+        <textarea id="dbQueryInput" placeholder="SELECT * FROM users LIMIT 10;"
+          style="width:100%;height:100px;font-family:monospace;font-size:12px;padding:8px;resize:vertical;
+                 background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
+                 color:var(--text);box-sizing:border-box;margin-bottom:10px"></textarea>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <button class="btn-primary" onclick="dbQueryRun()" style="font-size:12px;padding:5px 14px">Run</button>
+          <span id="dbQuerySummary" style="font-size:12px;color:var(--muted)"></span>
+          <span id="dbQueryError"   style="font-size:12px;color:var(--red);display:none"></span>
+        </div>
+        <div class="report-widget" id="job-dbquery-report" style="display:none">
+          <div class="report-preview" id="job-dbquery-preview"></div>
+          <div class="report-actions">
+            <button class="btn-report" onclick="openReportView(_dbQueryReportFile, 'Database query')">View full report</button>
+            <a id="job-dbquery-download-link" style="display:none">
+              <button class="btn-report">Download report</button>
+            </a>
+          </div>
         </div>
       </div>
 
@@ -2193,7 +2227,7 @@
 
   function switchSettingsSection(name) {
     _settingsSection = name;
-    ['cookies', 'loops', 'backfill', 'jobs', 'utils', 'diag'].forEach(s => {
+    ['cookies', 'loops', 'backfill', 'jobs', 'utils', 'diag', 'database'].forEach(s => {
       document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
       document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
     });
@@ -2497,6 +2531,34 @@
     _startFilecheckPoll();
   }
 
+  // ── Database query ─────────────────────────────────────────────────────────────
+
+  let _dbQueryReportFile = null;
+  const _dbQueryReport   = _makeReportWidget('dbquery');
+
+  async function dbQueryRun() {
+    const sql     = (document.getElementById('dbQueryInput')?.value || '').trim();
+    const summaryEl = document.getElementById('dbQuerySummary');
+    const errorEl   = document.getElementById('dbQueryError');
+    if (!sql) return;
+    summaryEl.textContent = 'Running…';
+    errorEl.style.display = 'none';
+    _dbQueryReport.hide();
+    const { ok, data } = await apiJSON('/api/db/query', {
+      method: 'POST',
+      body: JSON.stringify({ sql }),
+    });
+    if (!ok) {
+      summaryEl.textContent = '';
+      errorEl.textContent   = data.error || 'Query failed.';
+      errorEl.style.display = '';
+      return;
+    }
+    summaryEl.textContent  = data.summary;
+    _dbQueryReportFile     = data.report_file || null;
+    _dbQueryReport.show(data.report_file, data.preview, data.total);
+  }
+
   // ── Diagnostics ────────────────────────────────────────────────────────────────
 
   const _DIAG_ACTIONS = {
@@ -2585,9 +2647,13 @@
     added_at:       { asc: 'Oldest first', desc: 'Newest first' },
   };
 
-  let _trackingView = 'users';
+  let _trackingView   = 'users';
+  let _trackingSearch = '';
   function setTrackingView(view) {
-    _trackingView = view;
+    _trackingView   = view;
+    _trackingSearch = '';
+    const searchEl = document.getElementById('trackingSearch');
+    if (searchEl) { searchEl.value = ''; searchEl.style.display = view === 'log' ? 'none' : ''; }
     document.getElementById('tvUsers').classList.toggle('active', view === 'users');
     document.getElementById('tvSounds').classList.toggle('active', view === 'sounds');
     document.getElementById('tvLog').classList.toggle('active', view === 'log');
@@ -2595,6 +2661,14 @@
     document.getElementById('soundsGrid').style.display = view === 'sounds' ? '' : 'none';
     document.getElementById('logPanel').style.display   = view === 'log'    ? '' : 'none';
     document.getElementById('userControls').style.visibility = view === 'users' ? '' : 'hidden';
+    renderUsers();
+    renderSounds();
+  }
+
+  function onTrackingSearch(val) {
+    _trackingSearch = val.trim();
+    if (_trackingView === 'users')  renderUsers();
+    if (_trackingView === 'sounds') renderSounds();
   }
 
   function setUserFilter(group, value) {
@@ -2640,12 +2714,17 @@
   }
 
   function _filteredUsers() {
+    const q = _trackingSearch.toLowerCase();
     return users.filter(u => {
       if (userFilter.priv === 'public'   && (u.privacy_status !== 'public' || u.account_status === 'banned')) return false;
       if (userFilter.priv === 'private'  && !['private_accessible','private_blocked'].includes(u.privacy_status)) return false;
       if (userFilter.priv === 'banned'   && u.account_status !== 'banned') return false;
       if (userFilter.stat === 'active'   && u.tracking_enabled === 0) return false;
       if (userFilter.stat === 'inactive' && u.tracking_enabled !== 0) return false;
+      if (q) {
+        const hay = `${u.username || ''} ${u.display_name || ''} ${u.tiktok_id || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
   }
@@ -2665,23 +2744,27 @@
     });
   }
 
+  const _GHOST_CARD = '<div class="user-card" aria-hidden="true" style="visibility:hidden;pointer-events:none;min-height:220px"></div>';
+  function _ghostCards(n) { return n > 0 ? Array(n).fill(_GHOST_CARD).join('') : ''; }
+
   function renderUsers() {
     const grid     = document.getElementById('usersGrid');
     const filtered = _filteredUsers();
-    const isFiltered = userFilter.priv !== 'all' || userFilter.stat !== 'all';
+    const isFiltered = userFilter.priv !== 'all' || userFilter.stat !== 'all' || !!_trackingSearch;
     document.getElementById('userCount').textContent =
       isFiltered ? `${filtered.length} of ${users.length}` : users.length;
 
     if (!users.length) {
-      grid.innerHTML = '<div class="empty-state">No users tracked yet.</div>';
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users tracked yet.</div>' + _ghostCards(9);
       return;
     }
     if (!filtered.length) {
-      grid.innerHTML = '<div class="empty-state">No users match this filter.</div>';
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users match this filter.</div>' + _ghostCards(9);
       return;
     }
 
-    grid.innerHTML = _sortedUsers().map(u => {
+    const _sorted = _sortedUsers();
+    grid.innerHTML = _sorted.map(u => {
       const isCurrent  = u.username === currentUser;
       const isInactive = u.tracking_enabled === 0;
       const isBanned   = u.account_status === 'banned';
@@ -2755,7 +2838,7 @@
           </div>
         </div>
       `;
-    }).join('');
+    }).join('') + _ghostCards(Math.max(0, 9 - _sorted.length));
   }
 
   function renderPending() {
@@ -2879,12 +2962,20 @@
   function renderSounds() {
     const grid    = document.getElementById('soundsGrid');
     const countEl = document.getElementById('soundCount');
-    countEl.textContent = sounds.length;
+    const q = _trackingSearch.toLowerCase();
+    const filtered = q
+      ? sounds.filter(s => `${s.label || ''} ${s.sound_id}`.toLowerCase().includes(q))
+      : sounds;
+    countEl.textContent = q ? `${filtered.length} of ${sounds.length}` : sounds.length;
     if (!sounds.length) {
-      grid.innerHTML = '<div class="empty-state">No sounds tracked yet.</div>';
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds tracked yet.</div>' + _ghostCards(9);
       return;
     }
-    grid.innerHTML = sounds.map(s => {
+    if (!filtered.length) {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds match this search.</div>' + _ghostCards(9);
+      return;
+    }
+    grid.innerHTML = filtered.map(s => {
       const label      = s.label || s.sound_id;
       const ttUrl      = `https://www.tiktok.com/music/-${s.sound_id}`;
       const checked    = s.last_checked
@@ -2927,7 +3018,7 @@
             </div>
           </div>
         </div>`;
-    }).join('');
+    }).join('') + _ghostCards(Math.max(0, 9 - filtered.length));
   }
 
   async function loadSounds() {
@@ -3322,8 +3413,10 @@
     const uNext = document.getElementById('userLoopNext');
     const uBtn  = document.getElementById('triggerUserBtn');
     if (uLast) uLast.textContent = state.user_loop_last_end ? `Last: ${fmt.rel(state.user_loop_last_end)}` : 'Never run';
-    const uDur = document.getElementById('userLoopDuration');
-    if (uDur) uDur.textContent = state.user_loop_last_duration_secs != null ? fmt.dur(state.user_loop_last_duration_secs) : '';
+    const uDur      = document.getElementById('userLoopDuration');
+    const uNewVids  = document.getElementById('userLoopNewVideos');
+    if (uDur)     uDur.textContent     = state.user_loop_last_duration_secs != null ? fmt.dur(state.user_loop_last_duration_secs) : '';
+    if (uNewVids) uNewVids.textContent = state.user_loop_last_new_videos != null ? `${state.user_loop_last_new_videos} new` : '';
     if (uNext) uNext.textContent = state.user_loop_running
       ? (currentUser ? `Downloading @${currentUser}` : 'Running…')
       : (state.user_loop_next ? `Next: ${fmt.relFuture(state.user_loop_next)}` : '');
@@ -3334,8 +3427,10 @@
     const sDur  = document.getElementById('soundLoopDuration');
     const sNext = document.getElementById('soundLoopNext');
     const sBtn  = document.getElementById('triggerSoundBtn');
-    if (sLast) sLast.textContent = state.sound_loop_last_end ? `Last: ${fmt.rel(state.sound_loop_last_end)}` : 'Never run';
-    if (sDur)  sDur.textContent  = state.sound_loop_last_duration_secs != null ? fmt.dur(state.sound_loop_last_duration_secs) : '';
+    const sNewVids = document.getElementById('soundLoopNewVideos');
+    if (sLast)    sLast.textContent    = state.sound_loop_last_end ? `Last: ${fmt.rel(state.sound_loop_last_end)}` : 'Never run';
+    if (sDur)     sDur.textContent     = state.sound_loop_last_duration_secs != null ? fmt.dur(state.sound_loop_last_duration_secs) : '';
+    if (sNewVids) sNewVids.textContent = state.sound_loop_last_new_videos != null ? `${state.sound_loop_last_new_videos} new` : '';
     if (sNext) sNext.textContent = state.sound_loop_running
       ? 'Running…'
       : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');
@@ -3510,6 +3605,7 @@
   let _modalVideos          = [];
   let _modalFilter          = 'all';
   let _modalTypeFilter      = 'all';
+  let _modalSearch          = '';
   let _modalSort            = { field: 'upload_date', dir: 'desc' };
   let _modalPendingHighlight = null;   // { videoId, filter, sortField, sortDir } or null
   let _modalLoaded   = 0;
@@ -3549,6 +3645,7 @@
     _modalVideos = [];
     _modalFilter     = 'all';
     _modalTypeFilter = 'all';
+    _modalSearch     = '';
     _modalSort       = { field: 'upload_date', dir: 'desc' };
     _modalLoaded     = 0;
     if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
@@ -3726,13 +3823,20 @@
     }
   }
 
-  function _filteredSorted() {
+  function _filteredSorted(skipSearch = false) {
     let vids = _modalVideos;
     if (_modalFilter === 'active')        vids = vids.filter(v => v.status === 'up');
     if (_modalFilter === 'deleted')       vids = vids.filter(v => v.status === 'deleted');
     if (_modalFilter === 'restored')      vids = vids.filter(v => v.status === 'undeleted');
     if (_modalTypeFilter === 'video')     vids = vids.filter(v => v.type === 'video');
     if (_modalTypeFilter === 'photo')     vids = vids.filter(v => v.type === 'photo');
+    if (!skipSearch && _modalSearch) {
+      const q = _modalSearch.toLowerCase();
+      vids = vids.filter(v =>
+        (v.video_id    || '').toLowerCase().includes(q) ||
+        (v.description || '').toLowerCase().includes(q)
+      );
+    }
     const { field, dir } = _modalSort;
     return [...vids].sort((a, b) => {
       const av = a[field] ?? (dir === 'asc' ? Infinity : -Infinity);
@@ -3740,6 +3844,12 @@
       return dir === 'asc' ? (av < bv ? -1 : av > bv ? 1 : 0)
                            : (av > bv ? -1 : av < bv ? 1 : 0);
     });
+  }
+
+  function onModalSearch(val) {
+    _modalSearch = val.trim();
+    _renderModalToolbar(_modalVideos);
+    _renderModalVideoList();
   }
 
   function setModalSort(field) {
@@ -3820,7 +3930,7 @@
           ${u.video_deleted   ? `<span style="color:var(--red)"><strong>${u.video_deleted}</strong> deleted</span>` : ''}
           ${u.video_missing   ? `<span style="color:#ff9800"><strong>${u.video_missing}</strong> missing</span>` : ''}
           ${u.video_undeleted ? `<span style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
-          ${u.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="openProfileHistory()" title="Open profile change history"><strong>${u.profile_history_count}</strong> profile updates</span>` : ''}
+          ${u.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="openProfileHistory()" title="Open profile change history"><strong>${u.profile_history_count}</strong> profile ${u.profile_history_count === 1 ? 'update' : 'updates'}</span>` : ''}
         </div>
       </div>
     `;
@@ -3850,9 +3960,16 @@
       return `<button class="filter-pill${active}" onclick="setModalTypeFilter('${key}')">${label}</button>`;
     };
 
+    const total = _filteredSorted(true).length;
     const shown = _filteredSorted().length;
-    const label = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
-    document.getElementById('modalToolbar').innerHTML =
+    const label = _modalSearch
+      ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
+      : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
+    const searchVal = esc(_modalSearch);
+    const toolbar = document.getElementById('modalToolbar');
+    const searchWasFocused = document.activeElement === toolbar.querySelector('#modalVideoSearch');
+    const searchSelEnd = searchWasFocused ? document.activeElement.selectionEnd : 0;
+    toolbar.innerHTML =
         `<div class="filter-pills">`
       + pill('all', 'All')
       + pill('active', 'Active')
@@ -3867,7 +3984,14 @@
             + `</div>`
           : '')
       + `<span class="modal-vid-count">${label}</span>`
+      + `<input id="modalVideoSearch" type="search" value="${searchVal}" placeholder="Search videos…"
+           oninput="onModalSearch(this.value)"
+           style="width:140px;font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text)">`
       + `<button class="filter-pill" style="margin-left:auto" onclick="openProfileHistory()">Profile history</button>`;
+    if (searchWasFocused) {
+      const el = toolbar.querySelector('#modalVideoSearch');
+      if (el) { el.focus(); el.setSelectionRange(searchSelEnd, searchSelEnd); }
+    }
   }
 
   // ── Profile history ──────────────────────────────────────────────────────────
@@ -4063,7 +4187,7 @@
     list.scrollTop = 0;
     const vids = _filteredSorted();
     if (!vids.length) {
-      list.innerHTML = '<div class="vlist-empty">No videos match this filter.</div>';
+      list.innerHTML = `<div class="vlist-empty">${_modalSearch ? 'No videos match this search.' : 'No videos match this filter.'}</div>`;
       return;
     }
     _appendModalVideos(vids);

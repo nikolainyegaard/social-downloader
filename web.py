@@ -972,6 +972,36 @@ def create_app() -> Flask:
                         pass
         return jsonify({"deleted": deleted})
 
+    @app.route("/api/db/query", methods=["POST"])
+    def run_db_query():
+        body = request.get_json(silent=True) or {}
+        sql  = (body.get("sql") or "").strip()
+        if not sql:
+            return jsonify({"error": "No SQL provided"}), 400
+        try:
+            with db.get_db() as conn:
+                cursor = conn.execute(sql)
+                if cursor.description:
+                    cols   = [d[0] for d in cursor.description]
+                    rows   = cursor.fetchall()
+                    lines  = ["\t".join(cols)]
+                    lines += ["\t".join("" if v is None else str(v) for v in row) for row in rows]
+                    total  = len(rows)
+                    summary = f"{total} row{'s' if total != 1 else ''} returned"
+                else:
+                    conn.commit()
+                    affected = cursor.rowcount
+                    lines   = [f"OK — {affected} row{'s' if affected != 1 else ''} affected"]
+                    total   = 1
+                    summary = lines[0]
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+        header   = f"SQL: {sql}"
+        filename = _write_report("db-query", header, lines)
+        preview  = lines[:12]
+        return jsonify({"ok": True, "report_file": filename,
+                        "preview": preview, "total": total, "summary": summary})
+
     @app.route("/api/reports/<path:filename>", methods=["GET"])
     def download_report(filename: str):
         # Prevent path traversal

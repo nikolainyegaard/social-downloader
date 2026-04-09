@@ -3,6 +3,7 @@ Download loops (user and sound) and shared state used by both loop threads and t
 """
 
 import asyncio
+import json
 import os
 import queue as _queue_module
 import random
@@ -20,10 +21,7 @@ from thumbnailer import backfill_thumbnails, cache_avatar, generate_thumbnail
 import photo_converter as _photo_converter  # noqa: F401 — starts conversion thread on import
 from sound_tracker import process_all_sounds, process_sound
 
-USER_LAST_RUN_PATH       = os.path.join(DATA_DIR, "last_run.timestamp")
-USER_LAST_DURATION_PATH  = os.path.join(DATA_DIR, "last_run_duration.txt")
-SOUND_LAST_RUN_PATH      = os.path.join(DATA_DIR, "sound_last_run.timestamp")
-SOUND_LAST_DURATION_PATH = os.path.join(DATA_DIR, "sound_last_run_duration.txt")
+LOOP_STATE_PATH = os.path.join(DATA_DIR, "loop_state.json")
 
 _CONFIRM_THRESHOLD    = DELETION_CONFIRM_THRESHOLD  # loops a negative change must persist before it's made official
 _MAX_BOT_FAILURES     = 3  # consecutive post-reset bot detections before aborting the run
@@ -43,32 +41,44 @@ def _is_bot_error(exc: Exception) -> bool:
     )
 
 
-def _load_last_run(path: str) -> str | None:
+def _load_loop_state() -> dict:
     try:
-        with open(path, encoding="utf-8") as f:
-            return f.read().strip() or None
-    except FileNotFoundError:
-        return None
-
-
-def _load_last_duration(path: str) -> int | None:
-    try:
-        with open(path, encoding="utf-8") as f:
-            raw = f.read().strip()
-            return int(raw) if raw else None
+        with open(LOOP_STATE_PATH, encoding="utf-8") as f:
+            return json.load(f)
     except (FileNotFoundError, ValueError):
-        return None
+        return {}
+
+
+def _save_loop_state() -> None:
+    with _user_state_lock:
+        data = {
+            "user_last_run_end":       user_loop_state["last_run_end"],
+            "user_last_duration_secs": user_loop_state["last_run_duration_secs"],
+            "user_last_new_videos":    user_loop_state["last_new_videos"],
+        }
+    with _sound_state_lock:
+        data.update({
+            "sound_last_run_end":       sound_loop_state["last_run_end"],
+            "sound_last_duration_secs": sound_loop_state["last_run_duration_secs"],
+            "sound_last_new_videos":    sound_loop_state["last_new_videos"],
+        })
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(LOOP_STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f)
 
 
 # ── User loop state ───────────────────────────────────────────────────────────
 
+_persisted = _load_loop_state()
+
 user_loop_state = {
-    "running":               False,
-    "last_run_end":          _load_last_run(USER_LAST_RUN_PATH),
-    "last_run_duration_secs": _load_last_duration(USER_LAST_DURATION_PATH),
-    "next_run":              None,
-    "current_user":          None,
-    "logs":                  deque(maxlen=1000),
+    "running":                False,
+    "last_run_end":           _persisted.get("user_last_run_end"),
+    "last_run_duration_secs": _persisted.get("user_last_duration_secs"),
+    "last_new_videos":        _persisted.get("user_last_new_videos"),
+    "next_run":               None,
+    "current_user":           None,
+    "logs":                   deque(maxlen=1000),
 }
 _user_state_lock = threading.Lock()
 
@@ -81,10 +91,11 @@ _user_rflag_lock       = threading.Lock()
 # ── Sound loop state ──────────────────────────────────────────────────────────
 
 sound_loop_state = {
-    "running":               False,
-    "last_run_end":          _load_last_run(SOUND_LAST_RUN_PATH),
-    "last_run_duration_secs": _load_last_duration(SOUND_LAST_DURATION_PATH),
-    "next_run":              None,
+    "running":                False,
+    "last_run_end":           _persisted.get("sound_last_run_end"),
+    "last_run_duration_secs": _persisted.get("sound_last_duration_secs"),
+    "last_new_videos":        _persisted.get("sound_last_new_videos"),
+    "next_run":               None,
 }
 _sound_state_lock = threading.Lock()
 
@@ -138,17 +149,19 @@ def get_state_snapshot() -> dict:
     """Return a serialisable snapshot of both loop states plus run-queue state."""
     with _user_state_lock:
         state = {
-            "user_loop_running":           user_loop_state["running"],
-            "user_loop_last_end":          user_loop_state["last_run_end"],
+            "user_loop_running":            user_loop_state["running"],
+            "user_loop_last_end":           user_loop_state["last_run_end"],
             "user_loop_last_duration_secs": user_loop_state["last_run_duration_secs"],
-            "user_loop_next":              user_loop_state["next_run"],
-            "user_loop_current_user":      user_loop_state["current_user"],
-            "logs":                        list(user_loop_state["logs"]),
+            "user_loop_last_new_videos":    user_loop_state["last_new_videos"],
+            "user_loop_next":               user_loop_state["next_run"],
+            "user_loop_current_user":       user_loop_state["current_user"],
+            "logs":                         list(user_loop_state["logs"]),
         }
     with _sound_state_lock:
         state["sound_loop_running"]            = sound_loop_state["running"]
         state["sound_loop_last_end"]           = sound_loop_state["last_run_end"]
         state["sound_loop_last_duration_secs"] = sound_loop_state["last_run_duration_secs"]
+        state["sound_loop_last_new_videos"]    = sound_loop_state["last_new_videos"]
         state["sound_loop_next"]               = sound_loop_state["next_run"]
     with _run_state_lock:
         state["run_current"] = _run_state["current"]
@@ -669,6 +682,7 @@ def run_user_loop():
     with _user_state_lock:
         user_loop_state["running"] = True
     _loop_start = time.monotonic()
+    _videos_before = db.count_downloaded_videos()
 
     _log("=== User loop started ===")
     users = db.get_all_users()
@@ -684,15 +698,13 @@ def run_user_loop():
     _log("=== User loop complete ===")
     last_run_end = datetime.now(timezone.utc).isoformat()
     duration_secs = round(time.monotonic() - _loop_start)
+    new_videos = db.count_downloaded_videos() - _videos_before
     with _user_state_lock:
         user_loop_state["running"]                = False
         user_loop_state["last_run_end"]           = last_run_end
         user_loop_state["last_run_duration_secs"] = duration_secs
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(USER_LAST_RUN_PATH, "w", encoding="utf-8") as f:
-        f.write(last_run_end)
-    with open(USER_LAST_DURATION_PATH, "w", encoding="utf-8") as f:
-        f.write(str(duration_secs))
+        user_loop_state["last_new_videos"]        = new_videos
+    _save_loop_state()
 
 
 def run_sound_loop():
@@ -700,6 +712,7 @@ def run_sound_loop():
     with _sound_state_lock:
         sound_loop_state["running"] = True
     _loop_start = time.monotonic()
+    _videos_before = db.count_downloaded_videos()
 
     _log("=== Sound loop started ===")
     try:
@@ -710,12 +723,10 @@ def run_sound_loop():
     _log("=== Sound loop complete ===")
     last_run_end = datetime.now(timezone.utc).isoformat()
     duration_secs = round(time.monotonic() - _loop_start)
+    new_videos = db.count_downloaded_videos() - _videos_before
     with _sound_state_lock:
         sound_loop_state["running"]                = False
         sound_loop_state["last_run_end"]           = last_run_end
         sound_loop_state["last_run_duration_secs"] = duration_secs
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(SOUND_LAST_RUN_PATH, "w", encoding="utf-8") as f:
-        f.write(last_run_end)
-    with open(SOUND_LAST_DURATION_PATH, "w", encoding="utf-8") as f:
-        f.write(str(duration_secs))
+        sound_loop_state["last_new_videos"]        = new_videos
+    _save_loop_state()
