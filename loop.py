@@ -450,9 +450,7 @@ async def _process_single_user(user: dict, api, cookies: dict,
                 )
                 if path:
                     thumb = generate_thumbnail(vid_id, path)
-                    if thumb:
-                        _log(f"  Thumbnail OK: {os.path.basename(thumb)}")
-                    else:
+                    if not thumb:
                         _log(f"  Thumbnail FAILED for {vid_id} — see [thumb] lines above")
                 dl_result = {"file_path": path, "ytdlp_data": None} if path else None
             else:
