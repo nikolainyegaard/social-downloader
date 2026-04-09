@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Per-user comment field in the user modal; free-text note saved on blur, persisted to the database
 - Clicking a video thumbnail in user and sound modals now plays the video or opens the photo carousel; a new image-preview icon button replaces the old play button and opens the thumbnail
+- Video type badge overlaid on thumbnails in user and sound modals: white play icon for videos, photo-grid icon for photo posts, with a drop shadow for legibility over any thumbnail
 - Video search in the user modal toolbar; filters by video ID or description text and shows "N of M posts" when active
 - Database settings tab with a SQL query runner; SELECT results rendered as tab-separated rows with a preview, full-report viewer, and download; other statements (INSERT, UPDATE, DELETE, etc.) are committed and report rows affected
 - Search bar in the nav bar filters Users (by username, display name, or user ID) and Sounds (by label or sound ID); shows "N of M" count when a filter is active
@@ -37,12 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Loops panel redesigned as two sections, each with a 3-column grid: last run and next run on the left, duration and new-video count in the middle, Run Now button vertically centred on the right
+- `[sound]` prefix removed from user-facing log lines in the sound tracker; log messages now read consistently with user loop messages
 
 ### Fixed
 - "Profile updates" counter in user modal now uses singular "update" when the count is 1
 - Video search in user modal no longer loses focus on each keystroke; the toolbar rebuilds around the active input without destroying it
 - Switching tracking views now clears the active search filter; previously the filter remained applied even though the search box appeared empty
 - Sounds nav pill count now resets to the total when leaving the Sounds view; previously a filtered count ("0 of 2") persisted after switching away
+- Loop panel no longer shifts the page layout while running; status text simplified to "Running…" instead of cycling through per-user download messages (full status remains in the header pill)
+- Video row horizontal padding reduced to match the grid column gap, fixing uneven spacing to the left of thumbnails in user and sound modals
 
 ### Changed
 - Recently Deleted panel now only shows individually deleted videos, not those cleared by an account ban

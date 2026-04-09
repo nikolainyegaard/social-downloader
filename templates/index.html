@@ -589,7 +589,7 @@
     }
 
     .video-list-hdr {
-      padding: 5px 16px 4px;
+      padding: 5px 10px 4px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       background: var(--surface);
@@ -625,7 +625,7 @@
     .modal-video-list { flex: 1; overflow-y: auto; }
 
     .video-row {
-      padding: 7px 16px;
+      padding: 7px 10px;
       border-bottom: 1px solid var(--border);
       transition: background .1s;
     }
@@ -3325,9 +3325,7 @@
         : `<span class="author-chip untracked">@${esc(authorName)}</span>`;
 
       row.innerHTML = `
-        <img class="video-thumb" src="/api/videos/${esc(v.video_id)}/thumbnail" alt=""
-             onerror="this.style.opacity='.15'"
-             ${_videoThumbAction(v)}>
+        ${_thumbCell(v)}
         <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
           <button class="play-btn" onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>
           <div style="flex:1;min-width:0">${v.description
@@ -4197,6 +4195,19 @@
 
   const _imgPreviewIcon = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="11.5" height="11.5" rx="1.25"/><circle cx="4.25" cy="4.25" r="1.25"/><path d="M.75 9l3-3 2.5 2.5 2-2 4 4"/></svg>`;
 
+  const _badgeStyle = `position:absolute;bottom:4px;right:4px;color:#fff;pointer-events:none;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))`;
+  const _playBadge  = `<span style="${_badgeStyle}"><svg width="18" height="18" viewBox="0 0 9 9" fill="currentColor"><polygon points="1.5,0.5 8.5,4.5 1.5,8.5"/></svg></span>`;
+  const _photoBadge = `<span style="${_badgeStyle}"><svg width="18" height="18" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg></span>`;
+
+  function _thumbCell(v) {
+    const id    = esc(v.video_id);
+    const badge = v.type === 'video' ? _playBadge : v.type === 'photo' ? _photoBadge : '';
+    return `<div style="position:relative;line-height:0;width:90px;flex-shrink:0">
+      <img class="video-thumb" src="/api/videos/${id}/thumbnail" alt=""
+           onerror="this.style.opacity='.15'"
+           ${_videoThumbAction(v)}>${badge}</div>`;
+  }
+
   function _videoThumbAction(v) {
     const id = esc(v.video_id);
     if (v.type === 'video') return `onclick="event.stopPropagation();openVidModal('${id}')" title="Play video" style="cursor:pointer"`;
@@ -4249,9 +4260,7 @@
                          : isMissing                ? 'missing'
                          :                           'up';
       row.innerHTML = `
-        <img class="video-thumb" src="/api/videos/${esc(v.video_id)}/thumbnail" alt=""
-             onerror="this.style.opacity='.15'"
-             ${_videoThumbAction(v)}>
+        ${_thumbCell(v)}
         <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
           <button class="play-btn" onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>
           <div style="flex:1;min-width:0">${v.description
