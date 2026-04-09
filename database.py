@@ -157,6 +157,7 @@ def _migrate_db(conn):
         "ALTER TABLE videos ADD COLUMN deleted_reason     TEXT",
         "ALTER TABLE videos ADD COLUMN stats_updated_at   INTEGER",
         "ALTER TABLE users  ADD COLUMN avatar_cached      INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users  ADD COLUMN comment            TEXT",
     ]
     for sql in migrations:
         try:
@@ -228,6 +229,14 @@ def set_user_tracking_enabled(tiktok_id: str, enabled: bool) -> None:
         conn.execute(
             "UPDATE users SET tracking_enabled = ? WHERE tiktok_id = ?",
             (1 if enabled else 0, tiktok_id),
+        )
+
+
+def set_user_comment(tiktok_id: str, comment: str) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET comment = ? WHERE tiktok_id = ?",
+            (comment or None, tiktok_id),
         )
 
 

@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Per-user comment field in the user modal; free-text note saved on blur, persisted to the database
+- Clicking a video thumbnail in user and sound modals now plays the video or opens the photo carousel; a new image-preview icon button replaces the old play button and opens the thumbnail
 - Video search in the user modal toolbar; filters by video ID or description text and shows "N of M posts" when active
 - Database settings tab with a SQL query runner; SELECT results rendered as tab-separated rows with a preview, full-report viewer, and download; other statements (INSERT, UPDATE, DELETE, etc.) are committed and report rows affected
 - Search bar in the nav bar filters Users (by username, display name, or user ID) and Sounds (by label or sound ID); shows "N of M" count when a filter is active
@@ -32,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `avatar_cached` flag on the `users` table; avatar images are only requested when a file is confirmed to exist on disk, eliminating repeated 404 requests for users without a cached avatar
 - Startup scan sets `avatar_cached` for any avatar files already on disk, so existing deployments are not affected by the new column's default of 0
 - "Include banned users" toggle on the Delete all avatars utility; banned users are excluded by default since their avatars cannot be re-fetched from TikTok
+
+### Changed
+- Loops panel redesigned as two sections, each with a 3-column grid: last run and next run on the left, duration and new-video count in the middle, Run Now button vertically centred on the right
 
 ### Fixed
 - "Profile updates" counter in user modal now uses singular "update" when the count is 1

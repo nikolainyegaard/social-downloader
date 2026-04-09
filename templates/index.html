@@ -863,6 +863,26 @@
       gap: 14px;
     }
 
+    /* Loop grid */
+    .loop-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .loop-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      grid-template-rows: auto auto;
+      row-gap: 4px;
+      column-gap: 12px;
+      align-items: center;
+    }
+    .loop-cell-main { font-size: 12px; color: var(--text-dim); }
+    .loop-cell-sub  { font-size: 11px; color: var(--muted); }
+
     /* Stats grid */
     .stat-grid {
       display: grid;
@@ -1299,33 +1319,29 @@
       <div class="panel-header">
         <span class="section-title" style="margin-bottom:0">Loops</span>
       </div>
-      <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:0">
+      <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:12px">
 
-        <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">User Loop</div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <div>
-              <div id="userLoopLast" style="font-size:12px;color:var(--text-dim)">Never run</div>
-              <div id="userLoopDuration" style="font-size:11px;color:var(--muted)"></div>
-              <div id="userLoopNewVideos" style="font-size:11px;color:var(--muted)"></div>
-              <div id="userLoopNext" style="font-size:11px;color:var(--muted)"></div>
-            </div>
-            <button class="btn-run" id="triggerUserBtn" onclick="triggerUserLoop()" style="font-size:11px;padding:3px 10px">Run Now</button>
+        <div>
+          <div class="loop-section-label">User Loop</div>
+          <div class="loop-grid">
+            <div id="userLoopLast"      class="loop-cell-main">Never run</div>
+            <div id="userLoopDuration"  class="loop-cell-sub"></div>
+            <button class="btn-run" id="triggerUserBtn" onclick="triggerUserLoop()" style="grid-column:3;grid-row:1/3;align-self:center">Run Now</button>
+            <div id="userLoopNext"      class="loop-cell-sub"></div>
+            <div id="userLoopNewVideos" class="loop-cell-sub"></div>
           </div>
         </div>
 
-        <div style="border-top:1px solid var(--border);margin:0 -16px;padding:10px 0 0"></div>
+        <div style="border-top:1px solid var(--border);margin:0 -16px"></div>
 
         <div>
-          <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Sound Loop</div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <div>
-              <div id="soundLoopLast" style="font-size:12px;color:var(--text-dim)">Never run</div>
-              <div id="soundLoopDuration" style="font-size:11px;color:var(--muted)"></div>
-              <div id="soundLoopNewVideos" style="font-size:11px;color:var(--muted)"></div>
-              <div id="soundLoopNext" style="font-size:11px;color:var(--muted)"></div>
-            </div>
-            <button class="btn-run" id="triggerSoundBtn" onclick="triggerSoundLoop()" style="font-size:11px;padding:3px 10px">Run Now</button>
+          <div class="loop-section-label">Sound Loop</div>
+          <div class="loop-grid">
+            <div id="soundLoopLast"      class="loop-cell-main">Never run</div>
+            <div id="soundLoopDuration"  class="loop-cell-sub"></div>
+            <button class="btn-run" id="triggerSoundBtn" onclick="triggerSoundLoop()" style="grid-column:3;grid-row:1/3;align-self:center">Run Now</button>
+            <div id="soundLoopNext"      class="loop-cell-sub"></div>
+            <div id="soundLoopNewVideos" class="loop-cell-sub"></div>
           </div>
         </div>
 
@@ -3311,9 +3327,9 @@
       row.innerHTML = `
         <img class="video-thumb" src="/api/videos/${esc(v.video_id)}/thumbnail" alt=""
              onerror="this.style.opacity='.15'"
-             onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')">
+             ${_videoThumbAction(v)}>
         <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
-          ${_videoPlayBtn(v)}
+          <button class="play-btn" onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>
           <div style="flex:1;min-width:0">${v.description
             ? `<div class="video-desc">${esc(v.description)}</div>`
             : `<div class="video-desc-empty">(no description)</div>`}</div>
@@ -3416,7 +3432,7 @@
     const uDur      = document.getElementById('userLoopDuration');
     const uNewVids  = document.getElementById('userLoopNewVideos');
     if (uDur)     uDur.textContent     = state.user_loop_last_duration_secs != null ? fmt.dur(state.user_loop_last_duration_secs) : '';
-    if (uNewVids) uNewVids.textContent = state.user_loop_last_new_videos != null ? `${state.user_loop_last_new_videos} new` : '';
+    if (uNewVids) uNewVids.textContent = state.user_loop_last_new_videos    != null ? `${state.user_loop_last_new_videos} new` : '';
     if (uNext) uNext.textContent = state.user_loop_running
       ? (currentUser ? `Downloading @${currentUser}` : 'Running…')
       : (state.user_loop_next ? `Next: ${fmt.relFuture(state.user_loop_next)}` : '');
@@ -3430,7 +3446,7 @@
     const sNewVids = document.getElementById('soundLoopNewVideos');
     if (sLast)    sLast.textContent    = state.sound_loop_last_end ? `Last: ${fmt.rel(state.sound_loop_last_end)}` : 'Never run';
     if (sDur)     sDur.textContent     = state.sound_loop_last_duration_secs != null ? fmt.dur(state.sound_loop_last_duration_secs) : '';
-    if (sNewVids) sNewVids.textContent = state.sound_loop_last_new_videos != null ? `${state.sound_loop_last_new_videos} new` : '';
+    if (sNewVids) sNewVids.textContent = state.sound_loop_last_new_videos    != null ? `${state.sound_loop_last_new_videos} new` : '';
     if (sNext) sNext.textContent = state.sound_loop_running
       ? 'Running…'
       : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');
@@ -3503,6 +3519,19 @@
       _renderModalHeader(_modalUser);
     }
     renderUsers();
+  }
+
+  async function saveUserComment(tiktokId, value) {
+    const { ok } = await apiJSON(`/api/users/${encodeURIComponent(tiktokId)}/comment`, {
+      method: 'PATCH',
+      body: JSON.stringify({ comment: value }),
+    });
+    if (!ok) return;
+    const u = users.find(u => u.tiktok_id === tiktokId);
+    if (u) u.comment = value.trim() || null;
+    if (_modalUser && _modalUser.tiktok_id === tiktokId) _modalUser.comment = value.trim() || null;
+    const el = document.getElementById('userCommentSaved');
+    if (el) { el.style.display = ''; setTimeout(() => el.style.display = 'none', 2000); }
   }
 
   async function setSoundTracking(soundId, enabled) {
@@ -3932,6 +3961,15 @@
           ${u.video_undeleted ? `<span style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
           ${u.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="openProfileHistory()" title="Open profile change history"><strong>${u.profile_history_count}</strong> profile ${u.profile_history_count === 1 ? 'update' : 'updates'}</span>` : ''}
         </div>
+        <div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
+          <textarea placeholder="Add a note about this user…"
+            onblur="saveUserComment('${esc(u.tiktok_id)}', this.value)"
+            style="flex:1;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
+                   background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
+                   color:var(--text);font-family:inherit;line-height:1.5"
+          >${esc(u.comment || '')}</textarea>
+          <span id="userCommentSaved" style="font-size:11px;color:var(--green);display:none;padding-top:6px">Saved.</span>
+        </div>
       </div>
     `;
   }
@@ -4157,14 +4195,13 @@
 
   const _dlIcon = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1v7M3.5 5.5l3 3 3-3M1.5 10.5h10"/></svg>`;
 
-  function _videoPlayBtn(v) {
+  const _imgPreviewIcon = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="11.5" height="11.5" rx="1.25"/><circle cx="4.25" cy="4.25" r="1.25"/><path d="M.75 9l3-3 2.5 2.5 2-2 4 4"/></svg>`;
+
+  function _videoThumbAction(v) {
     const id = esc(v.video_id);
-    if (v.type === 'video') {
-      return `<button class="play-btn" onclick="event.stopPropagation();openVidModal('${id}')" title="Play video">▶</button>`;
-    } else if (v.type === 'photo') {
-      return `<button class="play-btn" onclick="event.stopPropagation();openCarousel('${id}')" title="View photos"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg></button>`;
-    }
-    return '';
+    if (v.type === 'video') return `onclick="event.stopPropagation();openVidModal('${id}')" title="Play video" style="cursor:pointer"`;
+    if (v.type === 'photo') return `onclick="event.stopPropagation();openCarousel('${id}')" title="View photos" style="cursor:pointer"`;
+    return `style="cursor:default"`;
   }
 
   function _videoActionBtns(v) {
@@ -4214,9 +4251,9 @@
       row.innerHTML = `
         <img class="video-thumb" src="/api/videos/${esc(v.video_id)}/thumbnail" alt=""
              onerror="this.style.opacity='.15'"
-             onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')">
+             ${_videoThumbAction(v)}>
         <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
-          ${_videoPlayBtn(v)}
+          <button class="play-btn" onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>
           <div style="flex:1;min-width:0">${v.description
             ? `<div class="video-desc">${esc(v.description)}</div>`
             : `<div class="video-desc-empty">(no description)</div>`}</div>
