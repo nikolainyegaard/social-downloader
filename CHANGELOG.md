@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Loops panel redesigned as two sections, each with a 3-column grid: last run and next run on the left, duration and new-video count in the middle, Run Now button vertically centred on the right
 - `[sound]` prefix removed from user-facing log lines in the sound tracker; log messages now read consistently with user loop messages
+- "Thumbnail OK" no longer logged for each photo post; thumbnail failures are still reported
 
 ### Fixed
 - "Profile updates" counter in user modal now uses singular "update" when the count is 1
