@@ -368,7 +368,7 @@ def add_video(video_id, tiktok_id, video_type, description, upload_date,
               view_count, like_count, comment_count, share_count, save_count,
               duration, width, height, music_title, music_artist, music_id,
               raw_video_data,
-              int(time.time()) if (view_count is not None and raw_video_data is not None) else None))
+              int(time.time()) if view_count is not None else None))
 
 
 def update_video_downloaded(video_id, file_path, ytdlp_data=None):
@@ -719,21 +719,23 @@ def update_video_stats_loop(video_id: str, view_count=None, like_count=None,
     """Lightweight stats upsert called during the user loop (from item_list data).
 
     Uses COALESCE so a None from TikTok never overwrites an existing stored value.
-    Sets stats_updated_at but does NOT touch stats_backfilled_at, so the backfill
-    worker can still run a full fetch on videos that need raw_video_data / dimensions.
+    Sets stats_updated_at and stamps stats_backfilled_at (via COALESCE so an existing
+    timestamp is preserved) so these videos don't show up as missing stats.
     """
+    now = int(time.time())
     with get_db() as conn:
         conn.execute("""
             UPDATE videos SET
-                view_count    = COALESCE(?, view_count),
-                like_count    = COALESCE(?, like_count),
-                comment_count = COALESCE(?, comment_count),
-                share_count   = COALESCE(?, share_count),
-                save_count    = COALESCE(?, save_count),
-                stats_updated_at = ?
+                view_count          = COALESCE(?, view_count),
+                like_count          = COALESCE(?, like_count),
+                comment_count       = COALESCE(?, comment_count),
+                share_count         = COALESCE(?, share_count),
+                save_count          = COALESCE(?, save_count),
+                stats_updated_at    = ?,
+                stats_backfilled_at = COALESCE(stats_backfilled_at, ?)
             WHERE video_id = ?
         """, (view_count, like_count, comment_count, share_count, save_count,
-              int(time.time()), video_id))
+              now, now, video_id))
 
 
 def delete_video(video_id: str) -> bool:
@@ -756,6 +758,25 @@ def get_all_user_ids() -> set:
         return {row[0] for row in conn.execute("SELECT tiktok_id FROM users").fetchall()}
 
 
+def _group_consecutive_by_user(rows: list[dict], date_key: str) -> list[dict]:
+    """Collapse a newest-first row list into groups of consecutive same-user entries.
+
+    Each output dict has: tiktok_id, username, {date_key} (most recent in group), count.
+    """
+    groups: list[dict] = []
+    for row in rows:
+        if groups and groups[-1]["tiktok_id"] == row["tiktok_id"]:
+            groups[-1]["count"] += 1
+        else:
+            groups.append({
+                "tiktok_id": row["tiktok_id"],
+                "username":  row["username"],
+                date_key:    row[date_key],
+                "count":     1,
+            })
+    return groups
+
+
 def get_recent_activity() -> dict:
     """Return recent deletions, profile changes, bans, and saves for the Recent panel."""
     with get_db() as conn:
@@ -763,6 +784,7 @@ def get_recent_activity() -> dict:
             """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+                 AND v.deleted_reason = 'video_deleted'
                ORDER BY v.deleted_at DESC LIMIT 3"""
         ).fetchall()]
         profile_changes = [dict(r) for r in conn.execute(
@@ -776,42 +798,24 @@ def get_recent_activity() -> dict:
                WHERE account_status = 'banned' AND banned_at IS NOT NULL
                ORDER BY banned_at DESC LIMIT 1"""
         ).fetchall()]
-        saved = [dict(r) for r in conn.execute(
-            """WITH recent AS (
-                   SELECT v.download_date, u.username, u.tiktok_id
-                   FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
-                   WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
-                   ORDER BY v.download_date DESC LIMIT 2000
-               ),
-               ranked AS (
-                   SELECT *,
-                       ROW_NUMBER() OVER (ORDER BY download_date DESC) AS grn,
-                       ROW_NUMBER() OVER (PARTITION BY tiktok_id ORDER BY download_date DESC) AS urn
-                   FROM recent
-               ),
-               groups AS (
-                   SELECT tiktok_id, username,
-                          MAX(download_date) AS download_date,
-                          COUNT(*) AS count,
-                          MIN(grn) AS first_row
-                   FROM ranked
-                   GROUP BY tiktok_id, grn - urn
-               )
-               SELECT tiktok_id, username, download_date, count
-               FROM groups
-               ORDER BY first_row
-               LIMIT 9"""
+        saved_rows = [dict(r) for r in conn.execute(
+            """SELECT v.download_date, u.username, u.tiktok_id
+               FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
+               ORDER BY v.download_date DESC LIMIT 2000"""
         ).fetchall()]
+    saved = _group_consecutive_by_user(saved_rows, "download_date")[:9]
     return {"deletions": deletions, "profile_changes": profile_changes, "bans": bans, "saved": saved}
 
 
 def get_deletion_history(offset: int = 0, limit: int = 50) -> list[dict]:
-    """Return paginated video deletion history (newest first)."""
+    """Return paginated video deletion history (newest first), excluding user_banned."""
     with get_db() as conn:
         rows = conn.execute(
             """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+                 AND v.deleted_reason = 'video_deleted'
                ORDER BY v.deleted_at DESC LIMIT ? OFFSET ?""",
             (limit, offset),
         ).fetchall()
@@ -843,7 +847,7 @@ def get_ban_history(offset: int = 0, limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-_SAVED_SCAN = 2500  # raw rows scanned per page; generous enough to yield ≥50 groups
+_GROUP_SCAN = 2500  # raw rows scanned per page; generous enough to yield ≥50 groups
 
 def get_saved_history(offset: int = 0, limit: int = 50) -> dict:
     """Return paginated grouped download history (newest first).
@@ -854,34 +858,14 @@ def get_saved_history(offset: int = 0, limit: int = 50) -> dict:
     advance its raw-row offset by this value for the next page.
     """
     with get_db() as conn:
-        rows = conn.execute(
-            """WITH recent AS (
-                   SELECT v.download_date, u.username, u.tiktok_id
-                   FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
-                   WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
-                   ORDER BY v.download_date DESC LIMIT ? OFFSET ?
-               ),
-               ranked AS (
-                   SELECT *,
-                       ROW_NUMBER() OVER (ORDER BY download_date DESC) AS grn,
-                       ROW_NUMBER() OVER (PARTITION BY tiktok_id ORDER BY download_date DESC) AS urn
-                   FROM recent
-               ),
-               groups AS (
-                   SELECT tiktok_id, username,
-                          MAX(download_date) AS download_date,
-                          COUNT(*) AS count,
-                          MIN(grn) AS first_row
-                   FROM ranked
-                   GROUP BY tiktok_id, grn - urn
-               )
-               SELECT tiktok_id, username, download_date, count
-               FROM groups
-               ORDER BY first_row
-               LIMIT ?""",
-            (_SAVED_SCAN, offset, limit),
-        ).fetchall()
-    groups = [dict(r) for r in rows]
+        rows = [dict(r) for r in conn.execute(
+            """SELECT v.download_date, u.username, u.tiktok_id
+               FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
+               ORDER BY v.download_date DESC LIMIT ? OFFSET ?""",
+            (_GROUP_SCAN, offset),
+        ).fetchall()]
+    groups = _group_consecutive_by_user(rows, "download_date")[:limit]
     return {"items": groups, "rows_consumed": sum(g["count"] for g in groups)}
 
 

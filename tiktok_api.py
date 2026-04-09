@@ -153,7 +153,7 @@ async def get_user_videos_with_stats(api, sec_uid: str,
     async for video in api.user(sec_uid=sec_uid).videos(count=max_count):
         results.append(_normalise_item_list_entry(video.as_dict))
         if len(results) % 10 == 0:
-            await asyncio.sleep(round(random.uniform(1, 3), 2))
+            await asyncio.sleep(round(random.uniform(0.5, 1.5), 2))
     return results
 
 
