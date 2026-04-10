@@ -361,7 +361,6 @@ async def _process_single_user(user: dict, api, cookies: dict,
                     api, sec_uid=sec_uid
                 )
                 item_list_map = {v["video_id"]: v for v in item_list_videos}
-                _log(f"  {len(item_list_map)} videos found")
                 _logd(f"  [{tiktok_id}] {len(item_list_map)} videos via item_list (sec_uid={sec_uid})")
             except Exception as e:
                 if _is_bot_error(e):
@@ -375,6 +374,9 @@ async def _process_single_user(user: dict, api, cookies: dict,
             _log(f"  Private account, no accessible videos — skipping video fetch")
             db.update_user_privacy_status(tiktok_id, "private_blocked")
             return
+
+        if item_list_map:
+            _log(f"  {len(item_list_map)} videos found")
 
         # ── Fallback: yt-dlp flat extraction ─────────────────────────────────
         # Only runs when item_list returned nothing (failed or no sec_uid).

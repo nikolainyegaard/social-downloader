@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Thumbnail OK" no longer logged for each photo post; thumbnail failures are still reported
 
 ### Fixed
+- "X videos found" no longer logged for private accounts where the video fetch is skipped
 - "Profile updates" counter in user modal now uses singular "update" when the count is 1
 - Video search in user modal no longer loses focus on each keystroke; the toolbar rebuilds around the active input without destroying it
 - Switching tracking views now clears the active search filter; previously the filter remained applied even though the search box appeared empty
