@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Video grid view: toggle in the user modal toolbar switches between list and thumbnail grid; cells show a view count overlay and a video/photo type badge; click a cell to play or open the photo carousel; deleted/restored/missing cells are indicated by a coloured outline
+- Ban inactivity countdown: user modal shows "N days until inactive" for banned users still within the 14-day auto-deactivation window, below the ID line
+- Account status and privacy status changes are now recorded in the existing profile history system; entries appear in the Profile History panel (with Account status and Privacy filter pills) and in the Recently changed profile feed on the home panel
 - Per-user comment field in the user modal; free-text note saved on blur, persisted to the database
 - Clicking a video thumbnail in user and sound modals now plays the video or opens the photo carousel; a new image-preview icon button replaces the old play button and opens the thumbnail
 - Video type badge overlaid on thumbnails in user and sound modals: white play icon for videos, photo-grid icon for photo posts, with a drop shadow for legibility over any thumbnail
@@ -37,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Include banned users" toggle on the Delete all avatars utility; banned users are excluded by default since their avatars cannot be re-fetched from TikTok
 
 ### Changed
+- Loop log messages use "post/posts" instead of "video/videos" for counts that may include photo posts; plurality is now correct ("1 post", "2 posts") throughout both the user loop and sound loop
 - Loops panel redesigned as two sections, each with a 3-column grid: last run and next run on the left, duration and new-video count in the middle, Run Now button vertically centred on the right
 - `[sound]` prefix removed from user-facing log lines in the sound tracker; log messages now read consistently with user loop messages
 - "Thumbnail OK" no longer logged for each photo post; thumbnail failures are still reported
