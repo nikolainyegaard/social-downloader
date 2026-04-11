@@ -14,8 +14,8 @@ The **user loop** runs on its own schedule. Each iteration:
 
 1. Loads all tracked users from the database
 2. For each user:
-   - Fetches their profile info via TikTokApi (Playwright/Chromium) and detects profile changes (username, display name, bio, avatar)
-   - Fetches their full public video list via yt-dlp (no browser session needed)
+   - Fetches their profile info via TikTokApi (Playwright/Chromium) and detects profile changes (username, display name, bio, avatar, account status, privacy status)
+   - Fetches their full public video list via TikTokApi `item_list` (reusing the same browser session); falls back to yt-dlp if item_list returns nothing
    - Compares it against the database
    - Downloads any new videos via yt-dlp, embedding metadata into the file; photo posts are downloaded as individual AVIF images
    - Tracks videos that have disappeared. After 3 consecutive loop runs without the video appearing, it is marked as deleted
@@ -108,7 +108,7 @@ Neither loop runs on startup. Each waits for its first interval to elapse. A **L
 
 To process a single user immediately, click the **Run** button on their card. Multiple users can be queued this way and run in order.
 
-Use the **Sort** dropdown and direction toggle in the Tracked users header to order cards by username, display name, followers, saved/deleted video counts, or date added.
+Use the **Sort** dropdown and direction toggle in the Tracked users header to order cards by username, display name, followers, saved/deleted video counts, or date added. The **search bar** in the nav bar filters both users (by username, display name, or ID) and sounds (by label or ID) in real time.
 
 ### Tracking sounds
 
@@ -122,10 +122,13 @@ Use the filter buttons next to the sort control to narrow the user list. The **P
 
 Each user card has a **tracking toggle** in its footer. Turning it off pauses new-video downloads for that account without removing it — profile changes and deletion/ban detection continue running. The card dims to show the paused state.
 
-Click anywhere on a user card (other than the Run/Remove/toggle buttons) to open a detail view showing their full profile info, profile change history, and a complete, sortable, filterable list of all their downloaded videos with thumbnails. From the video list:
+Click anywhere on a user card (other than the Run/Remove/toggle buttons) to open a detail view showing their full profile info, profile change history, and a complete, sortable, filterable list of all their downloaded videos with thumbnails. Use the **search box** in the toolbar to filter by video ID or description. A **comment field** below the profile header lets you add a free-text note for the account. From the video list:
 
-- **Click a thumbnail** to preview the image full-size in an overlay.
-- **Click the ▶ button** (video posts only) to play the video directly in the browser.
+- **Click a thumbnail** to play the video or open the photo carousel (for photo posts).
+- **Click the image-preview button** (next to the thumbnail) to view the still thumbnail full-size.
+- **Toggle the grid view** button in the toolbar to switch between list and thumbnail grid; grid cells show view counts and video/photo type badges.
+
+Videos that have disappeared from TikTok but are not yet confirmed deleted show a **Missing** status; they become Deleted after 3 consecutive loop runs without reappearing.
 
 The **Recent** panel on the main page shows the last few deleted videos, profile changes, bans, and recently saved videos. In the Recently Saved section, consecutive downloads from the same user are grouped into a single row (e.g. "@user 12x"). Click any entry to jump to that user. Click a section heading (e.g. "Recently deleted") to open a full scrollable log of all historical events of that type.
 
@@ -136,6 +139,8 @@ All profile pictures, thumbnails, and photo posts are stored as **AVIF** images 
 The **Jobs** section also has a **File integrity check**: a **Scan** button shows which videos have a database record but no file on disk (dry run, no changes). A **Purge** button removes those records from the database, allowing the loop to re-download them. A full report is written to disk and can be downloaded or viewed in the UI. The same check runs automatically at midnight and noon each day.
 
 The **Utilities** section has one-off maintenance actions: delete all cached avatar images (re-downloaded on the next loop without triggering change history), delete all thumbnails (regenerated on next startup), and remove leftover audio-only files from before video-only downloads were enforced.
+
+The **Database** section has a SQL query runner. SELECT statements return a paginated result table with a full-report viewer and download link. Other statements (INSERT, UPDATE, DELETE, etc.) are committed and report rows affected.
 
 ---
 

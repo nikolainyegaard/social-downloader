@@ -7,59 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-04-11
+
 ### Added
-- Video grid view: toggle in the user modal toolbar switches between list and thumbnail grid; cells show a view count overlay and a video/photo type badge; click a cell to play or open the photo carousel; deleted/restored/missing cells are indicated by a coloured outline
-- Ban inactivity countdown: user modal shows "N days until inactive" for banned users still within the 14-day auto-deactivation window, below the ID line
-- Account status and privacy status changes are now recorded in the existing profile history system; entries appear in the Profile History panel (with Account status and Privacy filter pills) and in the Recently changed profile feed on the home panel
-- Per-user comment field in the user modal; free-text note saved on blur, persisted to the database
-- Clicking a video thumbnail in user and sound modals now plays the video or opens the photo carousel; a new image-preview icon button replaces the old play button and opens the thumbnail
-- Video type badge overlaid on thumbnails in user and sound modals: white play icon for videos, photo-grid icon for photo posts, with a drop shadow for legibility over any thumbnail
-- Video search in the user modal toolbar; filters by video ID or description text and shows "N of M posts" when active
-- Database settings tab with a SQL query runner; SELECT results rendered as tab-separated rows with a preview, full-report viewer, and download; other statements (INSERT, UPDATE, DELETE, etc.) are committed and report rows affected
-- Search bar in the nav bar filters Users (by username, display name, or user ID) and Sounds (by label or sound ID); shows "N of M" count when a filter is active
-- Ghost cards pad the Users and Sounds grids to a minimum of 9 cards, preventing layout shift and scroll-jump during search filtering
-- Loop run state (last run time, duration, new-video count for both user and sound loops) consolidated into a single `loop_state.json` file, replacing four separate text files
-- Back-to-top button in the lower-right corner; appears after scrolling 200px and scrolls smoothly to the top
-- "Missing" video status label in user and sound modals for videos absent from the latest scrape but not yet confirmed deleted
-- "Missing" counter on user cards, shown only when non-zero (same behaviour as "Deleted")
+
+**Video modals**
+- Video grid view: toggle in the user modal toolbar switches between list and grid; cells show a view count overlay and video/photo type badge; click to play or open the carousel; deleted/restored/missing cells are indicated by a coloured outline
+- Video type badge overlaid on thumbnails: play icon for videos, photo-grid icon for photo posts
+- Clicking a thumbnail now plays the video or opens the photo carousel; a separate image-preview button opens the still thumbnail
+- Video search in the user modal toolbar: filters by video ID or description, shows "N of M posts" when active
+- "Missing" status in user and sound modals for videos absent from the latest scrape but not yet confirmed deleted; user cards show a "Missing" counter when non-zero
+- Per-user comment field; saved on blur, persisted to the database
+
+**User cards and profile**
+- Ban inactivity countdown: shows "N days until inactive" for banned users within the 14-day auto-deactivation window
 - "Profile Updates" count in the user modal stats bar; clickable, opens profile change history
-- Play button moved immediately right of the thumbnail in the video list; download button remains in the action column
-- Reset button grouped with Sort controls (Sort / direction / Reset form one unit)
-- Sound modal Author column header now centred to match the chips in data rows
-- Untracked users in Recently Saved and Recently Deleted now appear in grey and route to the relevant sound modal (with video highlighted) instead of doing nothing
-- Log moved from a standalone bottom section into the nav bar as a third view pill alongside Users and Sounds
-- Loop panel shows a "N new" counter after each run (user loop and sound loop independently)
-- `DELETION_CONFIRM_THRESHOLD` centralised to `config.py` (env-var overridable via `DELETION_CONFIRM_THRESHOLD`); the deletion confirmation check and the "Missing" label threshold now share the same value
-- Video listing via TikTokApi's `item_list` endpoint as primary source; returns full stats and photo detection in one pass; yt-dlp kept as fallback
-- Shared TikTokApi browser session across all users in a loop run (per-user sessions added 8-20 min overhead for large libraries)
+- Account status and privacy status changes recorded in profile history; appear in the Profile History panel (with filter pills) and the Recently changed profile feed
+
+**Navigation and global UI**
+- Search bar in the nav bar: filters users (by username, display name, or ID) and sounds (by label or ID); shows "N of M" count when active
+- Untracked users in Recently Saved and Recently Deleted appear in grey and route to the relevant sound modal with the video highlighted
+- Back-to-top button; appears after scrolling 200px
+
+**Settings and tools**
+- Database settings tab with a SQL query runner: SELECT results shown as a preview with a full-report viewer and download; other statements report rows affected
+- "Include banned users" toggle on the Delete all avatars utility; banned users excluded by default since their avatars cannot be re-fetched
+
+**Loop and backend**
+- Video listing via TikTokApi `item_list` as the primary source; returns full stats and photo detection in one pass; yt-dlp kept as fallback
+- Shared TikTokApi browser session across all users in a loop run, replacing per-user sessions (eliminated 8-20 min overhead for large libraries)
 - Bot detection with automatic session reset and per-user retry; loop aborts after 3 consecutive post-reset failures
-- `stats_updated_at` column on `videos` table, stamped by per-loop stats upserts
-- Loop duration saved to disk and pre-populated in the UI on restart
-- `avatar_cached` flag on the `users` table; avatar images are only requested when a file is confirmed to exist on disk, eliminating repeated 404 requests for users without a cached avatar
-- Startup scan sets `avatar_cached` for any avatar files already on disk, so existing deployments are not affected by the new column's default of 0
-- "Include banned users" toggle on the Delete all avatars utility; banned users are excluded by default since their avatars cannot be re-fetched from TikTok
+- Loop duration and new-video count saved to disk; pre-populated in the UI on restart
+- Eliminated redundant avatar requests for users without a cached file; previously these were retried on every startup
 
 ### Changed
-- Loop log messages use "post/posts" instead of "video/videos" for counts that may include photo posts; plurality is now correct ("1 post", "2 posts") throughout both the user loop and sound loop
-- Loops panel redesigned as two sections, each with a 3-column grid: last run and next run on the left, duration and new-video count in the middle, Run Now button vertically centred on the right
-- `[sound]` prefix removed from user-facing log lines in the sound tracker; log messages now read consistently with user loop messages
-- "Thumbnail OK" no longer logged for each photo post; thumbnail failures are still reported
+
+**UI**
+- Loops panel redesigned as two sections with a 3-column grid: last/next run, duration and new-video count, Run Now button
+- Log moved from a standalone bottom section into the nav bar as a third view pill alongside Users and Sounds
+- Play button moved immediately right of the thumbnail in the video list; download button remains in the action column
+- Reset button grouped with Sort controls as a single unit
+- Loop panel shows a "N new" counter after each run (user and sound loop independently)
+- Recently Deleted panel now only shows individually deleted videos, not those cleared by an account ban
+
+**Backend and logging**
+- Deletion confirmation threshold configurable via `DELETION_CONFIRM_THRESHOLD` env var; controls both the deletion check and the "Missing" label threshold
+- Loop log messages use "post/posts" instead of "video/videos" for counts that may include photo posts
+- Sound loop log messages no longer prefixed with `[sound]`; consistent with user loop format
+- "Thumbnail OK" log suppressed per photo post; failures are still reported
+- Delete all avatars utility resets the cached flag for removed files; skips banned users unless the toggle is enabled
 
 ### Fixed
-- Photo posts downloaded via sound tracking now have their thumbnail generated; previously `generate_thumbnail` was never called after `download_photos` in the sound loop, causing a persistent 404 on the thumbnail endpoint until the next restart
-- Adding a banned or removed account now shows a clear "is banned or removed on TikTok" error instead of a misleading "missing key 'user' — cookies may be stale" message
-- "X videos found" no longer logged for private accounts where the video fetch is skipped
-- "Profile updates" counter in user modal now uses singular "update" when the count is 1
-- Video search in user modal no longer loses focus on each keystroke; the toolbar rebuilds around the active input without destroying it
-- Switching tracking views now clears the active search filter; previously the filter remained applied even though the search box appeared empty
-- Sounds nav pill count now resets to the total when leaving the Sounds view; previously a filtered count ("0 of 2") persisted after switching away
-- Loop panel no longer shifts the page layout while running; status text simplified to "Running…" instead of cycling through per-user download messages (full status remains in the header pill)
-- Video row horizontal padding reduced to match the grid column gap, fixing uneven spacing to the left of thumbnails in user and sound modals
 
-### Changed
-- Recently Deleted panel now only shows individually deleted videos, not those cleared by an account ban
-- Avatar endpoint serves with `Cache-Control: max-age=300`, reducing repeated conditional requests from the browser
-- Delete all avatars utility resets the `avatar_cached` flag for removed files and skips banned users unless the toggle is enabled
+- Photo posts discovered via sound tracking now get a thumbnail generated; previously these had no thumbnail until the next restart
+- Adding a banned or removed account now shows a clear "is banned or removed on TikTok" error instead of a misleading "cookies may be stale" message
+- "X videos found" no longer logged for private accounts where the video fetch is skipped
+- "Profile updates" counter now uses singular "update" when the count is 1
+- Video search in the user modal no longer loses focus on each keystroke
+- Switching tracking views now clears the active search filter
+- Sounds nav pill count now resets to the total when leaving the Sounds view
+- Loop panel no longer shifts the page layout while running
+- Video row horizontal padding corrected, fixing uneven spacing to the left of thumbnails
 
 ## [1.23.0] - 2026-04-08
 
@@ -458,7 +466,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tracked users, video downloads, deletion detection, username change tracking
 - Docker and Docker Compose support
 
-[Unreleased]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.23.0...HEAD
+[Unreleased]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.24.0...HEAD
+[1.24.0]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.23.0...v1.24.0
 [1.23.0]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.21.1...v1.22.0
 [1.21.1]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.21.0...v1.21.1
