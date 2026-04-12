@@ -27,6 +27,8 @@
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html { overflow-x: hidden; overscroll-behavior-x: none; }
+
     body {
       background: var(--bg);
       color: var(--text);
@@ -570,6 +572,7 @@
       height: 24px; padding: 0 10px;
       border-radius: 99px;
       cursor: pointer;
+      white-space: nowrap;
       transition: background .1s, color .1s, border-color .1s;
       position: relative; z-index: 2;
     }
@@ -1265,6 +1268,34 @@
     /* ── Mobile ──────────────────────────────────────────────────────────────── */
 
     @media (max-width: 640px) {
+      body { width: 100vw; }
+      .app { padding: 16px 16px 40px; gap: 16px; margin: 0; max-width: 100%; overflow: hidden; }
+
+      /* iOS focus-zoom prevention: Safari zooms when a focused element has font-size < 16px. */
+      input[type="text"],
+      input[type="search"],
+      input[type="number"],
+      input[type="url"],
+      select,
+      textarea,
+      [contenteditable="true"] { font-size: 16px !important; }
+
+      /* Header: let header-meta wrap to its own row rather than overflow. */
+      header { gap: 6px 12px; }
+      .header-meta { margin-left: 0; width: 100%; }
+
+      /* Recent entries: hide the detail column — white-space:nowrap makes its auto
+         track width equal the untruncated string, which overflows the panel. */
+      .recent-entry { grid-template-columns: 88px minmax(0, 1fr); }
+      .recent-detail { display: none; }
+
+      /* Track a sound: label input overflows the row on mobile. */
+      #soundLabelInput { display: none; }
+
+      /* Filter tabs + search: wrap so search drops to its own full-width row. */
+      .tracking-tab-row { flex-wrap: wrap; }
+      #trackingSearch { width: 100% !important; box-sizing: border-box; }
+
       /* Full-screen modals — no space to waste on a blurred backdrop */
       .modal-backdrop {
         backdrop-filter: none;
@@ -1409,7 +1440,7 @@
   <!-- Tracking list (users / sounds) -->
   <section>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;gap:8px;">
+      <div class="tracking-tab-row" style="display:flex;align-items:center;gap:8px;">
         <div class="filter-pills">
           <button class="filter-pill active" id="tvUsers"  onclick="setTrackingView('users')">Users (<span id="userCount">0</span>)</button>
           <button class="filter-pill"        id="tvSounds" onclick="setTrackingView('sounds')">Sounds (<span id="soundCount">0</span>)</button>

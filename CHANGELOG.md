@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Page no longer renders wider than the viewport on mobile; the Track a Sound label input and the filter tabs + search row were each wider than the viewport, forcing the CSS grid to expand and clip all content on the right
+- Track a sound: label input hidden on mobile
+- Filter tabs: pills and search wrap to separate rows on mobile; search goes full-width below the pills
+- iOS focus zoom: all focusable inputs, selects, and textareas use 16px minimum font size on mobile to prevent Safari from zooming on tap
+- Horizontal rubber-band scroll suppressed on mobile via overscroll-behavior-x:none
+- Filter pill text no longer wraps inside button bounds
+- Header meta row wraps to its own line on mobile instead of overflowing
+- Recent entries: detail column hidden on mobile to prevent row overflow
+
 ## [1.24.0] - 2026-04-11
 
 ### Added
