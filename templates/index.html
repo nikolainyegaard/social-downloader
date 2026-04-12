@@ -2815,7 +2815,7 @@
     const q = _trackingSearch.toLowerCase();
     return users.filter(u => {
       if (userFilter.priv === 'public'   && (u.privacy_status !== 'public' || u.account_status === 'banned')) return false;
-      if (userFilter.priv === 'private'  && !['private_accessible','private_blocked'].includes(u.privacy_status)) return false;
+      if (userFilter.priv === 'private'  && (!['private_accessible','private_blocked'].includes(u.privacy_status) || u.account_status === 'banned')) return false;
       if (userFilter.priv === 'banned'   && u.account_status !== 'banned') return false;
       if (userFilter.stat === 'active'   && u.tracking_enabled === 0) return false;
       if (userFilter.stat === 'inactive' && u.tracking_enabled !== 0) return false;

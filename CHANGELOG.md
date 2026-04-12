@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Private filter no longer matches banned users whose privacy_status was set before the ban
 - Page no longer renders wider than the viewport on mobile; the Track a Sound label input and the filter tabs + search row were each wider than the viewport, forcing the CSS grid to expand and clip all content on the right
 - Track a sound: label input hidden on mobile
 - Filter tabs: pills and search wrap to separate rows on mobile; search goes full-width below the pills
