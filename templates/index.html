@@ -28,6 +28,7 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html { overflow-x: hidden; overscroll-behavior-x: none; }
+    html.modal-open { overflow: hidden; }
 
     body {
       background: var(--bg);
@@ -2181,6 +2182,7 @@
     document.getElementById('recentLogTitle').textContent = _RECENT_LOG_TITLES[type] || type;
     document.getElementById('recentLogBody').innerHTML = '';
     document.getElementById('recentLogBackdrop').style.display = 'flex';
+    _lockScroll();
 
     _setupRecentLogScroll();
     // Initial load is triggered by the IntersectionObserver firing on the
@@ -2190,6 +2192,7 @@
 
   function closeRecentLog() {
     document.getElementById('recentLogBackdrop').style.display = 'none';
+    _unlockScroll();
     if (_recentLogObs) { _recentLogObs.disconnect(); _recentLogObs = null; }
     _recentLogLastGroup = null;
     _recentLogType    = null;
@@ -2301,7 +2304,7 @@
   function openSettings(section) {
     switchSettingsSection(section || _settingsSection);
     document.getElementById('settingsBackdrop').style.display = 'flex';
-    document.body.style.overflow = 'hidden';
+    _lockScroll();
   }
 
   function closeSettings() {
@@ -2309,7 +2312,7 @@
     const avifRunning = _jobsPoll !== null;
     _stopJobsPoll();
     document.getElementById('settingsBackdrop').style.display = 'none';
-    document.body.style.overflow = '';
+    _unlockScroll();
     // Clear finished job widgets so reopening the panel shows a clean state
     if (!avifRunning)    { _avifWidget.hide();     document.getElementById('job-avif-btn').disabled     = false; }
     if (!_cleanupPoll)   { _cleanupWidget.hide();  document.getElementById('job-cleanup-btn').disabled  = false; }
@@ -2518,7 +2521,7 @@
     document.getElementById('reportViewSub').textContent   = filename;
     document.getElementById('reportViewBody').textContent  = 'Loading...';
     document.getElementById('reportViewBackdrop').style.display = 'flex';
-    document.body.style.overflow = 'hidden';
+    _lockScroll();
     const resp = await fetch(`/api/reports/${encodeURIComponent(filename)}`);
     document.getElementById('reportViewBody').textContent =
       resp.ok ? await resp.text() : 'Failed to load report.';
@@ -2526,7 +2529,7 @@
 
   function closeReportView() {
     document.getElementById('reportViewBackdrop').style.display = 'none';
-    document.body.style.overflow = '';
+    _unlockScroll();
   }
 
   // ── _makeReportWidget — reusable report preview + download + view buttons ────
@@ -2739,6 +2742,13 @@
     video_deleted:  { asc: 'Low → High',   desc: 'High → Low'   },
     added_at:       { asc: 'Oldest first', desc: 'Newest first' },
   };
+
+  // ── Scroll lock ───────────────────────────────────────────────────────────────
+  // Locks scroll on <html> (the actual scroll root when overflow-x:hidden is set).
+  // A counter handles nested modals: the lock stays until every opener has closed.
+  let _scrollLockDepth = 0;
+  function _lockScroll()   { if (++_scrollLockDepth === 1) document.documentElement.classList.add('modal-open'); }
+  function _unlockScroll() { if (--_scrollLockDepth === 0) document.documentElement.classList.remove('modal-open'); }
 
   let _trackingView   = 'users';
   let _trackingSearch = '';
@@ -3201,7 +3211,7 @@
     if (_soundModalObs) { _soundModalObs.disconnect(); _soundModalObs = null; }
 
     document.getElementById('soundModalBackdrop').style.display = 'flex';
-    document.body.style.overflow = 'hidden';
+    _lockScroll();
 
     _renderSoundModalHeader(s);
     _renderSoundModalToolbar([]);
@@ -3219,7 +3229,7 @@
 
   function closeSoundModal() {
     document.getElementById('soundModalBackdrop').style.display = 'none';
-    document.body.style.overflow = '';
+    _unlockScroll();
     if (_soundModalObs) { _soundModalObs.disconnect(); _soundModalObs = null; }
     _soundModalId     = null;
     _soundModal       = null;
@@ -3793,7 +3803,7 @@
     document.getElementById('modalVideoList').style.display = '';
 
     document.getElementById('modalBackdrop').style.display = 'flex';
-    document.body.style.overflow = 'hidden';
+    _lockScroll();
 
     _renderModalHeader(u);
     _renderModalToolbar([]);
@@ -3821,7 +3831,7 @@
 
   function closeModal() {
     document.getElementById('modalBackdrop').style.display = 'none';
-    document.body.style.overflow = '';
+    _unlockScroll();
     if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
     _modalUserId = null;
     _modalUser   = null;
@@ -3865,6 +3875,7 @@
   function openImgModalUrl(url) {
     document.getElementById('imgModalImg').src = url;
     document.getElementById('imgModal').style.display = 'flex';
+    _lockScroll();
   }
 
   function openImgModal(videoId) {
@@ -3874,6 +3885,7 @@
   function closeImgModal() {
     document.getElementById('imgModal').style.display = 'none';
     document.getElementById('imgModalImg').src = '';
+    _unlockScroll();
   }
 
   // ── Video player modal ────────────────────────────────────────────────────
@@ -3882,6 +3894,7 @@
     const vid = document.getElementById('vidModalPlayer');
     vid.src = `/api/videos/${encodeURIComponent(videoId)}/file`;
     document.getElementById('vidModal').style.display = 'flex';
+    _lockScroll();
     vid.play().catch(() => {});
   }
 
@@ -3890,6 +3903,7 @@
     vid.pause();
     vid.src = '';
     document.getElementById('vidModal').style.display = 'none';
+    _unlockScroll();
   }
 
   // ── Photo carousel modal ──────────────────────────────────────────────────
@@ -3903,6 +3917,7 @@
     _carouselUrls = data.urls;
     _showCarouselSlide(0);
     document.getElementById('carouselModal').style.display = 'flex';
+    _lockScroll();
   }
 
   function _showCarouselSlide(idx) {
@@ -3925,6 +3940,7 @@
     document.getElementById('carouselImg').src = '';
     _carouselUrls = [];
     _carouselIdx  = 0;
+    _unlockScroll();
   }
 
   async function _loadModalVideos(tiktokId) {

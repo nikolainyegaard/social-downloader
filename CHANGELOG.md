@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Private filter no longer matches banned users whose privacy_status was set before the ban
 - Reset button now clears the search field in addition to filters and sort
+- Modals no longer allow the underlying page to scroll while open; root cause was `overflow: hidden` being set on `<body>` when `<html>` is the actual scroll container
 
 ### Performance
 - User modal: video thumbnails are now lazy-loaded, reducing the initial network burst to only visible rows
