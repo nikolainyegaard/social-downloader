@@ -556,19 +556,26 @@
       background: var(--bg);
     }
 
-    .filter-pills { display: flex; gap: 4px; }
+    .filter-pills { display: flex; gap: 4px; position: relative; background: var(--surface2); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.25); padding: 4px; border-radius: 99px; }
     .filter-pill {
+      display: inline-flex; align-items: center; justify-content: center;
       background: var(--surface2);
       border: 1px solid var(--border);
       color: var(--text-dim);
       font-size: 11px; font-weight: 600;
-      padding: 3px 10px;
+      height: 24px; padding: 0 10px;
       border-radius: 99px;
       cursor: pointer;
       transition: background .1s, color .1s, border-color .1s;
+      position: relative; z-index: 2;
     }
     .filter-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     .filter-pill:hover:not(.active) { background: var(--border); color: var(--text); }
+    /* Pills inside a grouped container — glider provides the active highlight */
+    .filter-pills .filter-pill { background: transparent; border-color: transparent; }
+    .filter-pills .filter-pill.active { background: transparent; border-color: transparent; color: #fff; }
+    .filter-pills .filter-pill:hover:not(.active) { background: rgba(255,255,255,.06); border-color: transparent; color: var(--text); }
+    .glider { position: absolute; z-index: 1; background: var(--accent); border-radius: 99px; transition: left .2s ease, width .2s ease; pointer-events: none; }
 
     .modal-vid-count { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
 
@@ -2692,6 +2699,7 @@
     document.getElementById('userControls').style.visibility = view === 'users' ? '' : 'hidden';
     renderUsers();
     renderSounds();
+    _placeGlider(document.getElementById('tvUsers').closest('.filter-pills'));
   }
 
   function onTrackingSearch(val) {
@@ -2709,6 +2717,8 @@
       document.getElementById(id)?.classList.toggle('active', v === value);
     });
     renderUsers();
+    const anchorId = group === 'priv' ? 'ufPrivAll' : 'ufStatAll';
+    _placeGlider(document.getElementById(anchorId).closest('.filter-pills'));
   }
 
   function setUserSortField(field) {
@@ -2729,6 +2739,8 @@
     Object.entries(privIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     Object.entries(statIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     renderUsers();
+    _placeGlider(document.getElementById('ufPrivAll').closest('.filter-pills'));
+    _placeGlider(document.getElementById('ufStatAll').closest('.filter-pills'));
   }
 
   function toggleUserSortDir() {
@@ -2782,6 +2794,8 @@
     const isFiltered = userFilter.priv !== 'all' || userFilter.stat !== 'all' || !!_trackingSearch;
     document.getElementById('userCount').textContent =
       isFiltered ? `${filtered.length} of ${users.length}` : users.length;
+    const _tvPills = document.getElementById('tvUsers')?.closest('.filter-pills');
+    if (_tvPills) _placeGlider(_tvPills);
 
     if (!users.length) {
       grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users tracked yet.</div>' + _ghostCards(9);
@@ -2996,6 +3010,8 @@
       ? sounds.filter(s => `${s.label || ''} ${s.sound_id}`.toLowerCase().includes(q))
       : sounds;
     countEl.textContent = q ? `${filtered.length} of ${sounds.length}` : sounds.length;
+    const _tvPills = document.getElementById('tvUsers')?.closest('.filter-pills');
+    if (_tvPills) _placeGlider(_tvPills);
     if (!sounds.length) {
       grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds tracked yet.</div>' + _ghostCards(9);
       return;
@@ -3225,12 +3241,12 @@
     const pill = (key, label) => {
       const active = _soundModalFilter === key ? ' active' : '';
       const n      = counts[key];
-      return `<button class="filter-pill${active}" onclick="setSoundModalFilter('${key}')">`
+      return `<button class="filter-pill${active}" data-filter-key="${key}" onclick="setSoundModalFilter('${key}')">`
            + `${label}${n ? ` <span style="opacity:.65">(${n})</span>` : ''}</button>`;
     };
     const typePill = (key, label) => {
       const active = _soundModalTypeFilter === key ? ' active' : '';
-      return `<button class="filter-pill${active}" onclick="setSoundModalTypeFilter('${key}')">${label}</button>`;
+      return `<button class="filter-pill${active}" data-type-key="${key}" onclick="setSoundModalTypeFilter('${key}')">${label}</button>`;
     };
 
     const shown  = _soundFilteredSorted().length;
@@ -3250,17 +3266,32 @@
             + `</div>`
           : '')
       + `<span class="modal-vid-count">${label}</span>`;
+    document.getElementById('soundModalToolbar').querySelectorAll('.filter-pills').forEach(_placeGlider);
   }
 
   function setSoundModalFilter(filter) {
     _soundModalFilter = filter;
-    _renderSoundModalToolbar(_soundModalVideos);
+    const toolbar = document.getElementById('soundModalToolbar');
+    toolbar.querySelectorAll('[data-filter-key]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.filterKey === filter);
+    });
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    const shown = _soundFilteredSorted().length;
+    const countEl = toolbar.querySelector('.modal-vid-count');
+    if (countEl) countEl.textContent = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
     _renderSoundModalVideoList();
   }
 
   function setSoundModalTypeFilter(type) {
     _soundModalTypeFilter = type;
-    _renderSoundModalToolbar(_soundModalVideos);
+    const toolbar = document.getElementById('soundModalToolbar');
+    toolbar.querySelectorAll('[data-type-key]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.typeKey === type);
+    });
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    const shown = _soundFilteredSorted().length;
+    const countEl = toolbar.querySelector('.modal-vid-count');
+    if (countEl) countEl.textContent = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
     _renderSoundModalVideoList();
   }
 
@@ -3903,13 +3934,33 @@
 
   function setModalFilter(filter) {
     _modalFilter = filter;
-    _renderModalToolbar(_modalVideos);
+    const toolbar = document.getElementById('modalToolbar');
+    toolbar.querySelectorAll('[data-filter-key]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.filterKey === filter);
+    });
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    const total = _filteredSorted(true).length;
+    const shown = _filteredSorted().length;
+    const countEl = toolbar.querySelector('.modal-vid-count');
+    if (countEl) countEl.textContent = _modalSearch
+      ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
+      : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
     _renderModalVideoList();
   }
 
   function setModalTypeFilter(type) {
     _modalTypeFilter = type;
-    _renderModalToolbar(_modalVideos);
+    const toolbar = document.getElementById('modalToolbar');
+    toolbar.querySelectorAll('[data-type-key]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.typeKey === type);
+    });
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    const total = _filteredSorted(true).length;
+    const shown = _filteredSorted().length;
+    const countEl = toolbar.querySelector('.modal-vid-count');
+    if (countEl) countEl.textContent = _modalSearch
+      ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
+      : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
     _renderModalVideoList();
   }
 
@@ -4011,12 +4062,12 @@
     const pill = (key, label) => {
       const active = _modalFilter === key ? ' active' : '';
       const n      = counts[key];
-      return `<button class="filter-pill${active}" onclick="setModalFilter('${key}')">`
+      return `<button class="filter-pill${active}" data-filter-key="${key}" onclick="setModalFilter('${key}')">`
            + `${label}${n ? ` <span style="opacity:.65">(${n})</span>` : ''}</button>`;
     };
     const typePill = (key, label) => {
       const active = _modalTypeFilter === key ? ' active' : '';
-      return `<button class="filter-pill${active}" onclick="setModalTypeFilter('${key}')">${label}</button>`;
+      return `<button class="filter-pill${active}" data-type-key="${key}" onclick="setModalTypeFilter('${key}')">${label}</button>`;
     };
 
     const total = _filteredSorted(true).length;
@@ -4030,6 +4081,10 @@
     const searchSelEnd = searchWasFocused ? document.activeElement.selectionEnd : 0;
     toolbar.innerHTML =
         `<div class="filter-pills">`
+      + `<button class="filter-pill${_modalView === 'list' ? ' active' : ''}" data-view-key="list" onclick="setModalView('list')" title="List view">${_listViewIcon}</button>`
+      + `<button class="filter-pill${_modalView === 'grid' ? ' active' : ''}" data-view-key="grid" onclick="setModalView('grid')" title="Grid view">${_gridViewIcon}</button>`
+      + `</div>`
+      + `<div class="filter-pills">`
       + pill('all', 'All')
       + pill('active', 'Active')
       + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
@@ -4046,9 +4101,8 @@
       + `<input id="modalVideoSearch" type="search" value="${searchVal}" placeholder="Search videos…"
            oninput="onModalSearch(this.value)"
            style="width:140px;font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text)">`
-      + `<button class="filter-pill${_modalView === 'list' ? ' active' : ''}" style="margin-left:auto" onclick="setModalView('list')" title="List view">${_listViewIcon}</button>`
-      + `<button class="filter-pill${_modalView === 'grid' ? ' active' : ''}" onclick="setModalView('grid')" title="Grid view">${_gridViewIcon}</button>`
       + `<button class="filter-pill" onclick="openProfileHistory()">Profile history</button>`;
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
     if (searchWasFocused) {
       const el = toolbar.querySelector('#modalVideoSearch');
       if (el) { el.focus(); el.setSelectionRange(searchSelEnd, searchSelEnd); }
@@ -4123,7 +4177,11 @@
 
   function setHistoryField(field) {
     _phistField = field;
-    _renderHistoryToolbar();
+    const toolbar = document.getElementById('modalToolbar');
+    toolbar.querySelectorAll('[data-hist-key]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.histKey === field);
+    });
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
     _renderHistoryEntries();
   }
 
@@ -4131,11 +4189,12 @@
     const fields = ['all', 'username', 'display_name', 'bio', 'avatar', 'account_status', 'privacy_status'];
     const pills  = fields.map(f => {
       const active = _phistField === f ? ' active' : '';
-      return `<button class="filter-pill${active}" onclick="setHistoryField('${f}')">${_PHIST_FIELD_LABELS[f]}</button>`;
+      return `<button class="filter-pill${active}" data-hist-key="${f}" onclick="setHistoryField('${f}')">${_PHIST_FIELD_LABELS[f]}</button>`;
     }).join('');
     document.getElementById('modalToolbar').innerHTML =
       `<div class="filter-pills">${pills}</div>`
       + `<button class="filter-pill" style="margin-left:auto" onclick="_closeProfileHistory()">← Videos</button>`;
+    document.getElementById('modalToolbar').querySelectorAll('.filter-pills').forEach(_placeGlider);
   }
 
   function _renderHistoryEntries() {
@@ -4347,7 +4406,11 @@
   function setModalView(view) {
     _modalView = view;
     document.getElementById('videoListHdr').style.display = view === 'grid' ? 'none' : '';
-    _renderModalToolbar(_modalVideos);
+    const toolbar = document.getElementById('modalToolbar');
+    toolbar.querySelectorAll('[data-view-key]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.viewKey === view);
+    });
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
     _renderModalVideoList();
   }
 
@@ -4475,9 +4538,35 @@
     }, 2000);
   }
 
+  // ── Pill glider ───────────────────────────────────────────────────────────────
+
+  function _placeGlider(container) {
+    let g = container.querySelector(':scope > .glider');
+    const isNew = !g;
+    if (isNew) {
+      g = document.createElement('span');
+      g.className = 'glider';
+      container.appendChild(g);
+      g.style.transition = 'none';
+    }
+    const active = container.querySelector(':scope > .filter-pill.active');
+    if (!active) { g.style.opacity = '0'; return; }
+    g.style.opacity = '1';
+    g.style.top    = active.offsetTop + 'px';
+    g.style.left   = active.offsetLeft + 'px';
+    g.style.width  = active.offsetWidth + 'px';
+    g.style.height = active.offsetHeight + 'px';
+    if (isNew) requestAnimationFrame(() => { g.style.transition = ''; });
+  }
+
+  function _initAllGliders() {
+    document.querySelectorAll('.filter-pills').forEach(_placeGlider);
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────────
 
   resetUserFilters();   // clear any browser-restored form state
+  _initAllGliders();
   loadCookies();
   loadUsers();
   loadSounds();
