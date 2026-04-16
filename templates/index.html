@@ -621,6 +621,7 @@
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       background: var(--surface);
+      overflow-x: hidden;
     }
 
     .col-hdr {
@@ -4816,6 +4817,14 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────────
+
+  // Sync column header horizontal scroll with the video list
+  document.getElementById('modalVideoList').addEventListener('scroll', function() {
+    document.getElementById('videoListHdr').scrollLeft = this.scrollLeft;
+  });
+  document.getElementById('soundModalVideoList').addEventListener('scroll', function() {
+    document.getElementById('soundVideoListHdr').scrollLeft = this.scrollLeft;
+  });
 
   resetUserFilters();   // clear any browser-restored form state
   _initAllGliders();
