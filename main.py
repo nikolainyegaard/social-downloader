@@ -17,25 +17,26 @@ from loop import (
 from web import create_app
 
 LOGS_DIR = os.path.join(DATA_DIR, "logs")
+_RUNS_DIR = os.path.join(LOGS_DIR, "runs")
 os.makedirs(LOGS_DIR, exist_ok=True)
+os.makedirs(_RUNS_DIR, exist_ok=True)
 
 # ── Per-run log: run_current.log ──────────────────────────────────────────────
 #
 # On every startup the previous run_current.log is renamed to a timestamped
-# file (run_YYYYMMDD_HHMMSS.log) so each run is self-contained and easy to
-# retrieve.  Old run files beyond _RUN_LOG_KEEP are deleted automatically.
+# file (runs/run_YYYYMMDD_HHMMSS.log) so each run is self-contained and easy
+# to retrieve.  Old run files beyond _RUN_LOG_KEEP are deleted automatically.
 # The current run is always at the predictable path run_current.log.
 
-_RUN_LOG_KEEP = 10
+_RUN_LOG_KEEP = 50
 _run_current  = os.path.join(LOGS_DIR, "run_current.log")
 
 
 def _prune_old_runs() -> None:
-    old = sorted(f for f in os.listdir(LOGS_DIR)
-                 if f.startswith("run_") and f != "run_current.log")
+    old = sorted(f for f in os.listdir(_RUNS_DIR) if f.startswith("run_"))
     for name in old[:-_RUN_LOG_KEEP]:
         try:
-            os.remove(os.path.join(LOGS_DIR, name))
+            os.remove(os.path.join(_RUNS_DIR, name))
         except OSError:
             pass
 
@@ -44,7 +45,7 @@ def _prune_old_runs() -> None:
 if os.path.exists(_run_current):
     _run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     try:
-        os.rename(_run_current, os.path.join(LOGS_DIR, f"run_{_run_ts}.log"))
+        os.rename(_run_current, os.path.join(_RUNS_DIR, f"run_{_run_ts}.log"))
     except OSError:
         pass
     _prune_old_runs()
@@ -94,7 +95,7 @@ class _RunLog:
         except Exception:
             pass
         try:
-            os.rename(self._path, os.path.join(LOGS_DIR, f"run_{old_date}.log"))
+            os.rename(self._path, os.path.join(_RUNS_DIR, f"run_{old_date}.log"))
         except OSError:
             pass
         self._file = open(self._path, "w", encoding="utf-8", buffering=1)
