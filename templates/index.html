@@ -3498,7 +3498,7 @@
     const shown  = _soundFilteredSorted().length;
     const label  = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
     const hasActiveFilters = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
-    const toggleLabel = _soundModalToolbarExpanded ? '▲ Filters' : (hasActiveFilters ? '▼ Filters •' : '▼ Filters');
+    const toggleLabel = (_soundModalToolbarExpanded ? '▲' : '▼') + (hasActiveFilters ? ' Filters •' : ' Filters');
     document.getElementById('soundModalToolbar').innerHTML =
         `<div class="toolbar-main-row">`
       + `<button class="filter-pill toolbar-toggle" onclick="toggleSoundModalToolbar()">${toggleLabel}</button>`
@@ -3535,7 +3535,7 @@
     const toggleBtn = toolbar.querySelector('.toolbar-toggle');
     if (toggleBtn) {
       const hasActive = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
-      toggleBtn.textContent = _soundModalToolbarExpanded ? '▲ Filters' : (hasActive ? '▼ Filters •' : '▼ Filters');
+      toggleBtn.textContent = (_soundModalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
     }
     _renderSoundModalVideoList();
   }
@@ -3553,7 +3553,7 @@
     const toggleBtn = toolbar.querySelector('.toolbar-toggle');
     if (toggleBtn) {
       const hasActive = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
-      toggleBtn.textContent = _soundModalToolbarExpanded ? '▲ Filters' : (hasActive ? '▼ Filters •' : '▼ Filters');
+      toggleBtn.textContent = (_soundModalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
     }
     _renderSoundModalVideoList();
   }
@@ -4228,7 +4228,7 @@
     }
     if (btn) {
       const hasActive = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
-      btn.textContent = _modalToolbarExpanded ? '▲ Filters' : (hasActive ? '▼ Filters •' : '▼ Filters');
+      btn.textContent = (_modalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
     }
   }
 
@@ -4243,7 +4243,7 @@
     }
     if (btn) {
       const hasActive = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
-      btn.textContent = _soundModalToolbarExpanded ? '▲ Filters' : (hasActive ? '▼ Filters •' : '▼ Filters');
+      btn.textContent = (_soundModalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
     }
   }
 
@@ -4273,7 +4273,7 @@
     const toggleBtn = toolbar.querySelector('.toolbar-toggle');
     if (toggleBtn) {
       const hasActive = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
-      toggleBtn.textContent = _modalToolbarExpanded ? '▲ Filters' : (hasActive ? '▼ Filters •' : '▼ Filters');
+      toggleBtn.textContent = (_modalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
     }
     _renderModalVideoList();
   }
@@ -4294,7 +4294,7 @@
     const toggleBtn = toolbar.querySelector('.toolbar-toggle');
     if (toggleBtn) {
       const hasActive = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
-      toggleBtn.textContent = _modalToolbarExpanded ? '▲ Filters' : (hasActive ? '▼ Filters •' : '▼ Filters');
+      toggleBtn.textContent = (_modalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
     }
     _renderModalVideoList();
   }
@@ -4416,7 +4416,7 @@
     const searchWasFocused = document.activeElement === toolbar.querySelector('#modalVideoSearch');
     const searchSelEnd = searchWasFocused ? document.activeElement.selectionEnd : 0;
     const hasActiveFilters = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
-    const toggleLabel = _modalToolbarExpanded ? '▲ Filters' : (hasActiveFilters ? '▼ Filters •' : '▼ Filters');
+    const toggleLabel = (_modalToolbarExpanded ? '▲' : '▼') + (hasActiveFilters ? ' Filters •' : ' Filters');
     toolbar.innerHTML =
         `<div class="toolbar-main-row">`
       + `<div class="filter-pills">`
