@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Star button on user and sound cards: outline/grey when unset, solid yellow-orange when starred; persisted in the database
 - Starred filter pill for users (All / Starred) and sounds (All / Starred)
 - Starred sort option for users; sort controls for sounds (Label, Starred, Saved videos, Date added)
-- Track a user: compact input bar pinned above the stats/recent panels on mobile
+- Mobile smart add bar: single unified input above the stats panel that auto-detects whether the value is a TikTok username, sound ID, or sound URL, and routes to the correct tracking endpoint; includes a Paste button; replaces the separate "Track a user" and "Track a sound" forms on mobile
 - User and sound modal: column headers are sticky and scroll horizontally in sync with the video rows on mobile
 - User and sound modal: toolbar collapses on mobile to a single row (view toggle, post count, Profile History); filter pills expand via a "Filters" toggle button
 

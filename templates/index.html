@@ -247,7 +247,8 @@
       pointer-events: none;
     }
 
-    .mobile-add-user-bar { display: none; }
+    .mobile-add-bar,
+    .mobile-add-status { display: none; }
     .add-status { font-size: 13px; padding: 4px 0; min-height: 20px; }
     .add-status.error { color: var(--red); }
     .add-status.ok    { color: var(--green); }
@@ -1366,9 +1367,48 @@
       .video-row.vcols, .video-row.sound-vcols,
       #modalVideoList .video-list-hdr, #soundModalVideoList .video-list-hdr { min-width: max-content; }
 
-      /* Track a user: compact bar above stats panel; hide original form */
-      .mobile-add-user-bar { display: flex; gap: 8px; align-items: center; }
-      .track-panels > section:first-child { display: none; }
+      /* Unified mobile add bar: replaces both desktop track panels */
+      .mobile-add-bar { display: flex; gap: 8px; align-items: center; }
+      .mobile-add-input-row {
+        flex: 1;
+        display: flex;
+        align-items: stretch;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        transition: border-color 0.15s;
+      }
+      .mobile-add-input-row:focus-within { border-color: var(--accent); }
+      .mobile-add-input {
+        flex: 1;
+        min-width: 0;
+        padding: 7px 10px;
+        background: transparent;
+        border: none;
+        color: var(--text);
+        font-size: 14px;
+        outline: none;
+      }
+      .mobile-add-input::placeholder { color: var(--text-dim); }
+      .mobile-add-paste-btn {
+        background: transparent;
+        border: none;
+        border-left: 1px solid var(--border);
+        border-radius: 0;
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 13px;
+        padding: 0 12px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .mobile-add-paste-btn:hover { background: var(--surface); }
+      .mobile-add-status { display: block; font-size: 13px; padding: 2px 0; min-height: 18px; }
+      .mobile-add-status.error { color: var(--red); }
+      .mobile-add-status.ok    { color: var(--green); }
+      .track-panels > section:first-child,
+      .track-panels > section:last-child { display: none; }
 
       /* Collapsible modal toolbar on mobile */
       .modal-toolbar { flex-direction: column; align-items: stretch; padding: 8px 12px; gap: 6px; }
@@ -1402,19 +1442,22 @@
     </div>
   </header>
 
-  <!-- Mobile add-user bar: shown above stats on mobile, hidden on desktop -->
-  <div class="mobile-add-user-bar">
-    <div
-      class="handle-input"
-      id="handleInputMobile"
-      contenteditable="true"
-      role="textbox"
-      aria-label="TikTok username"
-      data-placeholder="@username"
-      spellcheck="false"
-    ></div>
-    <button class="btn-primary" onclick="addUserMobile()">Add</button>
+  <!-- Mobile smart add bar: unified input for users and sounds; hidden on desktop -->
+  <div class="mobile-add-bar">
+    <div class="mobile-add-input-row">
+      <input
+        type="text"
+        id="mobileAddInput"
+        class="mobile-add-input"
+        placeholder="@username, sound ID, or URL"
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <button class="mobile-add-paste-btn" onclick="mobileAddPaste()" aria-label="Paste">Paste</button>
+    </div>
+    <button class="btn-primary" onclick="mobileAddSubmit()">Add</button>
   </div>
+  <div class="mobile-add-status" id="mobileAddStatus"></div>
 
   <!-- Top panels: Stats (1/3) + Recent (2/3) -->
   <div class="top-panels">
@@ -3142,25 +3185,79 @@
     document.execCommand('insertText', false, text);
   });
 
-  // Mobile add-user bar
-  document.getElementById('handleInputMobile').addEventListener('input', function() {
-    _sanitiseHandle(this);
-  });
-  document.getElementById('handleInputMobile').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') { e.preventDefault(); addUserMobile(); }
-  });
-  document.getElementById('handleInputMobile').addEventListener('paste', function(e) {
-    e.preventDefault();
-    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-    document.execCommand('insertText', false, text);
+  // Mobile smart add bar
+  document.getElementById('mobileAddInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); mobileAddSubmit(); }
   });
 
-  async function addUserMobile() {
-    const m = document.getElementById('handleInputMobile');
-    document.getElementById('handleInput').textContent = m.textContent;
-    m.textContent = '';
-    await addUser();
-    m.focus();
+  function _isSoundInput(val) {
+    if (/\/music\/|\/sound\//.test(val)) return true;
+    if (/^\d+$/.test(val.trim())) return true;
+    return false;
+  }
+
+  async function mobileAddPaste() {
+    const input = document.getElementById('mobileAddInput');
+    try {
+      const text = await navigator.clipboard.readText();
+      input.value = text.trim();
+      input.focus();
+    } catch {
+      input.focus();
+    }
+  }
+
+  async function mobileAddSubmit() {
+    const input    = document.getElementById('mobileAddInput');
+    const statusEl = document.getElementById('mobileAddStatus');
+    const val = input.value.trim();
+    if (!val) return;
+
+    statusEl.textContent = 'Adding...';
+    statusEl.className = 'mobile-add-status';
+
+    if (_isSoundInput(val)) {
+      const { ok, data } = await apiJSON('/api/sounds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sound_id: val, label: null }),
+      });
+      if (ok) {
+        input.value = '';
+        statusEl.className = 'mobile-add-status ok';
+        statusEl.textContent = `Sound ${data.sound_id} added.`;
+        setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'mobile-add-status'; }, 5000);
+        loadSounds();
+      } else {
+        statusEl.className = 'mobile-add-status error';
+        statusEl.textContent = data.error || 'Failed.';
+      }
+    } else {
+      const name = val.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
+      if (!name) {
+        statusEl.className = 'mobile-add-status error';
+        statusEl.textContent = 'Invalid username.';
+        input.focus();
+        return;
+      }
+      const { ok, data } = await apiJSON('/api/users', {
+        method: 'POST',
+        body: JSON.stringify({ username: name }),
+      });
+      if (ok) {
+        input.value = '';
+        dismissed.delete(name);
+        pending[name] = { status: 'pending' };
+        statusEl.className = 'mobile-add-status ok';
+        statusEl.textContent = `@${name} queued.`;
+        setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'mobile-add-status'; }, 5000);
+        renderPending();
+      } else {
+        statusEl.className = 'mobile-add-status error';
+        statusEl.textContent = data.error || 'Failed.';
+      }
+    }
+    input.focus();
   }
 
   async function addUser() {
