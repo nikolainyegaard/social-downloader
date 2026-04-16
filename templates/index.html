@@ -3565,8 +3565,10 @@
     } else {
       _soundModalSort = { field, dir: 'desc' };
     }
-    _renderSoundColumnHdrs();
+    const list = document.getElementById('soundModalVideoList');
+    const sx = list.scrollLeft;
     _renderSoundModalVideoList();
+    list.scrollLeft = sx;
   }
 
   function _renderSoundModalVideoList() {
@@ -4191,8 +4193,10 @@
     _modalSort = _modalSort.field === field
       ? { field, dir: _modalSort.dir === 'asc' ? 'desc' : 'asc' }
       : { field, dir: 'desc' };
-    _renderColumnHdrs();
+    const list = document.getElementById('modalVideoList');
+    const sx = list.scrollLeft;
     _renderModalVideoList();
+    list.scrollLeft = sx;
   }
 
   function setModalFilter(filter) {
