@@ -1373,8 +1373,8 @@
       .toolbar-main-row { flex: none; gap: 8px; }
       .toolbar-filter-wrap { flex-wrap: wrap; gap: 6px; }
       .toolbar-filter-wrap.collapsed { display: none; }
-      .toolbar-toggle { display: inline-flex; margin-left: auto; }
-      .modal-video-search { flex: 1; width: auto; min-width: 80px; }
+      .toolbar-toggle { display: inline-flex; }
+      .modal-video-search { margin-left: auto; flex-shrink: 0; width: 33%; min-width: 80px; }
     }
   </style>
 </head>
@@ -3512,8 +3512,8 @@
     const toggleLabel = _soundModalToolbarExpanded ? '▲' : (hasActiveFilters ? '▼ Filters •' : '▼ Filters');
     document.getElementById('soundModalToolbar').innerHTML =
         `<div class="toolbar-main-row">`
-      + `<span class="modal-vid-count">${label}</span>`
       + `<button class="filter-pill toolbar-toggle" onclick="toggleSoundModalToolbar()">${toggleLabel}</button>`
+      + `<span class="modal-vid-count">${label}</span>`
       + `</div>`
       + `<div class="toolbar-filter-wrap${_soundModalToolbarExpanded ? '' : ' collapsed'}">`
       + `<div class="filter-pills">`
@@ -4233,7 +4233,10 @@
     const toolbar = document.getElementById('modalToolbar');
     const wrap = toolbar.querySelector('.toolbar-filter-wrap');
     const btn  = toolbar.querySelector('.toolbar-toggle');
-    if (wrap) wrap.classList.toggle('collapsed', !_modalToolbarExpanded);
+    if (wrap) {
+      wrap.classList.toggle('collapsed', !_modalToolbarExpanded);
+      if (_modalToolbarExpanded) wrap.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    }
     if (btn) {
       const hasActive = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
       btn.textContent = _modalToolbarExpanded ? '▲' : (hasActive ? '▼ Filters •' : '▼ Filters');
@@ -4245,7 +4248,10 @@
     const toolbar = document.getElementById('soundModalToolbar');
     const wrap = toolbar.querySelector('.toolbar-filter-wrap');
     const btn  = toolbar.querySelector('.toolbar-toggle');
-    if (wrap) wrap.classList.toggle('collapsed', !_soundModalToolbarExpanded);
+    if (wrap) {
+      wrap.classList.toggle('collapsed', !_soundModalToolbarExpanded);
+      if (_soundModalToolbarExpanded) wrap.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    }
     if (btn) {
       const hasActive = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
       btn.textContent = _soundModalToolbarExpanded ? '▲' : (hasActive ? '▼ Filters •' : '▼ Filters');
@@ -4428,9 +4434,9 @@
       + `<button class="filter-pill${_modalView === 'list' ? ' active' : ''}" data-view-key="list" onclick="setModalView('list')" title="List view">${_listViewIcon}</button>`
       + `<button class="filter-pill${_modalView === 'grid' ? ' active' : ''}" data-view-key="grid" onclick="setModalView('grid')" title="Grid view">${_gridViewIcon}</button>`
       + `</div>`
+      + `<button class="filter-pill toolbar-toggle" onclick="toggleModalToolbar()">${toggleLabel}</button>`
       + `<span class="modal-vid-count">${label}</span>`
       + `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${searchVal}" placeholder="Search videos…" oninput="onModalSearch(this.value)">`
-      + `<button class="filter-pill toolbar-toggle" onclick="toggleModalToolbar()">${toggleLabel}</button>`
       + `</div>`
       + `<div class="toolbar-filter-wrap${_modalToolbarExpanded ? '' : ' collapsed'}">`
       + `<div class="filter-pills">`
