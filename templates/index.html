@@ -619,8 +619,10 @@
     .video-list-hdr {
       padding: 5px 10px 4px;
       border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
       background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }
 
     .col-hdr {
@@ -650,8 +652,6 @@
     .author-chip:hover { background: rgba(79,142,247,.28); }
     .author-chip.untracked { background: var(--surface2); color: var(--muted); cursor: default; }
 
-    #modalListWrap  { flex: 1; overflow-x: auto; display: flex; flex-direction: column; min-width: 838px; }
-    #soundListWrap  { flex: 1; overflow-x: auto; display: flex; flex-direction: column; min-width: 988px; }
     .modal-video-list { flex: 1; overflow-y: auto; }
 
     .video-row {
@@ -1945,10 +1945,7 @@
     <div class="modal-header"  id="modalHeader"></div>
     <div class="modal-toolbar" id="modalToolbar"></div>
     <div class="phist-panel"    id="phistPanel" style="display:none"></div>
-    <div id="modalListWrap">
-      <div class="video-list-hdr" id="videoListHdr"></div>
-      <div class="modal-video-list" id="modalVideoList"></div>
-    </div>
+    <div class="modal-video-list" id="modalVideoList"></div>
   </div>
 </div>
 
@@ -1958,10 +1955,7 @@
     <button class="modal-close" onclick="closeSoundModal()">✕</button>
     <div class="modal-header"   id="soundModalHeader"></div>
     <div class="modal-toolbar"  id="soundModalToolbar"></div>
-    <div id="soundListWrap">
-      <div class="video-list-hdr" id="soundVideoListHdr"></div>
-      <div class="modal-video-list" id="soundModalVideoList"></div>
-    </div>
+    <div class="modal-video-list" id="soundModalVideoList"></div>
   </div>
 </div>
 
@@ -3382,7 +3376,6 @@
 
     _renderSoundModalHeader(s);
     _renderSoundModalToolbar([]);
-    _renderSoundColumnHdrs();
     document.getElementById('soundModalVideoList').innerHTML =
       '<div class="vlist-loading">Loading videos…</div>';
 
@@ -3545,15 +3538,18 @@
   ];
 
   function _renderSoundColumnHdrs() {
-    document.getElementById('soundVideoListHdr').innerHTML =
-      '<div class="sound-vcols">'
+    const list = document.getElementById('soundModalVideoList');
+    const existing = list.querySelector('.video-list-hdr');
+    if (existing) existing.remove();
+    list.insertAdjacentHTML('afterbegin',
+      '<div class="video-list-hdr"><div class="sound-vcols">'
       + SOUND_VCOLS.map(col => {
           if (!col.field) return `<div class="col-hdr">${col.label}</div>`;
           const isSorted = _soundModalSort.field === col.field;
           const cls = isSorted ? ` sort-${_soundModalSort.dir}` : '';
           return `<div class="col-hdr sortable${cls}" onclick="setSoundModalSort('${col.field}')">${col.label}</div>`;
         }).join('')
-      + '</div>';
+      + '</div></div>');
   }
 
   function setSoundModalSort(field) {
@@ -3572,9 +3568,10 @@
     const list = document.getElementById('soundModalVideoList');
     list.innerHTML = '';
     list.scrollTop = 0;
+    _renderSoundColumnHdrs();
     const vids = _soundFilteredSorted();
     if (!vids.length) {
-      list.innerHTML = '<div class="vlist-empty">No videos match this filter.</div>';
+      list.insertAdjacentHTML('beforeend', '<div class="vlist-empty">No videos match this filter.</div>');
       return;
     }
     _appendSoundModalVideos(vids);
@@ -3981,8 +3978,6 @@
     _phistField  = 'all';
     _phistUserId = null;
     document.getElementById('phistPanel').style.display     = 'none';
-    document.getElementById('modalListWrap').style.display  = '';
-    document.getElementById('videoListHdr').style.display   = _modalView === 'grid' ? 'none' : '';
     document.getElementById('modalVideoList').style.display = '';
 
     document.getElementById('modalBackdrop').style.display = 'flex';
@@ -3990,7 +3985,6 @@
 
     _renderModalHeader(u);
     _renderModalToolbar([]);
-    _renderColumnHdrs();
     document.getElementById('modalVideoList').innerHTML =
       '<div class="vlist-loading">Loading videos…</div>';
 
@@ -4135,7 +4129,6 @@
       const { videoId, filter, sortField, sortDir } = _modalPendingHighlight;
       _modalPendingHighlight = null;
       _modalView       = 'list';
-      document.getElementById('videoListHdr').style.display = '';
       _modalFilter     = filter;
       _modalTypeFilter = 'all';
       _modalSort       = { field: sortField, dir: sortDir };
@@ -4409,8 +4402,6 @@
     }
 
     document.getElementById('phistPanel').style.display = '';
-    document.getElementById('modalListWrap').style.display  = 'none';
-    document.getElementById('videoListHdr').style.display  = 'none';
     document.getElementById('modalVideoList').style.display = 'none';
     document.getElementById('phistPanel').innerHTML = '<div class="phist-empty">Loading…</div>';
 
@@ -4430,8 +4421,6 @@
 
   function _closeProfileHistory() {
     document.getElementById('phistPanel').style.display     = 'none';
-    document.getElementById('modalListWrap').style.display  = '';
-    document.getElementById('videoListHdr').style.display   = _modalView === 'grid' ? 'none' : '';
     document.getElementById('modalVideoList').style.display = '';
     if (_modalVideos.length) {
       _renderModalToolbar(_modalVideos);
@@ -4542,15 +4531,18 @@
 
   function _renderColumnHdrs() {
     if (_modalView === 'grid') return;
-    document.getElementById('videoListHdr').innerHTML =
-      '<div class="vcols">'
+    const list = document.getElementById('modalVideoList');
+    const existing = list.querySelector('.video-list-hdr');
+    if (existing) existing.remove();
+    list.insertAdjacentHTML('afterbegin',
+      '<div class="video-list-hdr"><div class="vcols">'
       + VCOLS.map(col => {
           if (!col.field) return `<div class="col-hdr">${col.label}</div>`;
           const isSorted = _modalSort.field === col.field;
           const cls = isSorted ? ` sort-${_modalSort.dir}` : '';
           return `<div class="col-hdr sortable${cls}" onclick="setModalSort('${col.field}')">${col.label}</div>`;
         }).join('')
-      + '</div>';
+      + '</div></div>');
   }
 
   const _dlIcon = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1v7M3.5 5.5l3 3 3-3M1.5 10.5h10"/></svg>`;
@@ -4601,9 +4593,10 @@
     const list = document.getElementById('modalVideoList');
     list.innerHTML = '';
     list.scrollTop = 0;
+    _renderColumnHdrs();
     const vids = _filteredSorted();
     if (!vids.length) {
-      list.innerHTML = `<div class="vlist-empty">${_modalSearch ? 'No posts match this search.' : 'No posts match this filter.'}</div>`;
+      list.insertAdjacentHTML('beforeend', `<div class="vlist-empty">${_modalSearch ? 'No posts match this search.' : 'No posts match this filter.'}</div>`);
       return;
     }
     _appendModalVideos(vids);
@@ -4669,8 +4662,6 @@
 
   function setModalView(view) {
     _modalView = view;
-    if (view === 'list') _renderColumnHdrs();
-    document.getElementById('videoListHdr').style.display = view === 'grid' ? 'none' : '';
     const toolbar = document.getElementById('modalToolbar');
     toolbar.querySelectorAll('[data-view-key]').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.viewKey === view);
