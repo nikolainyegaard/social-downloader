@@ -598,6 +598,16 @@
     .glider { position: absolute; z-index: 1; background: var(--accent); border-radius: 99px; transition: left .2s ease, width .2s ease; pointer-events: none; }
 
     .modal-vid-count { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .toolbar-main-row  { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+    .toolbar-main-row .modal-vid-count { margin-left: 0; }
+    .toolbar-filter-wrap { display: flex; align-items: center; gap: 10px; }
+    .toolbar-toggle { display: none; }
+    .modal-video-search {
+      width: 140px; font-size: 12px; padding: 3px 8px;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: var(--surface2); color: var(--text);
+      flex-shrink: 0;
+    }
 
     /* ── Video list ───────────────────────────────────────────────────────────── */
 
@@ -1357,6 +1367,14 @@
       .sound-vcols { grid-template-columns: 90px 120px 110px 76px 70px 130px 130px 130px 32px; }
       .video-row.vcols, .video-row.sound-vcols,
       #modalVideoList .video-list-hdr, #soundModalVideoList .video-list-hdr { min-width: max-content; }
+
+      /* Collapsible modal toolbar on mobile */
+      .modal-toolbar { flex-direction: column; align-items: stretch; padding: 8px 12px; gap: 6px; }
+      .toolbar-main-row { flex: none; gap: 8px; }
+      .toolbar-filter-wrap { flex-wrap: wrap; gap: 6px; }
+      .toolbar-filter-wrap.collapsed { display: none; }
+      .toolbar-toggle { display: inline-flex; margin-left: auto; }
+      .modal-video-search { flex: 1; width: auto; min-width: 80px; }
     }
   </style>
 </head>
@@ -3363,6 +3381,7 @@
   let _soundModalSort            = { field: 'upload_date', dir: 'desc' };
   let _soundModalLoaded          = 0;
   let _soundModalObs             = null;
+  let _soundModalToolbarExpanded = false;
   let _soundModalPendingHighlight = null; // { videoId, filter? }
   const SOUND_MODAL_PAGE = 50;
 
@@ -3376,6 +3395,7 @@
     _soundModalTypeFilter = 'all';
     _soundModalSort    = { field: 'upload_date', dir: 'desc' };
     _soundModalLoaded  = 0;
+    _soundModalToolbarExpanded = false;
     if (_soundModalObs) { _soundModalObs.disconnect(); _soundModalObs = null; }
 
     document.getElementById('soundModalBackdrop').style.display = 'flex';
@@ -3488,8 +3508,15 @@
 
     const shown  = _soundFilteredSorted().length;
     const label  = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
+    const hasActiveFilters = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
+    const toggleLabel = _soundModalToolbarExpanded ? '▲' : (hasActiveFilters ? '▼ Filters •' : '▼ Filters');
     document.getElementById('soundModalToolbar').innerHTML =
-        `<div class="filter-pills">`
+        `<div class="toolbar-main-row">`
+      + `<span class="modal-vid-count">${label}</span>`
+      + `<button class="filter-pill toolbar-toggle" onclick="toggleSoundModalToolbar()">${toggleLabel}</button>`
+      + `</div>`
+      + `<div class="toolbar-filter-wrap${_soundModalToolbarExpanded ? '' : ' collapsed'}">`
+      + `<div class="filter-pills">`
       + pill('all', 'All')
       + pill('active', 'Active')
       + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
@@ -3502,7 +3529,7 @@
             + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
             + `</div>`
           : '')
-      + `<span class="modal-vid-count">${label}</span>`;
+      + `</div>`;
     document.getElementById('soundModalToolbar').querySelectorAll('.filter-pills').forEach(_placeGlider);
   }
 
@@ -3516,6 +3543,11 @@
     const shown = _soundFilteredSorted().length;
     const countEl = toolbar.querySelector('.modal-vid-count');
     if (countEl) countEl.textContent = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
+    const toggleBtn = toolbar.querySelector('.toolbar-toggle');
+    if (toggleBtn) {
+      const hasActive = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
+      toggleBtn.textContent = _soundModalToolbarExpanded ? '▲' : (hasActive ? '▼ Filters •' : '▼ Filters');
+    }
     _renderSoundModalVideoList();
   }
 
@@ -3529,6 +3561,11 @@
     const shown = _soundFilteredSorted().length;
     const countEl = toolbar.querySelector('.modal-vid-count');
     if (countEl) countEl.textContent = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
+    const toggleBtn = toolbar.querySelector('.toolbar-toggle');
+    if (toggleBtn) {
+      const hasActive = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
+      toggleBtn.textContent = _soundModalToolbarExpanded ? '▲' : (hasActive ? '▼ Filters •' : '▼ Filters');
+    }
     _renderSoundModalVideoList();
   }
 
@@ -3937,6 +3974,7 @@
   let _modalLoaded   = 0;
   let _modalObs      = null;
   let _modalView     = 'list';   // 'list' | 'grid'
+  let _modalToolbarExpanded = false;
   const MODAL_PAGE   = 50;
 
   const VCOLS = [
@@ -3974,11 +4012,12 @@
     _modalUserId = tiktokId;
     _modalUser   = u;
     _modalVideos = [];
-    _modalFilter     = 'all';
-    _modalTypeFilter = 'all';
-    _modalSearch     = '';
-    _modalSort       = { field: 'upload_date', dir: 'desc' };
-    _modalLoaded     = 0;
+    _modalFilter          = 'all';
+    _modalTypeFilter      = 'all';
+    _modalSearch          = '';
+    _modalSort            = { field: 'upload_date', dir: 'desc' };
+    _modalLoaded          = 0;
+    _modalToolbarExpanded = false;
     if (window.innerWidth <= 640) _modalView = 'grid';
     if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
 
@@ -4189,6 +4228,30 @@
     _renderModalVideoList();
   }
 
+  function toggleModalToolbar() {
+    _modalToolbarExpanded = !_modalToolbarExpanded;
+    const toolbar = document.getElementById('modalToolbar');
+    const wrap = toolbar.querySelector('.toolbar-filter-wrap');
+    const btn  = toolbar.querySelector('.toolbar-toggle');
+    if (wrap) wrap.classList.toggle('collapsed', !_modalToolbarExpanded);
+    if (btn) {
+      const hasActive = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
+      btn.textContent = _modalToolbarExpanded ? '▲' : (hasActive ? '▼ Filters •' : '▼ Filters');
+    }
+  }
+
+  function toggleSoundModalToolbar() {
+    _soundModalToolbarExpanded = !_soundModalToolbarExpanded;
+    const toolbar = document.getElementById('soundModalToolbar');
+    const wrap = toolbar.querySelector('.toolbar-filter-wrap');
+    const btn  = toolbar.querySelector('.toolbar-toggle');
+    if (wrap) wrap.classList.toggle('collapsed', !_soundModalToolbarExpanded);
+    if (btn) {
+      const hasActive = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
+      btn.textContent = _soundModalToolbarExpanded ? '▲' : (hasActive ? '▼ Filters •' : '▼ Filters');
+    }
+  }
+
   function setModalSort(field) {
     _modalSort = _modalSort.field === field
       ? { field, dir: _modalSort.dir === 'asc' ? 'desc' : 'asc' }
@@ -4212,6 +4275,11 @@
     if (countEl) countEl.textContent = _modalSearch
       ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
       : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
+    const toggleBtn = toolbar.querySelector('.toolbar-toggle');
+    if (toggleBtn) {
+      const hasActive = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
+      toggleBtn.textContent = _modalToolbarExpanded ? '▲' : (hasActive ? '▼ Filters •' : '▼ Filters');
+    }
     _renderModalVideoList();
   }
 
@@ -4228,6 +4296,11 @@
     if (countEl) countEl.textContent = _modalSearch
       ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
       : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
+    const toggleBtn = toolbar.querySelector('.toolbar-toggle');
+    if (toggleBtn) {
+      const hasActive = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
+      toggleBtn.textContent = _modalToolbarExpanded ? '▲' : (hasActive ? '▼ Filters •' : '▼ Filters');
+    }
     _renderModalVideoList();
   }
 
@@ -4347,11 +4420,19 @@
     const toolbar = document.getElementById('modalToolbar');
     const searchWasFocused = document.activeElement === toolbar.querySelector('#modalVideoSearch');
     const searchSelEnd = searchWasFocused ? document.activeElement.selectionEnd : 0;
+    const hasActiveFilters = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
+    const toggleLabel = _modalToolbarExpanded ? '▲' : (hasActiveFilters ? '▼ Filters •' : '▼ Filters');
     toolbar.innerHTML =
-        `<div class="filter-pills">`
+        `<div class="toolbar-main-row">`
+      + `<div class="filter-pills">`
       + `<button class="filter-pill${_modalView === 'list' ? ' active' : ''}" data-view-key="list" onclick="setModalView('list')" title="List view">${_listViewIcon}</button>`
       + `<button class="filter-pill${_modalView === 'grid' ? ' active' : ''}" data-view-key="grid" onclick="setModalView('grid')" title="Grid view">${_gridViewIcon}</button>`
       + `</div>`
+      + `<span class="modal-vid-count">${label}</span>`
+      + `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${searchVal}" placeholder="Search videos…" oninput="onModalSearch(this.value)">`
+      + `<button class="filter-pill toolbar-toggle" onclick="toggleModalToolbar()">${toggleLabel}</button>`
+      + `</div>`
+      + `<div class="toolbar-filter-wrap${_modalToolbarExpanded ? '' : ' collapsed'}">`
       + `<div class="filter-pills">`
       + pill('all', 'All')
       + pill('active', 'Active')
@@ -4365,11 +4446,8 @@
             + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
             + `</div>`
           : '')
-      + `<span class="modal-vid-count">${label}</span>`
-      + `<input id="modalVideoSearch" type="search" value="${searchVal}" placeholder="Search videos…"
-           oninput="onModalSearch(this.value)"
-           style="width:140px;font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text)">`
-      + `<button class="filter-pill" onclick="openProfileHistory()">Profile history</button>`;
+      + `<button class="filter-pill" onclick="openProfileHistory()">Profile history</button>`
+      + `</div>`;
     toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
     if (searchWasFocused) {
       const el = toolbar.querySelector('#modalVideoSearch');
