@@ -1374,7 +1374,8 @@
       .toolbar-filter-wrap { flex-wrap: wrap; gap: 6px; }
       .toolbar-filter-wrap.collapsed { display: none; }
       .toolbar-toggle { display: inline-flex; }
-      .modal-video-search { margin-left: auto; flex-shrink: 0; width: 33%; min-width: 80px; }
+      .modal-video-search { display: none; }
+      .toolbar-phist-btn { margin-left: auto; }
     }
   </style>
 </head>
@@ -4437,6 +4438,7 @@
       + `<button class="filter-pill toolbar-toggle" onclick="toggleModalToolbar()">${toggleLabel}</button>`
       + `<span class="modal-vid-count">${label}</span>`
       + `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${searchVal}" placeholder="Search videos…" oninput="onModalSearch(this.value)">`
+      + `<button class="filter-pill toolbar-phist-btn" onclick="openProfileHistory()">Profile history</button>`
       + `</div>`
       + `<div class="toolbar-filter-wrap${_modalToolbarExpanded ? '' : ' collapsed'}">`
       + `<div class="filter-pills">`
@@ -4452,7 +4454,6 @@
             + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
             + `</div>`
           : '')
-      + `<button class="filter-pill" onclick="openProfileHistory()">Profile history</button>`
       + `</div>`;
     toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
     if (searchWasFocused) {
