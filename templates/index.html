@@ -624,6 +624,10 @@
       top: 0;
       z-index: 1;
     }
+    /* Rows and headers must be at least as wide as their grid content so
+       backgrounds and borders extend across the full horizontal scroll area */
+    .video-row.vcols, #modalVideoList .video-list-hdr             { min-width: 838px; }
+    .video-row.sound-vcols, #soundModalVideoList .video-list-hdr  { min-width: 988px; }
 
     .col-hdr {
       font-size: 10px; font-weight: 700;
