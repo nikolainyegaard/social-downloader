@@ -621,7 +621,6 @@
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       background: var(--surface);
-      min-width: max-content;
     }
 
     .col-hdr {
@@ -651,8 +650,9 @@
     .author-chip:hover { background: rgba(79,142,247,.28); }
     .author-chip.untracked { background: var(--surface2); color: var(--muted); cursor: default; }
 
-    #modalListWrap, #soundListWrap { flex: 1; overflow-x: auto; display: flex; flex-direction: column; }
-    .modal-video-list { flex: 1; overflow-y: auto; overflow-x: clip; min-width: max-content; }
+    #modalListWrap  { flex: 1; overflow-x: auto; display: flex; flex-direction: column; min-width: 838px; }
+    #soundListWrap  { flex: 1; overflow-x: auto; display: flex; flex-direction: column; min-width: 988px; }
+    .modal-video-list { flex: 1; overflow-y: auto; }
 
     .video-row {
       padding: 7px 10px;
