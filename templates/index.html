@@ -137,16 +137,26 @@
     .btn-ghost { background: var(--surface2); color: var(--text); }
     .btn-ghost:hover:not(:disabled) { background: var(--border); }
 
-    /* ── Section title ───────────────────────────────────────────────────────── */
+    /* ── Uppercase label utility ─────────────────────────────────────────────── */
 
-    .section-title {
-      font-size: 11px;
+    .label-caps,
+    .section-title, .col-hdr,
+    .loop-section-label, .ctrl-section-title,
+    .stat-label, .filter-row-label,
+    .phist-avatar-col .phist-side-label {
       font-weight: 700;
       letter-spacing: .08em;
       text-transform: uppercase;
       color: var(--muted);
-      margin-bottom: 12px;
     }
+
+    /* ── Section title ───────────────────────────────────────────────────────── */
+
+    .section-title {
+      font-size: 11px;
+      margin-bottom: 0;
+    }
+    .track-panels > section > .section-title { margin-bottom: 12px; }
 
     /* ── Cookie pill / meta / note (used inside settings modal) ─────────────── */
 
@@ -437,18 +447,21 @@
       justify-content: center;
     }
 
-    .modal {
-      width: 82vw;
-      max-width: 1280px;
-      height: 84vh;
+    .modal-base {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       display: flex;
-      flex-direction: column;
       overflow: hidden;
       position: relative;
       box-shadow: var(--shadow-modal);
+    }
+
+    .modal {
+      width: 82vw;
+      max-width: 1280px;
+      height: 84vh;
+      flex-direction: column;
     }
 
     .modal-close,
@@ -584,10 +597,7 @@
     }
     .phist-avatar-col .phist-side-label {
       font-size: 10px;
-      font-weight: 700;
       letter-spacing: .07em;
-      text-transform: uppercase;
-      color: var(--muted);
     }
     .phist-avatar-lg {
       width: 100px; height: 100px;
@@ -671,9 +681,7 @@
     }
 
     .col-hdr {
-      font-size: 10px; font-weight: 700;
-      letter-spacing: .07em; text-transform: uppercase;
-      color: var(--muted);
+      font-size: 10px; letter-spacing: .07em;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .col-hdr.sortable { cursor: pointer; user-select: none; }
@@ -795,7 +803,7 @@
 
     .filter-control-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .filter-row { display: flex; align-items: center; gap: 4px; }
-    .filter-row-label { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+    .filter-row-label { font-size: 11px; letter-spacing: .07em; white-space: nowrap; }
     .sort-controls { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
     #soundControls { display: none; }
 
@@ -948,10 +956,6 @@
     /* Loop grid */
     .loop-section-label {
       font-size: 10px;
-      font-weight: 700;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--muted);
       margin-bottom: 6px;
     }
     .loop-grid {
@@ -992,10 +996,7 @@
 
     .stat-label {
       font-size: 10px;
-      font-weight: 700;
       letter-spacing: .06em;
-      text-transform: uppercase;
-      color: var(--muted);
     }
 
     /* Recent panel entries */
@@ -1026,14 +1027,7 @@
     .report-view-modal {
       width: min(640px, 94vw);
       height: 72vh;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      display: flex;
       flex-direction: column;
-      overflow: hidden;
-      position: relative;
-      box-shadow: var(--shadow-modal);
     }
     .report-view-hdr {
       padding: 14px 44px 10px 18px;
@@ -1096,14 +1090,7 @@
     .recent-log-modal {
       width: min(580px, 94vw);
       height: 70vh;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      display: flex;
       flex-direction: column;
-      overflow: hidden;
-      position: relative;
-      box-shadow: var(--shadow-modal);
     }
     .recent-log-modal-hdr {
       padding: 14px 44px 12px 18px;
@@ -1126,10 +1113,6 @@
 
     .ctrl-section-title {
       font-size: 10px;
-      font-weight: 700;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--muted);
       margin-bottom: 10px;
     }
 
@@ -1152,11 +1135,6 @@
     .settings-modal {
       width: 700px; max-width: 94vw;
       height: 540px; max-height: 90vh;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      display: flex; overflow: hidden; position: relative;
-      box-shadow: var(--shadow-modal);
     }
 
     .settings-nav {
@@ -1201,25 +1179,6 @@
     .job-status-text { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
     .job-steps { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
     .job-step  { font-size: 12px; color: var(--green); }
-
-    /* ── Transcoding settings ────────────────────────────────────────────────── */
-
-    .tc-toggle-row {
-      display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;
-    }
-    .tc-toggle-label { font-size: 13px; color: var(--text-dim); flex: 1; }
-    .tc-toggle-row input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
-    .tc-toggle-switch {
-      position: relative; width: 36px; height: 20px; flex-shrink: 0;
-      background: var(--surface2); border-radius: 10px; transition: background .2s;
-    }
-    .tc-toggle-switch::after {
-      content: ''; position: absolute; top: 2px; left: 2px;
-      width: 16px; height: 16px; border-radius: 50%;
-      background: var(--muted); transition: transform .2s, background .2s;
-    }
-    .tc-toggle-row input:checked ~ .tc-toggle-switch { background: var(--accent); }
-    .tc-toggle-row input:checked ~ .tc-toggle-switch::after { transform: translateX(16px); background: #fff; }
 
     .tc-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
 
@@ -1305,8 +1264,6 @@
       padding: 10px 14px;
       border-bottom: 1px solid var(--border);
     }
-    .log-header .section-title { margin: 0; }
-
     .log-body {
       font-family: var(--mono);
       font-size: 12px;
@@ -1507,7 +1464,7 @@
     <!-- Statistics panel -->
     <div class="panel-card">
       <div class="panel-header">
-        <span class="section-title" style="margin-bottom:0">Statistics</span>
+        <span class="section-title">Statistics</span>
       </div>
       <div class="panel-body" style="padding:8px">
         <div class="stat-grid" id="statsGrid"></div>
@@ -1517,7 +1474,7 @@
     <!-- Recent panel (wide) -->
     <div class="panel-card">
       <div class="panel-header">
-        <span class="section-title" style="margin-bottom:0">Recent</span>
+        <span class="section-title">Recent</span>
       </div>
       <div class="panel-body" style="padding:12px 16px">
         <div class="recent-split">
@@ -1557,7 +1514,7 @@
     <!-- Loops panel (spans both track rows) -->
     <div class="panel-card loops-card">
       <div class="panel-header">
-        <span class="section-title" style="margin-bottom:0">Loops</span>
+        <span class="section-title">Loops</span>
       </div>
       <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:12px">
 
@@ -1704,7 +1661,7 @@
 </div>
 <!-- Settings modal -->
 <div id="settingsBackdrop" class="modal-backdrop" style="display:none;z-index:200" onclick="if(event.target===this)closeSettings()">
-  <div class="settings-modal">
+  <div class="modal-base settings-modal">
     <button class="modal-close" onclick="closeSettings()"></button>
     <nav class="settings-nav">
       <div class="settings-nav-item active" id="snav-cookies"   onclick="switchSettingsSection('cookies')">Cookies</div>
@@ -2040,7 +1997,7 @@
 
 <!-- User detail modal -->
 <div id="reportViewBackdrop" class="modal-backdrop" style="display:none;z-index:210" onclick="if(event.target===this)closeReportView()">
-  <div class="report-view-modal">
+  <div class="modal-base report-view-modal">
     <button class="modal-close" onclick="closeReportView()"></button>
     <div class="report-view-hdr">
       <span id="reportViewTitle"></span>
@@ -2051,7 +2008,7 @@
 </div>
 
 <div id="recentLogBackdrop" class="modal-backdrop" style="display:none;z-index:190" onclick="if(event.target===this)closeRecentLog()">
-  <div class="recent-log-modal">
+  <div class="modal-base recent-log-modal">
     <button class="modal-close" onclick="closeRecentLog()"></button>
     <div class="recent-log-modal-hdr" id="recentLogTitle"></div>
     <div class="recent-log-modal-body" id="recentLogBody"></div>
@@ -2059,7 +2016,7 @@
 </div>
 
 <div id="modalBackdrop" class="modal-backdrop" style="display:none" onclick="handleBackdropClick(event)">
-  <div class="modal">
+  <div class="modal modal-base">
     <button class="modal-close" onclick="closeModal()"></button>
     <div class="modal-header"  id="modalHeader"></div>
     <div class="modal-toolbar" id="modalToolbar"></div>
@@ -2070,7 +2027,7 @@
 
 <!-- Sound detail modal -->
 <div id="soundModalBackdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeSoundModal()">
-  <div class="modal">
+  <div class="modal modal-base">
     <button class="modal-close" onclick="closeSoundModal()"></button>
     <div class="modal-header"   id="soundModalHeader"></div>
     <div class="modal-toolbar"  id="soundModalToolbar"></div>
