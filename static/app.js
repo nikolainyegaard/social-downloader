@@ -1602,8 +1602,10 @@ function _mFiltered(cfg, skipSearch = false) {
   if (!skipSearch && cfg.st.search) {
     const q = cfg.st.search.toLowerCase();
     vids = vids.filter(v =>
-      (v.video_id    || '').toLowerCase().includes(q) ||
-      (v.description || '').toLowerCase().includes(q)
+      (v.video_id          || '').toLowerCase().includes(q) ||
+      (v.description       || '').toLowerCase().includes(q) ||
+      (v.author_username   || '').toLowerCase().includes(q) ||
+      (v.author_display_name || '').toLowerCase().includes(q)
     );
   }
   const { field, dir } = cfg.st.sort;
