@@ -887,6 +887,17 @@ def create_app() -> Flask:
         db.update_sound_label(sound_id, label)
         return jsonify({"ok": True})
 
+    @app.route("/api/sounds/<sound_id>/comment", methods=["PATCH"])
+    def set_sound_comment(sound_id: str):
+        if not db.get_sound(sound_id):
+            return jsonify({"error": "Sound not found"}), 404
+        body    = request.get_json(silent=True) or {}
+        comment = body.get("comment", "")
+        if not isinstance(comment, str):
+            return jsonify({"error": "comment must be a string"}), 400
+        db.set_sound_comment(sound_id, comment.strip())
+        return jsonify({"ok": True})
+
     @app.route("/api/sounds/<sound_id>", methods=["DELETE"])
     def remove_sound(sound_id: str):
         if not db.get_sound(sound_id):

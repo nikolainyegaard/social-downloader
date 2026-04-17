@@ -1615,6 +1615,14 @@
       </div>
       <div id="soundControls" class="filter-control-group">
         <div class="filter-row">
+          <span class="filter-row-label">Tracking</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="sfStatAll"      onclick="setSoundFilter('stat','all')">All</button>
+            <button class="filter-pill"        id="sfStatActive"   onclick="setSoundFilter('stat','active')">Active</button>
+            <button class="filter-pill"        id="sfStatInactive" onclick="setSoundFilter('stat','inactive')">Inactive</button>
+          </div>
+        </div>
+        <div class="filter-row">
           <span class="filter-row-label">Starred</span>
           <div class="filter-pills">
             <button class="filter-pill active" id="sfStarAll"     onclick="setSoundFilter('star','all')">All</button>
@@ -2180,6 +2188,7 @@
   const USER_PRIV_IDS  = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', banned: 'ufPrivBanned' };
   const USER_STAT_IDS  = { all: 'ufStatAll', active: 'ufStatActive', inactive: 'ufStatInactive' };
   const USER_STAR_IDS  = { all: 'ufStarAll', starred: 'ufStarStarred' };
+  const SOUND_STAT_IDS = { all: 'sfStatAll', active: 'sfStatActive', inactive: 'sfStatInactive' };
   const SOUND_STAR_IDS = { all: 'sfStarAll', starred: 'sfStarStarred' };
 
   function _videoStatus(v) {
@@ -3401,16 +3410,18 @@
   let sounds        = [];
   let soundRunCurrent = null;
   let soundRunQueue   = [];
-  let soundFilter   = { star: 'all' };
+  let soundFilter   = { stat: 'all', star: 'all' };
   let soundSort     = { field: 'label', dir: 'asc' };
 
   function setSoundFilter(group, value) {
     soundFilter[group] = value;
-    Object.entries(SOUND_STAR_IDS).forEach(([v, id]) => {
+    const map = group === 'stat' ? SOUND_STAT_IDS : SOUND_STAR_IDS;
+    Object.entries(map).forEach(([v, id]) => {
       document.getElementById(id)?.classList.toggle('active', v === value);
     });
     renderSounds();
-    _placeGlider(document.getElementById('sfStarAll').closest('.filter-pills'));
+    const anchorId = group === 'stat' ? 'sfStatAll' : 'sfStarAll';
+    _placeGlider(document.getElementById(anchorId).closest('.filter-pills'));
   }
 
   function setSoundSortField(field) {
@@ -3428,7 +3439,7 @@
 
 
   function resetSoundFilters() {
-    soundFilter = { star: 'all' };
+    soundFilter = { stat: 'all', star: 'all' };
     soundSort   = { field: 'label', dir: 'asc' };
     _trackingSearch = '';
     const searchEl = document.getElementById('trackingSearch');
@@ -3436,8 +3447,10 @@
     const sel = document.getElementById('soundSortField');
     if (sel) sel.value = 'label';
     _updateSortBtn('soundSortDirBtn', soundSort);
+    Object.entries(SOUND_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     Object.entries(SOUND_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     renderSounds();
+    _placeGlider(document.getElementById('sfStatAll').closest('.filter-pills'));
     _placeGlider(document.getElementById('sfStarAll').closest('.filter-pills'));
   }
 
@@ -3446,9 +3459,11 @@
     const countEl = document.getElementById('soundCount');
     const q = _trackingSearch.toLowerCase();
     let filtered = sounds;
-    if (soundFilter.star === 'starred') filtered = filtered.filter(s => s.starred);
+    if (soundFilter.stat === 'active')   filtered = filtered.filter(s => s.tracking_enabled !== 0);
+    if (soundFilter.stat === 'inactive') filtered = filtered.filter(s => s.tracking_enabled === 0);
+    if (soundFilter.star === 'starred')  filtered = filtered.filter(s => s.starred);
     if (q) filtered = filtered.filter(s => `${s.label || ''} ${s.sound_id}`.toLowerCase().includes(q));
-    const isFiltered = soundFilter.star !== 'all' || !!_trackingSearch;
+    const isFiltered = soundFilter.stat !== 'all' || soundFilter.star !== 'all' || !!_trackingSearch;
     countEl.textContent = isFiltered ? `${filtered.length} of ${sounds.length}` : sounds.length;
     const { field, dir } = soundSort;
     filtered = [...filtered].sort((a, b) => {
@@ -3475,8 +3490,9 @@
       const runLabel     = isCurrent ? 'Running…' : inQueue ? 'Queued' : 'Run';
       const runDis       = (inQueue || isCurrent) ? 'disabled' : '';
       const { cls: sTrackingCls, label: sTrackingLabel } = _trackingBadge(s.tracking_enabled);
+      const isInactive = s.tracking_enabled === 0;
       return `
-        <div class="user-card" data-soundid="${esc(s.sound_id)}" onclick="if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')" role="button" tabindex="0">
+        <div class="user-card${isInactive ? ' user-card-inactive' : ''}" data-soundid="${esc(s.sound_id)}" onclick="if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')" role="button" tabindex="0">
           <div class="user-card-top">
             <div class="sound-icon-wrap"><span class="sound-icon-letter">♫</span></div>
             <div class="user-identity">
@@ -3499,7 +3515,11 @@
           </div>
           <div class="user-card-footer">
             <span class="user-checked">${checked}</span>
-            <div style="display:flex;gap:6px;">
+            <div style="display:flex;gap:6px;align-items:center;">
+              <label class="tracking-toggle" title="${isInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}" onclick="event.stopPropagation()">
+                <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
               <button class="btn-star${s.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleSoundStar('${esc(s.sound_id)}')" title="${s.starred ? 'Unstar' : 'Star'}">${s.starred ? '★' : '☆'}</button>
               <button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${runLabel}</button>
               <button class="btn-danger" onclick="event.stopPropagation();removeSound('${esc(s.sound_id)}','${esc(label)}')">Remove</button>
@@ -3600,21 +3620,21 @@
     st: _userState, listElId: 'modalVideoList', toolbarElId: 'modalToolbar',
     cols: VCOLS, colsCls: 'vcols', pageSize: 50,
     filterFn: 'setModalFilter', typeFilterFn: 'setModalTypeFilter',
-    sortFn: 'setModalSort', toggleFn: 'toggleModalToolbar',
+    sortFn: 'setModalSort', toggleFn: 'toggleModalToolbar', searchFn: 'onModalSearch',
     authorCol: null, hasSearch: true, hasViewToggle: true, hasPhistBtn: true,
   };
   const _SOUND_MODAL_CFG = {
     st: _soundState, listElId: 'soundModalVideoList', toolbarElId: 'soundModalToolbar',
     cols: SOUND_VCOLS, colsCls: 'sound-vcols', pageSize: 50,
     filterFn: 'setSoundModalFilter', typeFilterFn: 'setSoundModalTypeFilter',
-    sortFn: 'setSoundModalSort', toggleFn: 'toggleSoundModalToolbar',
+    sortFn: 'setSoundModalSort', toggleFn: 'toggleSoundModalToolbar', searchFn: 'onSoundModalSearch',
     authorCol: v => {
       const name = v.author_username || v.tiktok_id || '?';
       return v.author_enabled === 1
         ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();openUserModal('${esc(v.tiktok_id)}')">@${esc(name)}</span>`
         : `<span class="author-chip untracked">@${esc(name)}</span>`;
     },
-    hasSearch: false, hasViewToggle: false, hasPhistBtn: false,
+    hasSearch: true, hasViewToggle: false, hasPhistBtn: false,
   };
 
   function _mFiltered(cfg, skipSearch = false) {
@@ -3670,7 +3690,7 @@
     html += `<button class="filter-pill toolbar-toggle" onclick="${cfg.toggleFn}()">${toggleLabel}</button>`
       + `<span class="modal-vid-count">${countLabel}</span>`;
     if (cfg.hasSearch) {
-      html += `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${esc(cfg.st.search)}" placeholder="Search videos…" oninput="onModalSearch(this.value)">`;
+      html += `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${esc(cfg.st.search)}" placeholder="Search videos…" oninput="${cfg.searchFn}(this.value)">`;
     }
     if (cfg.hasPhistBtn) {
       html += `<button class="filter-pill toolbar-phist-btn" onclick="openProfileHistory()">Profile history</button>`;
@@ -3837,7 +3857,7 @@
     _soundModalId = soundId;
     _soundModal   = s;
     Object.assign(_soundState, {
-      videos: [], filter: 'all', typeFilter: 'all',
+      videos: [], filter: 'all', typeFilter: 'all', search: '',
       sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
     });
     if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
@@ -3900,6 +3920,15 @@
           ${s.video_deleted   ? `<span style="color:var(--red)"><strong>${s.video_deleted}</strong> deleted</span>` : ''}
           ${s.video_undeleted ? `<span style="color:var(--yellow)"><strong>${s.video_undeleted}</strong> restored</span>` : ''}
           <span style="color:var(--muted)">${esc(checked)}</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
+          <textarea placeholder="Add a note about this sound…"
+            onblur="saveSoundComment('${esc(s.sound_id)}', this.value)"
+            style="flex:1;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
+                   background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
+                   color:var(--text);font-family:inherit;line-height:1.5"
+          >${esc(s.comment || '')}</textarea>
+          <span id="soundCommentSaved" style="font-size:11px;color:var(--green);display:none;padding-top:6px">Saved.</span>
         </div>
       </div>
     `;
@@ -4096,6 +4125,19 @@
     if (u) u.comment = value.trim() || null;
     if (_modalUser && _modalUser.tiktok_id === tiktokId) _modalUser.comment = value.trim() || null;
     const el = document.getElementById('userCommentSaved');
+    if (el) { el.style.display = ''; setTimeout(() => el.style.display = 'none', 2000); }
+  }
+
+  async function saveSoundComment(soundId, value) {
+    const { ok } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/comment`, {
+      method: 'PATCH',
+      body: JSON.stringify({ comment: value }),
+    });
+    if (!ok) return;
+    const s = sounds.find(s => s.sound_id === soundId);
+    if (s) s.comment = value.trim() || null;
+    if (_soundModal && _soundModal.sound_id === soundId) _soundModal.comment = value.trim() || null;
+    const el = document.getElementById('soundCommentSaved');
     if (el) { el.style.display = ''; setTimeout(() => el.style.display = 'none', 2000); }
   }
 
@@ -4397,6 +4439,11 @@
     _userState.search = val.trim();
     _mRenderToolbar(_USER_MODAL_CFG, _userState.videos);
     _mRenderList(_USER_MODAL_CFG);
+  }
+  function onSoundModalSearch(val) {
+    _soundState.search = val.trim();
+    _mRenderToolbar(_SOUND_MODAL_CFG, _soundState.videos);
+    _mRenderList(_SOUND_MODAL_CFG);
   }
 
   function _renderModalHeader(u) {

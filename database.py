@@ -160,6 +160,7 @@ def _migrate_db(conn):
         "ALTER TABLE users  ADD COLUMN comment            TEXT",
         "ALTER TABLE users  ADD COLUMN starred            INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE sounds ADD COLUMN starred            INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE sounds ADD COLUMN comment            TEXT",
     ]
     for sql in migrations:
         try:
@@ -239,6 +240,14 @@ def set_user_comment(tiktok_id: str, comment: str) -> None:
         conn.execute(
             "UPDATE users SET comment = ? WHERE tiktok_id = ?",
             (comment or None, tiktok_id),
+        )
+
+
+def set_sound_comment(sound_id: str, comment: str) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE sounds SET comment = ? WHERE sound_id = ?",
+            (comment or None, sound_id),
         )
 
 

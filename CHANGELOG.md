@@ -15,8 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User and sound modal: column headers are sticky and scroll horizontally in sync with the video rows on mobile
 - User and sound modal: toolbar collapses on mobile to a single row (view toggle, post count, Profile History); filter pills expand via a "Filters" toggle button
 
+### Added
+- Sound card grid: Tracking filter pills (All / Active / Inactive) matching the Users grid; inactive cards dimmed
+- Sound card grid: tracking toggle on each card, matching user cards
+- Sound modal toolbar: video search (ID or description), matching the user modal
+- Sound modal header: comment/notes field saved on blur, matching the user modal
+
 ### Changed
 - Recent entries: detail text shows the full video ID instead of a truncated value
+- `templates/index.html` internal consolidation (no functional changes): 18 duplicated modal functions replaced by 9 parameterised engine functions; shared CSS base classes (`.modal-base`, `.label-caps`) extracted; inline styles moved to stylesheet; JS helpers (`_cmp`, `_attachSentinel`, `_trackingBadge`, etc.) extracted to module scope; `apiJSON` adds `Content-Type` only when a body is present
 - User modal: opens in grid view by default on mobile; switches to list view automatically when a specific video needs to be highlighted
 - User modal header: compact layout on mobile with avatar and name on one row; handle, ID, bio, and stats below
 - Bio in user modal: collapsed to a single truncated line by default; tap to expand inline, tap again to collapse
@@ -34,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filter pills (All/Active/etc.) now correctly show their active state when the filter row is first expanded on mobile
 
 ### Performance
+- Recent activity panel: `_recentDate` pre-captures the current time once per render batch instead of once per entry
 - User modal: video thumbnails are now lazy-loaded, reducing the initial network burst to only visible rows
 - All date formatting now uses cached `Intl.DateTimeFormat` instances instead of constructing a formatter on every call (`fmtDateShort`, `_recentDate`, modal header join date, profile history entries)
 - User and sound modal: video rows batch-inserted with a single `insertAdjacentHTML` call instead of one `appendChild` per row
