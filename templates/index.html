@@ -3033,7 +3033,7 @@
     document.getElementById('soundsGrid').style.display = view === 'sounds' ? '' : 'none';
     document.getElementById('logPanel').style.display   = view === 'log'    ? '' : 'none';
     document.getElementById('userControls').style.visibility = view === 'users' ? '' : 'hidden';
-    document.getElementById('soundControls').style.display   = view === 'sounds' ? '' : 'none';
+    document.getElementById('soundControls').style.display   = view === 'sounds' ? 'flex' : 'none';
     renderUsers();
     renderSounds();
     _placeGlider(document.getElementById('tvUsers').closest('.filter-pills'));
@@ -3614,14 +3614,15 @@
   ];
 
   const _userState  = { videos:[], filter:'all', typeFilter:'all', search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false, view:'list' };
-  const _soundState = { videos:[], filter:'all', typeFilter:'all', search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false };
+  const _soundState = { videos:[], filter:'all', typeFilter:'all', search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false, view:'list' };
 
   const _USER_MODAL_CFG = {
     st: _userState, listElId: 'modalVideoList', toolbarElId: 'modalToolbar',
     cols: VCOLS, colsCls: 'vcols', pageSize: 50,
     filterFn: 'setModalFilter', typeFilterFn: 'setModalTypeFilter',
     sortFn: 'setModalSort', toggleFn: 'toggleModalToolbar', searchFn: 'onModalSearch',
-    authorCol: null, hasSearch: true, hasViewToggle: true, hasPhistBtn: true,
+    authorCol: null, hasSearch: true, hasViewToggle: true, viewFn: 'setModalView',
+    gridId: 'videoGrid', hasPhistBtn: true,
   };
   const _SOUND_MODAL_CFG = {
     st: _soundState, listElId: 'soundModalVideoList', toolbarElId: 'soundModalToolbar',
@@ -3634,7 +3635,8 @@
         ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();openUserModal('${esc(v.tiktok_id)}')">@${esc(name)}</span>`
         : `<span class="author-chip untracked">@${esc(name)}</span>`;
     },
-    hasSearch: true, hasViewToggle: false, hasPhistBtn: false,
+    hasSearch: true, hasViewToggle: true, viewFn: 'setSoundModalView',
+    gridId: 'soundVideoGrid', hasPhistBtn: false,
   };
 
   function _mFiltered(cfg, skipSearch = false) {
@@ -3683,8 +3685,8 @@
     let html = `<div class="toolbar-main-row">`;
     if (cfg.hasViewToggle) {
       html += `<div class="filter-pills">`
-        + `<button class="filter-pill${cfg.st.view === 'list' ? ' active' : ''}" data-view-key="list" onclick="setModalView('list')" title="List view">${_listViewIcon}</button>`
-        + `<button class="filter-pill${cfg.st.view === 'grid' ? ' active' : ''}" data-view-key="grid" onclick="setModalView('grid')" title="Grid view">${_gridViewIcon}</button>`
+        + `<button class="filter-pill${cfg.st.view === 'list' ? ' active' : ''}" data-view-key="list" onclick="${cfg.viewFn}('list')" title="List view">${_listViewIcon}</button>`
+        + `<button class="filter-pill${cfg.st.view === 'grid' ? ' active' : ''}" data-view-key="grid" onclick="${cfg.viewFn}('grid')" title="Grid view">${_gridViewIcon}</button>`
         + `</div>`;
     }
     html += `<button class="filter-pill toolbar-toggle" onclick="${cfg.toggleFn}()">${toggleLabel}</button>`
@@ -3792,7 +3794,7 @@
   }
 
   function _mRenderList(cfg) {
-    if (cfg.hasViewToggle && cfg.st.view === 'grid') { _renderModalVideoGrid(); return; }
+    if (cfg.hasViewToggle && cfg.st.view === 'grid') { _renderModalVideoGrid(cfg); return; }
     cfg.st.loaded = 0;
     if (cfg.st.obs) { cfg.st.obs.disconnect(); cfg.st.obs = null; }
     const list = document.getElementById(cfg.listElId);
@@ -3858,7 +3860,7 @@
     _soundModal   = s;
     Object.assign(_soundState, {
       videos: [], filter: 'all', typeFilter: 'all', search: '',
-      sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
+      sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false, view: 'list',
     });
     if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
 
@@ -4723,30 +4725,30 @@
     return '';
   }
 
-  function _renderModalVideoGrid() {
-    _userState.loaded = 0;
-    if (_userState.obs) { _userState.obs.disconnect(); _userState.obs = null; }
-    const list = document.getElementById('modalVideoList');
+  function _renderModalVideoGrid(cfg) {
+    cfg.st.loaded = 0;
+    if (cfg.st.obs) { cfg.st.obs.disconnect(); cfg.st.obs = null; }
+    const list = document.getElementById(cfg.listElId);
     list.innerHTML = '';
     list.scrollTop = 0;
-    const vids = _mFiltered(_USER_MODAL_CFG);
+    const vids = _mFiltered(cfg);
     if (!vids.length) {
-      list.innerHTML = `<div class="vlist-empty">${_userState.search ? 'No posts match this search.' : 'No posts match this filter.'}</div>`;
+      list.innerHTML = `<div class="vlist-empty">${cfg.st.search ? 'No posts match this search.' : 'No posts match this filter.'}</div>`;
       return;
     }
     const grid = document.createElement('div');
     grid.className = 'video-grid';
-    grid.id = 'videoGrid';
+    grid.id = cfg.gridId;
     list.appendChild(grid);
-    _appendModalGrid(vids);
+    _appendModalGrid(cfg, vids);
   }
 
-  function _appendModalGrid(vids) {
-    const list  = document.getElementById('modalVideoList');
-    const grid  = document.getElementById('videoGrid');
+  function _appendModalGrid(cfg, vids) {
+    const list  = document.getElementById(cfg.listElId);
+    const grid  = document.getElementById(cfg.gridId);
     if (!grid) return;
-    const batch = vids.slice(_userState.loaded, _userState.loaded + _USER_MODAL_CFG.pageSize);
-    _userState.loaded += batch.length;
+    const batch = vids.slice(cfg.st.loaded, cfg.st.loaded + cfg.pageSize);
+    cfg.st.loaded += batch.length;
     batch.forEach(v => {
       const cell = document.createElement('div');
       const { cls } = _videoStatus(v);
@@ -4763,10 +4765,10 @@
       else if (v.type === 'photo') cell.onclick = () => openCarousel(v.video_id);
       grid.appendChild(cell);
     });
-    if (_userState.loaded < vids.length) {
-      _userState.obs = _attachSentinel(list, () => {
-        _userState.obs = null;
-        _appendModalGrid(vids);
+    if (cfg.st.loaded < vids.length) {
+      cfg.st.obs = _attachSentinel(list, () => {
+        cfg.st.obs = null;
+        _appendModalGrid(cfg, vids);
       });
     }
   }
@@ -4779,6 +4781,16 @@
     });
     toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
     _mRenderList(_USER_MODAL_CFG);
+  }
+
+  function setSoundModalView(view) {
+    _soundState.view = view;
+    const toolbar = document.getElementById('soundModalToolbar');
+    toolbar.querySelectorAll('[data-view-key]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.viewKey === view);
+    });
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    _mRenderList(_SOUND_MODAL_CFG);
   }
 
   // ── Stats backfill ────────────────────────────────────────────────────────────
