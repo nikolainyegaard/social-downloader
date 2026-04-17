@@ -18,22 +18,29 @@ def _npost(n: int) -> str:
     return "1 post" if n == 1 else f"{n} posts"
 
 
-async def process_all_sounds(log: Callable[[str], None]) -> None:
+async def process_all_sounds(log: Callable[[str], None]) -> dict:
     """Fetch and download new videos for all tracked sounds.
     Called once per main loop run, after user processing.
+    Returns {"sounds_checked": int, "new_videos": int}.
     """
     sounds = db.get_all_sounds()
     if not sounds:
-        return
+        return {"sounds_checked": 0, "new_videos": 0}
 
+    sounds_checked = 0
+    total_new      = 0
     for sound in sounds:
         if not sound.get("tracking_enabled", 1):
             log(f"Skipping '{sound.get('label') or sound['sound_id']}' (tracking disabled)")
             continue
-        await process_sound(sound, log)
+        total_new += await process_sound(sound, log)
+        sounds_checked += 1
+
+    return {"sounds_checked": sounds_checked, "new_videos": total_new}
 
 
-async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
+async def process_sound(sound: dict, log: Callable[[str], None]) -> int:
+    """Process one sound. Returns the count of new video associations added."""
     sound_id = sound["sound_id"]
     label    = sound.get("label") or sound_id
 
@@ -46,7 +53,7 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
     except Exception as e:
         log(f"Failed to fetch posts for sound {sound_id}: {e}")
         db.update_sound_last_checked(sound_id)
-        return
+        return 0
 
     log(f"{_npost(len(remote_ids))} found for sound '{label}'")
 
@@ -76,16 +83,18 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
         if not missing_ids:
             log(f"No changes for sound '{label}'")
         db.update_sound_last_checked(sound_id)
-        return
+        return 0
 
     log(f"New: {_npost(len(new_ids))} for sound '{label}'")
-    cookies = get_cookies_flat()
+    cookies   = get_cookies_flat()
+    new_count = 0
 
     for vid_id in new_ids:
         # Already in DB (downloaded via user tracking) -- just add the junction row
         if db.get_video(vid_id):
             db.add_sound_video(sound_id, vid_id)
             log(f"Linked existing video {vid_id} to sound '{label}'")
+            new_count += 1
             continue
 
         # Fetch full video details (placeholder username; TikTok redirects by video ID)
@@ -121,7 +130,7 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
             if path:
                 thumb = generate_thumbnail(vid_id, path)
                 if not thumb:
-                    log(f"Thumbnail FAILED for {vid_id} — see [thumb] lines above")
+                    log(f"Thumbnail FAILED for {vid_id} -- see [thumb] lines above")
             dl_result = {"file_path": path, "ytdlp_data": None} if path else None
         else:
             log(f"Downloading video {vid_id} from @{author_username}...")
@@ -154,8 +163,10 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
             )
             db.update_video_downloaded(vid_id, dl_result["file_path"], dl_result.get("ytdlp_data"))
             db.add_sound_video(sound_id, vid_id)
-            log(f"Saved {vid_id} from @{author_username} → {dl_result['file_path']}")
+            log(f"Saved {vid_id} from @{author_username} -> {dl_result['file_path']}")
+            new_count += 1
         else:
             log(f"Failed to download {vid_id}")
 
     db.update_sound_last_checked(sound_id)
+    return new_count

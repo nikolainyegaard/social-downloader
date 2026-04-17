@@ -161,6 +161,7 @@ def _migrate_db(conn):
         "ALTER TABLE users  ADD COLUMN starred            INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE sounds ADD COLUMN starred            INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE sounds ADD COLUMN comment            TEXT",
+        "ALTER TABLE users  ADD COLUMN profile_fail_count INTEGER NOT NULL DEFAULT 0",
     ]
     for sql in migrations:
         try:
@@ -232,6 +233,29 @@ def set_user_tracking_enabled(tiktok_id: str, enabled: bool) -> None:
         conn.execute(
             "UPDATE users SET tracking_enabled = ? WHERE tiktok_id = ?",
             (1 if enabled else 0, tiktok_id),
+        )
+
+
+def increment_profile_fail_count(tiktok_id: str) -> int:
+    """Increment the consecutive profile-fetch failure counter. Returns the new count."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET profile_fail_count = COALESCE(profile_fail_count, 0) + 1 WHERE tiktok_id = ?",
+            (tiktok_id,),
+        )
+        row = conn.execute(
+            "SELECT COALESCE(profile_fail_count, 0) FROM users WHERE tiktok_id = ?",
+            (tiktok_id,),
+        ).fetchone()
+    return row[0] if row else 0
+
+
+def reset_profile_fail_count(tiktok_id: str) -> None:
+    """Reset the consecutive profile-fetch failure counter after a successful fetch."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET profile_fail_count = 0 WHERE tiktok_id = ?",
+            (tiktok_id,),
         )
 
 

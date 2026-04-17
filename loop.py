@@ -23,8 +23,9 @@ from sound_tracker import process_all_sounds, process_sound
 
 LOOP_STATE_PATH = os.path.join(DATA_DIR, "loop_state.json")
 
-_CONFIRM_THRESHOLD    = DELETION_CONFIRM_THRESHOLD  # loops a negative change must persist before it's made official
-_MAX_BOT_FAILURES     = 3  # consecutive post-reset bot detections before aborting the run
+_CONFIRM_THRESHOLD             = DELETION_CONFIRM_THRESHOLD  # loops a negative change must persist before it's made official
+_MAX_BOT_FAILURES              = 3  # consecutive post-reset bot detections before aborting the run
+_PROFILE_FAIL_QUIET_THRESHOLD  = 5  # consecutive profile-fetch failures before going silent (_logd only)
 
 
 class _BotDetectedError(Exception):
@@ -250,14 +251,14 @@ def _logd(msg: str):
 # ── Core async logic ──────────────────────────────────────────────────────────
 
 async def _process_single_user(user: dict, api, cookies: dict,
-                               fetch_videos: bool = True):
+                               fetch_videos: bool = True, progress: str = ""):
     tiktok_id = user["tiktok_id"]
 
     with _user_state_lock:
         user_loop_state["current_user"] = user["username"]
 
     try:
-        _log(f"Processing @{user['username']} (ID: {tiktok_id})")
+        _log(f"Processing @{user['username']} ({progress or f'ID: {tiktok_id}'})")
 
         is_private: bool | None = None
 
@@ -314,6 +315,7 @@ async def _process_single_user(user: dict, api, cookies: dict,
                 avatar_url=info.get("avatar_url"),
                 raw_user_data=info.get("_raw_user_data"),
             )
+            db.reset_profile_fail_count(tiktok_id)
             username     = info["username"]
             display_name = info["display_name"] or username
             if info.get("sec_uid"):
@@ -329,6 +331,7 @@ async def _process_single_user(user: dict, api, cookies: dict,
                 if cache_avatar(tiktok_id, info["avatar_url"]) == "changed":
                     _log(f"  Profile change: avatar changed")
         except UserBannedException:
+            db.reset_profile_fail_count(tiktok_id)  # TikTok responded; not a fetch failure
             if _was_banned:
                 _log(f"  No changes (still banned)")
                 banned_at = user.get("banned_at")
@@ -347,7 +350,11 @@ async def _process_single_user(user: dict, api, cookies: dict,
         except Exception as e:
             if _is_bot_error(e):
                 raise _BotDetectedError(str(e)) from e
-            _log(f"  Failed to fetch profile info: {e}")
+            _fail_count = db.increment_profile_fail_count(tiktok_id)
+            if _fail_count < _PROFILE_FAIL_QUIET_THRESHOLD:
+                _log(f"  Failed to fetch profile info: {e}")
+            else:
+                _logd(f"  [{tiktok_id}] profile still failing (#{_fail_count}): {e}")
             username     = user["username"]
             display_name = user.get("display_name") or username
 
@@ -525,11 +532,12 @@ async def _process_single_user(user: dict, api, cookies: dict,
             user_loop_state["current_user"] = None
 
 
-async def _process_all_users(users: list[dict]):
+async def _process_all_users(users: list[dict]) -> int:
     from TikTokApi import TikTokApi
 
     cookies  = get_cookies_flat()
     ms_token = get_ms_token()
+    total    = len(users)
 
     async def _make_session(api) -> bool:
         """(Re)create sessions on an existing TikTokApi instance. Returns True on success.
@@ -538,6 +546,7 @@ async def _process_all_users(users: list[dict]):
         relaunching the browser process, so this is cheap relative to a full TikTokApi()
         instantiation. Used both for the initial session and after bot detection.
         """
+        _last_exc: Exception | None = None
         for _attempt in range(2):
             try:
                 await api.create_sessions(
@@ -550,50 +559,63 @@ async def _process_all_users(users: list[dict]):
                 await asyncio.sleep(3)
                 return True
             except Exception as e:
+                _last_exc = e
                 _logd(f"create_sessions attempt {_attempt + 1} error: {e}")
                 if _attempt == 0:
                     _log("Session creation failed, retrying in 5s...")
                     await asyncio.sleep(5)
-        _log("Session creation failed after retry")
+        _log(f"Session creation failed after retry: {_last_exc}")
         return False
 
     # One browser process for the whole run. On bot detection, create_sessions() is
-    # called again for a fresh session — no new browser launch needed.
+    # called again for a fresh session -- no new browser launch needed.
     async with TikTokApi() as api:
         if not await _make_session(api):
-            _log("Aborting loop — could not create initial session")
-            return
+            _log(f"Aborting loop -- could not create initial session (0/{total} users)")
+            return 0
 
+        completed                = 0
         consecutive_bot_failures = 0
 
         for idx, user in enumerate(users):
             if idx > 0:
                 await asyncio.sleep(random.uniform(2, 5))
-            fetch_videos = bool(user.get("tracking_enabled", 1))
+            fetch_videos    = bool(user.get("tracking_enabled", 1))
+            progress        = f"{idx + 1}/{total}"
+            _user_processed = False
             try:
-                await _process_single_user(user, api, cookies, fetch_videos=fetch_videos)
+                await _process_single_user(user, api, cookies, fetch_videos=fetch_videos,
+                                           progress=progress)
                 consecutive_bot_failures = 0
+                _user_processed = True
             except _BotDetectedError as exc:
                 _logd(f"  [{user['tiktok_id']}] bot detection: {exc}")
-                _log(f"  Bot detected — resetting session and retrying @{user['username']}")
+                _log(f"  Bot detected -- resetting session and retrying @{user['username']}")
                 if not await _make_session(api):
-                    _log("Aborting loop — session reset failed")
-                    return
+                    _log(f"Aborting loop -- session reset failed after {completed}/{total} users")
+                    return completed
                 try:
-                    await _process_single_user(user, api, cookies, fetch_videos=fetch_videos)
+                    await _process_single_user(user, api, cookies, fetch_videos=fetch_videos,
+                                               progress=progress)
                     consecutive_bot_failures = 0
+                    _user_processed = True
                 except _BotDetectedError:
                     consecutive_bot_failures += 1
-                    _log(f"  Still bot-detected after reset — skipping @{user['username']}")
+                    _log(f"  Still bot-detected after reset -- skipping @{user['username']}")
                     if consecutive_bot_failures >= _MAX_BOT_FAILURES:
-                        _log(f"Aborting loop — {_MAX_BOT_FAILURES} consecutive bot detections, session unrecoverable")
-                        return
+                        _log(f"Aborting loop -- {_MAX_BOT_FAILURES} consecutive bot detections"
+                             f" after {completed}/{total} users, session unrecoverable")
+                        return completed
                 except Exception as exc2:
                     consecutive_bot_failures = 0
                     _log(f"  @{user['username']} failed after session reset: {exc2}")
             except Exception as e:
                 consecutive_bot_failures = 0
                 _log(f"Unhandled error for @{user['username']}: {e}")
+            if _user_processed:
+                completed += 1
+
+    return completed
 
 
 # ── Manual run workers ────────────────────────────────────────────────────────
@@ -619,10 +641,10 @@ async def _run_single_user_with_session(user: dict):
             except Exception as e:
                 _logd(f"  [{user['tiktok_id']}] create_sessions attempt {_attempt + 1} error: {e}")
                 if _attempt == 0:
-                    _log(f"Processing @{user['username']} — session failed, retrying in 5s...")
+                    _log(f"Processing @{user['username']} -- session failed, retrying in 5s...")
                     await asyncio.sleep(5)
                 else:
-                    _log(f"Processing @{user['username']} — session failed after retry, skipping")
+                    _log(f"Processing @{user['username']} -- session failed after retry ({e}), skipping")
                     return
         await asyncio.sleep(3)
         await _process_single_user(user, api, cookies)
@@ -691,20 +713,21 @@ def run_user_loop():
     _videos_before = db.count_downloaded_videos()
 
     _log("=== User loop started ===")
-    users = db.get_all_users()
+    users      = db.get_all_users()
+    _completed = 0
 
     if not users:
-        _log("No users configured — nothing to do.")
+        _log("No users configured -- nothing to do.")
     else:
         try:
-            asyncio.run(_process_all_users(users))
+            _completed = asyncio.run(_process_all_users(users)) or 0
         except Exception as e:
             _log(f"Unhandled user loop error: {e}")
 
-    _log("=== User loop complete ===")
-    last_run_end = datetime.now(timezone.utc).isoformat()
+    last_run_end  = datetime.now(timezone.utc).isoformat()
     duration_secs = round(time.monotonic() - _loop_start)
-    new_videos = db.count_downloaded_videos() - _videos_before
+    new_videos    = db.count_downloaded_videos() - _videos_before
+    _log(f"=== User loop complete: {_completed}/{len(users)} users, {new_videos} new video(s) ===")
     with _user_state_lock:
         user_loop_state["running"]                = False
         user_loop_state["last_run_end"]           = last_run_end
@@ -721,15 +744,20 @@ def run_sound_loop():
     _videos_before = db.count_downloaded_videos()
 
     _log("=== Sound loop started ===")
+    _sound_stats: dict | None = None
     try:
-        asyncio.run(process_all_sounds(_log))
+        _sound_stats = asyncio.run(process_all_sounds(_log))
     except Exception as e:
         _log(f"Unhandled sound loop error: {e}")
 
-    _log("=== Sound loop complete ===")
-    last_run_end = datetime.now(timezone.utc).isoformat()
+    last_run_end  = datetime.now(timezone.utc).isoformat()
     duration_secs = round(time.monotonic() - _loop_start)
-    new_videos = db.count_downloaded_videos() - _videos_before
+    new_videos    = db.count_downloaded_videos() - _videos_before
+    if _sound_stats:
+        _log(f"=== Sound loop complete: {_sound_stats['sounds_checked']} sound(s) checked,"
+             f" {new_videos} new video(s) ===")
+    else:
+        _log("=== Sound loop complete ===")
     with _sound_state_lock:
         sound_loop_state["running"]                = False
         sound_loop_state["last_run_end"]           = last_run_end

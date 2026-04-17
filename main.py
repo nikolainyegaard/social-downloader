@@ -147,6 +147,12 @@ class _SuppressPolling(logging.Filter):
 
 logging.getLogger("werkzeug").addFilter(_SuppressPolling())
 
+# Suppress TikTokApi's own library-level ERROR messages. These duplicate the
+# app's own exception handling and appear as raw "ERROR - Got an unexpected
+# status code: ..." lines in the log. All meaningful failures are already
+# caught and logged by the application code in loop.py / sound_tracker.py.
+logging.getLogger("TikTokApi").setLevel(logging.CRITICAL)
+
 
 def _ts() -> str:
     return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
