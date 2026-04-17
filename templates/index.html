@@ -4486,6 +4486,7 @@
   function _renderModalHeader(u) {
     const oldNames = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
 
+    const isInactive = u.tracking_enabled === 0;
     const { cls: trackingCls, label: trackingLbl } = _trackingBadge(u.tracking_enabled);
     const accountBadge = u.account_status === 'banned'
       ? `<span class="privacy-status banned">Banned</span>`
