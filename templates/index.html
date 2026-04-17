@@ -2219,6 +2219,12 @@
     return `<button class="filter-pill${active}" data-type-key="${key}" onclick="${onclickFn}('${key}')">${label}</button>`;
   }
 
+  function _cmp(av, bv, dir) {
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    return av < bv ? (dir === 'asc' ? -1 : 1) : av > bv ? (dir === 'asc' ? 1 : -1) : 0;
+  }
+
   function _sortByField(arr, field, dir) {
     return [...arr].sort((a, b) => {
       const av = a[field] ?? (dir === 'asc' ? Infinity : -Infinity);
@@ -2302,9 +2308,8 @@
     account_status: 'Account status', privacy_status: 'Privacy',
   };
 
-  function _recentDate(ts) {
+  function _recentDate(ts, now = new Date()) {
     const d        = new Date(ts * 1000);
-    const now      = new Date();
     const today    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const dDay     = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const diffDays = Math.round((today - dDay) / 86400000);
@@ -2318,6 +2323,7 @@
     const leftEl  = document.getElementById('recentLeft');
     const rightEl = document.getElementById('recentRight');
     if (!leftEl || !rightEl) return;
+    const now = new Date();
 
     // ── Left column ───────────────────────────────────────────────────────────
 
@@ -2332,7 +2338,7 @@
           ? `openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')`
           : d.sound_id ? `openSoundModalAndHighlight('${esc(d.sound_id)}','${esc(d.video_id)}','deleted')` : '';
         return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.username)}">
-          <span class="recent-date">${_recentDate(d.deleted_at)}</span>
+          <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
           <span class="recent-name" ${d.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(d.username)}</span>
           <span class="recent-detail">${esc(d.video_id.slice(0, 10))}\u2026</span>
         </div>`;
@@ -2348,7 +2354,7 @@
     if (data.profile_changes.length) {
       left += data.profile_changes.map(p =>
         `<div class="recent-entry" onclick="openUserModalWithHistory('${esc(p.tiktok_id)}','${esc(p.field)}')" title="Open @${esc(p.username)} · ${esc(_FIELD_LABELS[p.field] || p.field)} history">
-          <span class="recent-date">${_recentDate(p.changed_at)}</span>
+          <span class="recent-date">${_recentDate(p.changed_at, now)}</span>
           <span class="recent-name">@${esc(p.username)}</span>
           <span class="recent-detail">${esc(_FIELD_LABELS[p.field] || p.field)}</span>
         </div>`
@@ -2364,7 +2370,7 @@
     if (data.bans && data.bans.length) {
       const b = data.bans[0];
       left += `<div class="recent-entry" onclick="openUserModal('${esc(b.tiktok_id)}')" title="Open @${esc(b.username)}">
-        <span class="recent-date">${_recentDate(b.banned_at)}</span>
+        <span class="recent-date">${_recentDate(b.banned_at, now)}</span>
         <span class="recent-name">@${esc(b.username)}</span>
         <span class="recent-detail" style="color:var(--red)">Banned</span>
       </div>`;
@@ -2387,7 +2393,7 @@
           : g.sound_id ? `openSoundModalAndHighlight('${esc(g.sound_id)}','${esc(g.video_id)}')` : '';
         const nameStyle = g.enabled !== 0 ? '' : 'style="color:var(--text-dim)"';
         return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(g.username)}">
-          <span class="recent-date">${_recentDate(g.download_date)}</span>
+          <span class="recent-date">${_recentDate(g.download_date, now)}</span>
           <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>
           <span class="recent-detail">${g.count}x</span>
         </div>`;
@@ -2478,6 +2484,7 @@
     const body = document.getElementById('recentLogBody');
     const sentinel = document.getElementById('recentLogSentinel');
     const frag = document.createDocumentFragment();
+    const now = new Date();
 
     if (_recentLogType === 'saved') {
       // Server returns pre-grouped consecutive runs; stitch across batch boundaries.
@@ -2501,7 +2508,7 @@
           row.onclick = () => { openSoundModalAndHighlight(g.sound_id, g.video_id); };
         }
         row.innerHTML = `
-          <span class="recent-date">${_recentDate(g.download_date)}</span>
+          <span class="recent-date">${_recentDate(g.download_date, now)}</span>
           <span class="recent-name" ${g.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(g.username)}</span>
           <span class="recent-detail">${g.count}x</span>`;
         frag.appendChild(row);
@@ -2519,7 +2526,7 @@
             row.onclick = () => { openSoundModalAndHighlight(item.sound_id, item.video_id, 'deleted'); };
           }
           row.innerHTML = `
-            <span class="recent-date">${_recentDate(item.deleted_at)}</span>
+            <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
             <span class="recent-name" ${item.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(item.username)}</span>
             <span class="recent-detail">${esc(item.video_id)}</span>`;
         } else if (_recentLogType === 'profile-changes') {
@@ -2527,14 +2534,14 @@
           row.title = `Open @${item.username} · ${label} history`;
           row.onclick = () => { openUserModalWithHistory(item.tiktok_id, item.field); };
           row.innerHTML = `
-            <span class="recent-date">${_recentDate(item.changed_at)}</span>
+            <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
             <span class="recent-name">@${esc(item.username)}</span>
             <span class="recent-detail">${esc(label)}</span>`;
         } else {
           row.title = `Open @${item.username}`;
           row.onclick = () => { openUserModal(item.tiktok_id); };
           row.innerHTML = `
-            <span class="recent-date">${_recentDate(item.banned_at)}</span>
+            <span class="recent-date">${_recentDate(item.banned_at, now)}</span>
             <span class="recent-name">@${esc(item.username)}</span>
             <span class="recent-detail" style="color:var(--red)">Banned</span>`;
         }
@@ -2961,7 +2968,6 @@
 
     const { ok, data } = await apiJSON('/api/debug/fetch', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source, action, input: inp }),
     });
 
@@ -3097,15 +3103,9 @@
   function _sortedUsers() {
     const { field, dir } = userSort;
     return _filteredUsers().sort((a, b) => {
-      let av = field === 'display_name' ? (a.display_name || a.username)
-             : (a[field] ?? (field === 'username' ? '' : 0));
-      let bv = field === 'display_name' ? (b.display_name || b.username)
-             : (b[field] ?? (field === 'username' ? '' : 0));
-      if (typeof av === 'string') av = av.toLowerCase();
-      if (typeof bv === 'string') bv = bv.toLowerCase();
-      if (av < bv) return dir === 'asc' ? -1 : 1;
-      if (av > bv) return dir === 'asc' ? 1 : -1;
-      return 0;
+      const av = field === 'display_name' ? (a.display_name || a.username) : (a[field] ?? (field === 'username' ? '' : 0));
+      const bv = field === 'display_name' ? (b.display_name || b.username) : (b[field] ?? (field === 'username' ? '' : 0));
+      return _cmp(av, bv, dir);
     });
   }
 
@@ -3301,7 +3301,6 @@
     if (_isSoundInput(val)) {
       const { ok, data } = await apiJSON('/api/sounds', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sound_id: val, label: null }),
       });
       if (ok) {
@@ -3388,7 +3387,6 @@
     renderUsers();
     await apiJSON(`/api/users/${tiktokId}/star`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ starred: newVal }),
     });
   }
@@ -3454,13 +3452,9 @@
     countEl.textContent = isFiltered ? `${filtered.length} of ${sounds.length}` : sounds.length;
     const { field, dir } = soundSort;
     filtered = [...filtered].sort((a, b) => {
-      let av = field === 'label' ? (a.label || a.sound_id) : (a[field] ?? (field === 'starred' ? 0 : 0));
-      let bv = field === 'label' ? (b.label || b.sound_id) : (b[field] ?? (field === 'starred' ? 0 : 0));
-      if (typeof av === 'string') av = av.toLowerCase();
-      if (typeof bv === 'string') bv = bv.toLowerCase();
-      if (av < bv) return dir === 'asc' ? -1 : 1;
-      if (av > bv) return dir === 'asc' ? 1 : -1;
-      return 0;
+      const av = field === 'label' ? (a.label || a.sound_id) : (a[field] ?? 0);
+      const bv = field === 'label' ? (b.label || b.sound_id) : (b[field] ?? 0);
+      return _cmp(av, bv, dir);
     });
     const _tvPills = document.getElementById('tvUsers')?.closest('.filter-pills');
     if (_tvPills) _placeGlider(_tvPills);
@@ -3531,7 +3525,6 @@
     statusEl.className = 'add-status info'; statusEl.textContent = 'Adding…';
     const { ok, data } = await apiJSON('/api/sounds', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sound_id: raw, label }),
     });
     if (!ok) {
@@ -3561,7 +3554,6 @@
     renderSounds();
     await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/star`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ starred: newVal }),
     });
   }
@@ -3950,7 +3942,6 @@
     if (newLabel === null) return;
     const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: newLabel.trim() || null }),
     });
     if (!ok) { alert(data.error || 'Failed to update label.'); return; }
