@@ -3032,7 +3032,7 @@
     document.getElementById('usersGrid').style.display  = view === 'users'  ? '' : 'none';
     document.getElementById('soundsGrid').style.display = view === 'sounds' ? '' : 'none';
     document.getElementById('logPanel').style.display   = view === 'log'    ? '' : 'none';
-    document.getElementById('userControls').style.visibility = view === 'users' ? '' : 'hidden';
+    document.getElementById('userControls').style.display    = view === 'users' ? '' : 'none';
     document.getElementById('soundControls').style.display   = view === 'sounds' ? 'flex' : 'none';
     renderUsers();
     renderSounds();
