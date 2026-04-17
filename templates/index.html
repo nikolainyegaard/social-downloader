@@ -3577,38 +3577,284 @@
     if (e.key === 'Enter') addSound();
   });
 
+  // ── Modal engine ──────────────────────────────────────────────────────────────
+
+  const VCOLS = [
+    { field: null,            label: '' },
+    { field: null,            label: 'Description' },
+    { field: 'status',        label: 'Status' },
+    { field: 'view_count',    label: 'Views' },
+    { field: 'upload_date',   label: 'Uploaded' },
+    { field: 'download_date', label: 'Saved' },
+    { field: 'deleted_at',    label: 'Deleted' },
+    { field: null,            label: '' },
+  ];
+  const SOUND_VCOLS = [
+    { field: null,             label: '' },
+    { field: null,             label: 'Description' },
+    { field: null,             label: 'Author' },
+    { field: 'status',         label: 'Status' },
+    { field: 'view_count',     label: 'Views' },
+    { field: 'upload_date',    label: 'Uploaded' },
+    { field: 'download_date',  label: 'Downloaded' },
+    { field: 'deleted_at',     label: 'Deleted' },
+    { field: null,             label: '' },
+  ];
+
+  const _userState  = { videos:[], filter:'all', typeFilter:'all', search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false, view:'list' };
+  const _soundState = { videos:[], filter:'all', typeFilter:'all', search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false };
+
+  const _USER_MODAL_CFG = {
+    st: _userState, listElId: 'modalVideoList', toolbarElId: 'modalToolbar',
+    cols: VCOLS, colsCls: 'vcols', pageSize: 50,
+    filterFn: 'setModalFilter', typeFilterFn: 'setModalTypeFilter',
+    sortFn: 'setModalSort', toggleFn: 'toggleModalToolbar',
+    authorCol: null, hasSearch: true, hasViewToggle: true, hasPhistBtn: true,
+  };
+  const _SOUND_MODAL_CFG = {
+    st: _soundState, listElId: 'soundModalVideoList', toolbarElId: 'soundModalToolbar',
+    cols: SOUND_VCOLS, colsCls: 'sound-vcols', pageSize: 50,
+    filterFn: 'setSoundModalFilter', typeFilterFn: 'setSoundModalTypeFilter',
+    sortFn: 'setSoundModalSort', toggleFn: 'toggleSoundModalToolbar',
+    authorCol: v => {
+      const name = v.author_username || v.tiktok_id || '?';
+      return v.author_enabled === 1
+        ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();openUserModal('${esc(v.tiktok_id)}')">@${esc(name)}</span>`
+        : `<span class="author-chip untracked">@${esc(name)}</span>`;
+    },
+    hasSearch: false, hasViewToggle: false, hasPhistBtn: false,
+  };
+
+  function _mFiltered(cfg, skipSearch = false) {
+    let vids = cfg.st.videos;
+    if (cfg.st.filter === 'active')    vids = vids.filter(v => v.status === 'up');
+    if (cfg.st.filter === 'deleted')   vids = vids.filter(v => v.status === 'deleted');
+    if (cfg.st.filter === 'restored')  vids = vids.filter(v => v.status === 'undeleted');
+    if (cfg.st.typeFilter === 'video') vids = vids.filter(v => v.type === 'video');
+    if (cfg.st.typeFilter === 'photo') vids = vids.filter(v => v.type === 'photo');
+    if (!skipSearch && cfg.st.search) {
+      const q = cfg.st.search.toLowerCase();
+      vids = vids.filter(v =>
+        (v.video_id    || '').toLowerCase().includes(q) ||
+        (v.description || '').toLowerCase().includes(q)
+      );
+    }
+    const { field, dir } = cfg.st.sort;
+    return _sortByField(vids, field, dir);
+  }
+
+  function _mRenderToolbar(cfg, vids) {
+    const counts     = { all: 0, active: 0, deleted: 0, restored: 0 };
+    const typeCounts = { video: 0, photo: 0 };
+    vids.forEach(v => {
+      counts.all++;
+      if      (v.status === 'up')        counts.active++;
+      else if (v.status === 'deleted')   counts.deleted++;
+      else if (v.status === 'undeleted') counts.restored++;
+      if      (v.type === 'video') typeCounts.video++;
+      else if (v.type === 'photo') typeCounts.photo++;
+    });
+    const hasMultipleTypes = typeCounts.video > 0 && typeCounts.photo > 0;
+    const pill     = (key, label) => _pill(key, label, cfg.st.filter,     cfg.filterFn,     counts);
+    const typePill = (key, label) => _typePill(key, label, cfg.st.typeFilter, cfg.typeFilterFn);
+    const shown = _mFiltered(cfg).length;
+    const total = _mFiltered(cfg, true).length;
+    const countLabel = cfg.st.search
+      ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
+      : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
+    const hasActiveFilters = cfg.st.filter !== 'all' || cfg.st.typeFilter !== 'all';
+    const toggleLabel = (cfg.st.toolbarExpanded ? '▲' : '▼') + (hasActiveFilters ? ' Filters •' : ' Filters');
+    const toolbar = document.getElementById(cfg.toolbarElId);
+    const searchWasFocused = cfg.hasSearch &&
+      document.activeElement === toolbar.querySelector('#modalVideoSearch');
+    const searchSelEnd = searchWasFocused ? document.activeElement.selectionEnd : 0;
+    let html = `<div class="toolbar-main-row">`;
+    if (cfg.hasViewToggle) {
+      html += `<div class="filter-pills">`
+        + `<button class="filter-pill${cfg.st.view === 'list' ? ' active' : ''}" data-view-key="list" onclick="setModalView('list')" title="List view">${_listViewIcon}</button>`
+        + `<button class="filter-pill${cfg.st.view === 'grid' ? ' active' : ''}" data-view-key="grid" onclick="setModalView('grid')" title="Grid view">${_gridViewIcon}</button>`
+        + `</div>`;
+    }
+    html += `<button class="filter-pill toolbar-toggle" onclick="${cfg.toggleFn}()">${toggleLabel}</button>`
+      + `<span class="modal-vid-count">${countLabel}</span>`;
+    if (cfg.hasSearch) {
+      html += `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${esc(cfg.st.search)}" placeholder="Search videos…" oninput="onModalSearch(this.value)">`;
+    }
+    if (cfg.hasPhistBtn) {
+      html += `<button class="filter-pill toolbar-phist-btn" onclick="openProfileHistory()">Profile history</button>`;
+    }
+    html += `</div>`
+      + `<div class="toolbar-filter-wrap${cfg.st.toolbarExpanded ? '' : ' collapsed'}">`
+      + `<div class="filter-pills">`
+      + pill('all', 'All') + pill('active', 'Active')
+      + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
+      + (counts.restored ? pill('restored', 'Restored') : '')
+      + `</div>`
+      + (hasMultipleTypes
+          ? `<div class="filter-pills">`
+            + typePill('all', 'All types')
+            + typePill('video', `Videos (${typeCounts.video.toLocaleString()})`)
+            + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
+            + `</div>`
+          : '')
+      + `</div>`;
+    toolbar.innerHTML = html;
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    if (searchWasFocused) {
+      const el = toolbar.querySelector('#modalVideoSearch');
+      if (el) { el.focus(); el.setSelectionRange(searchSelEnd, searchSelEnd); }
+    }
+  }
+
+  function _mSetFilter(cfg, filter) {
+    cfg.st.filter = filter;
+    const toolbar = document.getElementById(cfg.toolbarElId);
+    toolbar.querySelectorAll('[data-filter-key]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.filterKey === filter);
+    });
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    const shown = _mFiltered(cfg).length;
+    const total = _mFiltered(cfg, true).length;
+    const countEl = toolbar.querySelector('.modal-vid-count');
+    if (countEl) countEl.textContent = cfg.st.search
+      ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
+      : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
+    const toggleBtn = toolbar.querySelector('.toolbar-toggle');
+    if (toggleBtn) {
+      const hasActive = cfg.st.filter !== 'all' || cfg.st.typeFilter !== 'all';
+      toggleBtn.textContent = (cfg.st.toolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
+    }
+    _mRenderList(cfg);
+  }
+
+  function _mSetTypeFilter(cfg, type) {
+    cfg.st.typeFilter = type;
+    const toolbar = document.getElementById(cfg.toolbarElId);
+    toolbar.querySelectorAll('[data-type-key]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.typeKey === type);
+    });
+    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    const shown = _mFiltered(cfg).length;
+    const total = _mFiltered(cfg, true).length;
+    const countEl = toolbar.querySelector('.modal-vid-count');
+    if (countEl) countEl.textContent = cfg.st.search
+      ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
+      : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
+    const toggleBtn = toolbar.querySelector('.toolbar-toggle');
+    if (toggleBtn) {
+      const hasActive = cfg.st.filter !== 'all' || cfg.st.typeFilter !== 'all';
+      toggleBtn.textContent = (cfg.st.toolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
+    }
+    _mRenderList(cfg);
+  }
+
+  function _mToggleToolbar(cfg) {
+    cfg.st.toolbarExpanded = _doToggleToolbar(
+      cfg.st.toolbarExpanded, cfg.toolbarElId,
+      () => cfg.st.filter !== 'all' || cfg.st.typeFilter !== 'all'
+    );
+  }
+
+  function _mSetSort(cfg, field) {
+    cfg.st.sort = _doSort(cfg.st.sort, field);
+    const list = document.getElementById(cfg.listElId);
+    const sx = list.scrollLeft;
+    _mRenderList(cfg);
+    list.scrollLeft = sx;
+  }
+
+  function _mRenderColHdrs(cfg) {
+    if (cfg.hasViewToggle && cfg.st.view === 'grid') return;
+    const list = document.getElementById(cfg.listElId);
+    const existing = list.querySelector('.video-list-hdr');
+    if (existing) existing.remove();
+    list.insertAdjacentHTML('afterbegin',
+      `<div class="video-list-hdr"><div class="${cfg.colsCls}">`
+      + cfg.cols.map(col => {
+          if (!col.field) return `<div class="col-hdr">${col.label}</div>`;
+          const isSorted = cfg.st.sort.field === col.field;
+          const cls = isSorted ? ` sort-${cfg.st.sort.dir}` : '';
+          return `<div class="col-hdr sortable${cls}" onclick="${cfg.sortFn}('${col.field}')">${col.label}</div>`;
+        }).join('')
+      + '</div></div>');
+  }
+
+  function _mRenderList(cfg) {
+    if (cfg.hasViewToggle && cfg.st.view === 'grid') { _renderModalVideoGrid(); return; }
+    cfg.st.loaded = 0;
+    if (cfg.st.obs) { cfg.st.obs.disconnect(); cfg.st.obs = null; }
+    const list = document.getElementById(cfg.listElId);
+    list.innerHTML = '';
+    list.scrollTop = 0;
+    _mRenderColHdrs(cfg);
+    const vids = _mFiltered(cfg);
+    if (!vids.length) {
+      const msg = cfg.st.search ? 'No posts match this search.' : 'No posts match this filter.';
+      list.insertAdjacentHTML('beforeend', `<div class="vlist-empty">${msg}</div>`);
+      return;
+    }
+    _mAppendVideos(cfg, vids);
+  }
+
+  function _mAppendVideos(cfg, vids) {
+    const list  = document.getElementById(cfg.listElId);
+    const batch = vids.slice(cfg.st.loaded, cfg.st.loaded + cfg.pageSize);
+    cfg.st.loaded += batch.length;
+    const html = batch.map(v => {
+      const { cls: statusCls, label: statusLabel } = _videoStatus(v);
+      const authorCell = cfg.authorCol ? `<div class="video-cell">${cfg.authorCol(v)}</div>` : '';
+      return `<div class="video-row ${cfg.colsCls}" data-video-id="${esc(v.video_id)}">
+        ${_thumbCell(v)}
+        <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
+          <button class="play-btn" onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>
+          <div style="flex:1;min-width:0">${v.description
+            ? `<div class="video-desc">${esc(v.description)}</div>`
+            : `<div class="video-desc-empty">(no description)</div>`}</div>
+        </div>
+        ${authorCell}
+        <div class="video-cell">
+          <span class="vstatus ${statusCls}">${statusLabel}</span>
+        </div>
+        <div class="video-cell">${fmtCount(v.view_count)}</div>
+        <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
+        <div class="video-cell">${fmtDateShort(v.download_date)}</div>
+        <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
+        <div class="video-cell" style="padding:0;display:flex;align-items:center;justify-content:center;gap:2px">
+          ${_videoActionBtns(v)}
+        </div>
+      </div>`;
+    }).join('');
+    list.insertAdjacentHTML('beforeend', html);
+    if (cfg.st.loaded < vids.length) {
+      cfg.st.obs = _attachSentinel(list, () => {
+        cfg.st.obs = null;
+        _mAppendVideos(cfg, vids);
+      });
+    }
+  }
+
   // ── Sound modal ────────────────────────────────────────────────────────────────
 
-  let _soundModalId              = null;
-  let _soundModal                = null;
-  let _soundModalVideos          = [];
-  let _soundModalFilter          = 'all';
-  let _soundModalTypeFilter      = 'all';
-  let _soundModalSort            = { field: 'upload_date', dir: 'desc' };
-  let _soundModalLoaded          = 0;
-  let _soundModalObs             = null;
-  let _soundModalToolbarExpanded = false;
+  let _soundModalId               = null;
+  let _soundModal                 = null;
   let _soundModalPendingHighlight = null; // { videoId, filter? }
-  const SOUND_MODAL_PAGE = 50;
 
   function openSoundModal(soundId) {
     const s = sounds.find(s => s.sound_id === soundId);
     if (!s) return;
-    _soundModalId      = soundId;
-    _soundModal        = s;
-    _soundModalVideos  = [];
-    _soundModalFilter  = 'all';
-    _soundModalTypeFilter = 'all';
-    _soundModalSort    = { field: 'upload_date', dir: 'desc' };
-    _soundModalLoaded  = 0;
-    _soundModalToolbarExpanded = false;
-    if (_soundModalObs) { _soundModalObs.disconnect(); _soundModalObs = null; }
+    _soundModalId = soundId;
+    _soundModal   = s;
+    Object.assign(_soundState, {
+      videos: [], filter: 'all', typeFilter: 'all',
+      sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
+    });
+    if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
 
     document.getElementById('soundModalBackdrop').style.display = 'flex';
     _lockScroll();
 
     _renderSoundModalHeader(s);
-    _renderSoundModalToolbar([]);
+    _mRenderToolbar(_SOUND_MODAL_CFG, []);
     document.getElementById('soundModalVideoList').innerHTML =
       '<div class="vlist-loading">Loading videos…</div>';
 
@@ -3623,10 +3869,10 @@
   function closeSoundModal() {
     document.getElementById('soundModalBackdrop').style.display = 'none';
     _unlockScroll();
-    if (_soundModalObs) { _soundModalObs.disconnect(); _soundModalObs = null; }
-    _soundModalId     = null;
-    _soundModal       = null;
-    _soundModalVideos = [];
+    if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
+    _soundModalId      = null;
+    _soundModal        = null;
+    _soundState.videos = [];
   }
 
   function _renderSoundModalHeader(s) {
@@ -3667,202 +3913,25 @@
     `;
   }
 
-  function _soundFilteredSorted() {
-    let vids = _soundModalVideos;
-    if (_soundModalFilter === 'active')    vids = vids.filter(v => v.status === 'up');
-    if (_soundModalFilter === 'deleted')   vids = vids.filter(v => v.status === 'deleted');
-    if (_soundModalFilter === 'restored')  vids = vids.filter(v => v.status === 'undeleted');
-    if (_soundModalTypeFilter === 'video') vids = vids.filter(v => v.type === 'video');
-    if (_soundModalTypeFilter === 'photo') vids = vids.filter(v => v.type === 'photo');
-    const { field, dir } = _soundModalSort;
-    return _sortByField(vids, field, dir);
-  }
-
-  function _renderSoundModalToolbar(vids) {
-    const counts     = { all: 0, active: 0, deleted: 0, restored: 0 };
-    const typeCounts = { video: 0, photo: 0 };
-    vids.forEach(v => {
-      counts.all++;
-      if      (v.status === 'up')        counts.active++;
-      else if (v.status === 'deleted')   counts.deleted++;
-      else if (v.status === 'undeleted') counts.restored++;
-      if      (v.type === 'video') typeCounts.video++;
-      else if (v.type === 'photo') typeCounts.photo++;
-    });
-    const hasMultipleTypes = typeCounts.video > 0 && typeCounts.photo > 0;
-
-    const pill     = (key, label) => _pill(key, label, _soundModalFilter, 'setSoundModalFilter', counts);
-    const typePill = (key, label) => _typePill(key, label, _soundModalTypeFilter, 'setSoundModalTypeFilter');
-
-    const shown  = _soundFilteredSorted().length;
-    const label  = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
-    const hasActiveFilters = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
-    const toggleLabel = (_soundModalToolbarExpanded ? '▲' : '▼') + (hasActiveFilters ? ' Filters •' : ' Filters');
-    document.getElementById('soundModalToolbar').innerHTML =
-        `<div class="toolbar-main-row">`
-      + `<button class="filter-pill toolbar-toggle" onclick="toggleSoundModalToolbar()">${toggleLabel}</button>`
-      + `<span class="modal-vid-count">${label}</span>`
-      + `</div>`
-      + `<div class="toolbar-filter-wrap${_soundModalToolbarExpanded ? '' : ' collapsed'}">`
-      + `<div class="filter-pills">`
-      + pill('all', 'All')
-      + pill('active', 'Active')
-      + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
-      + (counts.restored ? pill('restored', 'Restored') : '')
-      + `</div>`
-      + (hasMultipleTypes
-          ? `<div class="filter-pills">`
-            + typePill('all',   'All types')
-            + typePill('video', `Videos (${typeCounts.video.toLocaleString()})`)
-            + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
-            + `</div>`
-          : '')
-      + `</div>`;
-    document.getElementById('soundModalToolbar').querySelectorAll('.filter-pills').forEach(_placeGlider);
-  }
-
-  function setSoundModalFilter(filter) {
-    _soundModalFilter = filter;
-    const toolbar = document.getElementById('soundModalToolbar');
-    toolbar.querySelectorAll('[data-filter-key]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.filterKey === filter);
-    });
-    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
-    const shown = _soundFilteredSorted().length;
-    const countEl = toolbar.querySelector('.modal-vid-count');
-    if (countEl) countEl.textContent = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
-    const toggleBtn = toolbar.querySelector('.toolbar-toggle');
-    if (toggleBtn) {
-      const hasActive = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
-      toggleBtn.textContent = (_soundModalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
-    }
-    _renderSoundModalVideoList();
-  }
-
-  function setSoundModalTypeFilter(type) {
-    _soundModalTypeFilter = type;
-    const toolbar = document.getElementById('soundModalToolbar');
-    toolbar.querySelectorAll('[data-type-key]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.typeKey === type);
-    });
-    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
-    const shown = _soundFilteredSorted().length;
-    const countEl = toolbar.querySelector('.modal-vid-count');
-    if (countEl) countEl.textContent = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
-    const toggleBtn = toolbar.querySelector('.toolbar-toggle');
-    if (toggleBtn) {
-      const hasActive = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
-      toggleBtn.textContent = (_soundModalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
-    }
-    _renderSoundModalVideoList();
-  }
-
-  const SOUND_VCOLS = [
-    { field: null,          label: '' },
-    { field: null,          label: 'Description' },
-    { field: null,          label: 'Author' },
-    { field: 'status',      label: 'Status' },
-    { field: 'view_count',  label: 'Views' },
-    { field: 'upload_date', label: 'Uploaded' },
-    { field: 'download_date', label: 'Downloaded' },
-    { field: 'deleted_at',  label: 'Deleted' },
-    { field: null,          label: '' },
-  ];
-
-  function _renderSoundColumnHdrs() {
-    const list = document.getElementById('soundModalVideoList');
-    const existing = list.querySelector('.video-list-hdr');
-    if (existing) existing.remove();
-    list.insertAdjacentHTML('afterbegin',
-      '<div class="video-list-hdr"><div class="sound-vcols">'
-      + SOUND_VCOLS.map(col => {
-          if (!col.field) return `<div class="col-hdr">${col.label}</div>`;
-          const isSorted = _soundModalSort.field === col.field;
-          const cls = isSorted ? ` sort-${_soundModalSort.dir}` : '';
-          return `<div class="col-hdr sortable${cls}" onclick="setSoundModalSort('${col.field}')">${col.label}</div>`;
-        }).join('')
-      + '</div></div>');
-  }
-
-  function setSoundModalSort(field) {
-    _soundModalSort = _doSort(_soundModalSort, field);
-    const list = document.getElementById('soundModalVideoList');
-    const sx = list.scrollLeft;
-    _renderSoundModalVideoList();
-    list.scrollLeft = sx;
-  }
-
-  function _renderSoundModalVideoList() {
-    _soundModalLoaded = 0;
-    if (_soundModalObs) { _soundModalObs.disconnect(); _soundModalObs = null; }
-    const list = document.getElementById('soundModalVideoList');
-    list.innerHTML = '';
-    list.scrollTop = 0;
-    _renderSoundColumnHdrs();
-    const vids = _soundFilteredSorted();
-    if (!vids.length) {
-      list.insertAdjacentHTML('beforeend', '<div class="vlist-empty">No videos match this filter.</div>');
-      return;
-    }
-    _appendSoundModalVideos(vids);
-  }
-
-  function _appendSoundModalVideos(vids) {
-    const list  = document.getElementById('soundModalVideoList');
-    const batch = vids.slice(_soundModalLoaded, _soundModalLoaded + SOUND_MODAL_PAGE);
-    _soundModalLoaded += batch.length;
-
-    const html = batch.map(v => {
-      const { cls: statusCls_s, label: statusLabel } = _videoStatus(v);
-      const authorName  = v.author_username || v.tiktok_id || '?';
-      const authorChip  = v.author_enabled === 1
-        ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();openUserModal('${esc(v.tiktok_id)}')">@${esc(authorName)}</span>`
-        : `<span class="author-chip untracked">@${esc(authorName)}</span>`;
-      return `<div class="video-row sound-vcols" data-video-id="${esc(v.video_id)}">
-        ${_thumbCell(v)}
-        <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
-          <button class="play-btn" onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>
-          <div style="flex:1;min-width:0">${v.description
-            ? `<div class="video-desc">${esc(v.description)}</div>`
-            : `<div class="video-desc-empty">(no description)</div>`}</div>
-        </div>
-        <div class="video-cell">${authorChip}</div>
-        <div class="video-cell">
-          <span class="vstatus ${statusCls_s}">${statusLabel}</span>
-        </div>
-        <div class="video-cell">${fmtCount(v.view_count)}</div>
-        <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
-        <div class="video-cell">${fmtDateShort(v.download_date)}</div>
-        <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
-        <div class="video-cell" style="padding:0;display:flex;align-items:center;justify-content:center;gap:2px">
-          ${_videoActionBtns(v)}
-        </div>
-      </div>`;
-    }).join('');
-    list.insertAdjacentHTML('beforeend', html);
-
-    if (_soundModalLoaded < vids.length) {
-      _soundModalObs = _attachSentinel(list, () => {
-        _soundModalObs = null;
-        _appendSoundModalVideos(vids);
-      });
-    }
-  }
+  function setSoundModalFilter(f)     { _mSetFilter(_SOUND_MODAL_CFG, f); }
+  function setSoundModalTypeFilter(t) { _mSetTypeFilter(_SOUND_MODAL_CFG, t); }
+  function toggleSoundModalToolbar()  { _mToggleToolbar(_SOUND_MODAL_CFG); }
+  function setSoundModalSort(f)       { _mSetSort(_SOUND_MODAL_CFG, f); }
 
   async function _loadSoundModalVideos(soundId) {
     const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/videos`);
     if (!ok || _soundModalId !== soundId) return;
-    _soundModalVideos = data;
+    _soundState.videos = data;
     if (_soundModalPendingHighlight) {
       const { videoId, filter } = _soundModalPendingHighlight;
       _soundModalPendingHighlight = null;
       if (filter) {
-        _soundModalFilter = filter;
-        _soundModalSort   = { field: 'deleted_at', dir: 'desc' };
-        _renderSoundColumnHdrs();
+        _soundState.filter = filter;
+        _soundState.sort   = { field: 'deleted_at', dir: 'desc' };
+        _mRenderColHdrs(_SOUND_MODAL_CFG);
       }
-      _renderSoundModalToolbar(data);
-      _renderSoundModalVideoList();
+      _mRenderToolbar(_SOUND_MODAL_CFG, data);
+      _mRenderList(_SOUND_MODAL_CFG);
       const row = document.querySelector(`[data-video-id="${CSS.escape(videoId)}"]`);
       if (row) {
         row.scrollIntoView({ block: 'center' });
@@ -3870,8 +3939,8 @@
         row.addEventListener('mouseenter', () => row.classList.remove('video-row-highlight'), { once: true });
       }
     } else {
-      _renderSoundModalToolbar(data);
-      _renderSoundModalVideoList();
+      _mRenderToolbar(_SOUND_MODAL_CFG, data);
+      _mRenderList(_SOUND_MODAL_CFG);
     }
   }
 
@@ -4124,30 +4193,9 @@
 
   // ── User detail modal ─────────────────────────────────────────────────────────
 
-  let _modalUserId          = null;
-  let _modalUser            = null;   // full user object for the open modal
-  let _modalVideos          = [];
-  let _modalFilter          = 'all';
-  let _modalTypeFilter      = 'all';
-  let _modalSearch          = '';
-  let _modalSort            = { field: 'upload_date', dir: 'desc' };
+  let _modalUserId           = null;
+  let _modalUser             = null;   // full user object for the open modal
   let _modalPendingHighlight = null;   // { videoId, filter, sortField, sortDir } or null
-  let _modalLoaded   = 0;
-  let _modalObs      = null;
-  let _modalView     = 'list';   // 'list' | 'grid'
-  let _modalToolbarExpanded = false;
-  const MODAL_PAGE   = 50;
-
-  const VCOLS = [
-    { field: null,             label: '' },
-    { field: null,             label: 'Description' },
-    { field: 'status',         label: 'Status' },
-    { field: 'view_count',     label: 'Views' },
-    { field: 'upload_date',    label: 'Uploaded' },
-    { field: 'download_date',  label: 'Saved' },
-    { field: 'deleted_at',     label: 'Deleted' },
-    { field: null,             label: '' },
-  ];
 
   const _dtFmt          = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric',
                                                              hour: '2-digit', minute: '2-digit' });
@@ -4165,15 +4213,12 @@
     if (!u) return;
     _modalUserId = tiktokId;
     _modalUser   = u;
-    _modalVideos = [];
-    _modalFilter          = 'all';
-    _modalTypeFilter      = 'all';
-    _modalSearch          = '';
-    _modalSort            = { field: 'upload_date', dir: 'desc' };
-    _modalLoaded          = 0;
-    _modalToolbarExpanded = false;
-    if (window.innerWidth <= 640) _modalView = 'grid';
-    if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
+    Object.assign(_userState, {
+      videos: [], filter: 'all', typeFilter: 'all', search: '',
+      sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
+      view: window.innerWidth <= 640 ? 'grid' : 'list',
+    });
+    if (_userState.obs) { _userState.obs.disconnect(); _userState.obs = null; }
 
     // Reset history panel state
     _phistData   = [];
@@ -4186,7 +4231,7 @@
     _lockScroll();
 
     _renderModalHeader(u);
-    _renderModalToolbar([]);
+    _mRenderToolbar(_USER_MODAL_CFG, []);
     document.getElementById('modalVideoList').innerHTML =
       '<div class="vlist-loading">Loading videos…</div>';
 
@@ -4211,10 +4256,10 @@
   function closeModal() {
     document.getElementById('modalBackdrop').style.display = 'none';
     _unlockScroll();
-    if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
-    _modalUserId = null;
-    _modalUser   = null;
-    _modalVideos = [];
+    if (_userState.obs) { _userState.obs.disconnect(); _userState.obs = null; }
+    _modalUserId       = null;
+    _modalUser         = null;
+    _userState.videos  = [];
   }
 
   function handleBackdropClick(e) {
@@ -4325,18 +4370,18 @@
   async function _loadModalVideos(tiktokId) {
     const { ok, data } = await apiJSON(`/api/users/${tiktokId}/videos`);
     if (!ok || _modalUserId !== tiktokId) return;
-    _modalVideos = data;
+    _userState.videos = data;
 
     if (_modalPendingHighlight) {
       const { videoId, filter, sortField, sortDir } = _modalPendingHighlight;
-      _modalPendingHighlight = null;
-      _modalView       = 'list';
-      _modalFilter     = filter;
-      _modalTypeFilter = 'all';
-      _modalSort       = { field: sortField, dir: sortDir };
-      _renderColumnHdrs();
-      _renderModalToolbar(data);
-      _renderModalVideoList();
+      _modalPendingHighlight   = null;
+      _userState.view          = 'list';
+      _userState.filter        = filter;
+      _userState.typeFilter    = 'all';
+      _userState.sort          = { field: sortField, dir: sortDir };
+      _mRenderColHdrs(_USER_MODAL_CFG);
+      _mRenderToolbar(_USER_MODAL_CFG, data);
+      _mRenderList(_USER_MODAL_CFG);
       const row = document.querySelector(`[data-video-id="${CSS.escape(videoId)}"]`);
       if (row) {
         row.scrollIntoView({ block: 'center' });
@@ -4347,98 +4392,20 @@
       // Don't overwrite the toolbar/list if profile history is already open
       const historyOpen = document.getElementById('phistPanel').style.display !== 'none';
       if (!historyOpen) {
-        _renderModalToolbar(data);
-        _renderModalVideoList();
+        _mRenderToolbar(_USER_MODAL_CFG, data);
+        _mRenderList(_USER_MODAL_CFG);
       }
     }
   }
 
-  function _filteredSorted(skipSearch = false) {
-    let vids = _modalVideos;
-    if (_modalFilter === 'active')        vids = vids.filter(v => v.status === 'up');
-    if (_modalFilter === 'deleted')       vids = vids.filter(v => v.status === 'deleted');
-    if (_modalFilter === 'restored')      vids = vids.filter(v => v.status === 'undeleted');
-    if (_modalTypeFilter === 'video')     vids = vids.filter(v => v.type === 'video');
-    if (_modalTypeFilter === 'photo')     vids = vids.filter(v => v.type === 'photo');
-    if (!skipSearch && _modalSearch) {
-      const q = _modalSearch.toLowerCase();
-      vids = vids.filter(v =>
-        (v.video_id    || '').toLowerCase().includes(q) ||
-        (v.description || '').toLowerCase().includes(q)
-      );
-    }
-    const { field, dir } = _modalSort;
-    return _sortByField(vids, field, dir);
-  }
-
+  function setModalFilter(f)       { _mSetFilter(_USER_MODAL_CFG, f); }
+  function setModalTypeFilter(t)   { _mSetTypeFilter(_USER_MODAL_CFG, t); }
+  function toggleModalToolbar()    { _mToggleToolbar(_USER_MODAL_CFG); }
+  function setModalSort(f)         { _mSetSort(_USER_MODAL_CFG, f); }
   function onModalSearch(val) {
-    _modalSearch = val.trim();
-    _renderModalToolbar(_modalVideos);
-    _renderModalVideoList();
-  }
-
-  function toggleModalToolbar() {
-    _modalToolbarExpanded = _doToggleToolbar(
-      _modalToolbarExpanded, 'modalToolbar',
-      () => _modalFilter !== 'all' || _modalTypeFilter !== 'all'
-    );
-  }
-
-  function toggleSoundModalToolbar() {
-    _soundModalToolbarExpanded = _doToggleToolbar(
-      _soundModalToolbarExpanded, 'soundModalToolbar',
-      () => _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all'
-    );
-  }
-
-  function setModalSort(field) {
-    _modalSort = _doSort(_modalSort, field);
-    const list = document.getElementById('modalVideoList');
-    const sx = list.scrollLeft;
-    _renderModalVideoList();
-    list.scrollLeft = sx;
-  }
-
-  function setModalFilter(filter) {
-    _modalFilter = filter;
-    const toolbar = document.getElementById('modalToolbar');
-    toolbar.querySelectorAll('[data-filter-key]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.filterKey === filter);
-    });
-    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
-    const total = _filteredSorted(true).length;
-    const shown = _filteredSorted().length;
-    const countEl = toolbar.querySelector('.modal-vid-count');
-    if (countEl) countEl.textContent = _modalSearch
-      ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
-      : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
-    const toggleBtn = toolbar.querySelector('.toolbar-toggle');
-    if (toggleBtn) {
-      const hasActive = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
-      toggleBtn.textContent = (_modalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
-    }
-    _renderModalVideoList();
-  }
-
-  function setModalTypeFilter(type) {
-    _modalTypeFilter = type;
-    const toolbar = document.getElementById('modalToolbar');
-    toolbar.querySelectorAll('[data-type-key]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.typeKey === type);
-    });
-    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
-    const total = _filteredSorted(true).length;
-    const shown = _filteredSorted().length;
-    const countEl = toolbar.querySelector('.modal-vid-count');
-    if (countEl) countEl.textContent = _modalSearch
-      ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
-      : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
-    const toggleBtn = toolbar.querySelector('.toolbar-toggle');
-    if (toggleBtn) {
-      const hasActive = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
-      toggleBtn.textContent = (_modalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
-    }
-    _renderModalVideoList();
+    _userState.search = val.trim();
+    _mRenderToolbar(_USER_MODAL_CFG, _userState.videos);
+    _mRenderList(_USER_MODAL_CFG);
   }
 
   function _renderModalHeader(u) {
@@ -4513,68 +4480,6 @@
     `;
   }
 
-  function _renderModalToolbar(vids) {
-    const counts     = { all: 0, active: 0, deleted: 0, restored: 0 };
-    const typeCounts = { video: 0, photo: 0 };
-    vids.forEach(v => {
-      counts.all++;
-      if      (v.status === 'up')        counts.active++;
-      else if (v.status === 'deleted')   counts.deleted++;
-      else if (v.status === 'undeleted') counts.restored++;
-      if      (v.type === 'video') typeCounts.video++;
-      else if (v.type === 'photo') typeCounts.photo++;
-    });
-    const hasMultipleTypes = typeCounts.video > 0 && typeCounts.photo > 0;
-
-    const pill     = (key, label) => _pill(key, label, _modalFilter, 'setModalFilter', counts);
-    const typePill = (key, label) => _typePill(key, label, _modalTypeFilter, 'setModalTypeFilter');
-
-    const allPosts   = _filteredSorted(true);
-    const shownPosts = _filteredSorted();
-    const total = allPosts.length;
-    const shown = shownPosts.length;
-    const label = _modalSearch
-      ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
-      : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
-    const searchVal = esc(_modalSearch);
-    const toolbar = document.getElementById('modalToolbar');
-    const searchWasFocused = document.activeElement === toolbar.querySelector('#modalVideoSearch');
-    const searchSelEnd = searchWasFocused ? document.activeElement.selectionEnd : 0;
-    const hasActiveFilters = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
-    const toggleLabel = (_modalToolbarExpanded ? '▲' : '▼') + (hasActiveFilters ? ' Filters •' : ' Filters');
-    toolbar.innerHTML =
-        `<div class="toolbar-main-row">`
-      + `<div class="filter-pills">`
-      + `<button class="filter-pill${_modalView === 'list' ? ' active' : ''}" data-view-key="list" onclick="setModalView('list')" title="List view">${_listViewIcon}</button>`
-      + `<button class="filter-pill${_modalView === 'grid' ? ' active' : ''}" data-view-key="grid" onclick="setModalView('grid')" title="Grid view">${_gridViewIcon}</button>`
-      + `</div>`
-      + `<button class="filter-pill toolbar-toggle" onclick="toggleModalToolbar()">${toggleLabel}</button>`
-      + `<span class="modal-vid-count">${label}</span>`
-      + `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${searchVal}" placeholder="Search videos…" oninput="onModalSearch(this.value)">`
-      + `<button class="filter-pill toolbar-phist-btn" onclick="openProfileHistory()">Profile history</button>`
-      + `</div>`
-      + `<div class="toolbar-filter-wrap${_modalToolbarExpanded ? '' : ' collapsed'}">`
-      + `<div class="filter-pills">`
-      + pill('all', 'All')
-      + pill('active', 'Active')
-      + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
-      + (counts.restored ? pill('restored', 'Restored') : '')
-      + `</div>`
-      + (hasMultipleTypes
-          ? `<div class="filter-pills">`
-            + typePill('all',   'All types')
-            + typePill('video', `Videos (${typeCounts.video.toLocaleString()})`)
-            + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
-            + `</div>`
-          : '')
-      + `</div>`;
-    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
-    if (searchWasFocused) {
-      const el = toolbar.querySelector('#modalVideoSearch');
-      if (el) { el.focus(); el.setSelectionRange(searchSelEnd, searchSelEnd); }
-    }
-  }
-
   // ── Profile history ──────────────────────────────────────────────────────────
 
   let _phistField  = 'all';
@@ -4631,11 +4536,11 @@
   function _closeProfileHistory() {
     document.getElementById('phistPanel').style.display     = 'none';
     document.getElementById('modalVideoList').style.display = '';
-    if (_modalVideos.length) {
-      _renderModalToolbar(_modalVideos);
-      _renderModalVideoList();
+    if (_userState.videos.length) {
+      _mRenderToolbar(_USER_MODAL_CFG, _userState.videos);
+      _mRenderList(_USER_MODAL_CFG);
     }
-    // If _modalVideos is still empty the load is still in flight; the
+    // If _userState.videos is still empty the load is still in flight; the
     // historyOpen guard in _loadModalVideos will now pass and render normally.
   }
 
@@ -4738,21 +4643,6 @@
     }).join('');
   }
 
-  function _renderColumnHdrs() {
-    if (_modalView === 'grid') return;
-    const list = document.getElementById('modalVideoList');
-    const existing = list.querySelector('.video-list-hdr');
-    if (existing) existing.remove();
-    list.insertAdjacentHTML('afterbegin',
-      '<div class="video-list-hdr"><div class="vcols">'
-      + VCOLS.map(col => {
-          if (!col.field) return `<div class="col-hdr">${col.label}</div>`;
-          const isSorted = _modalSort.field === col.field;
-          const cls = isSorted ? ` sort-${_modalSort.dir}` : '';
-          return `<div class="col-hdr sortable${cls}" onclick="setModalSort('${col.field}')">${col.label}</div>`;
-        }).join('')
-      + '</div></div>');
-  }
 
   const _dlIcon = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1v7M3.5 5.5l3 3 3-3M1.5 10.5h10"/></svg>`;
 
@@ -4795,31 +4685,15 @@
     return '';
   }
 
-  function _renderModalVideoList() {
-    if (_modalView === 'grid') { _renderModalVideoGrid(); return; }
-    _modalLoaded = 0;
-    if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
-    const list = document.getElementById('modalVideoList');
-    list.innerHTML = '';
-    list.scrollTop = 0;
-    _renderColumnHdrs();
-    const vids = _filteredSorted();
-    if (!vids.length) {
-      list.insertAdjacentHTML('beforeend', `<div class="vlist-empty">${_modalSearch ? 'No posts match this search.' : 'No posts match this filter.'}</div>`);
-      return;
-    }
-    _appendModalVideos(vids);
-  }
-
   function _renderModalVideoGrid() {
-    _modalLoaded = 0;
-    if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
+    _userState.loaded = 0;
+    if (_userState.obs) { _userState.obs.disconnect(); _userState.obs = null; }
     const list = document.getElementById('modalVideoList');
     list.innerHTML = '';
     list.scrollTop = 0;
-    const vids = _filteredSorted();
+    const vids = _mFiltered(_USER_MODAL_CFG);
     if (!vids.length) {
-      list.innerHTML = `<div class="vlist-empty">${_modalSearch ? 'No posts match this search.' : 'No posts match this filter.'}</div>`;
+      list.innerHTML = `<div class="vlist-empty">${_userState.search ? 'No posts match this search.' : 'No posts match this filter.'}</div>`;
       return;
     }
     const grid = document.createElement('div');
@@ -4833,77 +4707,40 @@
     const list  = document.getElementById('modalVideoList');
     const grid  = document.getElementById('videoGrid');
     if (!grid) return;
-    const batch = vids.slice(_modalLoaded, _modalLoaded + MODAL_PAGE);
-    _modalLoaded += batch.length;
+    const batch = vids.slice(_userState.loaded, _userState.loaded + _USER_MODAL_CFG.pageSize);
+    _userState.loaded += batch.length;
     batch.forEach(v => {
       const cell = document.createElement('div');
       const { cls } = _videoStatus(v);
-      cell.className  = `vgrid-cell${cls !== 'up' ? ' ' + cls : ''}`;
+      cell.className   = `vgrid-cell${cls !== 'up' ? ' ' + cls : ''}`;
       cell.dataset.videoId = v.video_id;
-      const id        = esc(v.video_id);
-      const viewsHtml = v.view_count != null
+      const id         = esc(v.video_id);
+      const viewsHtml  = v.view_count != null
         ? `<span class="vgrid-views">${fmtCount(v.view_count)}</span>`
         : '<span></span>';
-      const typeIcon  = v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? _vgridPhotoIcon : '';
-      cell.innerHTML  = `<img src="/api/videos/${id}/thumbnail" alt="" onerror="this.style.opacity='.15'">
+      const typeIcon   = v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? _vgridPhotoIcon : '';
+      cell.innerHTML   = `<img src="/api/videos/${id}/thumbnail" alt="" onerror="this.style.opacity='.15'">
         <div class="vgrid-overlay">${viewsHtml}${typeIcon}</div>`;
       if (v.type === 'video')      cell.onclick = () => openVidModal(v.video_id);
       else if (v.type === 'photo') cell.onclick = () => openCarousel(v.video_id);
       grid.appendChild(cell);
     });
-    if (_modalLoaded < vids.length) {
-      _modalObs = _attachSentinel(list, () => {
-        _modalObs = null;
+    if (_userState.loaded < vids.length) {
+      _userState.obs = _attachSentinel(list, () => {
+        _userState.obs = null;
         _appendModalGrid(vids);
       });
     }
   }
 
   function setModalView(view) {
-    _modalView = view;
+    _userState.view = view;
     const toolbar = document.getElementById('modalToolbar');
     toolbar.querySelectorAll('[data-view-key]').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.viewKey === view);
     });
     toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
-    _renderModalVideoList();
-  }
-
-  function _appendModalVideos(vids) {
-    const list  = document.getElementById('modalVideoList');
-    const batch = vids.slice(_modalLoaded, _modalLoaded + MODAL_PAGE);
-    _modalLoaded += batch.length;
-
-    const html = batch.map(v => {
-      const { cls: statusCls, label: statusLabel } = _videoStatus(v);
-      return `<div class="video-row vcols" data-video-id="${esc(v.video_id)}">
-        ${_thumbCell(v)}
-        <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
-          <button class="play-btn" onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>
-          <div style="flex:1;min-width:0">${v.description
-            ? `<div class="video-desc">${esc(v.description)}</div>`
-            : `<div class="video-desc-empty">(no description)</div>`}</div>
-        </div>
-        <div class="video-cell">
-          <span class="vstatus ${statusCls}">${statusLabel}</span>
-        </div>
-        <div class="video-cell">${fmtCount(v.view_count)}</div>
-        <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
-        <div class="video-cell">${fmtDateShort(v.download_date)}</div>
-        <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
-        <div class="video-cell" style="padding:0;display:flex;align-items:center;justify-content:center;gap:2px">
-          ${_videoActionBtns(v)}
-        </div>
-      </div>`;
-    }).join('');
-    list.insertAdjacentHTML('beforeend', html);
-
-    if (_modalLoaded < vids.length) {
-      _modalObs = _attachSentinel(list, () => {
-        _modalObs = null;
-        _appendModalVideos(vids);
-      });
-    }
+    _mRenderList(_USER_MODAL_CFG);
   }
 
   // ── Stats backfill ────────────────────────────────────────────────────────────
