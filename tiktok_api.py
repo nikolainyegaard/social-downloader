@@ -30,20 +30,30 @@ async def get_user_info(api, username: str | None = None,
         # Primary path: resolve by secUid via make_request (no username required).
         # Passing username alongside when available does no harm and may help
         # TikTok disambiguate, but is not required.
-        data = await api.make_request(
-            url="https://www.tiktok.com/api/user/detail/",
-            params={"secUid": sec_uid, "uniqueId": username or ""},
-        )
-        if data is None:
-            raise RuntimeError(
-                f"TikTokApi returned None for sec_uid={sec_uid} "
-                f"-- TikTok may have blocked the request or cookies are stale"
+        import asyncio as _asyncio
+        for _attempt in range(2):
+            data = await api.make_request(
+                url="https://www.tiktok.com/api/user/detail/",
+                params={"secUid": sec_uid, "uniqueId": username or ""},
             )
-        if data.get("statusCode") in (10202, 10223):
-            raise UserBannedException(
-                f"TikTok returned statusCode {data.get('statusCode')} for sec_uid={sec_uid} "
-                f"-- account is banned, removed, or FTC-restricted"
-            )
+            if data is None:
+                raise RuntimeError(
+                    f"TikTokApi returned None for sec_uid={sec_uid} "
+                    f"-- TikTok may have blocked the request or cookies are stale"
+                )
+            if data.get("statusCode") in (10202, 10223):
+                raise UserBannedException(
+                    f"TikTok returned statusCode {data.get('statusCode')} for sec_uid={sec_uid} "
+                    f"-- account is banned, removed, or FTC-restricted"
+                )
+            # statusCode 0 with empty user object is a transient session artifact.
+            # The session is degraded but not blocked -- a short wait and one retry
+            # consistently resolves it (confirmed via diagnostics on affected accounts).
+            if data.get("userInfo", {}).get("user", {}).get("id"):
+                break  # got valid data
+            if _attempt == 0:
+                await _asyncio.sleep(3)
+            # second attempt falls through to the empty-check below
     else:
         # Fallback path: username-only lookup via user.info() (first-time adds).
         user = api.user(username=username)
