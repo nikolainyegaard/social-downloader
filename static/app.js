@@ -1059,7 +1059,9 @@ function _filteredUsers() {
     if (userFilter.stat === 'inactive' && u.tracking_enabled !== 0) return false;
     if (userFilter.star === 'starred'  && !u.starred) return false;
     if (q) {
-      const hay = `${u.username || ''} ${u.display_name || ''} ${u.tiktok_id || ''}`.toLowerCase();
+      const hay = [u.username, u.display_name, u.tiktok_id,
+                   ...(u.old_usernames || []), ...(u.old_display_names || []), ...(u.old_bios || [])]
+                  .filter(Boolean).join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;

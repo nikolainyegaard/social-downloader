@@ -486,7 +486,7 @@ def create_app() -> Flask:
     def list_users():
         users          = db.get_all_users()
         all_stats      = db.get_all_video_stats()
-        all_history    = db.get_all_username_history()
+        all_ph         = db.get_all_profile_history_for_search()
         all_ph_counts  = db.get_all_profile_history_counts()
 
         for user in users:
@@ -498,9 +498,16 @@ def create_app() -> Flask:
             user["video_undeleted"]        = stats.get("video_undeleted",   0)
             user["video_missing"]          = stats.get("video_missing",     0)
             user["profile_history_count"]  = all_ph_counts.get(tid, 0)
+            ph   = all_ph.get(tid, {})
             cur  = user["username"]
-            user["old_usernames"] = list(dict.fromkeys(
-                u for u in all_history.get(tid, []) if u != cur
+            user["old_usernames"]     = list(dict.fromkeys(
+                v for v in ph.get("username",     []) if v != cur
+            ))
+            user["old_display_names"] = list(dict.fromkeys(
+                v for v in ph.get("display_name", []) if v and v != user.get("display_name")
+            ))
+            user["old_bios"]          = list(dict.fromkeys(
+                v for v in ph.get("bio",          []) if v and v != user.get("bio")
             ))
         return jsonify(users)
 

@@ -702,6 +702,22 @@ def get_all_username_history() -> dict:
     return result
 
 
+def get_all_profile_history_for_search() -> dict:
+    """Return historical username, display_name, and bio values keyed by tiktok_id and field.
+    Returns {tiktok_id: {field: [old_value, ...]}} ordered oldest first."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT tiktok_id, field, old_value
+               FROM profile_history
+               WHERE field IN ('username', 'display_name', 'bio')
+               ORDER BY changed_at"""
+        ).fetchall()
+    result: dict = {}
+    for row in rows:
+        result.setdefault(row["tiktok_id"], {}).setdefault(row["field"], []).append(row["old_value"])
+    return result
+
+
 def migrate_username_history_to_profile_history() -> int:
     """Copy username_history rows into profile_history. Safe to run multiple times (skips rows already present)."""
     with get_db() as conn:
