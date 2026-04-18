@@ -565,6 +565,19 @@ async def _process_all_users(users: list[dict]) -> int:
                     cookies=[cookies] if cookies else None,
                 )
                 await asyncio.sleep(3)
+                # Verify the session is actually usable: TikTok sometimes completes the
+                # browser handshake but returns empty sessions when it detects automation.
+                # A quick make_request catches this before the user loop starts so the
+                # bot-detection path triggers immediately rather than after 3 users.
+                try:
+                    await api.make_request(
+                        url="https://www.tiktok.com/api/user/detail/",
+                        params={"secUid": "", "uniqueId": ""},
+                    )
+                except Exception as _val_err:
+                    if _is_bot_error(_val_err):
+                        raise  # treated as a failed attempt; loop will retry or give up
+                    # non-bot errors (empty response, unexpected shape) are fine
                 return True
             except Exception as e:
                 _last_exc = e
@@ -591,13 +604,19 @@ async def _process_all_users(users: list[dict]) -> int:
 
         async with TikTokApi() as api:
             if not await _make_session(api):
-                if start_idx == 0:
-                    _log(f"Aborting loop -- could not create initial session (0/{total} users)")
-                else:
+                if not bot_restart_done:
+                    bot_restart_done = True
+                    cooldown_pending = True
                     _log(
-                        f"Aborting loop -- fresh session failed after cool-down"
-                        f" ({total_completed}/{total} users)"
+                        f"Session failed (bot-detected at startup) -- cooling down"
+                        f" {_BOT_COOLDOWN_SLEEP // 60} min, then restarting"
+                        f" ({total_completed}/{total} users so far)"
                     )
+                    continue
+                _log(
+                    f"Aborting loop -- session unrecoverable after cool-down"
+                    f" ({total_completed}/{total} users)"
+                )
                 return total_completed
 
             completed                    = 0
