@@ -36,13 +36,13 @@ async def process_all_sounds(log: Callable[[str], None]) -> dict:
         if not sound.get("tracking_enabled", 1):
             log(f"Skipping '{sound.get('label') or sound['sound_id']}' (tracking disabled)")
             continue
-        total_new += await process_sound(sound, log)
+        total_new += await process_single_sound(sound, log)
         sounds_checked += 1
 
     return {"sounds_checked": sounds_checked, "new_videos": total_new}
 
 
-async def process_sound(sound: dict, log: Callable[[str], None]) -> int:
+async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
     """Process one sound. Returns the count of new video associations added."""
     sound_id = sound["sound_id"]
     label    = sound.get("label") or sound_id
