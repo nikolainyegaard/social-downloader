@@ -349,7 +349,9 @@ function renderRecent(data) {
   if (data.saved && data.saved.length) {
     right += data.saved.map(g => {
       const onclick = g.enabled !== 0
-        ? `openUserModal('${esc(g.tiktok_id)}')`
+        ? (g.count === 1
+            ? `openUserModalAndHighlight('${esc(g.tiktok_id)}','${esc(g.video_id)}','all','download_date','desc')`
+            : `openUserModal('${esc(g.tiktok_id)}')`)
         : g.sound_id ? `openSoundModalAndHighlight('${esc(g.sound_id)}','${esc(g.video_id)}')` : '';
       const nameStyle = g.enabled !== 0 ? '' : 'style="color:var(--text-dim)"';
       return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(g.username)}">
@@ -463,7 +465,9 @@ async function _loadRecentLogBatch() {
       row.className = 'recent-entry';
       row.title = `Open @${g.username}`;
       if (g.enabled !== 0) {
-        row.onclick = () => { openUserModal(g.tiktok_id); };
+        row.onclick = g.count === 1
+          ? () => openUserModalAndHighlight(g.tiktok_id, g.video_id, 'all', 'download_date', 'desc')
+          : () => openUserModal(g.tiktok_id);
       } else if (g.sound_id) {
         row.onclick = () => { openSoundModalAndHighlight(g.sound_id, g.video_id); };
       }
