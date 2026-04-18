@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sound loop: retry fetch once with a 15-second delay when the Playwright session times out, instead of skipping the sound for the entire loop run
 - User loop: validate the TikTok session immediately after creation; if bot-detected at startup or after a mid-run reset, trigger the existing cooldown+restart path instead of aborting or cycling through 3 users first
 - User loop: a successful item_list fetch now clears the rate-limit failure counter even when the profile endpoint returned empty; prevents a spurious 3-minute pause when the user-detail API hiccups but videos are accessible
+- User loop: sleep 15 seconds after each profile fetch failure to let the user-detail API recover before the next user hits the same endpoint; prevents cascades of consecutive profile failures
 - Private filter no longer matches banned users whose privacy_status was set before the ban
 - Reset button now clears the search field in addition to filters and sort
 - Modals no longer allow the underlying page to scroll while open; root cause was `overflow: hidden` being set on `<body>` when `<html>` is the actual scroll container

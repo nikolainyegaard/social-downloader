@@ -26,6 +26,7 @@ LOOP_STATE_PATH = os.path.join(DATA_DIR, "loop_state.json")
 _CONFIRM_THRESHOLD             = DELETION_CONFIRM_THRESHOLD  # loops a negative change must persist before it's made official
 _MAX_BOT_FAILURES              = 3  # consecutive post-reset bot detections before triggering cool-down
 _PROFILE_FAIL_QUIET_THRESHOLD  = 5  # consecutive profile-fetch failures before going silent (_logd only)
+_PROFILE_FAIL_SLEEP            = 15  # seconds to sleep after a profile fetch failure to let the user-detail API recover
 _RATE_LIMIT_THRESHOLD          = 3   # consecutive profile failures before suspecting rate limit
 _RATE_LIMIT_SLEEP              = 180  # seconds to pause on suspected rate limit (3 min)
 _BOT_COOLDOWN_SLEEP            = 600  # seconds to cool down before full browser restart (10 min)
@@ -362,6 +363,9 @@ async def _process_single_user(user: dict, api, cookies: dict,
                 _log(f"  Failed to fetch profile info: {e}")
             else:
                 _logd(f"  [{tiktok_id}] profile still failing (#{_fail_count}): {e}")
+            # Brief cooldown so the next user's profile fetch doesn't immediately
+            # hit the same rate-limited endpoint
+            await asyncio.sleep(_PROFILE_FAIL_SLEEP)
             username     = user["username"]
             display_name = user.get("display_name") or username
 
