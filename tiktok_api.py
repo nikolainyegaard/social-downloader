@@ -95,6 +95,9 @@ async def get_user_info(api, username: str | None = None,
         "video_count":     s.get("videoCount", 0),
         # 'secret' flag means the account is private (not necessarily banned)
         "is_private":      bool(u.get("secret")),
+        # relation & 1 == 1 means the authenticated cookie holder follows this account;
+        # for private accounts this is the reliable signal that content is accessible
+        "relation":        int(u.get("relation") or 0),
         "verified":        bool(u.get("verified")),
         "avatar_url":      u.get("avatarLarger") or u.get("avatarMedium") or u.get("avatarThumb"),
         "_raw_user_data":  json.dumps(data),

@@ -190,11 +190,17 @@ async def process_single_user(
                 log(f"  Video fetch failed, trying fallback...")
                 logd(f"  [{tiktok_id}] item_list error: {e}")
 
-        # Private account with empty item_list -> no access. yt-dlp will fail
-        # identically ("account is private"), so skip it and mark accordingly.
+        # Private account with empty item_list: could be no access, or could be
+        # accessible with 0 videos. Use relation & 1 (cookie holder follows them)
+        # as the access signal -- accessible accounts return a full user object
+        # with relation >= 1; inaccessible ones fail before reaching this point.
         if not item_list_map and is_private is True:
-            log(f"  Private account, no accessible videos -- skipping video fetch")
-            db.update_user_privacy_status(tiktok_id, "private_blocked")
+            if (info.get("relation") or 0) & 1:
+                log(f"  Private account with no videos -- accessible (following)")
+                db.update_user_privacy_status(tiktok_id, "private_accessible")
+            else:
+                log(f"  Private account, no accessible videos -- skipping video fetch")
+                db.update_user_privacy_status(tiktok_id, "private_blocked")
             return _profile_ok
 
         if item_list_map:
