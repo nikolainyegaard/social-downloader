@@ -4,6 +4,7 @@ data/
 videos/
 __pycache__/
 *.pyc
+*Venv/
 .DS_Store
 .claude
 CLAUDE.md
