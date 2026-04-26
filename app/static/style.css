@@ -52,19 +52,6 @@ body {
   overflow-x: clip;
 }
 
-/* ── Health banner ───────────────────────────────────────────────────────── */
-
-.health-banner {
-  background: var(--red-bg);
-  border-bottom: 1px solid var(--red);
-  color: var(--text);
-  padding: 10px 20px;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.health-banner p { margin: 0; }
-.health-banner p + p { margin-top: 3px; }
 
 /* ── Toast notifications ─────────────────────────────────────────────────── */
 

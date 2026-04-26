@@ -52,30 +52,15 @@ window.addEventListener('hashchange', () => {
 
 switchPlatform(location.hash.slice(1) || 'tiktok');
 
-// ── Health banner ─────────────────────────────────────────────────────────────
-
-function _showHealthBanner(issues) {
-  const existing = document.getElementById('_healthBanner');
-  if (existing) existing.remove();
-  const el = document.createElement('div');
-  el.id = '_healthBanner';
-  el.className = 'health-banner';
-  for (const iss of issues) {
-    const p = document.createElement('p');
-    p.textContent = iss.message;
-    el.appendChild(p);
-  }
-  document.body.prepend(el);
-}
+// ── Health check ──────────────────────────────────────────────────────────────
 
 async function checkHealth() {
   try {
     const data = await fetch('/api/health').then(r => r.json());
     if (!data.ok && data.issues && data.issues.length) {
-      _showHealthBanner(data.issues);
-    } else {
-      const el = document.getElementById('_healthBanner');
-      if (el) el.remove();
+      for (const iss of data.issues) {
+        showToast(iss.message, { type: 'error', duration: 0 });
+      }
     }
   } catch (_) {}
 }
