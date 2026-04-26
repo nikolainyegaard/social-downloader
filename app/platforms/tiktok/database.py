@@ -1300,6 +1300,35 @@ def migrate_del_prefix() -> int:
     return len(updates)
 
 
+def get_legacy_path_prefixes() -> dict:
+    """Return counts of file_path values not under MEDIA_DIR, grouped by prefix before /@."""
+    from config import MEDIA_DIR
+    media_norm = os.path.normpath(MEDIA_DIR)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT file_path FROM videos WHERE file_path IS NOT NULL"
+        ).fetchall()
+    counts: dict[str, int] = {}
+    for (path,) in rows:
+        norm = os.path.normpath(path)
+        if norm == media_norm or norm.startswith(media_norm + os.sep):
+            continue
+        idx = path.find("/@")
+        prefix = path[:idx] if idx >= 0 else path
+        counts[prefix] = counts.get(prefix, 0) + 1
+    return {"prefixes": counts, "media_dir": MEDIA_DIR, "total_legacy": sum(counts.values())}
+
+
+def rewrite_file_paths(old_prefix: str, new_prefix: str) -> int:
+    """Replace old_prefix with new_prefix at the start of every file_path in the videos table."""
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE videos SET file_path = ? || SUBSTR(file_path, ?) WHERE file_path LIKE ?",
+            (new_prefix, len(old_prefix) + 1, f"{old_prefix}%"),
+        )
+    return cur.rowcount
+
+
 def migrate_video_file_paths_to_platform(videos_dir: str,
                                           platform: str = "tiktok") -> int:
     """Add platform subdirectory to stored video file paths.

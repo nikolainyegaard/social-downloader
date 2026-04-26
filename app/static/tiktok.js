@@ -551,7 +551,7 @@ function closeSettings() {
 
 function switchSettingsSection(name) {
   _settingsSection = name;
-  ['cookies', 'loops', 'backfill', 'jobs', 'utils', 'diag', 'database'].forEach(s => {
+  ['cookies', 'loops', 'backfill', 'jobs', 'utils', 'migrate', 'diag', 'database'].forEach(s => {
     document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
     document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
   });
@@ -559,6 +559,72 @@ function switchSettingsSection(name) {
   if (name === 'jobs')  { _avifLoadStatus(); _startJobsPoll(); }
   else                  { _stopJobsPoll(); }
   if (name === 'diag')  { diagSourceChanged(); }
+}
+
+// ── Migration helpers ─────────────────────────────────────────────────────────
+
+async function loadMigratePreview() {
+  const previewEl  = document.getElementById('migrate-preview');
+  const statusEl   = document.getElementById('migrateStatus');
+  const runBtn     = document.getElementById('migrateRunBtn');
+  previewEl.textContent = 'Scanning…';
+  statusEl.textContent  = '';
+  runBtn.style.display  = 'none';
+  try {
+    const { ok, data } = await apiJSON('/api/migrate/preview');
+    if (!ok) { previewEl.textContent = data.error || 'Scan failed.'; return; }
+    const total    = data.total_legacy || 0;
+    const prefixes = data.prefixes     || {};
+    const mediaDir = data.media_dir    || '';
+    if (total === 0) {
+      previewEl.innerHTML = '<span style="color:var(--green)">No legacy paths found. Database is already up to date.</span>';
+      return;
+    }
+    let html = `<div style="margin-bottom:8px;">Found <strong>${total}</strong> record${total !== 1 ? 's' : ''} with paths outside <code>${esc(mediaDir)}</code>:</div>`;
+    for (const [prefix, count] of Object.entries(prefixes)) {
+      html += `<div style="font-size:12px;color:var(--muted);margin-bottom:3px"><code>${esc(prefix)}</code> &mdash; ${count} record${count !== 1 ? 's' : ''}</div>`;
+    }
+    previewEl.innerHTML = html;
+    const oldInput = document.getElementById('migrateOldPrefix');
+    const newInput = document.getElementById('migrateNewPrefix');
+    if (!oldInput.value) oldInput.value = Object.keys(prefixes)[0] || '';
+    if (!newInput.value) newInput.value = mediaDir;
+    runBtn.style.display = '';
+  } catch (e) {
+    previewEl.textContent = 'Scan failed: ' + e.message;
+  }
+}
+
+async function runMigration() {
+  const oldPrefix = (document.getElementById('migrateOldPrefix').value || '').trim().replace(/\/$/, '');
+  const newPrefix = (document.getElementById('migrateNewPrefix').value || '').trim().replace(/\/$/, '');
+  const statusEl  = document.getElementById('migrateStatus');
+  const runBtn    = document.getElementById('migrateRunBtn');
+  if (!oldPrefix || !newPrefix) {
+    statusEl.textContent = 'Both fields are required.';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+  if (!confirm(`Rewrite all file paths starting with "${oldPrefix}" to "${newPrefix}"?`)) return;
+  runBtn.disabled      = true;
+  statusEl.textContent = 'Rewriting…';
+  statusEl.style.color = 'var(--muted)';
+  try {
+    const { ok, data } = await apiJSON('/api/migrate', { method: 'POST', body: JSON.stringify({ old_prefix: oldPrefix, new_prefix: newPrefix }) });
+    if (!ok) {
+      statusEl.textContent = data.error || 'Failed.';
+      statusEl.style.color = 'var(--red)';
+    } else {
+      statusEl.textContent = `Done. ${data.updated} record${data.updated !== 1 ? 's' : ''} updated.`;
+      statusEl.style.color = 'var(--green)';
+      await loadMigratePreview();
+    }
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.style.color = 'var(--red)';
+  } finally {
+    runBtn.disabled = false;
+  }
 }
 
 // ── Job progress widget ───────────────────────────────────────────────────────

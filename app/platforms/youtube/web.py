@@ -94,6 +94,14 @@ def _run_cleanup() -> None:
             _cleanup_state["steps"] = list(steps)
 
         with _cleanup_lock:
+            _cleanup_state["current"] = "Checking for missing video files..."
+        n = db.delete_missing_video_files()
+        steps.append(f"Removed {n} video row{'s' if n != 1 else ''} with missing files (will re-download next loop)")
+        removed += n
+        with _cleanup_lock:
+            _cleanup_state["steps"] = list(steps)
+
+        with _cleanup_lock:
             _cleanup_state["current"] = "Scanning thumbnails..."
         video_ids   = db.get_all_video_ids()
         thumb_count = 0
@@ -206,6 +214,10 @@ def channel_videos(channel_id: str):
 
 @youtube_bp.route("/channels/<channel_id>/run", methods=["POST"])
 def run_channel(channel_id: str):
+    from config import get_path_issues
+    issues = get_path_issues()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
     if not db.get_channel(channel_id):
         return jsonify({"error": "Channel not found"}), 404
     if not enqueue_channel_run(channel_id):
@@ -339,6 +351,10 @@ def get_status():
 
 @youtube_bp.route("/trigger", methods=["POST"])
 def trigger_now():
+    from config import get_path_issues
+    issues = get_path_issues()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
     if is_running():
         return jsonify({"error": "Loop is already running"}), 409
     trigger_event.set()

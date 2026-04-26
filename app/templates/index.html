@@ -431,6 +431,7 @@
       <div class="settings-nav-item"        id="snav-backfill"  onclick="switchSettingsSection('backfill')">Backfill</div>
       <div class="settings-nav-item"        id="snav-jobs"      onclick="switchSettingsSection('jobs')">Jobs</div>
       <div class="settings-nav-item"        id="snav-utils"     onclick="switchSettingsSection('utils')">Utilities</div>
+      <div class="settings-nav-item"        id="snav-migrate"   onclick="switchSettingsSection('migrate');loadMigratePreview()">Migration</div>
       <div class="settings-nav-item"        id="snav-diag"      onclick="switchSettingsSection('diag')">Diagnostics</div>
       <div class="settings-nav-item"        id="snav-database"  onclick="switchSettingsSection('database')">Database</div>
     </nav>
@@ -665,6 +666,34 @@
           <div class="job-status" id="util-clear-thumbs-status" style="display:none">
             <div class="job-status-text" id="util-clear-thumbs-text"></div>
           </div>
+        </div>
+      </div>
+
+      <!-- Migration section -->
+      <div id="ssec-migrate" style="display:none">
+        <div class="settings-section-title">Migrate from tiktok-downloader</div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
+          Upgrades from tiktok-downloader stored video files under <code>videos/</code> but the new layout uses <code>media/</code>.
+          This tool rewrites the stored file paths in the TikTok database to match your current folder layout.
+        </p>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+          Before running: stop the container, rename <code>videos/</code> to <code>media/</code> on the host, update your docker-compose.yml volumes, then restart and open this panel.
+        </p>
+        <div id="migrate-preview" style="margin-bottom:16px;font-size:13px;"></div>
+        <div style="display:flex;flex-direction:column;gap:10px;max-width:440px;margin-bottom:14px">
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            <span style="color:var(--text-dim)">Old prefix</span>
+            <input type="text" id="migrateOldPrefix" class="text-input" placeholder="/app/videos">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            <span style="color:var(--text-dim)">New prefix</span>
+            <input type="text" id="migrateNewPrefix" class="text-input" placeholder="/app/media">
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button class="btn-primary" onclick="loadMigratePreview()" style="font-size:12px;padding:5px 14px">Scan database</button>
+          <button class="btn-danger" id="migrateRunBtn" onclick="runMigration()" style="display:none;font-size:12px;padding:5px 14px">Rewrite paths</button>
+          <span id="migrateStatus" style="font-size:12px;color:var(--muted)"></span>
         </div>
       </div>
 

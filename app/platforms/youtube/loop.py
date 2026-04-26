@@ -154,6 +154,11 @@ threading.Thread(target=_run_worker, daemon=True, name="yt-run-worker").start()
 
 def run_loop() -> None:
     """Process all enabled tracked YouTube channels. Called by the scheduler thread."""
+    from config import get_path_issues
+    issues = get_path_issues()
+    if issues:
+        _log(f"Loop blocked: {issues[0]['message']}")
+        return
     from platforms.youtube.tracker import process_all_channels
     with _state_lock:
         loop_state["running"] = True

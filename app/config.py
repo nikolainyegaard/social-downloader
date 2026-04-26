@@ -24,6 +24,34 @@ CHROME_EXECUTABLE: str | None = (
 )
 
 
+_IN_DOCKER = os.path.exists("/.dockerenv")
+
+
+def get_path_issues() -> list[dict]:
+    """Return a list of path issues that should block downloads/loops. Empty = all clear."""
+    issues = []
+    for name, path in [("DATA_DIR", DATA_DIR), ("MEDIA_DIR", MEDIA_DIR)]:
+        try:
+            os.makedirs(path, exist_ok=True)
+        except OSError:
+            pass
+        if not os.path.isdir(path) or not os.access(path, os.W_OK):
+            issues.append({
+                "level": "error", "name": name, "path": path,
+                "message": f"{name} ({path}) is not writable -- check directory permissions",
+            })
+        elif _IN_DOCKER and not os.path.ismount(path):
+            issues.append({
+                "level": "error", "name": name, "path": path,
+                "message": (
+                    f"{name} ({path}) is not mounted as a Docker volume. "
+                    "Data written here will be lost when the container restarts. "
+                    "Add the volume to your docker-compose.yml."
+                ),
+            })
+    return issues
+
+
 def _ts() -> str:
     """Current local time as a formatted string, used in log lines across modules."""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")

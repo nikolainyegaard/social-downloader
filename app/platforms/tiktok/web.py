@@ -929,6 +929,10 @@ def get_status():
 
 @tiktok_bp.route("/trigger", methods=["POST"])
 def trigger_now():
+    from config import get_path_issues
+    issues = get_path_issues()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
     if is_user_loop_running():
         return jsonify({"error": "User loop is already running"}), 409
     trigger_user_event.set()
@@ -937,6 +941,10 @@ def trigger_now():
 
 @tiktok_bp.route("/trigger/sounds", methods=["POST"])
 def trigger_sounds_now():
+    from config import get_path_issues
+    issues = get_path_issues()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
     if is_sound_loop_running():
         return jsonify({"error": "Sound loop is already running"}), 409
     trigger_sound_event.set()

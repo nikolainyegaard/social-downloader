@@ -285,6 +285,11 @@ threading.Thread(target=backfill_thumbnails, daemon=True, name="thumb-backfill")
 
 def run_user_loop():
     """Process all enabled tracked users. Called by the user loop scheduler thread."""
+    from config import get_path_issues
+    issues = get_path_issues()
+    if issues:
+        _log(f"User loop blocked: {issues[0]['message']}")
+        return
     with _user_state_lock:
         user_loop_state["running"] = True
     _loop_start = time.monotonic()
@@ -316,6 +321,11 @@ def run_user_loop():
 
 def run_sound_loop():
     """Process all tracked sounds. Called by the sound loop scheduler thread."""
+    from config import get_path_issues
+    issues = get_path_issues()
+    if issues:
+        _log(f"Sound loop blocked: {issues[0]['message']}")
+        return
     with _sound_state_lock:
         sound_loop_state["running"] = True
     _loop_start = time.monotonic()
