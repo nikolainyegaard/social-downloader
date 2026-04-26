@@ -529,7 +529,12 @@ def get_video(video_id: str) -> dict | None:
         row = conn.execute(
             "SELECT * FROM videos WHERE video_id = ?", (video_id,)
         ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        result = dict(row)
+        if result.get("file_path"):
+            result["file_path"] = os.path.abspath(result["file_path"])
+        return result
 
 
 def get_all_video_stats() -> dict:

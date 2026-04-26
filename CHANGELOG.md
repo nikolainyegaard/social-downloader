@@ -41,6 +41,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Settings modal crashed on open: `switchSettingsSection` was referencing old nav/section IDs (`cookies`, `loops`, etc.) that no longer exist after the settings restructure
 - YouTube channel modal load speed: `raw_video_data` was not being stripped from the channel videos API response, sending large JSON blobs to the browser for every video; now stripped same as `ytdlp_data`
 - YouTube video upload dates blank: Shorts tab flat extraction returns no date field; `download_video` now extracts it from the full yt-dlp info dict captured during download, and existing NULL rows are backfilled from stored `ytdlp_data` on the next loop run
+- TikTok video playback and thumbnail 404s: `get_video()` now normalizes `file_path` to absolute via `os.path.abspath` before returning; Flask's `send_file` resolves relative paths against `app.root_path` (`/app/app`), not CWD (`/app`), so relative paths stored in the DB by earlier downloads were resolved to the wrong directory
 
 ## [0.1.0] - 2026-04-26
 
