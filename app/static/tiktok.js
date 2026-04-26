@@ -3022,6 +3022,9 @@ function resetBackfillStep() {
   }
 })();
 
+// ── Settings platform tabs init ───────────────────────────────────────────────
+['jobs', 'diag', 'database'].forEach(s => initSettingsPlatformTabs(s));
+
 // ── Back to top ───────────────────────────────────────────────────────────────
 (function() {
   const btn = document.getElementById('backToTopBtn');

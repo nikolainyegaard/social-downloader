@@ -1,19 +1,49 @@
-const PLATFORMS = ['tiktok', 'youtube'];
+const PLATFORMS = [
+  { id: 'tiktok',  label: 'TikTok'  },
+  { id: 'youtube', label: 'YouTube' },
+];
 
 function switchPlatform(name) {
-  if (!PLATFORMS.includes(name)) name = 'tiktok';
+  if (!PLATFORMS.some(p => p.id === name)) name = 'tiktok';
   history.replaceState(null, '', '#' + name);
   document.querySelectorAll('.platform-tab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.platform === name);
   });
   PLATFORMS.forEach(p => {
-    const el = document.getElementById('platform-' + p);
-    if (el) el.style.display = p === name ? '' : 'none';
+    const el = document.getElementById('platform-' + p.id);
+    if (el) el.style.display = p.id === name ? '' : 'none';
   });
   const app = document.querySelector('.app');
-  PLATFORMS.forEach(p => app.classList.remove('theme-' + p));
+  PLATFORMS.forEach(p => app.classList.remove('theme-' + p.id));
   app.classList.add('theme-' + name);
   if (typeof _initAllGliders === 'function') _initAllGliders();
+}
+
+// ── Settings platform tabs ────────────────────────────────────────────────────
+// Call initSettingsPlatformTabs(sectionId) once for any settings section that
+// has per-platform panes. It renders the tab buttons from PLATFORMS and wires
+// up switching. Panes must be <div id="{sectionId}-{platformId}">.
+
+function initSettingsPlatformTabs(sectionId) {
+  const container = document.getElementById(sectionId + '-tabs');
+  if (!container) return;
+  container.innerHTML = PLATFORMS.map((p, i) =>
+    `<button class="settings-sub-tab${i === 0 ? ' active' : ''}" id="stab-${sectionId}-${p.id}" onclick="switchSettingsPlatformTab('${sectionId}','${p.id}')">${p.label}</button>`
+  ).join('');
+  PLATFORMS.forEach((p, i) => {
+    const pane = document.getElementById(sectionId + '-' + p.id);
+    if (pane) pane.style.display = i === 0 ? '' : 'none';
+  });
+}
+
+function switchSettingsPlatformTab(sectionId, platformId) {
+  PLATFORMS.forEach(p => {
+    const btn  = document.getElementById(`stab-${sectionId}-${p.id}`);
+    const pane = document.getElementById(`${sectionId}-${p.id}`);
+    const active = p.id === platformId;
+    if (btn)  btn.classList.toggle('active', active);
+    if (pane) pane.style.display = active ? '' : 'none';
+  });
 }
 
 window.addEventListener('hashchange', () => {
