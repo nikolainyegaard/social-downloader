@@ -327,25 +327,6 @@
           </div>
         </div>
 
-        <div style="border-top:1px solid var(--border);margin:0 -16px;padding:12px 16px 0">
-          <div class="loop-section-label" style="margin-bottom:6px">Interval</div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <input type="number" id="ytLoopIntervalInput" min="1" max="9999" class="loop-interval-input" style="width:70px">
-            <span style="color:var(--muted);font-size:13px">min</span>
-            <button class="btn-primary" onclick="ytSaveLoopSettings()" style="font-size:12px;padding:4px 10px;margin-left:4px">Save</button>
-            <span id="ytLoopSettingsSaved" style="font-size:12px;color:var(--green);display:none">Saved.</span>
-          </div>
-        </div>
-
-        <div style="border-top:1px solid var(--border);margin:0 -16px;padding:12px 16px 0">
-          <div class="loop-section-label" style="margin-bottom:8px">Database cleanup</div>
-          <button class="btn-primary" id="yt-job-cleanup-btn" onclick="ytTriggerCleanup()" style="font-size:12px;padding:4px 10px">Run</button>
-          <div class="job-status" id="job-yt-cleanup-status" style="display:none;margin-top:8px">
-            <div id="job-yt-cleanup-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-yt-cleanup-bar"></div></div></div>
-            <div class="job-status-text" id="job-yt-cleanup-text"></div>
-            <div class="job-steps" id="job-yt-cleanup-steps"></div>
-          </div>
-        </div>
 
       </div>
     </div>
@@ -767,7 +748,7 @@
           </div>
 
           <div style="position:relative">
-            <pre id="diagOutput">No output yet.</pre>
+            <pre id="diagOutput" class="diag-output">No output yet.</pre>
             <button onclick="diagCopy()" title="Copy output" style="
               position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
               border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
@@ -787,7 +768,7 @@
             <button class="btn-primary" id="ytDiagRunBtn" onclick="ytDiagRun()" style="flex-shrink:0">Run</button>
           </div>
           <div style="position:relative">
-            <pre id="ytDiagOutput">No output yet.</pre>
+            <pre id="ytDiagOutput" class="diag-output">No output yet.</pre>
             <button onclick="ytDiagCopy()" title="Copy output" style="
               position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
               border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
@@ -801,41 +782,8 @@
       <div id="ssec-database" style="display:none">
         <div class="settings-section-title">Database Query</div>
         <div id="database-tabs" class="settings-sub-tabs"></div>
-
-        <div id="database-tiktok">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
-            Run raw SQLite commands against the TikTok database. SELECT returns rows; other statements are committed immediately.
-          </div>
-          <textarea id="dbQueryInput" placeholder="SELECT * FROM users LIMIT 10;"></textarea>
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-            <button class="btn-primary" onclick="dbQueryRun()" style="font-size:12px;padding:5px 14px">Run</button>
-            <span id="dbQuerySummary" style="font-size:12px;color:var(--muted)"></span>
-            <span id="dbQueryError"   style="font-size:12px;color:var(--red);display:none"></span>
-          </div>
-          <div class="report-widget" id="job-dbquery-report" style="display:none">
-            <div class="report-preview" id="job-dbquery-preview"></div>
-            <div class="report-actions">
-              <button class="btn-report" onclick="openReportView(_dbQueryReportFile, 'Database query')">View full report</button>
-              <a id="job-dbquery-download-link" style="display:none">
-                <button class="btn-report">Download report</button>
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <div id="database-youtube" style="display:none">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
-            Run raw SQLite commands against the YouTube database. SELECT returns rows; other statements are committed immediately.
-          </div>
-          <textarea id="ytDbQueryInput" placeholder="SELECT * FROM channels LIMIT 10;"></textarea>
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-            <button class="btn-primary" onclick="ytDbQueryRun()" style="font-size:12px;padding:5px 14px">Run</button>
-            <span id="ytDbQuerySummary" style="font-size:12px;color:var(--muted)"></span>
-            <span id="ytDbQueryError"   style="font-size:12px;color:var(--red);display:none"></span>
-          </div>
-          <pre id="ytDbQueryOutput" style="display:none"></pre>
-        </div>
-
+        <div id="database-tiktok"></div>
+        <div id="database-youtube"></div>
       </div>
 
     </div>

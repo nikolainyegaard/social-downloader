@@ -86,12 +86,13 @@ const _ytChState = {
 };
 
 const _YT_CH_MODAL_CFG = {
-  st:           _ytChState,
-  listElId:     'ytChModalVideoList',
-  toolbarElId:  'ytChModalToolbar',
-  cols:         YT_VCOLS,
-  colsCls:      'vcols',
-  pageSize:     50,
+  st:             _ytChState,
+  listElId:       'ytChModalVideoList',
+  toolbarElId:    'ytChModalToolbar',
+  cols:           YT_VCOLS,
+  colsCls:        'vcols',
+  pageSize:       50,
+  uploadDateFmt:  fmtDateOnly,
   filterFn:     'ytSetChModalFilter',
   typeFilterFn: 'ytSetChModalTypeFilter',
   sortFn:       'ytSetChModalSort',
@@ -981,39 +982,6 @@ async function ytDiagRun() {
 function ytDiagCopy() {
   const output = document.getElementById('ytDiagOutput');
   navigator.clipboard.writeText(output?.textContent || '').catch(() => {});
-}
-
-// ── DB Query ──────────────────────────────────────────────────────────────────
-
-async function ytDbQueryRun() {
-  const sql       = (document.getElementById('ytDbQueryInput')?.value || '').trim();
-  const summaryEl = document.getElementById('ytDbQuerySummary');
-  const errorEl   = document.getElementById('ytDbQueryError');
-  const outputEl  = document.getElementById('ytDbQueryOutput');
-  if (!sql) return;
-  summaryEl.textContent  = 'Running...';
-  errorEl.style.display  = 'none';
-  outputEl.style.display = 'none';
-
-  const { ok, data } = await apiJSON('/api/youtube/db/query', {
-    method: 'POST',
-    body: JSON.stringify({ sql }),
-  });
-
-  if (!data.ok) {
-    summaryEl.textContent  = '';
-    errorEl.textContent    = data.error || 'Query failed.';
-    errorEl.style.display  = '';
-    return;
-  }
-
-  if (data.cols && data.cols.length) {
-    summaryEl.textContent  = `${data.rowcount} row${data.rowcount !== 1 ? 's' : ''}`;
-    outputEl.style.display = '';
-    outputEl.textContent   = JSON.stringify({ cols: data.cols, rows: data.rows }, null, 2);
-  } else {
-    summaryEl.textContent  = `${data.rowcount} row${data.rowcount !== 1 ? 's' : ''} affected`;
-  }
 }
 
 // ── Keyboard handler (Escape) ─────────────────────────────────────────────────

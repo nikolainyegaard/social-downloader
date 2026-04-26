@@ -50,13 +50,6 @@ async function apiJSON(path, opts = {}) {
   return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
 }
 
-function esc(s) {
-  if (!s) return '';
-  return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
 // ── Cookie management ─────────────────────────────────────────────────────────
 
 function renderCookies(info) {
@@ -810,61 +803,11 @@ function triggerClearThumbnails() {
   );
 }
 
-// ── Report view modal ─────────────────────────────────────────────────────────
-
-async function openReportView(filename, title) {
-  if (!filename) return;
-  document.getElementById('reportViewTitle').textContent = title;
-  document.getElementById('reportViewSub').textContent   = filename;
-  document.getElementById('reportViewBody').textContent  = 'Loading...';
-  document.getElementById('reportViewBackdrop').style.display = 'flex';
-  _lockScroll();
-  const resp = await fetch(`/api/tiktok/reports/${encodeURIComponent(filename)}`);
-  document.getElementById('reportViewBody').textContent =
-    resp.ok ? await resp.text() : 'Failed to load report.';
-}
-
-function closeReportView() {
-  document.getElementById('reportViewBackdrop').style.display = 'none';
-  _unlockScroll();
-}
-
-// ── _makeReportWidget — reusable report preview + download + view buttons ────
-//
-// Expects elements: #job-{id}-report, #job-{id}-preview,
-//                   #job-{id}-view-btn, #job-{id}-download-link
-//
-// show(filename, previewLines, totalCount) — renders preview and wires buttons
-// hide()                                  — hides the widget area
-
-function _makeReportWidget(id) {
-  const reportEl   = document.getElementById(`job-${id}-report`);
-  const previewEl  = document.getElementById(`job-${id}-preview`);
-  const dlLink     = document.getElementById(`job-${id}-download-link`);
-  return {
-    show(filename, previewLines, totalCount) {
-      if (!reportEl) return;
-      reportEl.style.display = '';
-      const shown   = previewLines.length;
-      const more    = totalCount - shown;
-      let html = previewLines.map(p => esc(p)).join('\n');
-      if (more > 0) html += `\n<span class="report-preview-more">...and ${more} more. View or download the full report.</span>`;
-      previewEl.innerHTML = html || '<span style="opacity:.5">No entries.</span>';
-      if (dlLink && filename) {
-        dlLink.href = `/api/tiktok/reports/${encodeURIComponent(filename)}?download=1`;
-        dlLink.download = filename;
-        dlLink.style.display = '';
-      }
-    },
-    hide() { if (reportEl) reportEl.style.display = 'none'; },
-  };
-}
-
 // Missing file check
 
 let _filecheckPoll       = null;
 let _filecheckReportFile = null;
-const _filecheckReport   = _makeReportWidget('filecheck');
+const _filecheckReport   = _makeReportWidget('filecheck', '/api/tiktok/reports');
 
 function _setFilecheckBtns(disabled) {
   document.getElementById('job-filecheck-scan-btn').disabled  = disabled;
@@ -922,34 +865,6 @@ async function triggerFilePurge() {
   _filecheckWidget.update({ barPct: null, label: 'Purging...' });
   _filecheckReport.hide();
   _startFilecheckPoll();
-}
-
-// ── Database query ─────────────────────────────────────────────────────────────
-
-let _dbQueryReportFile = null;
-const _dbQueryReport   = _makeReportWidget('dbquery');
-
-async function dbQueryRun() {
-  const sql     = (document.getElementById('dbQueryInput')?.value || '').trim();
-  const summaryEl = document.getElementById('dbQuerySummary');
-  const errorEl   = document.getElementById('dbQueryError');
-  if (!sql) return;
-  summaryEl.textContent = 'Running…';
-  errorEl.style.display = 'none';
-  _dbQueryReport.hide();
-  const { ok, data } = await apiJSON('/api/tiktok/db/query', {
-    method: 'POST',
-    body: JSON.stringify({ sql }),
-  });
-  if (!ok) {
-    summaryEl.textContent = '';
-    errorEl.textContent   = data.error || 'Query failed.';
-    errorEl.style.display = '';
-    return;
-  }
-  summaryEl.textContent  = data.summary;
-  _dbQueryReportFile     = data.report_file || null;
-  _dbQueryReport.show(data.report_file, data.preview, data.total);
 }
 
 // ── Diagnostics ────────────────────────────────────────────────────────────────
@@ -1859,9 +1774,10 @@ function _mAppendVideos(cfg, vids) {
   const list     = document.getElementById(cfg.listElId);
   const batch    = vids.slice(cfg.st.loaded, cfg.st.loaded + cfg.pageSize);
   cfg.st.loaded += batch.length;
-  const thumbFn   = cfg.thumbCellFn  || _thumbCell;
-  const actionFn  = cfg.actionBtnsFn || _videoActionBtns;
-  const previewFn = cfg.previewFn    || 'openImgModal';
+  const thumbFn      = cfg.thumbCellFn    || _thumbCell;
+  const actionFn     = cfg.actionBtnsFn   || _videoActionBtns;
+  const previewFn    = cfg.previewFn      || 'openImgModal';
+  const fmtUpload    = cfg.uploadDateFmt  || fmtDateShort;
   const html = batch.map(v => {
     const { cls: statusCls, label: statusLabel } = _videoStatus(v);
     const authorCell = cfg.authorCol ? `<div class="video-cell">${cfg.authorCol(v)}</div>` : '';
@@ -1878,7 +1794,7 @@ function _mAppendVideos(cfg, vids) {
         <span class="vstatus ${statusCls}">${statusLabel}</span>
       </div>
       <div class="video-cell">${fmtCount(v.view_count)}</div>
-      <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
+      <div class="video-cell">${fmtUpload(v.upload_date)}</div>
       <div class="video-cell">${fmtDateShort(v.download_date)}</div>
       <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
       <div class="video-cell" style="padding:0;display:flex;align-items:center;justify-content:center;gap:2px">
@@ -2286,9 +2202,14 @@ const _dtFmtTime      = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minu
 const _dtFmtRecent    = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short',
                                                            hour: '2-digit', minute: '2-digit' });
 const _dtFmtMonthYear = new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'numeric' });
+const _dtFmtDateOnly  = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 function fmtDateShort(unix) {
   if (!unix) return '—';
   return _dtFmt.format(new Date(unix * 1000));
+}
+function fmtDateOnly(unix) {
+  if (!unix) return '—';
+  return _dtFmtDateOnly.format(new Date(unix * 1000));
 }
 
 function openUserModal(tiktokId) {
@@ -3024,6 +2945,7 @@ function resetBackfillStep() {
 
 // ── Settings platform tabs init ───────────────────────────────────────────────
 ['jobs', 'diag', 'database'].forEach(s => initSettingsPlatformTabs(s));
+PLATFORMS.forEach(p => initDbQueryPane(p.id));
 
 // ── Back to top ───────────────────────────────────────────────────────────────
 (function() {

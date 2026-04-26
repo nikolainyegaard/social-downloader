@@ -134,7 +134,22 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
     else:
         print(f"[{_ts()}] Thumbnail FAILED for {video_id} (see [thumb] lines above)")
     ytdlp_data = _clean_ytdlp_info(ydl_info)
-    return {"file_path": actual_path, "ytdlp_data": ytdlp_data}
+    extracted_upload_date: int | None = None
+    if ydl_info:
+        raw_date = ydl_info.get("upload_date")  # "YYYYMMDD" string
+        if raw_date:
+            try:
+                extracted_upload_date = int(datetime.strptime(str(raw_date), "%Y%m%d").timestamp())
+            except (ValueError, TypeError):
+                pass
+        if extracted_upload_date is None:
+            ts = ydl_info.get("timestamp")
+            if ts:
+                try:
+                    extracted_upload_date = int(ts)
+                except (ValueError, TypeError):
+                    pass
+    return {"file_path": actual_path, "ytdlp_data": ytdlp_data, "upload_date": extracted_upload_date}
 
 
 def _load_cookies(cookies_path: str) -> dict[str, str]:

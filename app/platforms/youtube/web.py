@@ -20,6 +20,23 @@ from platforms.youtube.loop import (
 )
 from thumbnailer import thumb_path_for
 
+from config import DATA_DIR  # noqa: F811 (already imported MEDIA_DIR; adding DATA_DIR)
+
+REPORTS_DIR = os.path.join(DATA_DIR, "reports")
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+
+def _write_report(slug: str, header: str, lines: list[str]) -> str:
+    ts       = time.strftime("%Y%m%d-%H%M%S")
+    filename = f"{slug}-{ts}.txt"
+    path     = os.path.join(REPORTS_DIR, filename)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(header + "\n\n")
+        for line in lines:
+            f.write(line + "\n")
+    return filename
+
+
 youtube_bp = Blueprint("youtube", __name__, url_prefix="/api/youtube")
 
 _add_queue    = _queue_module.Queue()
@@ -58,6 +75,7 @@ def _process_add(handle: str) -> None:
         video_count=info.get("video_count"),
         avatar_url=info.get("avatar_url"),
         banner_url=info.get("banner_url"),
+        raw_channel_data=info.get("raw_channel_data"),
     )
     with _pending_lock:
         del _pending[handle]
@@ -212,6 +230,7 @@ def channel_videos(channel_id: str):
     videos = db.get_videos_for_channel(channel_id)
     for v in videos:
         v.pop("ytdlp_data", None)
+        v.pop("raw_video_data", None)
     return jsonify(videos)
 
 
@@ -345,25 +364,40 @@ def debug_channel_videos():
 @youtube_bp.route("/db/query", methods=["POST"])
 def db_query():
     body = request.get_json(silent=True) or {}
-    sql = (body.get("sql") or "").strip()
+    sql  = (body.get("sql") or "").strip()
     if not sql:
         return jsonify({"error": "sql is required"}), 400
-    import sqlite3 as _sl3
     try:
-        conn = _sl3.connect(db.DB_PATH)
-        conn.row_factory = _sl3.Row
-        cur = conn.execute(sql)
-        if cur.description:
-            cols = [d[0] for d in cur.description]
-            rows = [dict(zip(cols, row)) for row in cur.fetchall()]
-            conn.close()
-            return jsonify({"ok": True, "cols": cols, "rows": rows, "rowcount": len(rows)})
-        conn.commit()
-        rc = cur.rowcount
-        conn.close()
-        return jsonify({"ok": True, "cols": [], "rows": [], "rowcount": rc})
+        with db.get_db() as conn:
+            cursor = conn.execute(sql)
+            if cursor.description:
+                cols   = [d[0] for d in cursor.description]
+                rows   = cursor.fetchall()
+                lines  = ["\t".join(cols)]
+                lines += ["\t".join("" if v is None else str(v) for v in row) for row in rows]
+                total   = len(rows)
+                summary = f"{total} row{'s' if total != 1 else ''} returned"
+            else:
+                affected = cursor.rowcount
+                lines    = [f"OK - {affected} row{'s' if affected != 1 else ''} affected"]
+                total    = 1
+                summary  = lines[0]
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
+    filename = _write_report("yt-db-query", f"SQL: {sql}", lines)
+    preview  = lines[:12]
+    return jsonify({"ok": True, "report_file": filename, "preview": preview, "total": total, "summary": summary})
+
+
+@youtube_bp.route("/reports/<path:filename>", methods=["GET"])
+def download_report(filename: str):
+    if "/" in filename or "\\" in filename or ".." in filename:
+        return ("", 400)
+    path = os.path.join(REPORTS_DIR, filename)
+    if not os.path.exists(path):
+        return ("", 404)
+    as_attachment = request.args.get("download") == "1"
+    return send_file(path, mimetype="text/plain", as_attachment=as_attachment, download_name=filename)
 
 
 # Stats and recent activity

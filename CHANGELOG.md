@@ -13,6 +13,12 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - `/api/youtube/debug/channel-videos` and `/api/youtube/db/query` endpoints
 - Settings modal reorganised into platform-aware tabs: TikTok, YouTube, Jobs, Diagnostics, Database; Jobs/Diagnostics/Database tabs have TikTok/YouTube sub-tabs
 - README with setup, configuration, volumes, and migration guide
+- `raw_channel_data TEXT` column on YouTube `channels` table: full yt-dlp channel info dict (minus thumbnails/entries/formats) stored on add and updated each loop
+- `raw_video_data TEXT` column on YouTube `videos` table: full flat extraction entry stored on download
+- `backfill_upload_dates()` in YouTube database: runs at loop start, patches NULL `upload_date` rows from stored `ytdlp_data`; self-heals across one loop cycle
+- `fmtDateOnly` date formatter and `uploadDateFmt` hook on modal config: YouTube channel modal shows date-only for uploaded column (no time, since yt-dlp flat extraction only provides YYYYMMDD)
+- `/api/youtube/reports/<filename>` endpoint: serves report files for the DB query widget
+- Reusable DB query pane (`initDbQueryPane`, `_dbqRun`, `_dbqView`) in `common.js`: single implementation used for all platforms; DB query HTML no longer duplicated in `index.html`
 
 ### Changed
 - `DATA_DIR` and `MEDIA_DIR` now resolved with `os.path.abspath` at import time; fixes video playback and thumbnail 404s when the process CWD is not the app directory
@@ -23,9 +29,16 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Thumbnail generator retries with `seek=0` when ffmpeg exits 0 but produces no output file (videos shorter than 1 s, common for Shorts)
 - Migration panel new-prefix auto-fill now appends `/tiktok` subpath
 - `docker-compose.yml`: loop interval env vars removed; intervals are configurable from the UI
+- `download_video` return dict now includes `upload_date` (parsed from full yt-dlp info); YouTube tracker uses it as fallback when flat extraction returns no date (common for Shorts)
+- YouTube `/db/query` response normalized to match TikTok format (`{ok, report_file, preview, total, summary}`)
+- Settings sub-tab buttons restyled to match main platform tab (underline style, accent on active); CSS converted from ID-based to class-based (`.diag-output`, `.db-query-input`)
+- `esc`, `_makeReportWidget`, `openReportView`, `closeReportView` moved from `tiktok.js` to `common.js`; `_makeReportWidget` now accepts `reportsApiPath` parameter and looks up DOM elements lazily; `openReportView` accepts optional `apiBase` parameter
+- Interval and Database cleanup sub-sections removed from YouTube front-page loops card; both are already in Settings
 
 ### Fixed
 - Settings modal crashed on open: `switchSettingsSection` was referencing old nav/section IDs (`cookies`, `loops`, etc.) that no longer exist after the settings restructure
+- YouTube channel modal load speed: `raw_video_data` was not being stripped from the channel videos API response, sending large JSON blobs to the browser for every video; now stripped same as `ytdlp_data`
+- YouTube video upload dates blank: Shorts tab flat extraction returns no date field; `download_video` now extracts it from the full yt-dlp info dict captured during download, and existing NULL rows are backfilled from stored `ytdlp_data` on the next loop run
 
 ## [0.1.0] - 2026-04-26
 

@@ -23,6 +23,9 @@ def process_all_channels(
     set_current: Callable[[str | None], None] | None = None,
 ) -> int:
     """Process all tracked YouTube channels. Returns the count of successful channel runs."""
+    n = db.backfill_upload_dates()
+    if n:
+        log(f"  Backfilled upload_date for {n} video(s) from stored metadata")
     completed = 0
     for channel in channels:
         try:
@@ -108,10 +111,12 @@ def process_single_channel(
                 url=f"https://www.youtube.com/watch?v={vid_id}",
             )
             if result:
+                upload_date = v.get("upload_date") or result.get("upload_date")
                 db.add_video(
-                    vid_id, channel_id, v.get("title"), v.get("upload_date"),
+                    vid_id, channel_id, v.get("title"), upload_date,
                     view_count=v.get("view_count"), duration=v.get("duration"),
                     content_type=v.get("content_type", "video"),
+                    raw_video_data=v.get("raw_video_data"),
                 )
                 db.update_video_downloaded(vid_id, result["file_path"], result.get("ytdlp_data"))
                 log(f"  Saved {vid_id} -> {result['file_path']}")
@@ -165,6 +170,7 @@ def _update_profile(channel: dict, info: dict, log: Callable[[str], None]) -> No
         info.get("video_count"),
         avatar_url=info.get("avatar_url"),
         banner_url=info.get("banner_url"),
+        raw_channel_data=info.get("raw_channel_data"),
     )
 
     if info.get("avatar_url"):

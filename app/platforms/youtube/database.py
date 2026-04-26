@@ -1,7 +1,9 @@
+import json
 import sqlite3
 import time
 import os
 from contextlib import contextmanager
+from datetime import datetime
 
 from config import DATA_DIR, MEDIA_DIR  # noqa: F401
 
@@ -101,9 +103,11 @@ def init_db():
 def _migrate_db(conn):
     """Add columns introduced after the initial schema. Safe to run on existing DBs."""
     migrations: list[str] = [
-        "ALTER TABLE channels ADD COLUMN banner_url    TEXT",
-        "ALTER TABLE channels ADD COLUMN banner_cached INTEGER DEFAULT 0",
-        "ALTER TABLE videos   ADD COLUMN content_type TEXT DEFAULT 'video'",
+        "ALTER TABLE channels ADD COLUMN banner_url       TEXT",
+        "ALTER TABLE channels ADD COLUMN banner_cached    INTEGER DEFAULT 0",
+        "ALTER TABLE channels ADD COLUMN raw_channel_data TEXT",
+        "ALTER TABLE videos   ADD COLUMN content_type     TEXT DEFAULT 'video'",
+        "ALTER TABLE videos   ADD COLUMN raw_video_data   TEXT",
     ]
     for sql in migrations:
         try:
@@ -117,15 +121,16 @@ def _migrate_db(conn):
 def add_channel(channel_id: str, handle: str, display_name: str | None = None,
                 description: str | None = None, subscriber_count: int | None = None,
                 video_count: int | None = None, avatar_url: str | None = None,
-                banner_url: str | None = None) -> None:
+                banner_url: str | None = None,
+                raw_channel_data: str | None = None) -> None:
     with get_db() as conn:
         conn.execute("""
             INSERT OR IGNORE INTO channels
                 (channel_id, handle, display_name, description, subscriber_count,
-                 video_count, avatar_url, banner_url, added_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 video_count, avatar_url, banner_url, raw_channel_data, added_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (channel_id, handle, display_name, description, subscriber_count,
-              video_count, avatar_url, banner_url, int(time.time())))
+              video_count, avatar_url, banner_url, raw_channel_data, int(time.time())))
 
 
 def remove_channel(channel_id: str) -> None:
@@ -159,7 +164,8 @@ def get_channel_by_handle(handle: str) -> dict | None:
 def update_channel_info(channel_id: str, handle: str, display_name: str | None,
                         description: str | None, subscriber_count: int | None,
                         video_count: int | None, avatar_url: str | None = None,
-                        banner_url: str | None = None) -> None:
+                        banner_url: str | None = None,
+                        raw_channel_data: str | None = None) -> None:
     with get_db() as conn:
         conn.execute("""
             UPDATE channels SET
@@ -170,10 +176,11 @@ def update_channel_info(channel_id: str, handle: str, display_name: str | None,
                 video_count      = COALESCE(?, video_count),
                 avatar_url       = COALESCE(?, avatar_url),
                 banner_url       = COALESCE(?, banner_url),
+                raw_channel_data = COALESCE(?, raw_channel_data),
                 last_checked     = ?
             WHERE channel_id = ?
         """, (handle, display_name, description, subscriber_count, video_count,
-              avatar_url, banner_url, int(time.time()), channel_id))
+              avatar_url, banner_url, raw_channel_data, int(time.time()), channel_id))
 
 
 def record_profile_change(channel_id: str, field: str, old_value: str | None) -> None:
@@ -258,13 +265,14 @@ def get_video_id_sets(channel_id: str) -> tuple[set, set]:
 
 def add_video(video_id: str, channel_id: str, title: str | None, upload_date: int | None,
               view_count: int | None = None, duration: float | None = None,
-              content_type: str | None = None) -> None:
+              content_type: str | None = None,
+              raw_video_data: str | None = None) -> None:
     with get_db() as conn:
         conn.execute("""
             INSERT OR IGNORE INTO videos
-                (video_id, channel_id, title, upload_date, view_count, duration, content_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (video_id, channel_id, title, upload_date, view_count, duration, content_type or "video"))
+                (video_id, channel_id, title, upload_date, view_count, duration, content_type, raw_video_data)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (video_id, channel_id, title, upload_date, view_count, duration, content_type or "video", raw_video_data))
 
 
 def update_video_downloaded(video_id: str, file_path: str, ytdlp_data: str | None = None) -> None:
@@ -313,6 +321,38 @@ def get_video(video_id: str) -> dict | None:
             "SELECT * FROM videos WHERE video_id = ?", (video_id,)
         ).fetchone()
         return dict(row) if row else None
+
+
+def backfill_upload_dates() -> int:
+    """Parse upload_date from ytdlp_data for rows where upload_date IS NULL. Returns rows updated."""
+    updated = 0
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT video_id, ytdlp_data FROM videos WHERE upload_date IS NULL AND ytdlp_data IS NOT NULL"
+        ).fetchall()
+        for row in rows:
+            try:
+                data = json.loads(row["ytdlp_data"])
+                ts: int | None = None
+                raw_date = data.get("upload_date")
+                if raw_date:
+                    try:
+                        ts = int(datetime.strptime(str(raw_date), "%Y%m%d").timestamp())
+                    except (ValueError, TypeError):
+                        pass
+                if ts is None:
+                    raw_ts = data.get("timestamp")
+                    if raw_ts:
+                        try:
+                            ts = int(raw_ts)
+                        except (ValueError, TypeError):
+                            pass
+                if ts:
+                    conn.execute("UPDATE videos SET upload_date = ? WHERE video_id = ?", (ts, row["video_id"]))
+                    updated += 1
+            except Exception:
+                pass
+    return updated
 
 
 def get_all_videos() -> list[dict]:

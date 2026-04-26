@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 
 import yt_dlp
+
+_CHANNEL_STRIP_KEYS = frozenset({"thumbnails", "formats", "requested_formats", "entries"})
+_VIDEO_STRIP_KEYS   = frozenset({"formats", "requested_formats", "requested_downloads",
+                                  "__files_to_move", "__postprocessors", "thumbnails"})
 
 
 def _raw_fetch_entries(channel_id: str, limit: int = 5) -> list[dict]:
@@ -40,7 +45,7 @@ def _to_url(raw: str) -> str:
 
 
 def fetch_channel_info(url_or_handle: str) -> dict:
-    """Fetch channel metadata. Returns a dict with channel_id, handle, display_name, etc."""
+    """Fetch channel metadata. Returns a dict with channel_id, handle, display_name, raw_channel_data, etc."""
     url = _to_url(url_or_handle)
     ydl_opts = {"quiet": True, "no_warnings": True}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -53,6 +58,7 @@ def fetch_channel_info(url_or_handle: str) -> dict:
 def _parse_channel(info: dict) -> dict:
     avatar_url, banner_url = _split_thumbs(info.get("thumbnails") or [])
     handle = (info.get("uploader_id") or "").lstrip("@")
+    cleaned = {k: v for k, v in info.items() if k not in _CHANNEL_STRIP_KEYS}
     return {
         "channel_id":       info.get("channel_id") or info.get("id"),
         "handle":           handle,
@@ -62,7 +68,15 @@ def _parse_channel(info: dict) -> dict:
         "video_count":      info.get("playlist_count"),
         "avatar_url":       avatar_url,
         "banner_url":       banner_url,
+        "raw_channel_data": _safe_json(cleaned),
     }
+
+
+def _safe_json(obj) -> str | None:
+    try:
+        return json.dumps(obj, default=str)
+    except Exception:
+        return None
 
 
 def _split_thumbs(thumbs: list) -> tuple[str | None, str | None]:
@@ -120,12 +134,13 @@ def fetch_channel_videos(channel_id: str) -> list[dict]:
 
     return [
         {
-            "video_id":    e.get("id"),
-            "title":       e.get("title"),
-            "upload_date": _parse_date(e.get("upload_date")) or e.get("timestamp"),
-            "duration":    e.get("duration"),
-            "view_count":  e.get("view_count"),
-            "content_type": e.get("_ctype", "video"),
+            "video_id":      e.get("id"),
+            "title":         e.get("title"),
+            "upload_date":   _parse_date(e.get("upload_date")) or e.get("timestamp"),
+            "duration":      e.get("duration"),
+            "view_count":    e.get("view_count"),
+            "content_type":  e.get("_ctype", "video"),
+            "raw_video_data": _safe_json({k: v for k, v in e.items() if k not in _VIDEO_STRIP_KEYS}),
         }
         for e in videos.values()
     ]

@@ -81,3 +81,125 @@ async function checkHealth() {
 }
 
 checkHealth();
+
+// ── HTML escape helper ─────────────────────────────────────────────────────────
+
+function esc(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Report widget ──────────────────────────────────────────────────────────────
+// Elements are looked up lazily so this can be called before the DOM is ready.
+// id: base id string; reportsApiPath: e.g. '/api/tiktok/reports'
+
+function _makeReportWidget(id, reportsApiPath) {
+  return {
+    show(filename, previewLines, totalCount) {
+      const reportEl  = document.getElementById(`job-${id}-report`);
+      const previewEl = document.getElementById(`job-${id}-preview`);
+      const dlLink    = document.getElementById(`job-${id}-download-link`);
+      if (!reportEl) return;
+      reportEl.style.display = '';
+      const shown = previewLines.length;
+      const more  = totalCount - shown;
+      let html = previewLines.map(p => esc(p)).join('\n');
+      if (more > 0) html += `\n<span class="report-preview-more">...and ${more} more. View or download the full report.</span>`;
+      previewEl.innerHTML = html || '<span style="opacity:.5">No entries.</span>';
+      if (dlLink && filename && reportsApiPath) {
+        dlLink.href     = `${reportsApiPath}/${encodeURIComponent(filename)}?download=1`;
+        dlLink.download = filename;
+        dlLink.style.display = '';
+      }
+    },
+    hide() {
+      const reportEl = document.getElementById(`job-${id}-report`);
+      if (reportEl) reportEl.style.display = 'none';
+    },
+  };
+}
+
+// ── Report viewer modal ────────────────────────────────────────────────────────
+
+async function openReportView(filename, title, apiBase) {
+  if (!filename) return;
+  const base = apiBase || '/api/tiktok/reports';
+  document.getElementById('reportViewTitle').textContent = title;
+  document.getElementById('reportViewSub').textContent   = filename;
+  document.getElementById('reportViewBody').textContent  = 'Loading...';
+  document.getElementById('reportViewBackdrop').style.display = 'flex';
+  _lockScroll();
+  const resp = await fetch(`${base}/${encodeURIComponent(filename)}`);
+  document.getElementById('reportViewBody').textContent =
+    resp.ok ? await resp.text() : 'Failed to load report.';
+}
+
+function closeReportView() {
+  document.getElementById('reportViewBackdrop').style.display = 'none';
+  _unlockScroll();
+}
+
+// ── DB query pane (one shared widget, rendered per platform) ───────────────────
+
+const _dbqReportFiles = {};
+const _dbqWidgets     = {};
+
+function initDbQueryPane(platform) {
+  const pane = document.getElementById('database-' + platform);
+  if (!pane) return;
+  const label = platform.charAt(0).toUpperCase() + platform.slice(1);
+  const id    = 'dbq-' + platform;
+  const defaultSqls = { tiktok: 'SELECT * FROM users LIMIT 10;', youtube: 'SELECT * FROM channels LIMIT 10;' };
+  const ph = defaultSqls[platform] || 'SELECT 1;';
+  pane.innerHTML = `
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">
+      Run raw SQLite commands against the ${label} database.
+      SELECT returns rows; other statements are committed immediately.
+    </p>
+    <textarea id="${id}-input" class="db-query-input" placeholder="${ph}"></textarea>
+    <div class="db-query-controls">
+      <button class="btn-primary" onclick="_dbqRun('${platform}')" style="font-size:12px;padding:5px 14px">Run</button>
+      <span id="${id}-summary" class="db-query-summary"></span>
+      <span id="${id}-error"   class="db-query-error" style="display:none"></span>
+    </div>
+    <div class="report-widget" id="job-${id}-report" style="display:none">
+      <div class="report-preview" id="job-${id}-preview"></div>
+      <div class="report-actions">
+        <button class="btn-report" onclick="_dbqView('${platform}')">View full report</button>
+        <a id="job-${id}-download-link" style="display:none">
+          <button class="btn-report">Download report</button>
+        </a>
+      </div>
+    </div>
+  `;
+  _dbqWidgets[platform] = _makeReportWidget(id, `/api/${platform}/reports`);
+}
+
+async function _dbqRun(platform) {
+  const id      = 'dbq-' + platform;
+  const sql     = (document.getElementById(id + '-input')?.value || '').trim();
+  const summary = document.getElementById(id + '-summary');
+  const error   = document.getElementById(id + '-error');
+  if (!sql) return;
+  summary.textContent = 'Running...';
+  error.style.display = 'none';
+  _dbqWidgets[platform]?.hide();
+  const { ok, data } = await apiJSON(`/api/${platform}/db/query`, {
+    method: 'POST', body: JSON.stringify({ sql }),
+  });
+  if (!ok || !data.ok) {
+    summary.textContent = '';
+    error.textContent   = data.error || 'Query failed.';
+    error.style.display = '';
+    return;
+  }
+  summary.textContent = data.summary || '';
+  _dbqReportFiles[platform] = data.report_file || null;
+  _dbqWidgets[platform]?.show(data.report_file, data.preview || [], data.total || 0);
+}
+
+function _dbqView(platform) {
+  openReportView(_dbqReportFiles[platform], 'Database query', `/api/${platform}/reports`);
+}
