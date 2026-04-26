@@ -29,12 +29,12 @@ RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
 COPY . .
 
 # Persistent volumes are mounted here at runtime
-RUN mkdir -p /app/data /app/videos
+RUN mkdir -p /app/data /app/media
 
 ARG BUILD_VERSION=dev
 ENV PYTHONUNBUFFERED=1 \
     DATA_DIR=/app/data \
-    VIDEOS_DIR=/app/videos \
+    MEDIA_DIR=/app/media \
     WEB_PORT=5000 \
     APP_VERSION=${BUILD_VERSION}
 

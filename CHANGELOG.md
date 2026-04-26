@@ -21,6 +21,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Reusable DB query pane (`initDbQueryPane`, `_dbqRun`, `_dbqView`) in `common.js`: single implementation used for all platforms; DB query HTML no longer duplicated in `index.html`
 
 ### Changed
+- Dockerfile: `VIDEOS_DIR=/app/videos` replaced with `MEDIA_DIR=/app/media`; fixes TikTok video playback and thumbnail 404s (same root cause as the earlier YouTube path fix; the old env var was a leftover from tiktok-downloader and left `MEDIA_DIR` unset, causing path resolution to depend on CWD)
+- Deletion confirmation threshold reduced from 3 to 2 for both TikTok and YouTube: a video must be absent for 2 consecutive loop runs before being marked deleted
 - `DATA_DIR` and `MEDIA_DIR` now resolved with `os.path.abspath` at import time; fixes video playback and thumbnail 404s when the process CWD is not the app directory
 - YouTube recently saved panel now groups consecutive same-channel downloads and shows a count badge (e.g. `@handle x605`), matching TikTok behaviour
 - YouTube download format changed to `bestvideo[height<=1080]+bestaudio/best` (no mp4 merge constraint); video serving now sets the correct MIME type per file extension
