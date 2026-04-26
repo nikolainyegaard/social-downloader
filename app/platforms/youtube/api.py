@@ -50,16 +50,25 @@ def _parse_channel(info: dict) -> dict:
 
 
 def fetch_channel_videos(channel_id: str) -> list[dict]:
-    """Fetch all video IDs and basic metadata for a channel via flat extraction."""
-    url = f"https://www.youtube.com/channel/{channel_id}/videos"
-    ydl_opts = {
-        "quiet":        True,
-        "no_warnings":  True,
-        "extract_flat": True,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-    entries = (info.get("entries") or []) if info else []
+    """Fetch all video IDs from all content tabs (Videos, Shorts, Streams)."""
+    ydl_opts = {"quiet": True, "no_warnings": True, "extract_flat": True}
+    videos: dict[str, dict] = {}
+    last_exc: Exception | None = None
+
+    for tab in ("/videos", "/shorts", "/streams"):
+        url = f"https://www.youtube.com/channel/{channel_id}{tab}"
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            for e in (info.get("entries") or []):
+                if e and e.get("id"):
+                    videos[e["id"]] = e
+        except Exception as e:
+            last_exc = e
+
+    if not videos and last_exc is not None:
+        raise last_exc
+
     return [
         {
             "video_id":    e.get("id"),
@@ -68,8 +77,7 @@ def fetch_channel_videos(channel_id: str) -> list[dict]:
             "duration":    e.get("duration"),
             "view_count":  e.get("view_count"),
         }
-        for e in entries
-        if e and e.get("id")
+        for e in videos.values()
     ]
 
 

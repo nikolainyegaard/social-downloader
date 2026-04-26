@@ -906,6 +906,8 @@ function ytSetTrackingView(view) {
     searchEl.style.display = view === 'log' ? 'none' : '';
     if (view !== 'log') searchEl.value = '';
   }
+  const countEl = document.getElementById('ytChCount');
+  if (countEl) countEl.style.display = view === 'log' ? 'none' : '';
   ytChSearch = '';
   document.getElementById('ytTvChannels').classList.toggle('active', view === 'channels');
   document.getElementById('ytTvLog').classList.toggle('active', view === 'log');

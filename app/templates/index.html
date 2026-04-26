@@ -357,9 +357,10 @@
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="filter-pills">
-          <button class="filter-pill active" id="ytTvChannels" onclick="ytSetTrackingView('channels')">Channels (<span id="ytChCount">0</span>)</button>
+          <button class="filter-pill active" id="ytTvChannels" onclick="ytSetTrackingView('channels')">Channels</button>
           <button class="filter-pill"        id="ytTvLog"      onclick="ytSetTrackingView('log')">Log</button>
         </div>
+        <span id="ytChCount" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
         <input id="ytChSearch" type="search" placeholder="Search…"
                oninput="onYtChSearch(this.value)"
                style="width:160px;font-size:12px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">

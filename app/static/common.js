@@ -13,6 +13,7 @@ function switchPlatform(name) {
   const app = document.querySelector('.app');
   PLATFORMS.forEach(p => app.classList.remove('theme-' + p));
   app.classList.add('theme-' + name);
+  if (typeof _initAllGliders === 'function') _initAllGliders();
 }
 
 window.addEventListener('hashchange', () => {
