@@ -510,6 +510,7 @@ async def run_single_user_with_session(
     user: dict,
     log: Callable[[str], None],
     logd: Callable[[str], None],
+    profile_only: bool = False,
 ) -> None:
     """Create a dedicated session and process a single user. Used by the manual run worker."""
     from TikTokApi import TikTokApi
@@ -537,7 +538,7 @@ async def run_single_user_with_session(
                     log(f"Processing @{user['username']} -- session failed after retry ({e}), skipping")
                     return
         await asyncio.sleep(3)
-        await process_single_user(user, api, cookies, log=log, logd=logd)
+        await process_single_user(user, api, cookies, log=log, logd=logd, fetch_videos=not profile_only)
 
 
 # ── Sound tracking ────────────────────────────────────────────────────────────

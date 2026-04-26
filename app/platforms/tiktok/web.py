@@ -26,7 +26,7 @@ from platforms.tiktok.api import get_user_info, get_video_details, UserBannedExc
 from platforms.tiktok.loop import (
     is_user_loop_running, is_sound_loop_running, get_state_snapshot,
     trigger_user_event, trigger_sound_event,
-    enqueue_user_run, enqueue_sound_run,
+    enqueue_user_run, enqueue_user_profile_run, enqueue_sound_run,
     reschedule_user_loop, reschedule_sound_loop,
 )
 from thumbnailer import thumb_path_for, avatar_path
@@ -591,6 +591,15 @@ def run_user(tiktok_id: str):
     if not db.get_user(tiktok_id):
         return jsonify({"error": "User not found"}), 404
     if not enqueue_user_run(tiktok_id):
+        return jsonify({"error": "Already queued or running"}), 409
+    return jsonify({"ok": True})
+
+
+@tiktok_bp.route("/users/<tiktok_id>/run-profile", methods=["POST"])
+def run_user_profile(tiktok_id: str):
+    if not db.get_user(tiktok_id):
+        return jsonify({"error": "User not found"}), 404
+    if not enqueue_user_profile_run(tiktok_id):
         return jsonify({"error": "Already queued or running"}), 409
     return jsonify({"ok": True})
 

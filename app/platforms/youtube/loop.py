@@ -100,14 +100,19 @@ def check_and_clear_reschedule() -> bool:
     return val
 
 
-def enqueue_channel_run(channel_id: str) -> bool:
+def enqueue_channel_run(channel_id: str, profile_only: bool = False) -> bool:
     """Queue a single-channel manual run. Returns False if already queued/running."""
     with _run_state_lock:
         if channel_id in _run_state["queue"] or _run_state["current"] == channel_id:
             return False
         _run_state["queue"].append(channel_id)
-    _run_queue.put(channel_id)
+    _run_queue.put((channel_id, profile_only))
     return True
+
+
+def enqueue_channel_profile_run(channel_id: str) -> bool:
+    """Queue a profile-only run (no video fetch). Returns False if already queued/running."""
+    return enqueue_channel_run(channel_id, profile_only=True)
 
 
 def _log(msg: str) -> None:
@@ -125,7 +130,7 @@ def _set_current_channel(handle: str | None) -> None:
 
 def _run_worker() -> None:
     while True:
-        channel_id = _run_queue.get()
+        channel_id, profile_only = _run_queue.get()
         with _run_state_lock:
             if channel_id in _run_state["queue"]:
                 _run_state["queue"].remove(channel_id)
@@ -134,10 +139,11 @@ def _run_worker() -> None:
             channel = db.get_channel(channel_id)
             if channel:
                 label = f"@{channel['handle']}"
-                _log(f"=== Manual channel run started: {label} ===")
+                kind  = "profile" if profile_only else "channel"
+                _log(f"=== Manual {kind} run started: {label} ===")
                 from platforms.youtube.tracker import process_single_channel
-                process_single_channel(channel, _log, _set_current_channel)
-                _log(f"=== Manual channel run complete: {label} ===")
+                process_single_channel(channel, _log, _set_current_channel, profile_only=profile_only)
+                _log(f"=== Manual {kind} run complete: {label} ===")
             else:
                 _log(f"Manual run: channel {channel_id} not found in DB")
         except Exception as e:

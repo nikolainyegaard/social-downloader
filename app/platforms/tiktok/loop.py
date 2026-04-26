@@ -184,14 +184,19 @@ def check_and_clear_sound_reschedule() -> bool:
     return val
 
 
-def enqueue_user_run(tiktok_id: str) -> bool:
+def enqueue_user_run(tiktok_id: str, profile_only: bool = False) -> bool:
     """Queue a single-user manual run. Returns False if already queued/running."""
     with _run_state_lock:
         if tiktok_id in _run_state["queue"] or _run_state["current"] == tiktok_id:
             return False
         _run_state["queue"].append(tiktok_id)
-    _run_queue.put(tiktok_id)
+    _run_queue.put((tiktok_id, profile_only))
     return True
+
+
+def enqueue_user_profile_run(tiktok_id: str) -> bool:
+    """Queue a profile-only run (no video fetch). Returns False if already queued/running."""
+    return enqueue_user_run(tiktok_id, profile_only=True)
 
 
 def enqueue_sound_run(sound_id: str) -> bool:
@@ -230,7 +235,7 @@ def _set_current_user(username: str | None) -> None:
 
 def _run_worker():
     while True:
-        tiktok_id = _run_queue.get()
+        tiktok_id, profile_only = _run_queue.get()
         with _run_state_lock:
             if tiktok_id in _run_state["queue"]:
                 _run_state["queue"].remove(tiktok_id)
@@ -239,9 +244,10 @@ def _run_worker():
             user = db.get_user(tiktok_id)
             if user:
                 label = f"@{user['username']}"
-                _log(f"=== Manual user run started: {label} ===")
-                asyncio.run(run_single_user_with_session(user, _log, _logd))
-                _log(f"=== Manual user run complete: {label} ===")
+                kind  = "profile" if profile_only else "user"
+                _log(f"=== Manual {kind} run started: {label} ===")
+                asyncio.run(run_single_user_with_session(user, _log, _logd, profile_only=profile_only))
+                _log(f"=== Manual {kind} run complete: {label} ===")
             else:
                 _log(f"Manual run: user {tiktok_id} not found in DB")
         except Exception as e:

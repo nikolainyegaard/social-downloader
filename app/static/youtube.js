@@ -591,7 +591,7 @@ function renderYtChannels() {
           <div style="display:flex;gap:6px">
             <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="event.stopPropagation();ytToggleChStar('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
             <button class="btn-run" ${runDis} onclick="event.stopPropagation();ytRunChannel('${esc(ch.channel_id)}')">${runLabel}</button>
-            <button class="btn-danger" onclick="event.stopPropagation();ytRemoveChannel('${esc(ch.channel_id)}','@${esc(ch.handle)}')">Remove</button>
+            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>ytRunChProfile('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>ytRemoveChannel('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">•••</button>
           </div>
         </div>
       </div>
@@ -607,6 +607,13 @@ async function loadYtChannels() {
 async function ytRunChannel(channelId) {
   const { ok, data } = await apiJSON(`/api/youtube/channels/${channelId}/run`, { method: 'POST' });
   if (!ok) { showToast(data.error || 'Could not queue run', { type: 'error' }); return; }
+  ytRunQueue = [...ytRunQueue, channelId];
+  renderYtChannels();
+}
+
+async function ytRunChProfile(channelId) {
+  const { ok, data } = await apiJSON(`/api/youtube/channels/${channelId}/run-profile`, { method: 'POST' });
+  if (!ok) { showToast(data.error || 'Could not queue profile run', { type: 'error' }); return; }
   ytRunQueue = [...ytRunQueue, channelId];
   renderYtChannels();
 }

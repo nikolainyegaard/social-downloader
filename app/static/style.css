@@ -199,6 +199,39 @@ button:disabled { opacity: 0.45; cursor: default; }
 .btn-ghost { background: var(--surface2); color: var(--text); }
 .btn-ghost:hover:not(:disabled) { background: var(--border); }
 
+.btn-menu { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; font-size: 13px; line-height: 1; letter-spacing: 1px; border-radius: var(--radius); cursor: pointer; }
+.btn-menu:hover { color: var(--text); border-color: var(--muted); }
+
+.card-menu {
+  position: fixed;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-modal);
+  padding: 4px;
+  min-width: 148px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 500;
+}
+
+.card-menu-item {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  width: 100%;
+  font-family: inherit;
+}
+.card-menu-item:hover { background: var(--bg-hover); }
+.card-menu-item-danger { color: var(--red); }
+.card-menu-item-danger:hover { background: var(--red-bg); }
+
 /* ── Uppercase label utility ─────────────────────────────────────────────── */
 
 .label-caps,

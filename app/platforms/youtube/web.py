@@ -15,7 +15,7 @@ from config import MEDIA_DIR
 from platforms.youtube.api import fetch_channel_info, normalize_handle
 from platforms.youtube.loop import (
     is_running, get_state_snapshot, trigger_event,
-    enqueue_channel_run, reschedule_loop,
+    enqueue_channel_run, enqueue_channel_profile_run, reschedule_loop,
     LOOP_INTERVAL_MINUTES,
 )
 from thumbnailer import thumb_path_for
@@ -243,6 +243,15 @@ def run_channel(channel_id: str):
     if not db.get_channel(channel_id):
         return jsonify({"error": "Channel not found"}), 404
     if not enqueue_channel_run(channel_id):
+        return jsonify({"error": "Already queued or running"}), 409
+    return jsonify({"ok": True})
+
+
+@youtube_bp.route("/channels/<channel_id>/run-profile", methods=["POST"])
+def run_channel_profile(channel_id: str):
+    if not db.get_channel(channel_id):
+        return jsonify({"error": "Channel not found"}), 404
+    if not enqueue_channel_profile_run(channel_id):
         return jsonify({"error": "Already queued or running"}), 409
     return jsonify({"ok": True})
 

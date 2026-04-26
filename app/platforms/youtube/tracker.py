@@ -40,6 +40,7 @@ def process_single_channel(
     channel: dict,
     log: Callable[[str], None],
     set_current: Callable[[str | None], None] | None = None,
+    profile_only: bool = False,
 ) -> None:
     """Update profile, fetch video list, download new videos, track deletions."""
     channel_id = channel["channel_id"]
@@ -49,7 +50,7 @@ def process_single_channel(
         set_current(handle)
 
     try:
-        log(f"Processing @{handle}")
+        log(f"Processing @{handle}" + (" (profile only)" if profile_only else ""))
 
         info:         dict = {}
         display_name: str  = channel.get("display_name") or handle
@@ -61,6 +62,9 @@ def process_single_channel(
             display_name = info.get("display_name") or display_name
         except Exception as e:
             log(f"  Profile fetch failed: {e}")
+
+        if profile_only:
+            return
 
         if not channel.get("tracking_enabled", 1):
             log(f"  Video fetch skipped (tracking disabled for @{handle})")

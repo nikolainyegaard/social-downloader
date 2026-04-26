@@ -127,6 +127,47 @@ function esc(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ── Card action menu ──────────────────────────────────────────────────────────
+// _openCardMenu(triggerEl, items)
+//   triggerEl: the ••• button element
+//   items: [{ label, onclick, danger? }]
+// Opens a small dropdown anchored above the trigger button. Closes on outside
+// click, ESC, or when any item is chosen.
+
+let _cardMenuEl = null;
+
+function _closeCardMenu() {
+  if (_cardMenuEl) { _cardMenuEl.remove(); _cardMenuEl = null; }
+}
+
+function _openCardMenu(triggerEl, items) {
+  _closeCardMenu();
+
+  const menu = document.createElement('div');
+  menu.className = 'card-menu';
+
+  for (const item of items) {
+    const btn = document.createElement('button');
+    btn.className = 'card-menu-item' + (item.danger ? ' card-menu-item-danger' : '');
+    btn.textContent = item.label;
+    btn.onclick = () => { _closeCardMenu(); item.onclick(); };
+    menu.appendChild(btn);
+  }
+
+  document.body.appendChild(menu);
+  _cardMenuEl = menu;
+
+  // Position above the trigger, right-aligned to its right edge
+  const rect = triggerEl.getBoundingClientRect();
+  const menuH = menu.offsetHeight;
+  menu.style.right  = `${window.innerWidth - rect.right}px`;
+  menu.style.top    = `${rect.top - menuH - 4}px`;
+
+  setTimeout(() => document.addEventListener('click', _closeCardMenu, { once: true }), 0);
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') _closeCardMenu(); });
+
 // ── Report widget ──────────────────────────────────────────────────────────────
 // Elements are looked up lazily so this can be called before the DOM is ready.
 // id: base id string; reportsApiPath: e.g. '/api/tiktok/reports'

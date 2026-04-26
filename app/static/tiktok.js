@@ -1148,7 +1148,7 @@ function renderUsers() {
           <div style="display:flex;gap:6px;">
             <button class="btn-star${u.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleUserStar('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
             <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
-            <button class="btn-danger" onclick="event.stopPropagation();removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
+            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.tiktok_id)}')},{label:'Remove',danger:true,onclick:()=>removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')}])">•••</button>
           </div>
         </div>
       </div>
@@ -1327,6 +1327,13 @@ async function runUser(tiktokId) {
     showToast(data.error || 'Could not queue run', { type: 'error' });
     return;
   }
+  runQueue = [...runQueue, tiktokId];
+  renderUsers();
+}
+
+async function runUserProfile(tiktokId) {
+  const { ok, data } = await apiJSON(`/api/tiktok/users/${tiktokId}/run-profile`, { method: 'POST' });
+  if (!ok) { showToast(data.error || 'Could not queue profile run', { type: 'error' }); return; }
   runQueue = [...runQueue, tiktokId];
   renderUsers();
 }
