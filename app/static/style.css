@@ -204,7 +204,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 .card-menu {
   position: fixed;
-  background: var(--surface2);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-modal);
