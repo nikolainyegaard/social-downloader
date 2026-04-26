@@ -556,7 +556,6 @@ function renderYtChannels() {
            data-channelid="${esc(ch.channel_id)}"
            onclick="if(!event.target.closest('button'))ytOpenChModal('${esc(ch.channel_id)}')"
            role="button" tabindex="0">
-        ${ch.banner_cached ? `<div class="yt-channel-card-banner" style="background-image:url('/api/youtube/channels/${esc(ch.channel_id)}/banner')"></div>` : ''}
         <div class="user-card-top">
           <div class="avatar-wrap">
             <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
@@ -747,9 +746,13 @@ function _renderYtChModalHeader(ch) {
     if (ch.banner_cached) {
       bannerEl.style.display = '';
       bannerEl.style.backgroundImage = `url('/api/youtube/channels/${esc(ch.channel_id)}/banner')`;
+      bannerEl.style.cursor = 'pointer';
+      bannerEl.onclick = () => openImgModalUrl(`/api/youtube/channels/${ch.channel_id}/banner`);
     } else {
       bannerEl.style.display = 'none';
       bannerEl.style.backgroundImage = '';
+      bannerEl.style.cursor = '';
+      bannerEl.onclick = null;
     }
   }
 
