@@ -324,13 +324,13 @@ def _file_check_thread():
 
 def _migrate_data_to_platform_dirs() -> None:
     """Move flat data/ and videos/ paths into platform subdirectories. Idempotent."""
+    import re as _re
     os.makedirs(TIKTOK_DATA_DIR, exist_ok=True)
 
     _moves = [
-        (os.path.join(DATA_DIR,   "tiktok.db"),          os.path.join(TIKTOK_DATA_DIR, "tiktok.db")),
-        (os.path.join(DATA_DIR,   "loop_state.json"),     os.path.join(TIKTOK_DATA_DIR, "loop_state.json")),
-        (os.path.join(DATA_DIR,   "cookies.txt"),         os.path.join(TIKTOK_DATA_DIR, "cookies.txt")),
-        (os.path.join(DATA_DIR,   "cookies.timestamp"),   os.path.join(TIKTOK_DATA_DIR, "cookies.timestamp")),
+        (os.path.join(DATA_DIR, "tiktok.db"),        os.path.join(TIKTOK_DATA_DIR, "tiktok.db")),
+        (os.path.join(DATA_DIR, "cookies.txt"),       os.path.join(TIKTOK_DATA_DIR, "cookies.txt")),
+        (os.path.join(DATA_DIR, "cookies.timestamp"), os.path.join(TIKTOK_DATA_DIR, "cookies.timestamp")),
     ]
     for old, new in _moves:
         if os.path.exists(old) and not os.path.exists(new):
@@ -352,6 +352,39 @@ def _migrate_data_to_platform_dirs() -> None:
         if not os.path.exists(dest):
             _shutil.move(user_dir, dest)
             print(f"{_ts()} Migration: moved videos/{os.path.basename(user_dir)} -> videos/tiktok/")
+
+    # ── Cleanup: tiktok-downloader leftover artifacts ─────────────────────────
+
+    # loop_state.json served no purpose in the new layout; delete from both
+    # root (pre-move) and data/tiktok/ (post-move from a previous migration run)
+    for path in (
+        os.path.join(DATA_DIR,       "loop_state.json"),
+        os.path.join(TIKTOK_DATA_DIR, "loop_state.json"),
+    ):
+        if os.path.isfile(path):
+            os.remove(path)
+            print(f"{_ts()} Cleanup: removed {os.path.relpath(path, DATA_DIR)}")
+
+    # Flat date-rotation logs at data/logs/ root (run_YYYYMMDD.log).
+    # social-downloader never writes these at the root level; they are all
+    # tiktok-downloader artifacts.
+    _log_date_re = _re.compile(r"^run_\d{8}\.log$")
+    if os.path.isdir(LOGS_DIR):
+        for name in os.listdir(LOGS_DIR):
+            if _log_date_re.match(name):
+                path = os.path.join(LOGS_DIR, name)
+                if os.path.isfile(path):
+                    os.remove(path)
+                    print(f"{_ts()} Cleanup: removed data/logs/{name}")
+
+    # reports/ directory (tiktok-downloader artifact; only removed if empty)
+    reports_dir = os.path.join(DATA_DIR, "reports")
+    if os.path.isdir(reports_dir):
+        try:
+            os.rmdir(reports_dir)
+            print(f"{_ts()} Cleanup: removed data/reports/")
+        except OSError:
+            pass
 
 
 def _check_config() -> None:

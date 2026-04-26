@@ -23,6 +23,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Reusable DB query pane (`initDbQueryPane`, `_dbqRun`, `_dbqView`) in `common.js`: single implementation used for all platforms; DB query HTML no longer duplicated in `index.html`
 
 ### Changed
+- Startup migration now cleans up tiktok-downloader artifacts: `loop_state.json` (root and `data/tiktok/`), flat `run_YYYYMMDD.log` files in `data/logs/`, and `data/reports/` (if empty); `loop_state.json` is deleted rather than moved since nothing in the new app reads it
 - All `alert()` error/warning dialogs replaced with `showToast` calls; inline "Saved." spans in settings and comment forms replaced with success toasts
 - Dockerfile: `VIDEOS_DIR=/app/videos` replaced with `MEDIA_DIR=/app/media`; fixes TikTok video playback and thumbnail 404s (same root cause as the earlier YouTube path fix; the old env var was a leftover from tiktok-downloader and left `MEDIA_DIR` unset, causing path resolution to depend on CWD)
 - Deletion confirmation threshold reduced from 3 to 2 for both TikTok and YouTube: a video must be absent for 2 consecutive loop runs before being marked deleted
