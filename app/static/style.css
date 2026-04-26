@@ -66,6 +66,77 @@ body {
 .health-banner p { margin: 0; }
 .health-banner p + p { margin-top: 3px; }
 
+/* ── Toast notifications ─────────────────────────────────────────────────── */
+
+#toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9999;
+  pointer-events: none;
+  max-width: 380px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: all;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  color: var(--text);
+  animation: toast-in 0.18s ease;
+}
+
+.toast.leaving { animation: toast-out 0.18s ease forwards; }
+
+.toast-success { border-left-color: var(--green); }
+.toast-warning { border-left-color: var(--yellow); }
+.toast-error   { border-left-color: var(--red);   }
+.toast-info    { border-left-color: var(--accent); }
+
+.toast-body { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+.toast-action {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-align: left;
+}
+
+.toast-success .toast-action { color: var(--green);  }
+.toast-warning .toast-action { color: var(--yellow); }
+.toast-error   .toast-action { color: var(--red);    }
+.toast-info    .toast-action { color: var(--accent);  }
+
+.toast-dismiss {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 0 0 4px;
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.toast-dismiss:hover { color: var(--text); }
+
+@keyframes toast-in  { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes toast-out { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(12px); } }
+
 .app {
   max-width: 1100px;
   margin: 0 auto;

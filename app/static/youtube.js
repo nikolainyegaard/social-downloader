@@ -306,21 +306,20 @@ async function loadYtSettings() {
 
 async function ytSaveLoopSettings() {
   const val = parseInt(document.getElementById('ytLoopIntervalInput')?.value, 10);
-  if (!val || val < 1) { alert('Interval must be a positive integer.'); return; }
+  if (!val || val < 1) { showToast('Interval must be a positive integer.', { type: 'warning', duration: 4000 }); return; }
   const { ok, data } = await apiJSON('/api/youtube/settings', {
     method: 'PATCH',
     body: JSON.stringify({ loop_interval_minutes: val }),
   });
-  if (!ok) { alert(data.error || 'Could not save settings'); return; }
-  const saved = document.getElementById('ytLoopSettingsSaved');
-  if (saved) { saved.style.display = ''; setTimeout(() => { saved.style.display = 'none'; }, 2500); }
+  if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
+  showToast('Settings saved.', { type: 'success', duration: 2500 });
 }
 
 async function ytTriggerLoop() {
   const btn = document.getElementById('ytTriggerBtn');
   if (btn) btn.disabled = true;
   const { ok, data } = await apiJSON('/api/youtube/trigger', { method: 'POST' });
-  if (!ok) { alert(data.error || 'Could not trigger loop'); if (btn) btn.disabled = false; }
+  if (!ok) { showToast(data.error || 'Could not trigger loop', { type: 'error' }); if (btn) btn.disabled = false; }
 }
 
 // ── DB cleanup ────────────────────────────────────────────────────────────────
@@ -331,7 +330,7 @@ async function ytTriggerCleanup() {
   const btn = document.getElementById('yt-job-cleanup-btn');
   if (btn) btn.disabled = true;
   const { ok, data } = await apiJSON('/api/youtube/db/cleanup', { method: 'POST' });
-  if (!ok) { alert(data.error || 'Could not start cleanup'); if (btn) btn.disabled = false; return; }
+  if (!ok) { showToast(data.error || 'Could not start cleanup', { type: 'error' }); if (btn) btn.disabled = false; return; }
   _ytCleanupWidget.update({ barPct: null, label: 'Running…' });
   if (ytCleanupPoll) return;
   ytCleanupPoll = setInterval(async () => {
@@ -607,7 +606,7 @@ async function loadYtChannels() {
 
 async function ytRunChannel(channelId) {
   const { ok, data } = await apiJSON(`/api/youtube/channels/${channelId}/run`, { method: 'POST' });
-  if (!ok) { alert(data.error || 'Could not queue run'); return; }
+  if (!ok) { showToast(data.error || 'Could not queue run', { type: 'error' }); return; }
   ytRunQueue = [...ytRunQueue, channelId];
   renderYtChannels();
 }
@@ -637,7 +636,7 @@ async function ytSetChTracking(channelId, enabled) {
     method: 'PATCH',
     body: JSON.stringify({ enabled }),
   });
-  if (!ok) { alert(data.error || 'Failed to update tracking'); return; }
+  if (!ok) { showToast(data.error || 'Failed to update tracking', { type: 'error' }); return; }
   const ch = ytChannels.find(c => c.channel_id === channelId);
   if (ch) ch.tracking_enabled = enabled ? 1 : 0;
   if (_ytModalChannelId === channelId && _ytModalChannel) {
@@ -782,7 +781,6 @@ function _renderYtChModalHeader(ch) {
                  background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
                  color:var(--text);font-family:inherit;line-height:1.5"
         >${esc(ch.comment || '')}</textarea>
-        <span id="ytChCommentSaved" style="font-size:11px;color:var(--green);display:none;padding-top:6px">Saved.</span>
       </div>
     </div>
   `;
@@ -797,8 +795,7 @@ async function ytSaveChComment(channelId, value) {
   const ch = ytChannels.find(c => c.channel_id === channelId);
   if (ch) ch.comment = value.trim() || null;
   if (_ytModalChannel && _ytModalChannel.channel_id === channelId) _ytModalChannel.comment = value.trim() || null;
-  const el = document.getElementById('ytChCommentSaved');
-  if (el) { el.style.display = ''; setTimeout(() => { el.style.display = 'none'; }, 2000); }
+  showToast('Saved.', { type: 'success', duration: 2000 });
 }
 
 // Modal engine delegates
@@ -961,11 +958,11 @@ async function ytDiagRun() {
   const output = document.getElementById('ytDiagOutput');
   const btn    = document.getElementById('ytDiagRunBtn');
   let val = (input?.value || '').trim().replace(/^@/, '');
-  if (!val) { alert('Enter a channel ID or @handle.'); return; }
+  if (!val) { showToast('Enter a channel ID or @handle.', { type: 'warning', duration: 4000 }); return; }
 
   if (!val.startsWith('UC')) {
     const ch = ytChannels.find(c => c.handle.toLowerCase() === val.toLowerCase());
-    if (!ch) { alert(`@${val} not found in tracked channels.\nEnter the channel ID (UCxxx) directly or add the channel first.`); return; }
+    if (!ch) { showToast(`@${val} not found in tracked channels. Enter the channel ID (UCxxx) directly or add the channel first.`, { type: 'warning', duration: 6000 }); return; }
     val = ch.channel_id;
   }
 

@@ -88,7 +88,7 @@ async function uploadCookies(input) {
   if (r.ok) {
     renderCookies(data);
   } else {
-    alert(data.error || 'Upload failed');
+    showToast(data.error || 'Upload failed', { type: 'error' });
   }
 }
 
@@ -700,7 +700,7 @@ async function triggerAvifJob() {
   const btn = document.getElementById('job-avif-btn');
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/jobs/photo-converter/start', { method: 'POST' });
-  if (!ok) { alert(data.error || 'Failed to start'); btn.disabled = false; return; }
+  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); btn.disabled = false; return; }
   _avifLoadStatus();
   _startJobsPoll();
 }
@@ -719,7 +719,7 @@ async function triggerCleanup() {
   const btn = document.getElementById('job-cleanup-btn');
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/db/cleanup', { method: 'POST' });
-  if (!ok) { alert(data.error || 'Could not start cleanup'); btn.disabled = false; return; }
+  if (!ok) { showToast(data.error || 'Could not start cleanup', { type: 'error' }); btn.disabled = false; return; }
   _cleanupWidget.update({ barPct: null, label: 'Running…' });
   if (_cleanupPoll) return;
   _cleanupPoll = setInterval(async () => {
@@ -745,7 +745,7 @@ async function triggerAudioCleanup() {
   const btn = document.getElementById('job-audio-btn');
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/jobs/audio-cleanup/start', { method: 'POST' });
-  if (!ok) { alert(data.error || 'Failed to start'); btn.disabled = false; return; }
+  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); btn.disabled = false; return; }
   _audioWidget.update({ barPct: null, label: 'Running…' });
   if (_audioPoll) return;
   _audioPoll = setInterval(async () => {
@@ -851,7 +851,7 @@ function _startFilecheckPoll() {
 async function triggerFileScan() {
   _setFilecheckBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/scan', { method: 'POST' });
-  if (!ok) { alert(data.error || 'Failed to start'); _setFilecheckBtns(false); return; }
+  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setFilecheckBtns(false); return; }
   _filecheckWidget.update({ barPct: null, label: 'Scanning...' });
   _filecheckReport.hide();
   _startFilecheckPoll();
@@ -861,7 +861,7 @@ async function triggerFilePurge() {
   if (!confirm('Remove all DB records for files that are missing on disk?\nThis cannot be undone.')) return;
   _setFilecheckBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/purge', { method: 'POST' });
-  if (!ok) { alert(data.error || 'Failed to start'); _setFilecheckBtns(false); return; }
+  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setFilecheckBtns(false); return; }
   _filecheckWidget.update({ barPct: null, label: 'Purging...' });
   _filecheckReport.hide();
   _startFilecheckPoll();
@@ -1324,7 +1324,7 @@ async function addUser() {
 async function runUser(tiktokId) {
   const { ok, data } = await apiJSON(`/api/tiktok/users/${tiktokId}/run`, { method: 'POST' });
   if (!ok) {
-    alert(data.error || 'Could not queue run');
+    showToast(data.error || 'Could not queue run', { type: 'error' });
     return;
   }
   runQueue = [...runQueue, tiktokId];
@@ -1510,7 +1510,7 @@ async function addSound() {
 async function removeSound(soundId, label) {
   if (!confirm(`Remove sound "${label}" (${soundId})?\n\nVideos already downloaded will not be deleted.`)) return;
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
-  if (!ok) { alert(data.error || 'Failed to remove sound.'); return; }
+  if (!ok) { showToast(data.error || 'Failed to remove sound.', { type: 'error' }); return; }
   if (_soundModalId === soundId) closeSoundModal();
   loadSounds();
 }
@@ -1529,7 +1529,7 @@ async function toggleSoundStar(soundId) {
 
 async function runSound(soundId) {
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/run`, { method: 'POST' });
-  if (!ok) { alert(data.error || 'Could not start sound run.'); return; }
+  if (!ok) { showToast(data.error || 'Could not start sound run.', { type: 'error' }); return; }
   soundRunQueue = [...soundRunQueue, soundId];
   renderSounds();
 }
@@ -1894,7 +1894,6 @@ function _renderSoundModalHeader(s) {
                  background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
                  color:var(--text);font-family:inherit;line-height:1.5"
         >${esc(s.comment || '')}</textarea>
-        <span id="soundCommentSaved" style="font-size:11px;color:var(--green);display:none;padding-top:6px">Saved.</span>
       </div>
     </div>
   `;
@@ -1939,7 +1938,7 @@ async function editSoundLabel(soundId) {
     method: 'PATCH',
     body: JSON.stringify({ label: newLabel.trim() || null }),
   });
-  if (!ok) { alert(data.error || 'Failed to update label.'); return; }
+  if (!ok) { showToast(data.error || 'Failed to update label.', { type: 'error' }); return; }
   await loadSounds();
   if (_soundModalId === soundId) {
     _soundModal = sounds.find(s => s.sound_id === soundId);
@@ -2071,7 +2070,7 @@ async function setUserTracking(tiktokId, enabled) {
     method: 'PATCH',
     body: JSON.stringify({ enabled }),
   });
-  if (!ok) { alert(data.error || 'Failed to update tracking'); return; }
+  if (!ok) { showToast(data.error || 'Failed to update tracking', { type: 'error' }); return; }
   const u = users.find(u => u.tiktok_id === tiktokId);
   if (u) u.tracking_enabled = enabled ? 1 : 0;
   if (_modalUser && _modalUser.tiktok_id === tiktokId) {
@@ -2090,8 +2089,7 @@ async function saveUserComment(tiktokId, value) {
   const u = users.find(u => u.tiktok_id === tiktokId);
   if (u) u.comment = value.trim() || null;
   if (_modalUser && _modalUser.tiktok_id === tiktokId) _modalUser.comment = value.trim() || null;
-  const el = document.getElementById('userCommentSaved');
-  if (el) { el.style.display = ''; setTimeout(() => el.style.display = 'none', 2000); }
+  showToast('Saved.', { type: 'success', duration: 2000 });
 }
 
 async function saveSoundComment(soundId, value) {
@@ -2103,8 +2101,7 @@ async function saveSoundComment(soundId, value) {
   const s = sounds.find(s => s.sound_id === soundId);
   if (s) s.comment = value.trim() || null;
   if (_soundModal && _soundModal.sound_id === soundId) _soundModal.comment = value.trim() || null;
-  const el = document.getElementById('soundCommentSaved');
-  if (el) { el.style.display = ''; setTimeout(() => el.style.display = 'none', 2000); }
+  showToast('Saved.', { type: 'success', duration: 2000 });
 }
 
 async function setSoundTracking(soundId, enabled) {
@@ -2112,7 +2109,7 @@ async function setSoundTracking(soundId, enabled) {
     method: 'PATCH',
     body: JSON.stringify({ enabled }),
   });
-  if (!ok) { alert(data.error || 'Failed to update tracking'); return; }
+  if (!ok) { showToast(data.error || 'Failed to update tracking', { type: 'error' }); return; }
   const s = sounds.find(s => s.sound_id === soundId);
   if (s) s.tracking_enabled = enabled ? 1 : 0;
   if (_soundModal && _soundModal.sound_id === soundId) {
@@ -2126,7 +2123,7 @@ async function _triggerLoop(btnId, apiPath, errMsg) {
   const btn = document.getElementById(btnId);
   btn.disabled = true;
   const { ok, data } = await apiJSON(apiPath, { method: 'POST' });
-  if (!ok) { alert(data.error || errMsg); btn.disabled = false; }
+  if (!ok) { showToast(data.error || errMsg, { type: 'error' }); btn.disabled = false; }
 }
 
 function triggerUserLoop()  { return _triggerLoop('triggerUserBtn',  '/api/tiktok/trigger',        'Could not trigger user loop'); }
@@ -2145,16 +2142,15 @@ async function saveLoopSettings() {
   const uVal = parseInt(document.getElementById('userLoopIntervalInput')?.value, 10);
   const sVal = parseInt(document.getElementById('soundLoopIntervalInput')?.value, 10);
   if (!uVal || !sVal || uVal < 1 || sVal < 1) {
-    alert('Intervals must be positive integers.');
+    showToast('Intervals must be positive integers.', { type: 'warning', duration: 4000 });
     return;
   }
   const { ok, data } = await apiJSON('/api/tiktok/settings', {
     method: 'PATCH',
     body: JSON.stringify({ user_loop_interval_minutes: uVal, sound_loop_interval_minutes: sVal }),
   });
-  if (!ok) { alert(data.error || 'Could not save settings'); return; }
-  const saved = document.getElementById('loopSettingsSaved');
-  if (saved) { saved.style.display = ''; setTimeout(() => saved.style.display = 'none', 2500); }
+  if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
+  showToast('Settings saved.', { type: 'success', duration: 2500 });
 }
 
 function updateRunStates() {
@@ -2483,7 +2479,6 @@ function _renderModalHeader(u) {
                  background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
                  color:var(--text);font-family:inherit;line-height:1.5"
         >${esc(u.comment || '')}</textarea>
-        <span id="userCommentSaved" style="font-size:11px;color:var(--green);display:none;padding-top:6px">Saved.</span>
       </div>
     </div>
   `;
@@ -2781,7 +2776,7 @@ async function triggerBackfill() {
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/backfill', { method: 'POST' });
   if (!ok) {
-    alert(data.error || 'Could not start backfill');
+    showToast(data.error || 'Could not start backfill', { type: 'error' });
     btn.disabled = false;
     return;
   }
@@ -2946,6 +2941,24 @@ function resetBackfillStep() {
 // ── Settings platform tabs init ───────────────────────────────────────────────
 ['jobs', 'diag', 'database'].forEach(s => initSettingsPlatformTabs(s));
 PLATFORMS.forEach(p => initDbQueryPane(p.id));
+
+// ── Migration warning ─────────────────────────────────────────────────────────
+
+(async function checkMigrationStatus() {
+  try {
+    const { ok, data } = await apiJSON('/api/migrate/preview');
+    if (!ok || !data.total_legacy) return;
+    const n = data.total_legacy;
+    showToast(
+      `${n} video${n !== 1 ? 's' : ''} have paths that need migration.`,
+      {
+        type: 'warning',
+        duration: 0,
+        action: { label: 'Open Migration Settings', onclick: () => openSettings('tiktok') },
+      }
+    );
+  } catch (_) {}
+})();
 
 // ── Back to top ───────────────────────────────────────────────────────────────
 (function() {

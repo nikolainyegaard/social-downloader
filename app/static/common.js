@@ -82,6 +82,57 @@ async function checkHealth() {
 
 checkHealth();
 
+// ── Toast notifications ────────────────────────────────────────────────────────
+// showToast(message, { type, duration, action })
+//   type:     'success' | 'warning' | 'error' | 'info'  (default: 'info')
+//   duration: ms before auto-dismiss; 0 = persistent     (default: 5000)
+//   action:   { label: string, onclick: fn }              (optional)
+// Returns { dismiss } for programmatic dismissal.
+
+function showToast(message, { type = 'info', duration = 5000, action = null } = {}) {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+
+  const body = document.createElement('div');
+  body.className = 'toast-body';
+  const msg = document.createElement('span');
+  msg.textContent = message;
+  body.appendChild(msg);
+
+  if (action) {
+    const btn = document.createElement('button');
+    btn.className = 'toast-action';
+    btn.textContent = action.label;
+    btn.onclick = () => { dismiss(); action.onclick(); };
+    body.appendChild(btn);
+  }
+
+  toast.appendChild(body);
+
+  const x = document.createElement('button');
+  x.className = 'toast-dismiss';
+  x.textContent = '×';
+  x.setAttribute('aria-label', 'Dismiss');
+  x.onclick = dismiss;
+  toast.appendChild(x);
+
+  function dismiss() {
+    toast.classList.add('leaving');
+    toast.addEventListener('animationend', () => toast.remove(), { once: true });
+  }
+
+  container.appendChild(toast);
+  if (duration > 0) setTimeout(dismiss, duration);
+  return { dismiss };
+}
+
 // ── HTML escape helper ─────────────────────────────────────────────────────────
 
 function esc(s) {
