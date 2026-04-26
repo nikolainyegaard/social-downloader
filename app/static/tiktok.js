@@ -90,7 +90,7 @@ async function uploadCookies(input) {
   form.append('file', input.files[0]);
   input.value = '';
 
-  const r    = await fetch('/api/cookies', { method: 'POST', body: form });
+  const r    = await fetch('/api/tiktok/cookies', { method: 'POST', body: form });
   const data = await r.json().catch(() => ({}));
   if (r.ok) {
     renderCookies(data);
@@ -101,12 +101,12 @@ async function uploadCookies(input) {
 
 async function deleteCookies() {
   if (!confirm('Remove the stored cookies file?')) return;
-  const { ok } = await apiJSON('/api/cookies', { method: 'DELETE' });
+  const { ok } = await apiJSON('/api/tiktok/cookies', { method: 'DELETE' });
   if (ok) loadCookies();
 }
 
 async function loadCookies() {
-  const { ok, data } = await apiJSON('/api/cookies');
+  const { ok, data } = await apiJSON('/api/tiktok/cookies');
   if (ok) renderCookies(data);
 }
 
@@ -265,7 +265,7 @@ function renderStats(s) {
 }
 
 async function loadStats() {
-  const { ok, data } = await apiJSON('/api/stats');
+  const { ok, data } = await apiJSON('/api/tiktok/stats');
   if (ok) renderStats(data);
 }
 
@@ -377,7 +377,7 @@ function renderRecent(data) {
 }
 
 async function loadRecent() {
-  const { ok, data } = await apiJSON('/api/recent');
+  const { ok, data } = await apiJSON('/api/tiktok/recent');
   if (ok) renderRecent(data);
 }
 
@@ -439,7 +439,7 @@ function _setupRecentLogScroll() {
 async function _loadRecentLogBatch() {
   if (_recentLogDone || !_recentLogType || _recentLogLoading) return;
   _recentLogLoading = true;
-  const url = `/api/recent/${_recentLogType}?offset=${_recentLogOffset}&limit=50`;
+  const url = `/api/tiktok/recent/${_recentLogType}?offset=${_recentLogOffset}&limit=50`;
   const { ok, data } = await apiJSON(url);
   if (!ok || !_recentLogType) { _recentLogLoading = false; return; }
 
@@ -614,7 +614,7 @@ const _filecheckWidget = _makeJobWidget('filecheck');
 const _PHASE_LABELS = { startup: 'Checking…', counting: 'Counting…', photos: 'Photo posts…', thumbnails: 'Thumbnails…', avatars: 'Avatars…' };
 
 async function _avifLoadStatus() {
-  const { ok, data } = await apiJSON('/api/jobs/photo-converter/status');
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/photo-converter/status');
   if (!ok) return;
   const btn = document.getElementById('job-avif-btn');
   const isPending = data.phase === 'startup';
@@ -639,7 +639,7 @@ async function _avifLoadStatus() {
 async function triggerAvifJob() {
   const btn = document.getElementById('job-avif-btn');
   btn.disabled = true;
-  const { ok, data } = await apiJSON('/api/jobs/photo-converter/start', { method: 'POST' });
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/photo-converter/start', { method: 'POST' });
   if (!ok) { alert(data.error || 'Failed to start'); btn.disabled = false; return; }
   _avifLoadStatus();
   _startJobsPoll();
@@ -658,12 +658,12 @@ function _stopJobsPoll() {
 async function triggerCleanup() {
   const btn = document.getElementById('job-cleanup-btn');
   btn.disabled = true;
-  const { ok, data } = await apiJSON('/api/db/cleanup', { method: 'POST' });
+  const { ok, data } = await apiJSON('/api/tiktok/db/cleanup', { method: 'POST' });
   if (!ok) { alert(data.error || 'Could not start cleanup'); btn.disabled = false; return; }
   _cleanupWidget.update({ barPct: null, label: 'Running…' });
   if (_cleanupPoll) return;
   _cleanupPoll = setInterval(async () => {
-    const { ok, data } = await apiJSON('/api/db/cleanup');
+    const { ok, data } = await apiJSON('/api/tiktok/db/cleanup');
     if (!ok) return;
     if (data.running) {
       _cleanupWidget.update({ barPct: null, label: data.current || 'Running…', steps: data.steps });
@@ -684,12 +684,12 @@ async function triggerCleanup() {
 async function triggerAudioCleanup() {
   const btn = document.getElementById('job-audio-btn');
   btn.disabled = true;
-  const { ok, data } = await apiJSON('/api/jobs/audio-cleanup/start', { method: 'POST' });
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/audio-cleanup/start', { method: 'POST' });
   if (!ok) { alert(data.error || 'Failed to start'); btn.disabled = false; return; }
   _audioWidget.update({ barPct: null, label: 'Running…' });
   if (_audioPoll) return;
   _audioPoll = setInterval(async () => {
-    const { ok, data } = await apiJSON('/api/jobs/audio-cleanup/status');
+    const { ok, data } = await apiJSON('/api/tiktok/jobs/audio-cleanup/status');
     if (!ok) return;
     if (data.running) {
       _audioWidget.update({ barPct: null, label: `Running… ${data.deleted} deleted, ${data.db_removed} removed from DB` });
@@ -728,7 +728,7 @@ function triggerClearAvatars() {
   const includeBanned = document.getElementById('util-clear-avatars-include-banned').checked;
   return _runDeleteJob(
     'util-clear-avatars-btn', 'util-clear-avatars-status', 'util-clear-avatars-text',
-    '/api/utils/clear-avatars',
+    '/api/tiktok/utils/clear-avatars',
     () => ({ include_banned: includeBanned }),
     d => `Deleted ${d.deleted} avatar file${d.deleted !== 1 ? 's' : ''}.`
   );
@@ -737,7 +737,7 @@ function triggerClearAvatars() {
 function triggerClearThumbnails() {
   return _runDeleteJob(
     'util-clear-thumbs-btn', 'util-clear-thumbs-status', 'util-clear-thumbs-text',
-    '/api/utils/clear-thumbnails',
+    '/api/tiktok/utils/clear-thumbnails',
     null,
     d => `Deleted ${d.deleted} thumbnail file${d.deleted !== 1 ? 's' : ''}.`
   );
@@ -752,7 +752,7 @@ async function openReportView(filename, title) {
   document.getElementById('reportViewBody').textContent  = 'Loading...';
   document.getElementById('reportViewBackdrop').style.display = 'flex';
   _lockScroll();
-  const resp = await fetch(`/api/reports/${encodeURIComponent(filename)}`);
+  const resp = await fetch(`/api/tiktok/reports/${encodeURIComponent(filename)}`);
   document.getElementById('reportViewBody').textContent =
     resp.ok ? await resp.text() : 'Failed to load report.';
 }
@@ -784,7 +784,7 @@ function _makeReportWidget(id) {
       if (more > 0) html += `\n<span class="report-preview-more">...and ${more} more. View or download the full report.</span>`;
       previewEl.innerHTML = html || '<span style="opacity:.5">No entries.</span>';
       if (dlLink && filename) {
-        dlLink.href = `/api/reports/${encodeURIComponent(filename)}?download=1`;
+        dlLink.href = `/api/tiktok/reports/${encodeURIComponent(filename)}?download=1`;
         dlLink.download = filename;
         dlLink.style.display = '';
       }
@@ -807,7 +807,7 @@ function _setFilecheckBtns(disabled) {
 function _startFilecheckPoll() {
   if (_filecheckPoll) return;
   _filecheckPoll = setInterval(async () => {
-    const { ok, data } = await apiJSON('/api/jobs/file-check/status');
+    const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/status');
     if (!ok) return;
     if (data.running) {
       const label = data.mode === 'purge' ? 'Purging...' : 'Scanning...';
@@ -840,7 +840,7 @@ function _startFilecheckPoll() {
 
 async function triggerFileScan() {
   _setFilecheckBtns(true);
-  const { ok, data } = await apiJSON('/api/jobs/file-check/scan', { method: 'POST' });
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/scan', { method: 'POST' });
   if (!ok) { alert(data.error || 'Failed to start'); _setFilecheckBtns(false); return; }
   _filecheckWidget.update({ barPct: null, label: 'Scanning...' });
   _filecheckReport.hide();
@@ -850,7 +850,7 @@ async function triggerFileScan() {
 async function triggerFilePurge() {
   if (!confirm('Remove all DB records for files that are missing on disk?\nThis cannot be undone.')) return;
   _setFilecheckBtns(true);
-  const { ok, data } = await apiJSON('/api/jobs/file-check/purge', { method: 'POST' });
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/purge', { method: 'POST' });
   if (!ok) { alert(data.error || 'Failed to start'); _setFilecheckBtns(false); return; }
   _filecheckWidget.update({ barPct: null, label: 'Purging...' });
   _filecheckReport.hide();
@@ -870,7 +870,7 @@ async function dbQueryRun() {
   summaryEl.textContent = 'Running…';
   errorEl.style.display = 'none';
   _dbQueryReport.hide();
-  const { ok, data } = await apiJSON('/api/db/query', {
+  const { ok, data } = await apiJSON('/api/tiktok/db/query', {
     method: 'POST',
     body: JSON.stringify({ sql }),
   });
@@ -938,7 +938,7 @@ async function diagRun() {
     ? 'Running… item_list paginates with delays — allow several minutes for large accounts'
     : 'Running… (this may take up to 30 s for TikTokApi calls)';
 
-  const { ok, data } = await apiJSON('/api/debug/fetch', {
+  const { ok, data } = await apiJSON('/api/tiktok/debug/fetch', {
     method: 'POST',
     body: JSON.stringify({ source, action, input: inp }),
   });
@@ -1098,11 +1098,11 @@ function renderUsers() {
   if (_tvPills) _placeGlider(_tvPills);
 
   if (!users.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users tracked yet.</div>' + _ghostCards(9);
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users tracked yet.</div>';
     return;
   }
   if (!filtered.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users match this filter.</div>' + _ghostCards(9);
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users match this filter.</div>' + _ghostCards(Math.min(users.length, 9));
     return;
   }
 
@@ -1134,9 +1134,9 @@ function renderUsers() {
         <div class="user-card-top">
           <div class="avatar-wrap">
             <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
-            ${u.avatar_cached ? `<img class="user-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
+            ${u.avatar_cached ? `<img class="user-avatar" src="/api/tiktok/users/${esc(u.tiktok_id)}/avatar" alt=""
                  onerror="this.style.display='none'"
-                 onclick="event.stopPropagation();openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">` : ''}
+                 onclick="event.stopPropagation();openImgModalUrl('/api/tiktok/users/${esc(u.tiktok_id)}/avatar')">` : ''}
           </div>
           <div class="user-identity">
             <div class="user-display-name">${esc(u.display_name || u.username)}</div>
@@ -1171,7 +1171,7 @@ function renderUsers() {
         </div>
       </div>
     `;
-  }).join('') + _ghostCards(Math.max(0, 9 - _sorted.length));
+  }).join('') + _ghostCards(Math.max(0, Math.min(users.length, 9) - _sorted.length));
 }
 
 function renderPending() {
@@ -1187,13 +1187,13 @@ function renderPending() {
 }
 
 async function dismissPending(username) {
-  await apiJSON(`/api/queue/${encodeURIComponent(username)}`, { method: 'DELETE' });
+  await apiJSON(`/api/tiktok/queue/${encodeURIComponent(username)}`, { method: 'DELETE' });
   delete pending[username];
   renderPending();
 }
 
 async function loadQueue() {
-  const { ok, data } = await apiJSON('/api/queue');
+  const { ok, data } = await apiJSON('/api/tiktok/queue');
   if (!ok) return;
   // Remove entries that are no longer in server pending (successfully added)
   let anyResolved = false;
@@ -1275,7 +1275,7 @@ async function mobileAddSubmit() {
   statusEl.className = 'mobile-add-status';
 
   if (_isSoundInput(val)) {
-    const { ok, data } = await apiJSON('/api/sounds', {
+    const { ok, data } = await apiJSON('/api/tiktok/sounds', {
       method: 'POST',
       body: JSON.stringify({ sound_id: val, label: null }),
     });
@@ -1297,7 +1297,7 @@ async function mobileAddSubmit() {
       input.focus();
       return;
     }
-    const { ok, data } = await apiJSON('/api/users', {
+    const { ok, data } = await apiJSON('/api/tiktok/users', {
       method: 'POST',
       body: JSON.stringify({ username: name }),
     });
@@ -1325,7 +1325,7 @@ async function addUser() {
   input.textContent = '';
   input.focus();
 
-  const { ok, data } = await apiJSON('/api/users', {
+  const { ok, data } = await apiJSON('/api/tiktok/users', {
     method: 'POST',
     body: JSON.stringify({ username: name }),
   });
@@ -1340,7 +1340,7 @@ async function addUser() {
 }
 
 async function runUser(tiktokId) {
-  const { ok, data } = await apiJSON(`/api/users/${tiktokId}/run`, { method: 'POST' });
+  const { ok, data } = await apiJSON(`/api/tiktok/users/${tiktokId}/run`, { method: 'POST' });
   if (!ok) {
     alert(data.error || 'Could not queue run');
     return;
@@ -1351,7 +1351,7 @@ async function runUser(tiktokId) {
 
 async function removeUser(tiktokId, label) {
   if (!confirm(`Stop tracking ${label}?\n(Downloaded files will not be deleted.)`)) return;
-  await apiJSON(`/api/users/${tiktokId}`, { method: 'DELETE' });
+  await apiJSON(`/api/tiktok/users/${tiktokId}`, { method: 'DELETE' });
   loadUsers();
 }
 
@@ -1361,14 +1361,14 @@ async function toggleUserStar(tiktokId) {
   const newVal = !user.starred;
   user.starred = newVal ? 1 : 0;
   renderUsers();
-  await apiJSON(`/api/users/${tiktokId}/star`, {
+  await apiJSON(`/api/tiktok/users/${tiktokId}/star`, {
     method: 'PATCH',
     body: JSON.stringify({ starred: newVal }),
   });
 }
 
 async function loadUsers() {
-  const { ok, data } = await apiJSON('/api/users');
+  const { ok, data } = await apiJSON('/api/tiktok/users');
   if (ok) { users = data; renderUsers(); }
 }
 
@@ -1441,11 +1441,11 @@ function renderSounds() {
   const _tvPills = document.getElementById('tvUsers')?.closest('.filter-pills');
   if (_tvPills) _placeGlider(_tvPills);
   if (!sounds.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds tracked yet.</div>' + _ghostCards(9);
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds tracked yet.</div>';
     return;
   }
   if (!filtered.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds match this search.</div>' + _ghostCards(9);
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds match this search.</div>' + _ghostCards(Math.min(sounds.length, 9));
     return;
   }
   grid.innerHTML = filtered.map(s => {
@@ -1493,11 +1493,11 @@ function renderSounds() {
           </div>
         </div>
       </div>`;
-  }).join('') + _ghostCards(Math.max(0, 9 - filtered.length));
+  }).join('') + _ghostCards(Math.max(0, Math.min(sounds.length, 9) - filtered.length));
 }
 
 async function loadSounds() {
-  const { ok, data } = await apiJSON('/api/sounds');
+  const { ok, data } = await apiJSON('/api/tiktok/sounds');
   if (ok) { sounds = data; renderSounds(); }
 }
 
@@ -1510,7 +1510,7 @@ async function addSound() {
   if (!raw) { statusEl.className = 'add-status info'; statusEl.textContent = 'Enter a sound ID or URL.'; return; }
 
   statusEl.className = 'add-status info'; statusEl.textContent = 'Adding…';
-  const { ok, data } = await apiJSON('/api/sounds', {
+  const { ok, data } = await apiJSON('/api/tiktok/sounds', {
     method: 'POST',
     body: JSON.stringify({ sound_id: raw, label }),
   });
@@ -1527,7 +1527,7 @@ async function addSound() {
 
 async function removeSound(soundId, label) {
   if (!confirm(`Remove sound "${label}" (${soundId})?\n\nVideos already downloaded will not be deleted.`)) return;
-  const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
   if (!ok) { alert(data.error || 'Failed to remove sound.'); return; }
   if (_soundModalId === soundId) closeSoundModal();
   loadSounds();
@@ -1539,14 +1539,14 @@ async function toggleSoundStar(soundId) {
   const newVal = !sound.starred;
   sound.starred = newVal ? 1 : 0;
   renderSounds();
-  await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/star`, {
+  await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/star`, {
     method: 'PATCH',
     body: JSON.stringify({ starred: newVal }),
   });
 }
 
 async function runSound(soundId) {
-  const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/run`, { method: 'POST' });
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/run`, { method: 'POST' });
   if (!ok) { alert(data.error || 'Could not start sound run.'); return; }
   soundRunQueue = [...soundRunQueue, soundId];
   renderSounds();
@@ -1666,7 +1666,8 @@ function _mRenderToolbar(cfg, vids) {
     html += `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${esc(cfg.st.search)}" placeholder="Search videos…" oninput="${cfg.searchFn}(this.value)">`;
   }
   if (cfg.hasPhistBtn) {
-    html += `<button class="filter-pill toolbar-phist-btn" onclick="openProfileHistory()">Profile history</button>`;
+    const pfn = cfg.phistBtnFn || 'openProfileHistory';
+    html += `<button class="filter-pill toolbar-phist-btn" onclick="${pfn}()">Profile history</button>`;
   }
   html += `</div>`
     + `<div class="toolbar-filter-wrap${cfg.st.toolbarExpanded ? '' : ' collapsed'}">`
@@ -1783,16 +1784,19 @@ function _mRenderList(cfg) {
 }
 
 function _mAppendVideos(cfg, vids) {
-  const list  = document.getElementById(cfg.listElId);
-  const batch = vids.slice(cfg.st.loaded, cfg.st.loaded + cfg.pageSize);
+  const list     = document.getElementById(cfg.listElId);
+  const batch    = vids.slice(cfg.st.loaded, cfg.st.loaded + cfg.pageSize);
   cfg.st.loaded += batch.length;
+  const thumbFn   = cfg.thumbCellFn  || _thumbCell;
+  const actionFn  = cfg.actionBtnsFn || _videoActionBtns;
+  const previewFn = cfg.previewFn    || 'openImgModal';
   const html = batch.map(v => {
     const { cls: statusCls, label: statusLabel } = _videoStatus(v);
     const authorCell = cfg.authorCol ? `<div class="video-cell">${cfg.authorCol(v)}</div>` : '';
     return `<div class="video-row ${cfg.colsCls}" data-video-id="${esc(v.video_id)}">
-      ${_thumbCell(v)}
+      ${thumbFn(v)}
       <div style="display:flex;align-items:center;gap:4px;min-width:0">
-        <button class="play-btn" onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>
+        <button class="play-btn" onclick="event.stopPropagation();${previewFn}('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>
         <div style="flex:1;min-width:0">${v.description
           ? `<div class="video-desc">${esc(v.description)}</div>`
           : `<div class="video-desc-empty">(no description)</div>`}</div>
@@ -1806,7 +1810,7 @@ function _mAppendVideos(cfg, vids) {
       <div class="video-cell">${fmtDateShort(v.download_date)}</div>
       <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
       <div class="video-cell" style="padding:0;display:flex;align-items:center;justify-content:center;gap:2px">
-        ${_videoActionBtns(v)}
+        ${actionFn(v)}
       </div>
     </div>`;
   }).join('');
@@ -1914,7 +1918,7 @@ function toggleSoundModalToolbar()  { _mToggleToolbar(_SOUND_MODAL_CFG); }
 function setSoundModalSort(f)       { _mSetSort(_SOUND_MODAL_CFG, f); }
 
 async function _loadSoundModalVideos(soundId) {
-  const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/videos`);
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/videos`);
   if (!ok || _soundModalId !== soundId) return;
   _soundState.videos = data;
   if (_soundModalPendingHighlight) {
@@ -1943,7 +1947,7 @@ async function editSoundLabel(soundId) {
   const s = sounds.find(s => s.sound_id === soundId);
   const newLabel = prompt('Edit label for this sound:', s?.label || '');
   if (newLabel === null) return;
-  const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}`, {
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, {
     method: 'PATCH',
     body: JSON.stringify({ label: newLabel.trim() || null }),
   });
@@ -2075,7 +2079,7 @@ function renderLogs(lines) {
 }
 
 async function setUserTracking(tiktokId, enabled) {
-  const { ok, data } = await apiJSON(`/api/users/${encodeURIComponent(tiktokId)}/tracking`, {
+  const { ok, data } = await apiJSON(`/api/tiktok/users/${encodeURIComponent(tiktokId)}/tracking`, {
     method: 'PATCH',
     body: JSON.stringify({ enabled }),
   });
@@ -2090,7 +2094,7 @@ async function setUserTracking(tiktokId, enabled) {
 }
 
 async function saveUserComment(tiktokId, value) {
-  const { ok } = await apiJSON(`/api/users/${encodeURIComponent(tiktokId)}/comment`, {
+  const { ok } = await apiJSON(`/api/tiktok/users/${encodeURIComponent(tiktokId)}/comment`, {
     method: 'PATCH',
     body: JSON.stringify({ comment: value }),
   });
@@ -2103,7 +2107,7 @@ async function saveUserComment(tiktokId, value) {
 }
 
 async function saveSoundComment(soundId, value) {
-  const { ok } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/comment`, {
+  const { ok } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/comment`, {
     method: 'PATCH',
     body: JSON.stringify({ comment: value }),
   });
@@ -2116,7 +2120,7 @@ async function saveSoundComment(soundId, value) {
 }
 
 async function setSoundTracking(soundId, enabled) {
-  const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/tracking`, {
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/tracking`, {
     method: 'PATCH',
     body: JSON.stringify({ enabled }),
   });
@@ -2137,11 +2141,11 @@ async function _triggerLoop(btnId, apiPath, errMsg) {
   if (!ok) { alert(data.error || errMsg); btn.disabled = false; }
 }
 
-function triggerUserLoop()  { return _triggerLoop('triggerUserBtn',  '/api/trigger',        'Could not trigger user loop'); }
-function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/trigger/sounds', 'Could not trigger sound loop'); }
+function triggerUserLoop()  { return _triggerLoop('triggerUserBtn',  '/api/tiktok/trigger',        'Could not trigger user loop'); }
+function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/tiktok/trigger/sounds', 'Could not trigger sound loop'); }
 
 async function loadSettings() {
-  const { ok, data } = await apiJSON('/api/settings');
+  const { ok, data } = await apiJSON('/api/tiktok/settings');
   if (!ok) return;
   const uEl = document.getElementById('userLoopIntervalInput');
   const sEl = document.getElementById('soundLoopIntervalInput');
@@ -2156,7 +2160,7 @@ async function saveLoopSettings() {
     alert('Intervals must be positive integers.');
     return;
   }
-  const { ok, data } = await apiJSON('/api/settings', {
+  const { ok, data } = await apiJSON('/api/tiktok/settings', {
     method: 'PATCH',
     body: JSON.stringify({ user_loop_interval_minutes: uVal, sound_loop_interval_minutes: sVal }),
   });
@@ -2190,7 +2194,7 @@ function updateRunStates() {
 }
 
 async function loadStatus() {
-  const { ok, data } = await apiJSON('/api/status');
+  const { ok, data } = await apiJSON('/api/tiktok/status');
   if (ok) {
     renderStatus(data);
     renderLogs(data.logs);
@@ -2310,7 +2314,7 @@ function openImgModalUrl(url) {
 }
 
 function openImgModal(videoId) {
-  openImgModalUrl(`/api/videos/${encodeURIComponent(videoId)}/thumbnail`);
+  openImgModalUrl(`/api/tiktok/videos/${encodeURIComponent(videoId)}/thumbnail`);
 }
 
 function closeImgModal() {
@@ -2323,7 +2327,7 @@ function closeImgModal() {
 
 function openVidModal(videoId) {
   const vid = document.getElementById('vidModalPlayer');
-  vid.src = `/api/videos/${encodeURIComponent(videoId)}/file`;
+  vid.src = `/api/tiktok/videos/${encodeURIComponent(videoId)}/file`;
   document.getElementById('vidModal').style.display = 'flex';
   _lockScroll();
   vid.play().catch(() => {});
@@ -2343,7 +2347,7 @@ let _carouselUrls = [];
 let _carouselIdx  = 0;
 
 async function openCarousel(videoId) {
-  const { ok, data } = await apiJSON(`/api/videos/${encodeURIComponent(videoId)}/photos`);
+  const { ok, data } = await apiJSON(`/api/tiktok/videos/${encodeURIComponent(videoId)}/photos`);
   if (!ok || !data.urls || !data.urls.length) return;
   _carouselUrls = data.urls;
   _showCarouselSlide(0);
@@ -2375,7 +2379,7 @@ function closeCarousel() {
 }
 
 async function _loadModalVideos(tiktokId) {
-  const { ok, data } = await apiJSON(`/api/users/${tiktokId}/videos`);
+  const { ok, data } = await apiJSON(`/api/tiktok/users/${tiktokId}/videos`);
   if (!ok || _modalUserId !== tiktokId) return;
   _userState.videos = data;
 
@@ -2446,9 +2450,9 @@ function _renderModalHeader(u) {
   document.getElementById('modalHeader').innerHTML = `
     <div class="modal-avatar-wrap">
       <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
-      ${u.avatar_cached ? `<img class="modal-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
+      ${u.avatar_cached ? `<img class="modal-avatar" src="/api/tiktok/users/${esc(u.tiktok_id)}/avatar" alt=""
            onerror="this.style.display='none'"
-           onclick="openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">` : ''}
+           onclick="openImgModalUrl('/api/tiktok/users/${esc(u.tiktok_id)}/avatar')">` : ''}
     </div>
     <div class="modal-name-row">
       <span class="modal-name">${esc(u.display_name || u.username)}</span>
@@ -2533,7 +2537,7 @@ async function openProfileHistory(field) {
 
   _renderHistoryToolbar();
 
-  const { ok, data } = await apiJSON(`/api/users/${encodeURIComponent(_phistUserId)}/profile-history`);
+  const { ok, data } = await apiJSON(`/api/tiktok/users/${encodeURIComponent(_phistUserId)}/profile-history`);
   if (!ok) {
     document.getElementById('phistPanel').innerHTML = '<div class="phist-empty">Failed to load history.</div>';
     return;
@@ -2619,10 +2623,10 @@ function _renderHistoryEntries() {
     const newVal = newValMap.get(e);
 
     if (e.field === 'avatar') {
-      const oldSrc = `/api/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(e.old_value)}`;
+      const oldSrc = `/api/tiktok/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(e.old_value)}`;
       const newSrc = newVal === '__current__'
-        ? `/api/users/${encodeURIComponent(_phistUserId)}/avatar?t=${e.changed_at}`
-        : `/api/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(newVal)}`;
+        ? `/api/tiktok/users/${encodeURIComponent(_phistUserId)}/avatar?t=${e.changed_at}`
+        : `/api/tiktok/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(newVal)}`;
       const img = (src, label) =>
         `<div class="phist-avatar-col">
           <span class="phist-side-label">${label}</span>
@@ -2673,7 +2677,7 @@ function _thumbCell(v) {
   const id    = esc(v.video_id);
   const badge = v.type === 'video' ? _playBadge : v.type === 'photo' ? _photoBadge : '';
   return `<div style="position:relative;line-height:0;width:90px;flex-shrink:0">
-    <img class="video-thumb" src="/api/videos/${id}/thumbnail" alt="" loading="lazy"
+    <img class="video-thumb" src="/api/tiktok/videos/${id}/thumbnail" alt="" loading="lazy"
          onerror="this.style.opacity='.15'"
          ${_videoThumbAction(v)}>${badge}</div>`;
 }
@@ -2688,10 +2692,10 @@ function _videoThumbAction(v) {
 function _videoActionBtns(v) {
   const id = esc(v.video_id);
   if (v.type === 'video' && v.file_path) {
-    return `<a class="play-btn" href="/api/videos/${id}/file" download="${id}.mp4"
+    return `<a class="play-btn" href="/api/tiktok/videos/${id}/file" download="${id}.mp4"
              onclick="event.stopPropagation()" title="Download video">${_dlIcon}</a>`;
   } else if (v.type === 'photo' && v.file_path) {
-    return `<a class="play-btn" href="/api/videos/${id}/photos/zip" download="${id}_photos.zip"
+    return `<a class="play-btn" href="/api/tiktok/videos/${id}/photos/zip" download="${id}_photos.zip"
              onclick="event.stopPropagation()" title="Download all photos as zip">${_dlIcon}</a>`;
   }
   return '';
@@ -2731,10 +2735,16 @@ function _appendModalGrid(cfg, vids) {
       ? `<span class="vgrid-views">${fmtCount(v.view_count)}</span>`
       : '<span></span>';
     const typeIcon   = v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? _vgridPhotoIcon : '';
-    cell.innerHTML   = `<img src="/api/videos/${id}/thumbnail" alt="" onerror="this.style.opacity='.15'">
+    const thumbSrc = cfg.gridThumbSrc ? cfg.gridThumbSrc(v) : `/api/tiktok/videos/${id}/thumbnail`;
+    cell.innerHTML = `<img src="${thumbSrc}" alt="" onerror="this.style.opacity='.15'">
       <div class="vgrid-overlay">${viewsHtml}${typeIcon}</div>`;
-    if (v.type === 'video')      cell.onclick = () => openVidModal(v.video_id);
-    else if (v.type === 'photo') cell.onclick = () => openCarousel(v.video_id);
+    if (cfg.gridCellOnclick) {
+      cell.onclick = () => cfg.gridCellOnclick(v);
+    } else if (v.type === 'video') {
+      cell.onclick = () => openVidModal(v.video_id);
+    } else if (v.type === 'photo') {
+      cell.onclick = () => openCarousel(v.video_id);
+    }
     grid.appendChild(cell);
   });
   if (cfg.st.loaded < vids.length) {
@@ -2772,7 +2782,7 @@ let _backfillPoll = null;
 async function triggerBackfill() {
   const btn = document.getElementById('backfillBtn');
   btn.disabled = true;
-  const { ok, data } = await apiJSON('/api/backfill', { method: 'POST' });
+  const { ok, data } = await apiJSON('/api/tiktok/backfill', { method: 'POST' });
   if (!ok) {
     alert(data.error || 'Could not start backfill');
     btn.disabled = false;
@@ -2785,7 +2795,7 @@ async function retryFailed() {
   const btn = document.getElementById('retryFailedBtn');
   const statusEl = document.getElementById('backfillStatus');
   btn.disabled = true;
-  const { ok, data } = await apiJSON('/api/backfill/reset-errors', { method: 'POST' });
+  const { ok, data } = await apiJSON('/api/tiktok/backfill/reset-errors', { method: 'POST' });
   btn.disabled = false;
   if (!ok) { statusEl.textContent = data.error || 'Failed.'; return; }
   statusEl.textContent = `${data.reset} video(s) cleared, ready to retry.`;
@@ -2802,7 +2812,7 @@ async function toggleFailedList() {
   if (!_failedListOpen) { el.style.display = 'none'; return; }
   el.style.display = '';
   el.textContent = 'Loading…';
-  const { ok, data } = await apiJSON('/api/backfill/failed');
+  const { ok, data } = await apiJSON('/api/tiktok/backfill/failed');
   if (!ok) { el.textContent = 'Failed to load.'; return; }
   if (!data.length) { el.textContent = 'None.'; return; }
   el.innerHTML = data.map(v =>
@@ -2816,7 +2826,7 @@ async function toggleFailedList() {
 function _startBackfillPoll() {
   if (_backfillPoll) return;
   _backfillPoll = setInterval(async () => {
-    const { ok, data } = await apiJSON('/api/backfill');
+    const { ok, data } = await apiJSON('/api/tiktok/backfill');
     if (!ok) return;
     const btn      = document.getElementById('backfillBtn');
     const statusEl = document.getElementById('backfillStatus');
@@ -2912,7 +2922,7 @@ function resetBackfillStep() {
     statusEl.textContent = 'Resetting…';
     statusEl.style.color = 'var(--muted)';
 
-    apiJSON('/api/backfill/reset', { method: 'POST' }).then(({ ok, data }) => {
+    apiJSON('/api/tiktok/backfill/reset', { method: 'POST' }).then(({ ok, data }) => {
       btn.disabled = false;
       if (!ok) {
         statusEl.textContent = data.error || 'Failed.';
@@ -2928,7 +2938,7 @@ function resetBackfillStep() {
 
 // Resume backfill poll if it was running before page load
 (async () => {
-  const { ok, data } = await apiJSON('/api/backfill');
+  const { ok, data } = await apiJSON('/api/tiktok/backfill');
   if (ok && data.running) {
     document.getElementById('backfillBtn').disabled = true;
     document.getElementById('backfillStatus').textContent = `Backfilling… ${data.done}/${data.total}`;

@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any
 from yt_dlp.utils import DownloadError
 
-from config import VIDEOS_DIR, COOKIES_PATH, _ts
+from config import MEDIA_DIR, _ts
 from thumbnailer import generate_thumbnail
 from photo_converter import encode_avif, CRF_PHOTO
 
@@ -36,16 +36,19 @@ def _clean_ytdlp_info(info: dict | None) -> str | None:
 
 def download_video(*, video_id: str, username: str, tiktok_id: str,
                    display_name: str, description: str,
-                   upload_date: int, download_date: int) -> dict | None:
+                   upload_date: int, download_date: int,
+                   platform: str = "tiktok",
+                   url: str | None = None,
+                   cookies_path: str | None = None) -> dict | None:
     """
-    Download a TikTok video using yt-dlp and embed metadata into the file.
+    Download a video using yt-dlp and embed metadata into the file.
     Returns {'file_path': ..., 'ytdlp_data': ...} on success, None on failure.
     """
-    author_folder = os.path.join(VIDEOS_DIR, f"@{username}")
+    author_folder = os.path.join(MEDIA_DIR, platform, f"@{username}")
     os.makedirs(author_folder, exist_ok=True)
 
     output_template = os.path.join(author_folder, f"{video_id}.%(ext)s")
-    video_url = f"https://www.tiktok.com/@{username}/video/{video_id}"
+    video_url = url if url is not None else f"https://www.tiktok.com/@{username}/video/{video_id}"
 
     upload_str   = (datetime.fromtimestamp(upload_date).strftime("%Y-%m-%d")
                     if upload_date else "")
@@ -59,7 +62,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
         "retries":             3,
         "quiet":               True,
         "no_warnings":         False,
-        **({"cookiefile": COOKIES_PATH} if os.path.exists(COOKIES_PATH) else {}),
+        **({"cookiefile": cookies_path} if cookies_path and os.path.exists(cookies_path) else {}),
         "postprocessors": [
             {"key": "FFmpegMetadata", "add_metadata": True},
         ],
@@ -106,7 +109,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
         os.remove(actual_path)
         return None
 
-    # Reject audio-only downloads — yt-dlp's final /best fallback was removed, but
+    # Reject audio-only downloads -- yt-dlp's final /best fallback was removed, but
     # some edge cases (very old posts, inaccessible video streams) can still produce
     # audio files.  Storing them as videos would pollute the library.
     _audio_exts = (".mp3", ".m4a", ".m4b", ".aac", ".ogg", ".wav", ".flac", ".opus")
@@ -115,7 +118,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
         os.remove(actual_path)
         return None
 
-    print(f"[{_ts()}] Saved {video_id} ({file_size:,} bytes) → {actual_path}")
+    print(f"[{_ts()}] Saved {video_id} ({file_size:,} bytes) -> {actual_path}")
     if upload_date:
         os.utime(actual_path, (upload_date, upload_date))
     thumb = generate_thumbnail(video_id, actual_path)
@@ -127,11 +130,11 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
     return {"file_path": actual_path, "ytdlp_data": ytdlp_data}
 
 
-def _load_cookies() -> dict[str, str]:
-    """Parse cookies.txt and return a name→value dict for HTTP requests."""
+def _load_cookies(cookies_path: str) -> dict[str, str]:
+    """Parse cookies.txt and return a name->value dict for HTTP requests."""
     result: dict[str, str] = {}
     try:
-        with open(COOKIES_PATH, encoding="utf-8", errors="ignore") as f:
+        with open(cookies_path, encoding="utf-8", errors="ignore") as f:
             for line in f:
                 if line.startswith("#") or not line.strip():
                     continue
@@ -144,16 +147,18 @@ def _load_cookies() -> dict[str, str]:
 
 
 def download_photos(*, video_id: str, username: str,
-                    image_urls: list[str], upload_date: int) -> str | None:
+                    image_urls: list[str], upload_date: int,
+                    platform: str = "tiktok",
+                    cookies_path: str | None = None) -> str | None:
     """
     Download each image from a TikTok photo post directly.
-    Files are saved as {video_id}_01.jpg, {video_id}_02.jpg, …
+    Files are saved as {video_id}_01.jpg, {video_id}_02.jpg, ...
     Returns the path of the first image on success, None if all fail.
     """
-    author_folder = os.path.join(VIDEOS_DIR, f"@{username}")
+    author_folder = os.path.join(MEDIA_DIR, platform, f"@{username}")
     os.makedirs(author_folder, exist_ok=True)
 
-    cookies    = _load_cookies()
+    cookies    = _load_cookies(cookies_path) if cookies_path else {}
     first_path: str | None = None
     total      = len(image_urls)
 
@@ -182,7 +187,7 @@ def download_photos(*, video_id: str, username: str,
 
             if first_path is None:
                 first_path = saved_path
-            print(f"[{_ts()}] Photo {i}/{total} saved → {saved_path}")
+            print(f"[{_ts()}] Photo {i}/{total} saved -> {saved_path}")
         except Exception as e:
             print(f"[{_ts()}] Failed to download photo {i}/{total} for {video_id}: {e}")
 
@@ -198,13 +203,13 @@ def _get_video_files(folder: str, video_id: str) -> list[str]:
     ]
 
 
-def rename_user_folder(old_username: str, new_username: str) -> bool:
-    """Rename @old_username → @new_username on disk.
+def rename_creator_folder(platform: str, old_username: str, new_username: str) -> bool:
+    """Rename {platform}/@old_username -> {platform}/@new_username on disk.
     If the target folder already exists, files are moved individually (merge).
     Returns True on success or if old folder doesn't exist; False on error.
     """
-    old_folder = os.path.join(VIDEOS_DIR, f"@{old_username}")
-    new_folder = os.path.join(VIDEOS_DIR, f"@{new_username}")
+    old_folder = os.path.join(MEDIA_DIR, platform, f"@{old_username}")
+    new_folder = os.path.join(MEDIA_DIR, platform, f"@{new_username}")
     if not os.path.isdir(old_folder):
         return True
     try:
@@ -217,7 +222,7 @@ def rename_user_folder(old_username: str, new_username: str) -> bool:
             os.rename(old_folder, new_folder)
         return True
     except Exception as e:
-        print(f"[{_ts()}] Failed to rename folder @{old_username} → @{new_username}: {e}")
+        print(f"[{_ts()}] Failed to rename folder @{old_username} -> @{new_username}: {e}")
         return False
 
 

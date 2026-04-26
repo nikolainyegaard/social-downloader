@@ -1,6 +1,6 @@
 """
-Central configuration and cookie helpers.
-All modules import paths and settings from here.
+Central configuration.
+Global paths and settings live here; platform-specific config lives in platforms/<platform>/config.py.
 """
 
 import os
@@ -9,22 +9,13 @@ from datetime import datetime
 
 APP_VERSION = os.environ.get("APP_VERSION", "dev")  # v1.19.0
 
-DATA_DIR     = os.environ.get("DATA_DIR",   "./data")
-VIDEOS_DIR   = os.environ.get("VIDEOS_DIR", "./videos")
-AVATARS_DIR  = os.path.join(DATA_DIR, "avatars")
-COOKIES_PATH           = os.path.join(DATA_DIR, "cookies.txt")
-COOKIES_TIMESTAMP_PATH = os.path.join(DATA_DIR, "cookies.timestamp")
+DATA_DIR  = os.environ.get("DATA_DIR",  "./data")
+MEDIA_DIR = os.environ.get("MEDIA_DIR", "./media")
 
-# LOOP_INTERVAL_MINUTES kept for backward compatibility — maps to USER_LOOP_INTERVAL_MINUTES.
-LOOP_INTERVAL_MINUTES       = int(os.environ.get("LOOP_INTERVAL_MINUTES", 180))
-USER_LOOP_INTERVAL_MINUTES  = int(os.environ.get("USER_LOOP_INTERVAL_MINUTES",  LOOP_INTERVAL_MINUTES))
-SOUND_LOOP_INTERVAL_MINUTES = int(os.environ.get("SOUND_LOOP_INTERVAL_MINUTES", 60))
-WEB_PORT                    = int(os.environ.get("WEB_PORT", 5000))
+WEB_PORT = int(os.environ.get("WEB_PORT", 5000))
 
-DELETION_CONFIRM_THRESHOLD = int(os.environ.get("DELETION_CONFIRM_THRESHOLD", 3))
-
-THUMBNAIL_WORKERS  = int(os.environ.get("THUMBNAIL_WORKERS", min((os.cpu_count() or 4) // 4, 4) or 1))
-THUMBNAIL_USE_GPU  = os.environ.get("THUMBNAIL_USE_GPU", "").lower() in ("1", "true", "yes")
+THUMBNAIL_WORKERS = int(os.environ.get("THUMBNAIL_WORKERS", min((os.cpu_count() or 4) // 4, 4) or 1))
+THUMBNAIL_USE_GPU = os.environ.get("THUMBNAIL_USE_GPU", "").lower() in ("1", "true", "yes")
 
 # Use Google Chrome if available (better bot detection resistance than Playwright Chromium).
 # Falls back to None, which tells TikTokApi to use its bundled Chromium.
@@ -36,103 +27,3 @@ CHROME_EXECUTABLE: str | None = (
 def _ts() -> str:
     """Current local time as a formatted string, used in log lines across modules."""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def get_ms_token() -> str | None:
-    """
-    Return the msToken value for TikTokApi sessions.
-
-    Priority:
-      1. Parse msToken / ms_token from ./data/cookies.txt (Netscape format).
-      2. Fall back to the ms_token environment variable.
-    """
-    try:
-        with open(COOKIES_PATH, encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                if line.startswith("#") or not line.strip():
-                    continue
-                parts = line.strip().split("\t")
-                # Netscape cookie format: domain flag path secure expiry name value
-                if len(parts) == 7 and parts[5].lower() in ("mstoken", "ms_token"):
-                    return parts[6]
-    except FileNotFoundError:
-        pass
-    return os.environ.get("ms_token")
-
-
-def get_cookies_flat() -> dict:
-    """Return cookies.txt as a flat {name: value} dict."""
-    result = {}
-    try:
-        with open(COOKIES_PATH, encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                if stripped.startswith("#HttpOnly_"):
-                    stripped = stripped[len("#HttpOnly_"):]
-                elif stripped.startswith("#"):
-                    continue
-                parts = stripped.split("\t")
-                if len(parts) != 7:
-                    continue
-                _domain, _flag, _path, _secure, _expiry, name, value = parts
-                result[str(name)] = str(value)
-    except FileNotFoundError:
-        pass
-    return result
-
-
-def get_cookies_for_playwright() -> list[dict]:
-    """
-    Parse cookies.txt and return a list of Playwright-format cookie dicts
-    suitable for passing to TikTokApi's create_sessions(cookies=[...]).
-    """
-    result = []
-    try:
-        with open(COOKIES_PATH, encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                if stripped.startswith("#HttpOnly_"):
-                    stripped = stripped[len("#HttpOnly_"):]
-                elif stripped.startswith("#"):
-                    continue
-                parts = stripped.split("\t")
-                if len(parts) != 7:
-                    continue
-                domain, _, path, secure, expiry, name, value = parts
-                try:
-                    expires = float(expiry)
-                except (ValueError, TypeError):
-                    expires = -1.0
-                result.append({
-                    "name":    str(name),
-                    "value":   str(value),
-                    "domain":  str(domain),
-                    "path":    str(path),
-                    "expires": expires,
-                })
-    except FileNotFoundError:
-        pass
-    return result
-
-
-def cookies_info() -> dict:
-    """Return metadata about the current cookies file."""
-    if not os.path.exists(COOKIES_PATH):
-        return {"present": False}
-    stat = os.stat(COOKIES_PATH)
-    # Use explicit upload timestamp; never fall back to st_mtime which is
-    # unreliable on Docker volume mounts and resets on container restart.
-    try:
-        with open(COOKIES_TIMESTAMP_PATH, encoding="utf-8") as f:
-            uploaded_at = int(f.read().strip())
-    except (FileNotFoundError, ValueError):
-        uploaded_at = None
-    return {
-        "present":      True,
-        "updated_at":   uploaded_at,
-        "size_bytes":   stat.st_size,
-    }

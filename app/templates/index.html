@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111214" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>TikTok Downloader</title>
+  <title>Social Downloader</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
 
   <!-- Header -->
   <header>
-    <h1>TikTok Downloader <span style="font-size:12px;font-weight:400;color:var(--muted);letter-spacing:0">v{{ version }}</span></h1>
+    <h1>Social Downloader <span style="font-size:12px;font-weight:400;color:var(--muted);letter-spacing:0">v{{ version }}</span></h1>
     <span class="status-badge" id="statusBadge">
       <span class="dot"></span>
       <span id="statusText">Idle</span>
@@ -29,6 +29,13 @@
       <button class="btn-gear" onclick="openSettings('cookies')" title="Settings"><svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/><path d="M27.758,10.366l-1-1.732c-0.552-0.957-1.775-1.284-2.732-0.732L23.5,8.206C21.5,9.36,19,7.917,19,5.608V5c0-1.105-0.895-2-2-2h-2c-1.105,0-2,0.895-2,2v0.608c0,2.309-2.5,3.753-4.5,2.598L7.974,7.902C7.017,7.35,5.794,7.677,5.242,8.634l-1,1.732c-0.552,0.957-0.225,2.18,0.732,2.732L5.5,13.402c2,1.155,2,4.041,0,5.196l-0.526,0.304c-0.957,0.552-1.284,1.775-0.732,2.732l1,1.732c0.552,0.957,1.775,1.284,2.732,0.732L8.5,23.794c2-1.155,4.5,0.289,4.5,2.598V27c0,1.105,0.895,2,2,2h2c1.105,0,2-0.895,2-2v-0.608c0-2.309,2.5-3.753,4.5-2.598l0.526,0.304c0.957,0.552,2.18,0.225,2.732-0.732l1-1.732c0.552-0.957,0.225-2.18-0.732-2.732L26.5,18.598c-2-1.155-2-4.041,0-5.196l0.526-0.304C27.983,12.546,28.311,11.323,27.758,10.366z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/></svg></button>
     </div>
   </header>
+
+  <nav class="platform-tabs">
+    <button class="platform-tab active" data-platform="tiktok" onclick="switchPlatform('tiktok')">TikTok</button>
+    <button class="platform-tab" data-platform="youtube" onclick="switchPlatform('youtube')">YouTube</button>
+  </nav>
+
+  <div id="platform-tiktok" class="platform-section">
 
   <!-- Mobile smart add bar: unified input for users and sounds; hidden on desktop -->
   <div class="mobile-add-bar">
@@ -254,6 +261,163 @@
       </div>
     </div>
   </section>
+
+  </div>
+
+  <div id="platform-youtube" class="platform-section" style="display:none">
+
+  <!-- Top panels: Stats (1/3) + Recent (2/3) -->
+  <div class="top-panels">
+    <div class="panel-card">
+      <div class="panel-header">
+        <span class="section-title">Statistics</span>
+      </div>
+      <div class="panel-body" style="padding:8px">
+        <div class="stat-grid" id="ytStatsGrid"></div>
+      </div>
+    </div>
+    <div class="panel-card">
+      <div class="panel-header">
+        <span class="section-title">Recent</span>
+      </div>
+      <div class="panel-body" style="padding:12px 16px">
+        <div class="recent-split">
+          <div class="recent-col" id="ytRecentLeft"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
+          <div class="recent-col" id="ytRecentRight"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Track channel + Loop card -->
+  <div class="track-panels">
+    <section>
+      <div class="section-title">Track a channel</div>
+      <div class="add-form">
+        <div
+          class="handle-input"
+          id="ytHandleInput"
+          contenteditable="true"
+          role="textbox"
+          aria-label="YouTube channel handle or URL"
+          data-placeholder="@handle or channel URL"
+          spellcheck="false"
+        ></div>
+        <button class="btn-primary" onclick="ytAddChannel()">Add</button>
+      </div>
+      <div class="add-status" id="ytAddStatus"></div>
+      <div class="pending-list" id="ytPendingList"></div>
+    </section>
+
+    <!-- Loop card (spans both rows in col 2) -->
+    <div class="panel-card loops-card">
+      <div class="panel-header">
+        <span class="section-title">Loop</span>
+      </div>
+      <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:16px">
+
+        <div>
+          <div class="loop-section-label">Channel Loop</div>
+          <div class="loop-grid">
+            <div id="ytLoopLast"      class="loop-cell-main">Never run</div>
+            <div id="ytLoopDuration"  class="loop-cell-sub"></div>
+            <button class="btn-run" id="ytTriggerBtn" onclick="ytTriggerLoop()" style="grid-column:3;grid-row:1/3;align-self:center">Run Now</button>
+            <div id="ytLoopNext"      class="loop-cell-sub"></div>
+            <div id="ytLoopNewVideos" class="loop-cell-sub"></div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:0 -16px;padding:12px 16px 0">
+          <div class="loop-section-label" style="margin-bottom:6px">Interval</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" id="ytLoopIntervalInput" min="1" max="9999" class="loop-interval-input" style="width:70px">
+            <span style="color:var(--muted);font-size:13px">min</span>
+            <button class="btn-primary" onclick="ytSaveLoopSettings()" style="font-size:12px;padding:4px 10px;margin-left:4px">Save</button>
+            <span id="ytLoopSettingsSaved" style="font-size:12px;color:var(--green);display:none">Saved.</span>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:0 -16px;padding:12px 16px 0">
+          <div class="loop-section-label" style="margin-bottom:8px">Database cleanup</div>
+          <button class="btn-primary" id="yt-job-cleanup-btn" onclick="ytTriggerCleanup()" style="font-size:12px;padding:4px 10px">Run</button>
+          <div class="job-status" id="job-yt-cleanup-status" style="display:none;margin-top:8px">
+            <div id="job-yt-cleanup-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-yt-cleanup-bar"></div></div></div>
+            <div class="job-status-text" id="job-yt-cleanup-text"></div>
+            <div class="job-steps" id="job-yt-cleanup-steps"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Tracking list (channels / log) -->
+  <section>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="filter-pills">
+          <button class="filter-pill active" id="ytTvChannels" onclick="ytSetTrackingView('channels')">Channels (<span id="ytChCount">0</span>)</button>
+          <button class="filter-pill"        id="ytTvLog"      onclick="ytSetTrackingView('log')">Log</button>
+        </div>
+        <input id="ytChSearch" type="search" placeholder="Search…"
+               oninput="onYtChSearch(this.value)"
+               style="width:160px;font-size:12px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
+      </div>
+      <div id="ytChControls" class="filter-control-group">
+        <div class="filter-row">
+          <span class="filter-row-label">Tracking</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="yfStatAll"      onclick="setYtChFilter('stat','all')">All</button>
+            <button class="filter-pill"        id="yfStatActive"   onclick="setYtChFilter('stat','active')">Active</button>
+            <button class="filter-pill"        id="yfStatInactive" onclick="setYtChFilter('stat','inactive')">Inactive</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <span class="filter-row-label">Starred</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="yfStarAll"     onclick="setYtChFilter('star','all')">All</button>
+            <button class="filter-pill"        id="yfStarStarred" onclick="setYtChFilter('star','starred')">Starred</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <span class="filter-row-label">Sort</span>
+          <div class="sort-controls">
+            <select class="sort-select" id="ytChSortField" onchange="setYtChSortField(this.value)">
+              <option value="handle">Handle</option>
+              <option value="display_name">Display name</option>
+              <option value="subscriber_count">Subscribers</option>
+              <option value="video_total">Saved videos</option>
+              <option value="video_deleted">Deleted videos</option>
+              <option value="added_at">Date added</option>
+              <option value="starred">Starred</option>
+            </select>
+            <button class="sort-dir-btn" id="ytChSortDirBtn" onclick="toggleYtChSortDir()">A → Z</button>
+            <button class="sort-dir-btn" onclick="resetYtChFilters()" title="Reset filters and sort">Reset</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="users-grid" id="ytChannelsGrid">
+      <div class="empty-state">No channels tracked yet.</div>
+    </div>
+    <div id="ytLogPanel" style="display:none">
+      <div class="log-panel">
+        <div class="log-header">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+              <input type="checkbox" id="ytAutoScroll" checked style="accent-color:var(--accent)">
+              Auto-scroll
+            </label>
+            <button class="btn-ghost" onclick="ytClearLog()" style="font-size:11px;padding:3px 8px;">Clear</button>
+          </div>
+        </div>
+        <div class="log-body" id="ytLogBody"></div>
+      </div>
+    </div>
+  </section>
+
+  </div>
 
 </div>
 <!-- Settings modal -->
@@ -635,6 +799,19 @@
 <button id="backToTopBtn" class="back-to-top"
         onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top">↑</button>
 
-<script src="/static/app.js"></script>
+<!-- YouTube channel detail modal -->
+<div id="ytChModalBackdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)ytCloseChModal()">
+  <div class="modal modal-base">
+    <button class="modal-close" onclick="ytCloseChModal()"></button>
+    <div class="modal-header"     id="ytChModalHeader"></div>
+    <div class="modal-toolbar"    id="ytChModalToolbar"></div>
+    <div class="phist-panel"      id="ytPhistPanel" style="display:none"></div>
+    <div class="modal-video-list" id="ytChModalVideoList"></div>
+  </div>
+</div>
+
+<script src="/static/common.js"></script>
+<script src="/static/tiktok.js"></script>
+<script src="/static/youtube.js"></script>
 </body>
 </html>

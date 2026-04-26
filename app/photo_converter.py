@@ -2,17 +2,17 @@
 Background AVIF conversion for all image assets.
 
 Converts existing JPEG files to AVIF in three passes:
-  1. Photo post images:  videos/@username/{video_id}_NN.jpg  -> .avif
-  2. Thumbnails:         videos/@username/thumbs/{video_id}.jpg -> .avif
-  3. Profile avatars:    data/avatars/{tiktok_id}[_ts].jpg   -> .avif
+  1. Photo post images:  videos/{platform}/@username/{video_id}_NN.jpg  -> .avif
+  2. Thumbnails:         videos/{platform}/@username/thumbs/{video_id}.jpg -> .avif
+  3. Profile avatars:    data/{platform}/avatars/{creator_id}[_ts].jpg   -> .avif
 
 Runs automatically at startup; already-converted files are skipped so it is
 safe to restart mid-run. Also callable on demand via the Jobs settings panel.
 
 CRF values (libaom-av1; lower = better quality / larger file):
-  CRF_PHOTO  = 28  (photo post images — best quality)
-  CRF_THUMB  = 38  (grid thumbnails — most compressed)
-  CRF_AVATAR = 30  (profile avatars — medium quality)
+  CRF_PHOTO  = 28  (photo post images -- best quality)
+  CRF_THUMB  = 38  (grid thumbnails -- most compressed)
+  CRF_AVATAR = 30  (profile avatars -- medium quality)
 """
 
 from __future__ import annotations
@@ -24,8 +24,7 @@ import subprocess
 import threading
 import time
 
-import database as db
-from config import VIDEOS_DIR, AVATARS_DIR, _ts
+from config import MEDIA_DIR, DATA_DIR, _ts
 
 CRF_PHOTO  = 28
 CRF_THUMB  = 38
@@ -85,7 +84,7 @@ def encode_avif(src: str, dst: str, crf: int) -> bool:
                 "-b:v", "0",
                 "-cpu-used", "6",
                 "-loglevel", "error",
-                "-f", "avif",   # explicit format — .tmp extension can't be auto-detected
+                "-f", "avif",   # explicit format -- .tmp extension can't be auto-detected
                 tmp,
             ],
             capture_output=True,
@@ -123,19 +122,24 @@ def _try_remove(path: str) -> None:
 def count_pending() -> int:
     """Count JPEG image files still awaiting AVIF conversion."""
     n = 0
-    # Photo post images: {video_id}_{NN}.jpg in user folders
-    for user_dir in _glob.glob(os.path.join(VIDEOS_DIR, "@*")):
-        if not os.path.isdir(user_dir):
+    # Photo post images: scan all platform user dirs
+    for platform_dir in _glob.glob(os.path.join(MEDIA_DIR, "*")):
+        if not os.path.isdir(platform_dir):
             continue
-        for fname in os.listdir(user_dir):
-            if _PHOTO_RE.match(fname):
-                n += 1
-    # Thumbnails
-    for thumbs_dir in _glob.glob(os.path.join(VIDEOS_DIR, "*", "thumbs")):
+        for user_dir in _glob.glob(os.path.join(platform_dir, "@*")):
+            if not os.path.isdir(user_dir):
+                continue
+            for fname in os.listdir(user_dir):
+                if _PHOTO_RE.match(fname):
+                    n += 1
+    # Thumbnails: platform/@username/thumbs
+    for thumbs_dir in _glob.glob(os.path.join(MEDIA_DIR, "*", "*", "thumbs")):
         n += len(_glob.glob(os.path.join(thumbs_dir, "*.jpg")))
-    # Avatars (current + history)
-    if os.path.isdir(AVATARS_DIR):
-        n += len(_glob.glob(os.path.join(AVATARS_DIR, "*.jpg")))
+    # Avatars: data/{platform}/avatars
+    for platform_data_dir in _glob.glob(os.path.join(DATA_DIR, "*")):
+        _avatars_dir = os.path.join(platform_data_dir, "avatars")
+        if os.path.isdir(_avatars_dir):
+            n += len(_glob.glob(os.path.join(_avatars_dir, "*.jpg")))
     return n
 
 
@@ -145,15 +149,21 @@ def _convert_photo_posts() -> None:
     """Convert all JPEG photo post images to AVIF and update DB file_path."""
     # Group JPEG files by video_id so we can update the DB after all images convert
     by_video: dict[str, list[str]] = {}
-    for user_dir in _glob.glob(os.path.join(VIDEOS_DIR, "@*")):
-        if not os.path.isdir(user_dir):
+    for platform_dir in _glob.glob(os.path.join(MEDIA_DIR, "*")):
+        if not os.path.isdir(platform_dir):
             continue
-        for fname in sorted(os.listdir(user_dir)):
-            m = _PHOTO_RE.match(fname)
-            if m:
-                by_video.setdefault(m.group(1), []).append(
-                    os.path.join(user_dir, fname)
-                )
+        for user_dir in _glob.glob(os.path.join(platform_dir, "@*")):
+            if not os.path.isdir(user_dir):
+                continue
+            for fname in sorted(os.listdir(user_dir)):
+                m = _PHOTO_RE.match(fname)
+                if m:
+                    by_video.setdefault(m.group(1), []).append(
+                        os.path.join(user_dir, fname)
+                    )
+
+    # Lazy import to avoid circular dependency at module load time
+    from platforms.tiktok import database as _tiktok_db
 
     for video_id, jpg_paths in by_video.items():
         new_first: str | None = None
@@ -172,7 +182,7 @@ def _convert_photo_posts() -> None:
                 _try_remove(jpg)
                 if new_first is None:
                     new_first = avif
-                print(f"[{_ts()}] [converter] photo → {os.path.basename(avif)}")
+                print(f"[{_ts()}] [converter] photo -> {os.path.basename(avif)}")
             else:
                 _inc_errors()
                 print(f"[{_ts()}] [converter] FAILED photo: {os.path.basename(jpg)}")
@@ -180,14 +190,14 @@ def _convert_photo_posts() -> None:
 
         # Update DB if first image path needs updating
         if new_first:
-            video = db.get_video(video_id)
+            video = _tiktok_db.get_video(video_id)
             if video and video.get("file_path", "").lower().endswith((".jpg", ".jpeg")):
-                db.update_video_file_path(video_id, new_first)
+                _tiktok_db.update_video_file_path(video_id, new_first)
 
 
 def _convert_thumbnails() -> None:
     """Convert all JPEG thumbnails to AVIF in-place."""
-    for thumbs_dir in _glob.glob(os.path.join(VIDEOS_DIR, "*", "thumbs")):
+    for thumbs_dir in _glob.glob(os.path.join(MEDIA_DIR, "*", "*", "thumbs")):
         for jpg in _glob.glob(os.path.join(thumbs_dir, "*.jpg")):
             avif = os.path.splitext(jpg)[0] + ".avif"
             if os.path.exists(avif):
@@ -196,7 +206,7 @@ def _convert_thumbnails() -> None:
                 continue
             if encode_avif(jpg, avif, CRF_THUMB):
                 _try_remove(jpg)
-                print(f"[{_ts()}] [converter] thumb → {os.path.basename(avif)}")
+                print(f"[{_ts()}] [converter] thumb -> {os.path.basename(avif)}")
             else:
                 _inc_errors()
                 print(f"[{_ts()}] [converter] FAILED thumb: {os.path.basename(jpg)}")
@@ -204,22 +214,24 @@ def _convert_thumbnails() -> None:
 
 
 def _convert_avatars() -> None:
-    """Convert all JPEG avatars (current and history) to AVIF."""
-    if not os.path.isdir(AVATARS_DIR):
-        return
-    for jpg in _glob.glob(os.path.join(AVATARS_DIR, "*.jpg")):
-        avif = os.path.splitext(jpg)[0] + ".avif"
-        if os.path.exists(avif):
-            _try_remove(jpg)
-            _inc_done()
+    """Convert all JPEG avatars (current and history) to AVIF across all platforms."""
+    for platform_data_dir in _glob.glob(os.path.join(DATA_DIR, "*")):
+        _avatars_dir = os.path.join(platform_data_dir, "avatars")
+        if not os.path.isdir(_avatars_dir):
             continue
-        if encode_avif(jpg, avif, CRF_AVATAR):
-            _try_remove(jpg)
-            print(f"[{_ts()}] [converter] avatar → {os.path.basename(avif)}")
-        else:
-            _inc_errors()
-            print(f"[{_ts()}] [converter] FAILED avatar: {os.path.basename(jpg)}")
-        _inc_done()
+        for jpg in _glob.glob(os.path.join(_avatars_dir, "*.jpg")):
+            avif = os.path.splitext(jpg)[0] + ".avif"
+            if os.path.exists(avif):
+                _try_remove(jpg)
+                _inc_done()
+                continue
+            if encode_avif(jpg, avif, CRF_AVATAR):
+                _try_remove(jpg)
+                print(f"[{_ts()}] [converter] avatar -> {os.path.basename(avif)}")
+            else:
+                _inc_errors()
+                print(f"[{_ts()}] [converter] FAILED avatar: {os.path.basename(jpg)}")
+            _inc_done()
 
 
 # ── Public job interface ──────────────────────────────────────────────────────
@@ -235,7 +247,7 @@ def run_conversion(triggered_by: str = "startup") -> None:
         _state.update({"running": True, "done": 0, "errors": 0,
                         "phase": "counting", "total": 0})
 
-    print(f"[{_ts()}] [converter] Starting AVIF conversion ({triggered_by})…")
+    print(f"[{_ts()}] [converter] Starting AVIF conversion ({triggered_by})...")
     t0 = time.monotonic()
 
     try:

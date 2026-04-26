@@ -3,9 +3,10 @@ import time
 import os
 from contextlib import contextmanager
 
-from config import DATA_DIR
+from config import DATA_DIR, MEDIA_DIR
 
-DB_PATH = os.path.join(DATA_DIR, "tiktok.db")
+TIKTOK_DATA_DIR = os.path.join(DATA_DIR, "tiktok")
+DB_PATH = os.path.join(TIKTOK_DATA_DIR, "tiktok.db")
 
 
 @contextmanager
@@ -23,7 +24,7 @@ def get_db():
 
 
 def init_db():
-    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(TIKTOK_DATA_DIR, exist_ok=True)
     # WAL is a persistent property; set it once rather than on every connection.
     _conn = sqlite3.connect(DB_PATH)
     try:
@@ -361,7 +362,7 @@ def backfill_avatar_cached() -> int:
     avatars after the column is added with DEFAULT 0.
     Returns the number of files found.
     """
-    from config import AVATARS_DIR
+    from platforms.tiktok.config import AVATARS_DIR
     if not os.path.isdir(AVATARS_DIR):
         return 0
     cached_ids = [
@@ -681,13 +682,14 @@ def clear_video_pending_deletion(video_id: str):
         )
 
 
-def rename_user_video_paths(tiktok_id: str, old_username: str, new_username: str):
+def rename_user_video_paths(tiktok_id: str, old_username: str, new_username: str,
+                            platform: str = "tiktok"):
     """Update all file_path values in videos when a user's folder is renamed."""
     with get_db() as conn:
         conn.execute("""
             UPDATE videos SET file_path = REPLACE(file_path, ?, ?)
             WHERE tiktok_id = ? AND file_path IS NOT NULL
-        """, (f"@{old_username}/", f"@{new_username}/", tiktok_id))
+        """, (f"{platform}/@{old_username}/", f"{platform}/@{new_username}/", tiktok_id))
 
 
 def get_all_username_history() -> dict:
@@ -995,14 +997,14 @@ def get_ban_history(offset: int = 0, limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-_GROUP_SCAN = 2500  # raw rows scanned per page; generous enough to yield ≥50 groups
+_GROUP_SCAN = 2500  # raw rows scanned per page; generous enough to yield >= 50 groups
 
 def get_saved_history(offset: int = 0, limit: int = 50) -> dict:
     """Return paginated grouped download history (newest first).
 
     Consecutive downloads by the same user are collapsed into one group.
     Returns {"items": [...groups...], "rows_consumed": N} where rows_consumed
-    is the total raw rows spanned by the returned groups — the caller should
+    is the total raw rows spanned by the returned groups -- the caller should
     advance its raw-row offset by this value for the next page.
     """
     with get_db() as conn:
@@ -1050,13 +1052,13 @@ def delete_orphaned_records() -> int:
     """Delete video, username_history, and profile_history rows for users no longer in
     the users table. Does NOT touch files on disk. Returns the number of rows deleted."""
     with get_db() as conn:
-        videos   = conn.execute(
+        videos  = conn.execute(
             "DELETE FROM videos WHERE tiktok_id NOT IN (SELECT tiktok_id FROM users)"
         ).rowcount
-        history  = conn.execute(
+        history = conn.execute(
             "DELETE FROM username_history WHERE tiktok_id NOT IN (SELECT tiktok_id FROM users)"
         ).rowcount
-        profile  = conn.execute(
+        profile = conn.execute(
             "DELETE FROM profile_history WHERE tiktok_id NOT IN (SELECT tiktok_id FROM users)"
         ).rowcount
     return videos + history + profile
@@ -1296,3 +1298,21 @@ def migrate_del_prefix() -> int:
             )
 
     return len(updates)
+
+
+def migrate_video_file_paths_to_platform(videos_dir: str,
+                                          platform: str = "tiktok") -> int:
+    """Add platform subdirectory to stored video file paths.
+
+    Converts '{videos_dir}/@username/...' to '{videos_dir}/tiktok/@username/...'.
+    Safe to run multiple times; only updates paths that don't already contain the
+    platform segment.
+    """
+    old_prefix = os.path.join(videos_dir, "@")
+    new_prefix = os.path.join(videos_dir, platform, "@")
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE videos SET file_path = REPLACE(file_path, ?, ?) WHERE file_path LIKE ?",
+            (old_prefix, new_prefix, old_prefix + "%"),
+        )
+        return cur.rowcount

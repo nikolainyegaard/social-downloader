@@ -1,22 +1,21 @@
 services:
-  tiktok-downloader:
-    image: ghcr.io/nikolainyegaard/tiktok-downloader:latest
-    container_name: tiktok-downloader
+  social-downloader:
+    image: ghcr.io/nikolainyegaard/social-downloader:latest
+    container_name: social-downloader
     restart: unless-stopped
 
     volumes:
-      # Database and cookies.txt are stored here — back this up.
+      # Database and cookies.txt are stored here - back this up.
       - ./data:/app/data
-      # Downloaded videos are stored here.
-      - ./videos:/app/videos
+      # Downloaded media (videos, photos) are stored here.
+      - ./media:/app/media
 
     environment:
-      USER_LOOP_INTERVAL_MINUTES:  "180"   # how often to check tracked users (minutes)
-      SOUND_LOOP_INTERVAL_MINUTES: "60"    # how often to check tracked sounds (minutes)
-      TZ: "Europe/Oslo"                    # set your timezone so log timestamps are in local time
-      # WEB_PORT: "5000"         # change if needed (also update the expose below)
-      # VIDEOS_DIR: /app/videos  # override video storage path inside the container
-      # LOOP_INTERVAL_MINUTES: "180"  # legacy alias for USER_LOOP_INTERVAL_MINUTES
+      TIKTOK_USER_LOOP_INTERVAL_MINUTES:  "180"   # how often to check tracked TikTok users (minutes)
+      TIKTOK_SOUND_LOOP_INTERVAL_MINUTES: "60"    # how often to check tracked TikTok sounds (minutes)
+      TZ: "Europe/Oslo"                           # set your timezone so log timestamps are in local time
+      # WEB_PORT: "5000"         # change if needed (also update the ports below)
+      # MEDIA_DIR: /app/media  # override media storage path inside the container
 
     # Bind only to localhost so Caddy (running on the host) can reach the service
     # but it is not directly exposed to the internet.
@@ -26,7 +25,7 @@ services:
     #
     # If Caddy is also a Docker container on the same host, put both services on
     # a shared network instead and reference the service name as the upstream:
-    #   reverse_proxy tiktok-downloader:5000
+    #   reverse_proxy social-downloader:5000
     # Then remove the `ports` block below and use `expose` instead.
     ports:
       - "127.0.0.1:5000:5000"

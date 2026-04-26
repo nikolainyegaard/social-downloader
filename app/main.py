@@ -5,15 +5,23 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-import database as db
-from config import DATA_DIR, USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, WEB_PORT
-from loop import (
+import glob as _glob
+import shutil as _shutil
+from platforms.tiktok import database as db
+from platforms.youtube import database as youtube_db
+from config import DATA_DIR, MEDIA_DIR, WEB_PORT
+from platforms.tiktok.config import (
+    USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, TIKTOK_DATA_DIR,
+)
+from platforms.tiktok.loop import (
     run_user_loop, run_sound_loop,
     is_user_loop_running, is_sound_loop_running,
     set_user_loop_next_run, set_sound_loop_next_run,
     trigger_user_event, trigger_sound_event,
     check_and_clear_user_reschedule, check_and_clear_sound_reschedule,
 )
+from platforms.youtube import loop as youtube_loop
+from platforms.youtube.loop import LOOP_INTERVAL_MINUTES as YOUTUBE_LOOP_INTERVAL_MINUTES
 from web import create_app
 
 LOGS_DIR = os.path.join(DATA_DIR, "logs")
@@ -134,10 +142,13 @@ sys.stderr = _Tee(sys.__stderr__)
 # logger so only meaningful HTTP activity reaches the transcript.
 
 _POLLING_ENDPOINTS = (
-    '"GET /api/status HTTP',
-    '"GET /api/queue HTTP',
-    '"GET /api/users HTTP',
-    '"GET /api/sounds HTTP',
+    '"GET /api/tiktok/status HTTP',
+    '"GET /api/tiktok/queue HTTP',
+    '"GET /api/tiktok/users HTTP',
+    '"GET /api/tiktok/sounds HTTP',
+    '"GET /api/youtube/status HTTP',
+    '"GET /api/youtube/queue HTTP',
+    '"GET /api/youtube/channels HTTP',
 )
 
 class _SuppressPolling(logging.Filter):
@@ -251,6 +262,33 @@ def _sound_loop_thread():
         run_sound_loop()
 
 
+# ── YouTube loop scheduler ────────────────────────────────────────────────────
+
+def _youtube_loop_thread():
+    while True:
+        interval_minutes = int(youtube_db.get_setting("loop_interval_minutes", YOUTUBE_LOOP_INTERVAL_MINUTES))
+        next_at_ts = time.time() + interval_minutes * 60
+        youtube_loop.set_next_run(datetime.fromtimestamp(next_at_ts, tz=timezone.utc).isoformat())
+        print(
+            f"{_ts()} YouTube loop sleeping {interval_minutes} min"
+            f" until {datetime.fromtimestamp(next_at_ts).strftime('%H:%M:%S')}."
+        )
+
+        remaining = next_at_ts - time.time()
+        triggered = youtube_loop.trigger_event.wait(timeout=max(remaining, 0))
+        youtube_loop.trigger_event.clear()
+
+        if youtube_loop.check_and_clear_reschedule():
+            print(f"{_ts()} YouTube loop: interval changed, rescheduling.")
+            continue
+
+        if triggered:
+            print(f"{_ts()} YouTube loop: manual trigger received.")
+
+        youtube_loop.set_next_run(None)
+        youtube_loop.run_loop()
+
+
 # ── File integrity check (twice daily: 00:00 and 12:00) ──────────────────────
 
 def _next_check_time() -> float:
@@ -284,31 +322,71 @@ def _file_check_thread():
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def _migrate_data_to_platform_dirs() -> None:
+    """Move flat data/ and videos/ paths into platform subdirectories. Idempotent."""
+    os.makedirs(TIKTOK_DATA_DIR, exist_ok=True)
+
+    _moves = [
+        (os.path.join(DATA_DIR,   "tiktok.db"),          os.path.join(TIKTOK_DATA_DIR, "tiktok.db")),
+        (os.path.join(DATA_DIR,   "loop_state.json"),     os.path.join(TIKTOK_DATA_DIR, "loop_state.json")),
+        (os.path.join(DATA_DIR,   "cookies.txt"),         os.path.join(TIKTOK_DATA_DIR, "cookies.txt")),
+        (os.path.join(DATA_DIR,   "cookies.timestamp"),   os.path.join(TIKTOK_DATA_DIR, "cookies.timestamp")),
+    ]
+    for old, new in _moves:
+        if os.path.exists(old) and not os.path.exists(new):
+            _shutil.move(old, new)
+            print(f"{_ts()} Migration: moved {os.path.relpath(old, DATA_DIR)} -> data/tiktok/")
+
+    old_avatars = os.path.join(DATA_DIR, "avatars")
+    new_avatars = os.path.join(TIKTOK_DATA_DIR, "avatars")
+    if os.path.isdir(old_avatars) and not os.path.exists(new_avatars):
+        _shutil.move(old_avatars, new_avatars)
+        print(f"{_ts()} Migration: moved data/avatars/ -> data/tiktok/avatars/")
+
+    tiktok_videos = os.path.join(MEDIA_DIR, "tiktok")
+    os.makedirs(tiktok_videos, exist_ok=True)
+    for user_dir in _glob.glob(os.path.join(MEDIA_DIR, "@*")):
+        if not os.path.isdir(user_dir):
+            continue
+        dest = os.path.join(tiktok_videos, os.path.basename(user_dir))
+        if not os.path.exists(dest):
+            _shutil.move(user_dir, dest)
+            print(f"{_ts()} Migration: moved videos/{os.path.basename(user_dir)} -> videos/tiktok/")
+
+
 def _check_config() -> None:
     """Warn about outdated docker-compose.yml env var patterns."""
-    # Legacy LOOP_INTERVAL_MINUTES without the split replacements.
-    # The old var still works via backward-compat in config.py, but
-    # SOUND_LOOP_INTERVAL_MINUTES will silently use its hardcoded default.
+    # LOOP_INTERVAL_MINUTES predates both the user/sound split and platform namespacing.
+    # Still accepted via backward-compat in platforms/tiktok/config.py, but the current
+    # names should be used going forward.
     has_legacy  = bool(os.environ.get("LOOP_INTERVAL_MINUTES"))
-    has_user    = bool(os.environ.get("USER_LOOP_INTERVAL_MINUTES"))
-    has_sound   = bool(os.environ.get("SOUND_LOOP_INTERVAL_MINUTES"))
+    has_user    = bool(os.environ.get("USER_LOOP_INTERVAL_MINUTES")
+                       or os.environ.get("TIKTOK_USER_LOOP_INTERVAL_MINUTES"))
+    has_sound   = bool(os.environ.get("SOUND_LOOP_INTERVAL_MINUTES")
+                       or os.environ.get("TIKTOK_SOUND_LOOP_INTERVAL_MINUTES"))
 
     if has_legacy and not (has_user and has_sound):
         print(
             f"{_ts()} [config] WARNING: your docker-compose.yml uses the deprecated\n"
-            f"  LOOP_INTERVAL_MINUTES variable. Replace it with the two current variables:\n"
+            f"  LOOP_INTERVAL_MINUTES variable. Replace it with the current variables:\n"
             f"\n"
-            f"    USER_LOOP_INTERVAL_MINUTES:  \"180\"  # how often to check tracked users\n"
-            f"    SOUND_LOOP_INTERVAL_MINUTES: \"60\"   # how often to check tracked sounds\n"
+            f"    TIKTOK_USER_LOOP_INTERVAL_MINUTES:  \"180\"  # how often to check tracked users\n"
+            f"    TIKTOK_SOUND_LOOP_INTERVAL_MINUTES: \"60\"   # how often to check tracked sounds\n"
             f"\n"
-            f"  Until then, SOUND_LOOP_INTERVAL_MINUTES defaults to 60 min."
+            f"  Until then, TIKTOK_SOUND_LOOP_INTERVAL_MINUTES defaults to 60 min."
         )
 
 
 if __name__ == "__main__":
     _check_config()
-    print(f"{_ts()} Initialising database...")
+    _migrate_data_to_platform_dirs()
+    print(f"{_ts()} Initialising databases...")
     db.init_db()
+    youtube_db.init_db()
+
+    n = db.migrate_video_file_paths_to_platform(MEDIA_DIR)
+    if n:
+        print(f"{_ts()} Migration: updated {n} video file path(s) to include platform subdirectory.")
 
     n = db.migrate_del_prefix()
     if n:
@@ -324,9 +402,10 @@ if __name__ == "__main__":
     app = create_app()
 
     print(f"{_ts()} Starting loop threads...")
-    threading.Thread(target=_user_loop_thread,  daemon=True, name="user-loop-thread").start()
-    threading.Thread(target=_sound_loop_thread, daemon=True, name="sound-loop-thread").start()
-    threading.Thread(target=_file_check_thread, daemon=True, name="file-check-thread").start()
+    threading.Thread(target=_user_loop_thread,    daemon=True, name="user-loop-thread").start()
+    threading.Thread(target=_sound_loop_thread,   daemon=True, name="sound-loop-thread").start()
+    threading.Thread(target=_youtube_loop_thread, daemon=True, name="yt-loop-thread").start()
+    threading.Thread(target=_file_check_thread,   daemon=True, name="file-check-thread").start()
 
     print(f"{_ts()} Web UI available at http://0.0.0.0:{WEB_PORT}")
     try:

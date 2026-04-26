@@ -1,5 +1,5 @@
 """
-Download loops (user and sound) and shared state used by both loop threads and the web server.
+TikTok download loops (user and sound) and shared state used by both loop threads and the web server.
 """
 
 import asyncio
@@ -11,14 +11,14 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 
-import database as db
-from config import DATA_DIR
+from platforms.tiktok import database as db
+from platforms.tiktok.config import TIKTOK_DATA_DIR
 from thumbnailer import backfill_thumbnails
 import photo_converter as _photo_converter  # noqa: F401 -- starts conversion thread on import
-from sound_tracker import process_all_sounds, process_single_sound
-from user_tracker import process_all_users, run_single_user_with_session
+from platforms.tiktok.tracker import process_all_sounds, process_single_sound
+from platforms.tiktok.tracker import process_all_users, run_single_user_with_session
 
-LOOP_STATE_PATH = os.path.join(DATA_DIR, "loop_state.json")
+LOOP_STATE_PATH = os.path.join(TIKTOK_DATA_DIR, "loop_state.json")
 
 
 def _load_loop_state() -> dict:
@@ -42,7 +42,7 @@ def _save_loop_state() -> None:
             "sound_last_duration_secs": sound_loop_state["last_run_duration_secs"],
             "sound_last_new_videos":    sound_loop_state["last_new_videos"],
         })
-    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(TIKTOK_DATA_DIR, exist_ok=True)
     with open(LOOP_STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f)
 

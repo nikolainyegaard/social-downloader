@@ -2,7 +2,7 @@
 Thumbnail and avatar generation — all output in AVIF format.
 
 Thumbnails are stored as AVIF files at:
-    VIDEOS_DIR/@username/thumbs/{video_id}.avif
+    MEDIA_DIR/@username/thumbs/{video_id}.avif
 
 Avatars are stored as AVIF files at:
     AVATARS_DIR/{tiktok_id}.avif
@@ -24,8 +24,9 @@ import shutil
 import subprocess
 import time
 import urllib.request
-import database as db
-from config import VIDEOS_DIR, AVATARS_DIR, THUMBNAIL_WORKERS, THUMBNAIL_USE_GPU, _ts
+from platforms.tiktok import database as db
+from config import MEDIA_DIR, THUMBNAIL_WORKERS, THUMBNAIL_USE_GPU, _ts
+from platforms.tiktok.config import AVATARS_DIR
 from photo_converter import encode_avif, CRF_THUMB, CRF_AVATAR
 
 THUMB_WIDTH = 360   # px
@@ -52,29 +53,38 @@ def _thumb_exists(video_id: str, file_path: str) -> bool:
 
 # ── Avatar caching ────────────────────────────────────────────────────────────
 
-def cache_avatar(tiktok_id: str, avatar_url: str) -> str | bool:
+def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok") -> str | bool:
     """
-    Download avatar_url, convert to AVIF, and save to the avatars cache.
-    If the image differs from the cached version, the old file is archived as
-    {tiktok_id}_{timestamp}.avif and the change is recorded in profile_history.
+    Download avatar_url, convert to AVIF, and save to the platform's avatars cache.
+    If the image differs from the cached version, the old file is archived and the
+    change is recorded in profile_history.
     Returns "changed", "unchanged", or False on failure.
     """
     if not avatar_url:
         return False
-    os.makedirs(AVATARS_DIR, exist_ok=True)
 
-    path      = avatar_path(tiktok_id)       # .avif
-    jpg_tmp   = path + ".jpg.tmp"
-    avif_tmp  = path + ".avif.tmp"
+    if platform == "tiktok":
+        _avatars_dir = AVATARS_DIR
+        _db = db
+    elif platform == "youtube":
+        from config import DATA_DIR as _DATA_DIR
+        _avatars_dir = os.path.join(_DATA_DIR, "youtube", "avatars")
+        from platforms.youtube import database as _db
+    else:
+        return False
 
-    # Download source JPEG
+    os.makedirs(_avatars_dir, exist_ok=True)
+
+    path     = os.path.join(_avatars_dir, f"{creator_id}.avif")
+    jpg_tmp  = path + ".jpg.tmp"
+    avif_tmp = path + ".avif.tmp"
+
     try:
         urllib.request.urlretrieve(avatar_url, jpg_tmp)
     except Exception:
         _try_remove(jpg_tmp)
         return False
 
-    # Convert to AVIF
     if not encode_avif(jpg_tmp, avif_tmp, CRF_AVATAR):
         _try_remove(jpg_tmp)
         _try_remove(avif_tmp)
@@ -93,13 +103,13 @@ def cache_avatar(tiktok_id: str, avatar_url: str) -> str | bool:
         if os.path.exists(path):
             if _md5(path) != _md5(avif_tmp):
                 ts   = int(time.time())
-                arch = os.path.join(AVATARS_DIR, f"{tiktok_id}_{ts}.avif")
+                arch = os.path.join(_avatars_dir, f"{creator_id}_{ts}.avif")
                 shutil.copy2(path, arch)
-                db.record_profile_change(tiktok_id, "avatar", f"{tiktok_id}_{ts}.avif")
+                _db.record_profile_change(creator_id, "avatar", f"{creator_id}_{ts}.avif")
                 changed = True
 
         os.replace(avif_tmp, path)
-        db.set_avatar_cached(tiktok_id, True)
+        _db.set_avatar_cached(creator_id, True)
         return "changed" if changed else "unchanged"
     except Exception:
         _try_remove(avif_tmp)
@@ -236,10 +246,15 @@ def backfill_thumbnails() -> None:
     Videos that have a .jpg thumbnail will have it converted to AVIF by
     photo_converter — no need to regenerate from the source here.
     """
-    print(f"[{_ts()}] Thumbnail backfill: scanning database…")
+    print(f"[{_ts()}] Thumbnail backfill: scanning database...")
     t0 = time.monotonic()
 
-    all_videos = db.get_all_videos()
+    all_videos = list(db.get_all_videos())
+    try:
+        from platforms.youtube import database as _yt_db
+        all_videos.extend(_yt_db.get_all_videos())
+    except Exception:
+        pass
     total = len(all_videos)
 
     missing = [
