@@ -9,8 +9,8 @@ from datetime import datetime
 
 APP_VERSION = os.environ.get("APP_VERSION", "dev")  # v1.19.0
 
-DATA_DIR  = os.environ.get("DATA_DIR",  "./data")
-MEDIA_DIR = os.environ.get("MEDIA_DIR", "./media")
+DATA_DIR  = os.path.abspath(os.environ.get("DATA_DIR",  "./data"))
+MEDIA_DIR = os.path.abspath(os.environ.get("MEDIA_DIR", "./media"))
 
 WEB_PORT = int(os.environ.get("WEB_PORT", 5000))
 

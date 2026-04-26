@@ -26,15 +26,22 @@ const _YT_SORT_DIR_LABELS = {
   starred:          { asc: 'Unstarred first', desc: 'Starred first'   },
 };
 
+// ── YouTube-specific icons and badges ─────────────────────────────────────────
+
+const _wideGridIcon   = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5"><rect x=".75" y="2" width="5.25" height="3" rx=".5"/><rect x="7" y="2" width="5.25" height="3" rx=".5"/><rect x=".75" y="8" width="5.25" height="3" rx=".5"/><rect x="7" y="8" width="5.25" height="3" rx=".5"/></svg>`;
+const _vgridShortIcon = `<svg width="12" height="12" viewBox="0 0 9 9" fill="none" stroke="rgba(255,255,255,.9)" stroke-width="1.2"><rect x="1.5" y=".5" width="6" height="8" rx=".75"/><polygon fill="rgba(255,255,255,.9)" stroke="none" points="3,2.5 7,4.5 3,6.5"/></svg>`;
+const _ytShortsBadge  = `<span style="position:absolute;bottom:4px;right:4px;color:#fff;pointer-events:none;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))"><svg width="18" height="18" viewBox="0 0 9 9" fill="none" stroke="rgba(255,255,255,.9)" stroke-width="1.2"><rect x="1.5" y=".5" width="6" height="8" rx=".75"/><polygon fill="rgba(255,255,255,.9)" stroke="none" points="3,2.5 7,4.5 3,6.5"/></svg></span>`;
+
 // ── YouTube-specific render helpers ───────────────────────────────────────────
 
 function _ytThumbCell(v) {
   const id = esc(v.video_id);
+  const badge = v.content_type === 'short' ? _ytShortsBadge : _playBadge;
   return `<div style="position:relative;line-height:0;width:90px;flex-shrink:0">
     <img class="video-thumb" src="/api/youtube/videos/${id}/thumbnail" alt="" loading="lazy"
          onerror="this.style.opacity='.15'"
          onclick="event.stopPropagation();ytOpenVidModal('${id}')" title="Play video" style="cursor:pointer">
-    ${_playBadge}
+    ${badge}
   </div>`;
 }
 
@@ -94,6 +101,18 @@ const _YT_CH_MODAL_CFG = {
   hasSearch:    true,
   hasViewToggle: true,
   viewFn:       'ytSetChModalView',
+  viewKeys: [
+    { key: 'list',   icon: _listViewIcon,  title: 'List view' },
+    { key: 'videos', icon: _wideGridIcon,  title: 'Videos grid' },
+    { key: 'shorts', icon: _gridViewIcon,  title: 'Shorts grid' },
+  ],
+  viewVideoFilter: (view, vids) => {
+    if (view === 'videos') return vids.filter(v => v.content_type !== 'short');
+    if (view === 'shorts') return vids.filter(v => v.content_type === 'short');
+    return vids;
+  },
+  gridClassFn: view => view === 'videos' ? 'video-grid--wide' : '',
+  typeIconFn:  v => v.content_type === 'short' ? _vgridShortIcon : _vgridPlayIcon,
   gridId:       'ytChVideoGrid',
   hasPhistBtn:  true,
   phistBtnFn:   'ytOpenProfileHistory',
@@ -185,6 +204,7 @@ function renderYtRecent(data) {
       `<div class="recent-entry" onclick="ytOpenChModal('${esc(g.channel_id)}')" title="Open @${esc(g.handle)}">
         <span class="recent-date">${_recentDate(g.download_date, now)}</span>
         <span class="recent-name">@${esc(g.handle)}</span>
+        <span class="recent-detail">${g.count}x</span>
       </div>`
     ).join('');
   } else {
@@ -931,6 +951,69 @@ function ytSetTrackingView(view) {
   if (chCtrl) chCtrl.style.display = view === 'channels' ? '' : 'none';
   if (view === 'channels') renderYtChannels();
   _placeGlider(document.getElementById('ytTvChannels').closest('.filter-pills'));
+}
+
+// ── Diagnostics ───────────────────────────────────────────────────────────────
+
+async function ytDiagRun() {
+  const input  = document.getElementById('ytDiagInput');
+  const output = document.getElementById('ytDiagOutput');
+  const btn    = document.getElementById('ytDiagRunBtn');
+  let val = (input?.value || '').trim().replace(/^@/, '');
+  if (!val) { alert('Enter a channel ID or @handle.'); return; }
+
+  if (!val.startsWith('UC')) {
+    const ch = ytChannels.find(c => c.handle.toLowerCase() === val.toLowerCase());
+    if (!ch) { alert(`@${val} not found in tracked channels.\nEnter the channel ID (UCxxx) directly or add the channel first.`); return; }
+    val = ch.channel_id;
+  }
+
+  btn.disabled = true;
+  output.textContent = 'Running...';
+  const { ok, data } = await apiJSON('/api/youtube/debug/channel-videos', {
+    method: 'POST',
+    body: JSON.stringify({ channel_id: val }),
+  });
+  btn.disabled = false;
+  output.textContent = JSON.stringify(data, null, 2);
+}
+
+function ytDiagCopy() {
+  const output = document.getElementById('ytDiagOutput');
+  navigator.clipboard.writeText(output?.textContent || '').catch(() => {});
+}
+
+// ── DB Query ──────────────────────────────────────────────────────────────────
+
+async function ytDbQueryRun() {
+  const sql       = (document.getElementById('ytDbQueryInput')?.value || '').trim();
+  const summaryEl = document.getElementById('ytDbQuerySummary');
+  const errorEl   = document.getElementById('ytDbQueryError');
+  const outputEl  = document.getElementById('ytDbQueryOutput');
+  if (!sql) return;
+  summaryEl.textContent  = 'Running...';
+  errorEl.style.display  = 'none';
+  outputEl.style.display = 'none';
+
+  const { ok, data } = await apiJSON('/api/youtube/db/query', {
+    method: 'POST',
+    body: JSON.stringify({ sql }),
+  });
+
+  if (!data.ok) {
+    summaryEl.textContent  = '';
+    errorEl.textContent    = data.error || 'Query failed.';
+    errorEl.style.display  = '';
+    return;
+  }
+
+  if (data.cols && data.cols.length) {
+    summaryEl.textContent  = `${data.rowcount} row${data.rowcount !== 1 ? 's' : ''}`;
+    outputEl.style.display = '';
+    outputEl.textContent   = JSON.stringify({ cols: data.cols, rows: data.rows }, null, 2);
+  } else {
+    summaryEl.textContent  = `${data.rowcount} row${data.rowcount !== 1 ? 's' : ''} affected`;
+  }
 }
 
 // ── Keyboard handler (Escape) ─────────────────────────────────────────────────

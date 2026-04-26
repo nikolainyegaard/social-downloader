@@ -11,9 +11,8 @@ services:
       - ./media:/app/media
 
     environment:
-      TIKTOK_USER_LOOP_INTERVAL_MINUTES:  "180"   # how often to check tracked TikTok users (minutes)
-      TIKTOK_SOUND_LOOP_INTERVAL_MINUTES: "60"    # how often to check tracked TikTok sounds (minutes)
       TZ: "Europe/Oslo"                           # set your timezone so log timestamps are in local time
+      # Loop intervals are configurable from Settings in the UI and do not need to be set here.
       # WEB_PORT: "5000"         # change if needed (also update the ports below)
       # MEDIA_DIR: /app/media  # override media storage path inside the container
 

@@ -426,19 +426,17 @@
   <div class="modal-base settings-modal">
     <button class="modal-close" onclick="closeSettings()"></button>
     <nav class="settings-nav">
-      <div class="settings-nav-item active" id="snav-cookies"   onclick="switchSettingsSection('cookies')">Cookies</div>
-      <div class="settings-nav-item"        id="snav-loops"     onclick="switchSettingsSection('loops')">Loops</div>
-      <div class="settings-nav-item"        id="snav-backfill"  onclick="switchSettingsSection('backfill')">Backfill</div>
-      <div class="settings-nav-item"        id="snav-jobs"      onclick="switchSettingsSection('jobs')">Jobs</div>
-      <div class="settings-nav-item"        id="snav-utils"     onclick="switchSettingsSection('utils')">Utilities</div>
-      <div class="settings-nav-item"        id="snav-migrate"   onclick="switchSettingsSection('migrate');loadMigratePreview()">Migration</div>
-      <div class="settings-nav-item"        id="snav-diag"      onclick="switchSettingsSection('diag')">Diagnostics</div>
-      <div class="settings-nav-item"        id="snav-database"  onclick="switchSettingsSection('database')">Database</div>
+      <div class="settings-nav-item active" id="snav-tiktok"   onclick="switchSettingsSection('tiktok')">TikTok</div>
+      <div class="settings-nav-item"        id="snav-youtube"  onclick="switchSettingsSection('youtube');loadYtSettings()">YouTube</div>
+      <div class="settings-nav-item"        id="snav-jobs"     onclick="switchSettingsSection('jobs')">Jobs</div>
+      <div class="settings-nav-item"        id="snav-diag"     onclick="switchSettingsSection('diag')">Diagnostics</div>
+      <div class="settings-nav-item"        id="snav-database" onclick="switchSettingsSection('database')">Database</div>
     </nav>
     <div class="settings-content">
 
-      <!-- Cookies section -->
-      <div id="ssec-cookies">
+      <!-- TikTok section -->
+      <div id="ssec-tiktok">
+
         <div class="settings-section-title">Authentication</div>
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
           <span class="cookie-pill absent" id="cookiePill">
@@ -476,10 +474,9 @@
           The file must be in Netscape format and include the <code>msToken</code> cookie.
           Cookies are stored server-side. Uploading once applies everywhere.
         </div>
-      </div>
 
-      <!-- Loops section -->
-      <div id="ssec-loops" style="display:none">
+        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
+
         <div class="settings-section-title">Loop Intervals</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
           Each loop runs independently. If both are due at the same time, the second one waits
@@ -505,10 +502,9 @@
           <button class="btn-primary" onclick="saveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
           <span id="loopSettingsSaved" style="font-size:12px;color:var(--green);display:none">Saved.</span>
         </div>
-      </div>
 
-      <!-- Backfill section -->
-      <div id="ssec-backfill" style="display:none">
+        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
+
         <div class="settings-section-title">Stats Backfill</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
           Fetches view counts, likes, and other metadata for downloaded videos that are missing stats.
@@ -523,93 +519,19 @@
           <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
         </div>
         <div id="failedList" style="display:none;font-size:11px;color:var(--muted);line-height:1.7"></div>
-
-        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">
-        <div class="settings-section-title" style="font-size:12px;margin-bottom:8px;">Re-backfill all videos</div>
-        <p style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
-          Marks every video as needing a stats backfill. Use this after adding new tracked columns; the next Run Backfill will re-fetch all videos.
-        </p>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <button class="btn-danger" id="resetBackfillBtn" onclick="resetBackfillStep()">Reset all backfill status</button>
-          <span id="resetBackfillStatus" style="font-size:12px;color:var(--muted)"></span>
-        </div>
-      </div>
-
-      <!-- Jobs section -->
-      <div id="ssec-jobs" style="display:none">
-        <div class="settings-section-title">Jobs</div>
-
-        <div class="job-card">
-          <div class="job-card-hdr">
-            <div style="flex:1">
-              <div class="job-card-title">Convert photos to AVIF</div>
-              <div class="job-card-desc">
-                Converts all existing photo post images, thumbnails, and profile avatars
-                from JPEG to AVIF. Runs automatically at startup; already-converted files
-                are skipped. New downloads are saved as AVIF directly.
-              </div>
-            </div>
-            <button class="btn-primary" id="job-avif-btn" onclick="triggerAvifJob()" style="flex-shrink:0;align-self:flex-start">Run</button>
-          </div>
-          <div class="job-status" id="job-avif-status" style="display:none">
-            <div id="job-avif-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-avif-bar"></div></div></div>
-            <div class="job-status-text" id="job-avif-text"></div>
+        <div style="margin-top:14px">
+          <div class="settings-section-title" style="font-size:12px;margin-bottom:8px;">Re-backfill all videos</div>
+          <p style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
+            Marks every video as needing a stats backfill. Use this after adding new tracked columns; the next Run Backfill will re-fetch all videos.
+          </p>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <button class="btn-danger" id="resetBackfillBtn" onclick="resetBackfillStep()">Reset all backfill status</button>
+            <span id="resetBackfillStatus" style="font-size:12px;color:var(--muted)"></span>
           </div>
         </div>
 
-        <div class="job-card">
-          <div class="job-card-hdr">
-            <div style="flex:1">
-              <div class="job-card-title">Database cleanup</div>
-              <div class="job-card-desc">
-                Removes orphaned thumbnails and avatars left behind when users are removed
-                from tracking. Also runs VACUUM on the SQLite database to compact freed space.
-              </div>
-            </div>
-            <button class="btn-primary" id="job-cleanup-btn" onclick="triggerCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
-          </div>
-          <div class="job-status" id="job-cleanup-status" style="display:none">
-            <div id="job-cleanup-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-cleanup-bar"></div></div></div>
-            <div class="job-status-text" id="job-cleanup-text"></div>
-            <div class="job-steps" id="job-cleanup-steps"></div>
-          </div>
-        </div>
+        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
 
-        <div class="job-card">
-          <div class="job-card-hdr">
-            <div style="flex:1">
-              <div class="job-card-title">Missing file check</div>
-              <div class="job-card-desc">
-                Scans saved video records for files no longer present on disk.
-                Scan reports what would be removed. Purge removes the DB records,
-                after which videos will be re-downloaded on the next loop run.
-                Purge also runs automatically at midnight and noon.
-              </div>
-            </div>
-            <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
-              <button class="btn-primary" id="job-filecheck-scan-btn" onclick="triggerFileScan()">Scan</button>
-              <button class="btn-danger"  id="job-filecheck-purge-btn" onclick="triggerFilePurge()">Purge</button>
-            </div>
-          </div>
-          <div class="job-status" id="job-filecheck-status" style="display:none">
-            <div id="job-filecheck-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-filecheck-bar"></div></div></div>
-            <div class="job-status-text" id="job-filecheck-text"></div>
-            <div class="report-widget" id="job-filecheck-report" style="display:none">
-              <div class="report-preview" id="job-filecheck-preview"></div>
-              <div class="report-actions">
-                <button class="btn-report" id="job-filecheck-view-btn" onclick="openReportView(_filecheckReportFile, 'Missing file check')">View full report</button>
-                <a id="job-filecheck-download-link" style="display:none">
-                  <button class="btn-report">Download report</button>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Utilities section -->
-      <div id="ssec-utils" style="display:none">
         <div class="settings-section-title">Utilities</div>
 
         <div class="job-card">
@@ -638,7 +560,7 @@
                 Deletes the current cached profile picture for tracked users. Archived avatar
                 history is preserved. On the next loop run, avatars will be re-downloaded and
                 saved without triggering a profile change event. Banned users are excluded by
-                default — their avatars cannot be re-fetched from TikTok.
+                default; their avatars cannot be re-fetched from TikTok.
               </div>
               <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.85em;cursor:pointer">
                 <input type="checkbox" id="util-clear-avatars-include-banned">
@@ -667,11 +589,10 @@
             <div class="job-status-text" id="util-clear-thumbs-text"></div>
           </div>
         </div>
-      </div>
 
-      <!-- Migration section -->
-      <div id="ssec-migrate" style="display:none">
-        <div class="settings-section-title">Migrate from tiktok-downloader</div>
+        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
+
+        <div class="settings-section-title">Migration</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
           Upgrades from tiktok-downloader stored video files under <code>videos/</code> but the new layout uses <code>media/</code>.
           This tool rewrites the stored file paths in the TikTok database to match your current folder layout.
@@ -695,64 +616,235 @@
           <button class="btn-danger" id="migrateRunBtn" onclick="runMigration()" style="display:none;font-size:12px;padding:5px 14px">Rewrite paths</button>
           <span id="migrateStatus" style="font-size:12px;color:var(--muted)"></span>
         </div>
+
+      </div>
+
+      <!-- YouTube section -->
+      <div id="ssec-youtube" style="display:none">
+        <div class="settings-section-title">Loop Interval</div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+          Changes take effect at the next scheduled run.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:340px">
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Channel loop every</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="ytLoopIntervalInput" min="1" max="9999" class="loop-interval-input" style="width:70px">
+              <span style="color:var(--muted)">min</span>
+            </div>
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+          <button class="btn-primary" onclick="ytSaveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
+          <span id="ytLoopSettingsSaved" style="font-size:12px;color:var(--green);display:none">Saved.</span>
+        </div>
+      </div>
+
+      <!-- Jobs section -->
+      <div id="ssec-jobs" style="display:none">
+        <div class="settings-section-title">Jobs</div>
+        <div class="settings-sub-tabs">
+          <button class="settings-sub-tab active" id="stab-jobs-tiktok" onclick="switchSettingsSubTab('jobs','tiktok')">TikTok</button>
+          <button class="settings-sub-tab"        id="stab-jobs-youtube" onclick="switchSettingsSubTab('jobs','youtube')">YouTube</button>
+        </div>
+
+        <div id="jobs-tiktok">
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Convert photos to AVIF</div>
+                <div class="job-card-desc">
+                  Converts all existing photo post images, thumbnails, and profile avatars
+                  from JPEG to AVIF. Runs automatically at startup; already-converted files
+                  are skipped. New downloads are saved as AVIF directly.
+                </div>
+              </div>
+              <button class="btn-primary" id="job-avif-btn" onclick="triggerAvifJob()" style="flex-shrink:0;align-self:flex-start">Run</button>
+            </div>
+            <div class="job-status" id="job-avif-status" style="display:none">
+              <div id="job-avif-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-avif-bar"></div></div></div>
+              <div class="job-status-text" id="job-avif-text"></div>
+            </div>
+          </div>
+
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Database cleanup</div>
+                <div class="job-card-desc">
+                  Removes orphaned thumbnails and avatars left behind when users are removed
+                  from tracking. Also runs VACUUM on the SQLite database to compact freed space.
+                </div>
+              </div>
+              <button class="btn-primary" id="job-cleanup-btn" onclick="triggerCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+            </div>
+            <div class="job-status" id="job-cleanup-status" style="display:none">
+              <div id="job-cleanup-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-cleanup-bar"></div></div></div>
+              <div class="job-status-text" id="job-cleanup-text"></div>
+              <div class="job-steps" id="job-cleanup-steps"></div>
+            </div>
+          </div>
+
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Missing file check</div>
+                <div class="job-card-desc">
+                  Scans saved video records for files no longer present on disk.
+                  Scan reports what would be removed. Purge removes the DB records,
+                  after which videos will be re-downloaded on the next loop run.
+                  Purge also runs automatically at midnight and noon.
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
+                <button class="btn-primary" id="job-filecheck-scan-btn" onclick="triggerFileScan()">Scan</button>
+                <button class="btn-danger"  id="job-filecheck-purge-btn" onclick="triggerFilePurge()">Purge</button>
+              </div>
+            </div>
+            <div class="job-status" id="job-filecheck-status" style="display:none">
+              <div id="job-filecheck-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-filecheck-bar"></div></div></div>
+              <div class="job-status-text" id="job-filecheck-text"></div>
+              <div class="report-widget" id="job-filecheck-report" style="display:none">
+                <div class="report-preview" id="job-filecheck-preview"></div>
+                <div class="report-actions">
+                  <button class="btn-report" id="job-filecheck-view-btn" onclick="openReportView(_filecheckReportFile, 'Missing file check')">View full report</button>
+                  <a id="job-filecheck-download-link" style="display:none">
+                    <button class="btn-report">Download report</button>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="jobs-youtube" style="display:none">
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Database cleanup</div>
+                <div class="job-card-desc">
+                  Removes orphaned thumbnails left behind when channels are removed.
+                  Also runs VACUUM on the YouTube SQLite database to compact freed space.
+                </div>
+              </div>
+              <button class="btn-primary" id="job-yt-cleanup-btn" onclick="ytTriggerCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+            </div>
+            <div class="job-status" id="job-yt-cleanup-status" style="display:none">
+              <div id="job-yt-cleanup-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-yt-cleanup-bar"></div></div></div>
+              <div class="job-status-text" id="job-yt-cleanup-text"></div>
+              <div class="job-steps" id="job-yt-cleanup-steps"></div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Diagnostics section -->
       <div id="ssec-diag" style="display:none">
-        <div class="settings-section-title">API Diagnostics</div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
-          Run raw API calls and inspect the response. Useful for debugging download issues.
-          TikTokApi calls open a browser session and may take 10–30 seconds.
+        <div class="settings-section-title">Diagnostics</div>
+        <div class="settings-sub-tabs">
+          <button class="settings-sub-tab active" id="stab-diag-tiktok" onclick="switchSettingsSubTab('diag','tiktok')">TikTok</button>
+          <button class="settings-sub-tab"        id="stab-diag-youtube" onclick="switchSettingsSubTab('diag','youtube')">YouTube</button>
         </div>
 
-        <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-          <select id="diagSource" onchange="diagSourceChanged()" style="flex:1;min-width:160px">
-            <option value="get_video_details">get_video_details</option>
-            <option value="ytdlp">yt-dlp</option>
-            <option value="tiktokapi">TikTokApi</option>
-          </select>
-          <select id="diagAction" onchange="diagActionChanged()" style="flex:1;min-width:160px">
-            <option value="">(paste a URL below)</option>
-          </select>
+        <div id="diag-tiktok">
+          <div class="settings-section-title">API Diagnostics</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+            Run raw API calls and inspect the response. Useful for debugging download issues.
+            TikTokApi calls open a browser session and may take 10-30 seconds.
+          </div>
+
+          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+            <select id="diagSource" onchange="diagSourceChanged()" style="flex:1;min-width:160px">
+              <option value="get_video_details">get_video_details</option>
+              <option value="ytdlp">yt-dlp</option>
+              <option value="tiktokapi">TikTokApi</option>
+            </select>
+            <select id="diagAction" onchange="diagActionChanged()" style="flex:1;min-width:160px">
+              <option value="">(paste a URL below)</option>
+            </select>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-bottom:12px">
+            <input id="diagInput" class="text-input" type="text"
+                   placeholder="https://www.tiktok.com/@user/video/123... or user ID"
+                   style="flex:1">
+            <button class="btn-primary" id="diagRunBtn" onclick="diagRun()" style="flex-shrink:0">Run</button>
+          </div>
+
+          <div style="position:relative">
+            <pre id="diagOutput">No output yet.</pre>
+            <button onclick="diagCopy()" title="Copy output" style="
+              position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
+              border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
+            ">Copy</button>
+          </div>
         </div>
 
-        <div style="display:flex;gap:10px;margin-bottom:12px">
-          <input id="diagInput" class="text-input" type="text"
-                 placeholder="https://www.tiktok.com/@user/video/123… or user ID"
-                 style="flex:1">
-          <button class="btn-primary" id="diagRunBtn" onclick="diagRun()" style="flex-shrink:0">Run</button>
+        <div id="diag-youtube" style="display:none">
+          <div class="settings-section-title">Channel Videos Raw Fetch</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+            Runs yt-dlp flat extraction on a channel and returns the first 5 entries per tab (Videos, Shorts, Streams) with all raw fields. Useful for checking which date fields yt-dlp returns.
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:12px">
+            <input id="ytDiagInput" class="text-input" type="text"
+                   placeholder="Channel ID (UCxxx) or @handle"
+                   style="flex:1">
+            <button class="btn-primary" id="ytDiagRunBtn" onclick="ytDiagRun()" style="flex-shrink:0">Run</button>
+          </div>
+          <div style="position:relative">
+            <pre id="ytDiagOutput">No output yet.</pre>
+            <button onclick="ytDiagCopy()" title="Copy output" style="
+              position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
+              border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
+            ">Copy</button>
+          </div>
         </div>
 
-        <div style="position:relative">
-          <pre id="diagOutput">No output yet.</pre>
-          <button onclick="diagCopy()" title="Copy output" style="
-            position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
-            border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
-          ">Copy</button>
-        </div>
       </div>
 
       <!-- Database section -->
       <div id="ssec-database" style="display:none">
         <div class="settings-section-title">Database Query</div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
-          Run raw SQLite commands against the database. SELECT returns rows; other statements are committed immediately.
+        <div class="settings-sub-tabs">
+          <button class="settings-sub-tab active" id="stab-database-tiktok" onclick="switchSettingsSubTab('database','tiktok')">TikTok</button>
+          <button class="settings-sub-tab"        id="stab-database-youtube" onclick="switchSettingsSubTab('database','youtube')">YouTube</button>
         </div>
-        <textarea id="dbQueryInput" placeholder="SELECT * FROM users LIMIT 10;"></textarea>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-          <button class="btn-primary" onclick="dbQueryRun()" style="font-size:12px;padding:5px 14px">Run</button>
-          <span id="dbQuerySummary" style="font-size:12px;color:var(--muted)"></span>
-          <span id="dbQueryError"   style="font-size:12px;color:var(--red);display:none"></span>
-        </div>
-        <div class="report-widget" id="job-dbquery-report" style="display:none">
-          <div class="report-preview" id="job-dbquery-preview"></div>
-          <div class="report-actions">
-            <button class="btn-report" onclick="openReportView(_dbQueryReportFile, 'Database query')">View full report</button>
-            <a id="job-dbquery-download-link" style="display:none">
-              <button class="btn-report">Download report</button>
-            </a>
+
+        <div id="database-tiktok">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+            Run raw SQLite commands against the TikTok database. SELECT returns rows; other statements are committed immediately.
+          </div>
+          <textarea id="dbQueryInput" placeholder="SELECT * FROM users LIMIT 10;"></textarea>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <button class="btn-primary" onclick="dbQueryRun()" style="font-size:12px;padding:5px 14px">Run</button>
+            <span id="dbQuerySummary" style="font-size:12px;color:var(--muted)"></span>
+            <span id="dbQueryError"   style="font-size:12px;color:var(--red);display:none"></span>
+          </div>
+          <div class="report-widget" id="job-dbquery-report" style="display:none">
+            <div class="report-preview" id="job-dbquery-preview"></div>
+            <div class="report-actions">
+              <button class="btn-report" onclick="openReportView(_dbQueryReportFile, 'Database query')">View full report</button>
+              <a id="job-dbquery-download-link" style="display:none">
+                <button class="btn-report">Download report</button>
+              </a>
+            </div>
           </div>
         </div>
+
+        <div id="database-youtube" style="display:none">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+            Run raw SQLite commands against the YouTube database. SELECT returns rows; other statements are committed immediately.
+          </div>
+          <textarea id="ytDbQueryInput" placeholder="SELECT * FROM channels LIMIT 10;"></textarea>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <button class="btn-primary" onclick="ytDbQueryRun()" style="font-size:12px;padding:5px 14px">Run</button>
+            <span id="ytDbQuerySummary" style="font-size:12px;color:var(--muted)"></span>
+            <span id="ytDbQueryError"   style="font-size:12px;color:var(--red);display:none"></span>
+          </div>
+          <pre id="ytDbQueryOutput" style="display:none"></pre>
+        </div>
+
       </div>
 
     </div>

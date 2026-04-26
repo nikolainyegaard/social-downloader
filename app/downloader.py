@@ -54,14 +54,21 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
                     if upload_date else "")
     download_str = datetime.fromtimestamp(download_date).strftime("%Y-%m-%d %H:%M:%S")
 
+    if platform == "youtube":
+        fmt          = "bestvideo[height<=1080]+bestaudio/best"
+        merge_fmt    = {}
+    else:
+        fmt          = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]"
+        merge_fmt    = {"merge_output_format": "mp4"}
+
     ydl_opts: dict[str, Any] = {
-        "outtmpl":             output_template,
-        "format":              "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]",
-        "merge_output_format": "mp4",
-        "socket_timeout":      30,
-        "retries":             3,
-        "quiet":               True,
-        "no_warnings":         False,
+        "outtmpl":        output_template,
+        "format":         fmt,
+        **merge_fmt,
+        "socket_timeout": 30,
+        "retries":        3,
+        "quiet":          True,
+        "no_warnings":    False,
         **({"cookiefile": cookies_path} if cookies_path and os.path.exists(cookies_path) else {}),
         "postprocessors": [
             {"key": "FFmpegMetadata", "add_metadata": True},

@@ -8,6 +8,25 @@ from datetime import datetime
 import yt_dlp
 
 
+def _raw_fetch_entries(channel_id: str, limit: int = 5) -> list[dict]:
+    """Fetch raw yt-dlp flat-extraction entries for diagnostics. Returns first `limit` entries per tab."""
+    ydl_opts = {"quiet": True, "no_warnings": True, "extract_flat": True}
+    results = []
+    for tab, ctype in [("/videos", "video"), ("/shorts", "short"), ("/streams", "stream")]:
+        url = f"https://www.youtube.com/channel/{channel_id}{tab}"
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            entries = (info.get("entries") or [])[:limit]
+            for e in entries:
+                if e:
+                    safe = {k: v for k, v in e.items() if isinstance(v, (str, int, float, bool, type(None)))}
+                    results.append({"_tab": tab, "_ctype": ctype, **safe})
+        except Exception as ex:
+            results.append({"_tab": tab, "_error": str(ex)})
+    return results
+
+
 def _to_url(raw: str) -> str:
     """Convert @handle, channel ID, or any YouTube URL to a canonical URL."""
     raw = raw.strip()
@@ -85,14 +104,14 @@ def fetch_channel_videos(channel_id: str) -> list[dict]:
     videos: dict[str, dict] = {}
     last_exc: Exception | None = None
 
-    for tab in ("/videos", "/shorts", "/streams"):
+    for tab, ctype in [("/videos", "video"), ("/shorts", "short"), ("/streams", "stream")]:
         url = f"https://www.youtube.com/channel/{channel_id}{tab}"
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
             for e in (info.get("entries") or []):
-                if e and e.get("id"):
-                    videos[e["id"]] = e
+                if e and e.get("id") and e["id"] not in videos:
+                    videos[e["id"]] = {**e, "_ctype": ctype}
         except Exception as e:
             last_exc = e
 
@@ -103,9 +122,10 @@ def fetch_channel_videos(channel_id: str) -> list[dict]:
         {
             "video_id":    e.get("id"),
             "title":       e.get("title"),
-            "upload_date": _parse_date(e.get("upload_date")),
+            "upload_date": _parse_date(e.get("upload_date")) or e.get("timestamp"),
             "duration":    e.get("duration"),
             "view_count":  e.get("view_count"),
+            "content_type": e.get("_ctype", "video"),
         }
         for e in videos.values()
     ]

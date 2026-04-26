@@ -209,7 +209,10 @@ def remove_channel(channel_id: str):
 
 @youtube_bp.route("/channels/<channel_id>/videos", methods=["GET"])
 def channel_videos(channel_id: str):
-    return jsonify(db.get_videos_for_channel(channel_id))
+    videos = db.get_videos_for_channel(channel_id)
+    for v in videos:
+        v.pop("ytdlp_data", None)
+    return jsonify(videos)
 
 
 @youtube_bp.route("/channels/<channel_id>/run", methods=["POST"])
@@ -302,6 +305,14 @@ def video_thumbnail(video_id: str):
     return ("", 404)
 
 
+_VIDEO_MIME = {
+    ".mp4":  "video/mp4",
+    ".webm": "video/webm",
+    ".mkv":  "video/x-matroska",
+    ".mov":  "video/quicktime",
+}
+
+
 @youtube_bp.route("/videos/<video_id>/file", methods=["GET"])
 def video_file(video_id: str):
     video = db.get_video(video_id)
@@ -310,7 +321,49 @@ def video_file(video_id: str):
     path = video["file_path"]
     if not os.path.exists(path):
         return ("", 404)
-    return send_file(path, conditional=True)
+    ext  = os.path.splitext(path)[1].lower()
+    mime = _VIDEO_MIME.get(ext, "video/mp4")
+    return send_file(path, mimetype=mime, conditional=True)
+
+
+# Diagnostics
+
+@youtube_bp.route("/debug/channel-videos", methods=["POST"])
+def debug_channel_videos():
+    body = request.get_json(silent=True) or {}
+    channel_id = body.get("channel_id", "").strip()
+    if not channel_id:
+        return jsonify({"error": "channel_id is required"}), 400
+    try:
+        from platforms.youtube.api import _raw_fetch_entries
+        entries = _raw_fetch_entries(channel_id, limit=5)
+        return jsonify({"ok": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@youtube_bp.route("/db/query", methods=["POST"])
+def db_query():
+    body = request.get_json(silent=True) or {}
+    sql = (body.get("sql") or "").strip()
+    if not sql:
+        return jsonify({"error": "sql is required"}), 400
+    import sqlite3 as _sl3
+    try:
+        conn = _sl3.connect(db.DB_PATH)
+        conn.row_factory = _sl3.Row
+        cur = conn.execute(sql)
+        if cur.description:
+            cols = [d[0] for d in cur.description]
+            rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+            conn.close()
+            return jsonify({"ok": True, "cols": cols, "rows": rows, "rowcount": len(rows)})
+        conn.commit()
+        rc = cur.rowcount
+        conn.close()
+        return jsonify({"ok": True, "cols": [], "rows": [], "rowcount": rc})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
 
 
 # Stats and recent activity

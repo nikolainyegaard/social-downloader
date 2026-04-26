@@ -111,6 +111,7 @@ def process_single_channel(
                 db.add_video(
                     vid_id, channel_id, v.get("title"), v.get("upload_date"),
                     view_count=v.get("view_count"), duration=v.get("duration"),
+                    content_type=v.get("content_type", "video"),
                 )
                 db.update_video_downloaded(vid_id, result["file_path"], result.get("ytdlp_data"))
                 log(f"  Saved {vid_id} -> {result['file_path']}")

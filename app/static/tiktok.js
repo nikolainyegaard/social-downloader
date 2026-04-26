@@ -527,10 +527,11 @@ async function _loadRecentLogBatch() {
 
 // ── Settings modal ────────────────────────────────────────────────────────────
 
-let _settingsSection = 'cookies';
+let _settingsSection = 'tiktok';
 
 function openSettings(section) {
-  switchSettingsSection(section || _settingsSection);
+  const _OLD_TO_NEW = { cookies: 'tiktok', loops: 'tiktok', backfill: 'tiktok', utils: 'tiktok', migrate: 'tiktok' };
+  switchSettingsSection(_OLD_TO_NEW[section] || section || _settingsSection);
   document.getElementById('settingsBackdrop').style.display = 'flex';
   _lockScroll();
 }
@@ -551,14 +552,14 @@ function closeSettings() {
 
 function switchSettingsSection(name) {
   _settingsSection = name;
-  ['cookies', 'loops', 'backfill', 'jobs', 'utils', 'migrate', 'diag', 'database'].forEach(s => {
+  ['tiktok', 'youtube', 'jobs', 'diag', 'database'].forEach(s => {
     document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
     document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
   });
-  if (name === 'loops') { loadSettings(); }
-  if (name === 'jobs')  { _avifLoadStatus(); _startJobsPoll(); }
-  else                  { _stopJobsPoll(); }
-  if (name === 'diag')  { diagSourceChanged(); }
+  if (name === 'tiktok') { loadSettings(); }
+  if (name === 'jobs')   { _avifLoadStatus(); _startJobsPoll(); }
+  else                   { _stopJobsPoll(); }
+  if (name === 'diag')   { diagSourceChanged(); }
 }
 
 // ── Migration helpers ─────────────────────────────────────────────────────────
@@ -588,7 +589,7 @@ async function loadMigratePreview() {
     const oldInput = document.getElementById('migrateOldPrefix');
     const newInput = document.getElementById('migrateNewPrefix');
     if (!oldInput.value) oldInput.value = Object.keys(prefixes)[0] || '';
-    if (!newInput.value) newInput.value = mediaDir;
+    if (!newInput.value) newInput.value = mediaDir.replace(/\/$/, '') + '/tiktok';
     runBtn.style.display = '';
   } catch (e) {
     previewEl.textContent = 'Scan failed: ' + e.message;
@@ -1721,9 +1722,14 @@ function _mRenderToolbar(cfg, vids) {
   const searchSelEnd = searchWasFocused ? document.activeElement.selectionEnd : 0;
   let html = `<div class="toolbar-main-row">`;
   if (cfg.hasViewToggle) {
+    const viewKeys = cfg.viewKeys || [
+      { key: 'list', icon: _listViewIcon, title: 'List view' },
+      { key: 'grid', icon: _gridViewIcon, title: 'Grid view' },
+    ];
     html += `<div class="filter-pills">`
-      + `<button class="filter-pill${cfg.st.view === 'list' ? ' active' : ''}" data-view-key="list" onclick="${cfg.viewFn}('list')" title="List view">${_listViewIcon}</button>`
-      + `<button class="filter-pill${cfg.st.view === 'grid' ? ' active' : ''}" data-view-key="grid" onclick="${cfg.viewFn}('grid')" title="Grid view">${_gridViewIcon}</button>`
+      + viewKeys.map(vk =>
+          `<button class="filter-pill${cfg.st.view === vk.key ? ' active' : ''}" data-view-key="${vk.key}" onclick="${cfg.viewFn}('${vk.key}')" title="${vk.title}">${vk.icon}</button>`
+        ).join('')
       + `</div>`;
   }
   html += `<button class="filter-pill toolbar-toggle" onclick="${cfg.toggleFn}()">${toggleLabel}</button>`
@@ -1817,7 +1823,7 @@ function _mSetSort(cfg, field) {
 }
 
 function _mRenderColHdrs(cfg) {
-  if (cfg.hasViewToggle && cfg.st.view === 'grid') return;
+  if (cfg.hasViewToggle && cfg.st.view !== 'list') return;
   const list = document.getElementById(cfg.listElId);
   const existing = list.querySelector('.video-list-hdr');
   if (existing) existing.remove();
@@ -1833,7 +1839,7 @@ function _mRenderColHdrs(cfg) {
 }
 
 function _mRenderList(cfg) {
-  if (cfg.hasViewToggle && cfg.st.view === 'grid') { _renderModalVideoGrid(cfg); return; }
+  if (cfg.hasViewToggle && cfg.st.view !== 'list') { _renderModalVideoGrid(cfg); return; }
   cfg.st.loaded = 0;
   if (cfg.st.obs) { cfg.st.obs.disconnect(); cfg.st.obs = null; }
   const list = document.getElementById(cfg.listElId);
@@ -2773,13 +2779,15 @@ function _renderModalVideoGrid(cfg) {
   const list = document.getElementById(cfg.listElId);
   list.innerHTML = '';
   list.scrollTop = 0;
-  const vids = _mFiltered(cfg);
+  let vids = _mFiltered(cfg);
+  if (cfg.viewVideoFilter) vids = cfg.viewVideoFilter(cfg.st.view, vids);
   if (!vids.length) {
     list.innerHTML = `<div class="vlist-empty">${cfg.st.search ? 'No posts match this search.' : 'No posts match this filter.'}</div>`;
     return;
   }
   const grid = document.createElement('div');
-  grid.className = 'video-grid';
+  const extraClass = cfg.gridClassFn ? cfg.gridClassFn(cfg.st.view) : '';
+  grid.className = 'video-grid' + (extraClass ? ' ' + extraClass : '');
   grid.id = cfg.gridId;
   list.appendChild(grid);
   _appendModalGrid(cfg, vids);
@@ -2800,7 +2808,9 @@ function _appendModalGrid(cfg, vids) {
     const viewsHtml  = v.view_count != null
       ? `<span class="vgrid-views">${fmtCount(v.view_count)}</span>`
       : '<span></span>';
-    const typeIcon   = v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? _vgridPhotoIcon : '';
+    const typeIcon   = cfg.typeIconFn
+      ? cfg.typeIconFn(v)
+      : (v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? _vgridPhotoIcon : '');
     const thumbSrc = cfg.gridThumbSrc ? cfg.gridThumbSrc(v) : `/api/tiktok/videos/${id}/thumbnail`;
     cell.innerHTML = `<img src="${thumbSrc}" alt="" onerror="this.style.opacity='.15'">
       <div class="vgrid-overlay">${viewsHtml}${typeIcon}</div>`;

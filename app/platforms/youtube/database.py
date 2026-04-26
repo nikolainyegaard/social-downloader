@@ -103,6 +103,7 @@ def _migrate_db(conn):
     migrations: list[str] = [
         "ALTER TABLE channels ADD COLUMN banner_url    TEXT",
         "ALTER TABLE channels ADD COLUMN banner_cached INTEGER DEFAULT 0",
+        "ALTER TABLE videos   ADD COLUMN content_type TEXT DEFAULT 'video'",
     ]
     for sql in migrations:
         try:
@@ -256,13 +257,14 @@ def get_video_id_sets(channel_id: str) -> tuple[set, set]:
 
 
 def add_video(video_id: str, channel_id: str, title: str | None, upload_date: int | None,
-              view_count: int | None = None, duration: float | None = None) -> None:
+              view_count: int | None = None, duration: float | None = None,
+              content_type: str | None = None) -> None:
     with get_db() as conn:
         conn.execute("""
             INSERT OR IGNORE INTO videos
-                (video_id, channel_id, title, upload_date, view_count, duration)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (video_id, channel_id, title, upload_date, view_count, duration))
+                (video_id, channel_id, title, upload_date, view_count, duration, content_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (video_id, channel_id, title, upload_date, view_count, duration, content_type or "video"))
 
 
 def update_video_downloaded(video_id: str, file_path: str, ytdlp_data: str | None = None) -> None:
@@ -402,6 +404,23 @@ def get_aggregate_stats() -> dict:
     }
 
 
+def _group_consecutive_by_channel(rows: list[dict], date_key: str) -> list[dict]:
+    groups: list[dict] = []
+    for row in rows:
+        if groups and groups[-1]["channel_id"] == row["channel_id"]:
+            groups[-1]["count"] += 1
+        else:
+            groups.append({
+                "channel_id": row["channel_id"],
+                "handle":     row["handle"],
+                "enabled":    row.get("enabled", 1),
+                "video_id":   row.get("video_id"),
+                date_key:     row[date_key],
+                "count":      1,
+            })
+    return groups
+
+
 def get_recent_activity() -> dict:
     with get_db() as conn:
         deletions = [dict(r) for r in conn.execute("""
@@ -415,12 +434,13 @@ def get_recent_activity() -> dict:
             FROM profile_history ph JOIN channels c ON c.channel_id = ph.channel_id
             ORDER BY ph.changed_at DESC LIMIT 3
         """).fetchall()]
-        saved = [dict(r) for r in conn.execute("""
+        saved_rows = [dict(r) for r in conn.execute("""
             SELECT v.download_date, c.handle, c.channel_id, c.enabled, v.video_id
             FROM videos v JOIN channels c ON c.channel_id = v.channel_id
             WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
-            ORDER BY v.download_date DESC LIMIT 9
+            ORDER BY v.download_date DESC LIMIT 2000
         """).fetchall()]
+    saved = _group_consecutive_by_channel(saved_rows, "download_date")[:9]
     return {"deletions": deletions, "profile_changes": profile_changes, "saved": saved}
 
 

@@ -201,17 +201,18 @@ def generate_thumbnail(video_id: str, file_path: str) -> str | None:
         "-threads", "2",
     ]
 
-    def _build_cmd(bsf: str | None = None) -> list[str]:
+    def _build_cmd(bsf: str | None = None, seek: float = 1.0) -> list[str]:
         # bsf: optional bitstream filter string placed before -i to patch
         # "reserved/reserved" colour primaries before the decoder reads them.
         # FFmpeg 7's buffersrc rejects such streams with "Invalid colour space".
         bsf_args = ["-bsf:v", bsf] if bsf else []
+        ss_args  = ["-ss", str(seek)] if seek > 0 else []
         if is_image:
             return ["ffmpeg", "-i", file_path, *avif_encode_args, "-y", out_path]
         if THUMBNAIL_USE_GPU:
-            return ["ffmpeg", "-hwaccel", "cuda", "-ss", "1", *bsf_args, "-i", file_path,
+            return ["ffmpeg", "-hwaccel", "cuda", *ss_args, *bsf_args, "-i", file_path,
                     "-vframes", "1", *avif_encode_args, "-y", out_path]
-        return ["ffmpeg", "-ss", "1", *bsf_args, "-i", file_path,
+        return ["ffmpeg", *ss_args, *bsf_args, "-i", file_path,
                 "-vframes", "1", *avif_encode_args, "-y", out_path]
 
     def _run(cmd: list[str]) -> tuple[int, str]:
@@ -250,6 +251,13 @@ def generate_thumbnail(video_id: str, file_path: str) -> str | None:
                 cmd = _build_cmd(bsf=bsf)
                 returncode, error_text = _run(cmd)
 
+        # If ffmpeg exited 0 but wrote no file, the seek was past the end of the
+        # video (common for Shorts under 1 s). Retry from the very first frame.
+        if returncode == 0 and not os.path.exists(out_path) and not is_image:
+            print(f"[{_ts()}] [thumb] Retrying {video_id} seeking from start (video shorter than seek position)")
+            cmd = _build_cmd(seek=0)
+            returncode, error_text = _run(cmd)
+
         if returncode == 0 and os.path.exists(out_path):
             return out_path
         if returncode != 0:
@@ -258,7 +266,7 @@ def generate_thumbnail(video_id: str, file_path: str) -> str | None:
                 f" — ffmpeg exit {returncode}: {error_text}"
             )
         else:
-            # ffmpeg exited 0 but wrote no output file (e.g. -ss past end of video)
+            # ffmpeg exited 0 but produced no output even from seek=0
             print(
                 f"[{_ts()}] [thumb] FAILED {video_id}"
                 f" — ffmpeg exit 0, no output file: {error_text}"

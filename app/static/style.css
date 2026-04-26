@@ -747,6 +747,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .vgrid-cell.deleted   { outline: 2px solid var(--red);    outline-offset: -2px; }
 .vgrid-cell.undeleted { outline: 2px solid var(--yellow); outline-offset: -2px; }
 .vgrid-cell.missing   { outline: 2px solid #ff9800;       outline-offset: -2px; }
+.video-grid--wide { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.video-grid--wide .vgrid-cell { aspect-ratio: 16/9; }
 .vgrid-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 16px 5px 4px; background: linear-gradient(transparent, rgba(0,0,0,.65)); display: flex; align-items: flex-end; justify-content: space-between; pointer-events: none; }
 .vgrid-views  { font-size: 10px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.8); line-height: 1; }
 
