@@ -18,7 +18,7 @@ USER_LOOP_INTERVAL_MINUTES  = int(os.environ.get("TIKTOK_USER_LOOP_INTERVAL_MINU
 SOUND_LOOP_INTERVAL_MINUTES = int(os.environ.get("TIKTOK_SOUND_LOOP_INTERVAL_MINUTES",
                                   int(os.environ.get("SOUND_LOOP_INTERVAL_MINUTES", 60))))
 
-DELETION_CONFIRM_THRESHOLD = int(os.environ.get("DELETION_CONFIRM_THRESHOLD", 3))
+DELETION_CONFIRM_THRESHOLD = int(os.environ.get("DELETION_CONFIRM_THRESHOLD", 2))
 
 
 def get_ms_token() -> str | None:

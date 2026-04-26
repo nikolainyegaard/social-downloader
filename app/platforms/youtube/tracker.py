@@ -10,7 +10,7 @@ from platforms.youtube.api import fetch_channel_info, fetch_channel_videos
 from downloader import download_video, rename_creator_folder
 from thumbnailer import cache_avatar, cache_banner
 
-_CONFIRM_THRESHOLD = 3
+_CONFIRM_THRESHOLD = 2
 
 
 def _npost(n: int) -> str:
