@@ -116,6 +116,41 @@ def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok") -> 
         return False
 
 
+def cache_banner(channel_id: str, banner_url: str) -> bool:
+    """Download and cache the YouTube channel banner as AVIF. Returns True on success."""
+    if not banner_url:
+        return False
+
+    from config import DATA_DIR as _DATA_DIR
+    banners_dir = os.path.join(_DATA_DIR, "youtube", "banners")
+    os.makedirs(banners_dir, exist_ok=True)
+
+    path     = os.path.join(banners_dir, f"{channel_id}.avif")
+    jpg_tmp  = path + ".jpg.tmp"
+    avif_tmp = path + ".avif.tmp"
+
+    try:
+        urllib.request.urlretrieve(banner_url, jpg_tmp)
+    except Exception:
+        _try_remove(jpg_tmp)
+        return False
+
+    if not encode_avif(jpg_tmp, avif_tmp, CRF_AVATAR):
+        _try_remove(jpg_tmp)
+        _try_remove(avif_tmp)
+        return False
+    _try_remove(jpg_tmp)
+
+    try:
+        os.replace(avif_tmp, path)
+        from platforms.youtube import database as _db
+        _db.set_banner_cached(channel_id, True)
+        return True
+    except Exception:
+        _try_remove(avif_tmp)
+        return False
+
+
 def _try_remove(path: str) -> None:
     try:
         if path and os.path.exists(path):

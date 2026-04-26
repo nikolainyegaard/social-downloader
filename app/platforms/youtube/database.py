@@ -100,7 +100,10 @@ def init_db():
 
 def _migrate_db(conn):
     """Add columns introduced after the initial schema. Safe to run on existing DBs."""
-    migrations: list[str] = []
+    migrations: list[str] = [
+        "ALTER TABLE channels ADD COLUMN banner_url    TEXT",
+        "ALTER TABLE channels ADD COLUMN banner_cached INTEGER DEFAULT 0",
+    ]
     for sql in migrations:
         try:
             conn.execute(sql)
@@ -112,15 +115,16 @@ def _migrate_db(conn):
 
 def add_channel(channel_id: str, handle: str, display_name: str | None = None,
                 description: str | None = None, subscriber_count: int | None = None,
-                video_count: int | None = None, avatar_url: str | None = None) -> None:
+                video_count: int | None = None, avatar_url: str | None = None,
+                banner_url: str | None = None) -> None:
     with get_db() as conn:
         conn.execute("""
             INSERT OR IGNORE INTO channels
                 (channel_id, handle, display_name, description, subscriber_count,
-                 video_count, avatar_url, added_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 video_count, avatar_url, banner_url, added_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (channel_id, handle, display_name, description, subscriber_count,
-              video_count, avatar_url, int(time.time())))
+              video_count, avatar_url, banner_url, int(time.time())))
 
 
 def remove_channel(channel_id: str) -> None:
@@ -153,7 +157,8 @@ def get_channel_by_handle(handle: str) -> dict | None:
 
 def update_channel_info(channel_id: str, handle: str, display_name: str | None,
                         description: str | None, subscriber_count: int | None,
-                        video_count: int | None, avatar_url: str | None = None) -> None:
+                        video_count: int | None, avatar_url: str | None = None,
+                        banner_url: str | None = None) -> None:
     with get_db() as conn:
         conn.execute("""
             UPDATE channels SET
@@ -163,10 +168,11 @@ def update_channel_info(channel_id: str, handle: str, display_name: str | None,
                 subscriber_count = COALESCE(?, subscriber_count),
                 video_count      = COALESCE(?, video_count),
                 avatar_url       = COALESCE(?, avatar_url),
+                banner_url       = COALESCE(?, banner_url),
                 last_checked     = ?
             WHERE channel_id = ?
         """, (handle, display_name, description, subscriber_count, video_count,
-              avatar_url, int(time.time()), channel_id))
+              avatar_url, banner_url, int(time.time()), channel_id))
 
 
 def record_profile_change(channel_id: str, field: str, old_value: str | None) -> None:
@@ -181,6 +187,14 @@ def set_avatar_cached(channel_id: str, cached: bool) -> None:
     with get_db() as conn:
         conn.execute(
             "UPDATE channels SET avatar_cached = ? WHERE channel_id = ?",
+            (1 if cached else 0, channel_id)
+        )
+
+
+def set_banner_cached(channel_id: str, cached: bool) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE channels SET banner_cached = ? WHERE channel_id = ?",
             (1 if cached else 0, channel_id)
         )
 

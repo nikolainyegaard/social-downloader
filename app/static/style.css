@@ -375,6 +375,25 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .user-card-banned { border-color: rgba(224,82,82,.4) !important; box-shadow: 0 0 0 1px rgba(224,82,82,.4); }
 .user-card-banned:hover { box-shadow: 0 0 0 2px rgba(224,82,82,.4) !important; }
 
+/* YouTube channel card banner strip */
+.yt-channel-card-banner {
+  margin: -16px -16px 8px;
+  height: 52px;
+  background-size: cover;
+  background-position: center;
+  border-radius: var(--radius) var(--radius) 0 0;
+  opacity: 0.3;
+  flex-shrink: 0;
+}
+
+/* YouTube channel modal banner */
+.yt-modal-banner {
+  height: 110px;
+  background-size: cover;
+  background-position: center;
+  flex-shrink: 0;
+}
+
 /* Tracking toggle switch */
 .tracking-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; vertical-align: middle; }
 .tracking-toggle input { display: none; }

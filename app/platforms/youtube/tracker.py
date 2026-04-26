@@ -8,6 +8,7 @@ from typing import Callable
 from platforms.youtube import database as db
 from platforms.youtube.api import fetch_channel_info, fetch_channel_videos
 from downloader import download_video, rename_creator_folder
+from thumbnailer import cache_avatar, cache_banner
 
 _CONFIRM_THRESHOLD = 3
 
@@ -162,13 +163,19 @@ def _update_profile(channel: dict, info: dict, log: Callable[[str], None]) -> No
         info.get("subscriber_count"),
         info.get("video_count"),
         avatar_url=info.get("avatar_url"),
+        banner_url=info.get("banner_url"),
     )
 
     if info.get("avatar_url"):
         try:
-            from thumbnailer import cache_avatar
             result = cache_avatar(channel_id, info["avatar_url"], "youtube")
             if result == "changed":
                 log("  Profile change: avatar changed")
         except Exception as e:
             log(f"  Avatar cache failed: {e}")
+
+    if info.get("banner_url"):
+        try:
+            cache_banner(channel_id, info["banner_url"])
+        except Exception as e:
+            log(f"  Banner cache failed: {e}")

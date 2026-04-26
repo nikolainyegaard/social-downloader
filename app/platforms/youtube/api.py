@@ -32,11 +32,7 @@ def fetch_channel_info(url_or_handle: str) -> dict:
 
 
 def _parse_channel(info: dict) -> dict:
-    thumbs = info.get("thumbnails") or []
-    avatar_url = None
-    if thumbs:
-        best = max(thumbs, key=lambda t: (t.get("width") or 0))
-        avatar_url = best.get("url")
+    avatar_url, banner_url = _split_thumbs(info.get("thumbnails") or [])
     handle = (info.get("uploader_id") or "").lstrip("@")
     return {
         "channel_id":       info.get("channel_id") or info.get("id"),
@@ -46,7 +42,41 @@ def _parse_channel(info: dict) -> dict:
         "subscriber_count": info.get("channel_follower_count"),
         "video_count":      info.get("playlist_count"),
         "avatar_url":       avatar_url,
+        "banner_url":       banner_url,
     }
+
+
+def _split_thumbs(thumbs: list) -> tuple[str | None, str | None]:
+    """Separate avatar (square) from banner (wide) thumbnails.
+
+    Tries id-keyword hints first; falls back to aspect ratio.
+    Returns (avatar_url, banner_url).
+    """
+    avatar_cands: list[dict] = []
+    banner_cands: list[dict] = []
+
+    for t in thumbs:
+        url = t.get("url")
+        if not url:
+            continue
+        tid   = (t.get("id") or "").lower()
+        w, h  = t.get("width") or 0, t.get("height") or 0
+        ratio = (w / h) if h else 0
+
+        if "avatar" in tid:
+            avatar_cands.append(t)
+        elif "banner" in tid:
+            banner_cands.append(t)
+        elif w and h:
+            if ratio <= 1.5:
+                avatar_cands.append(t)
+            elif ratio > 2.5:
+                banner_cands.append(t)
+
+    def _best(cands: list[dict]) -> str | None:
+        return max(cands, key=lambda t: t.get("width") or 0)["url"] if cands else None
+
+    return _best(avatar_cands), _best(banner_cands)
 
 
 def fetch_channel_videos(channel_id: str) -> list[dict]:

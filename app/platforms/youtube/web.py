@@ -57,6 +57,7 @@ def _process_add(handle: str) -> None:
         subscriber_count=info.get("subscriber_count"),
         video_count=info.get("video_count"),
         avatar_url=info.get("avatar_url"),
+        banner_url=info.get("banner_url"),
     )
     with _pending_lock:
         del _pending[handle]
@@ -259,6 +260,15 @@ def channel_profile_history(channel_id: str):
 def channel_avatar(channel_id: str):
     from config import DATA_DIR
     path = os.path.join(DATA_DIR, "youtube", "avatars", f"{channel_id}.avif")
+    if os.path.exists(path):
+        return send_file(path, mimetype="image/avif")
+    return ("", 404)
+
+
+@youtube_bp.route("/channels/<channel_id>/banner", methods=["GET"])
+def channel_banner(channel_id: str):
+    from config import DATA_DIR
+    path = os.path.join(DATA_DIR, "youtube", "banners", f"{channel_id}.avif")
     if os.path.exists(path):
         return send_file(path, mimetype="image/avif")
     return ("", 404)
