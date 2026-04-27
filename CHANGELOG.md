@@ -8,6 +8,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Changed
 - Shared JS helpers consolidated into `common.js`: `apiJSON`, `fmt`, `fmtCount`, date formatters, `_videoStatus`, `_trackingBadge`, scroll lock, pill glider, `_makeJobWidget`, `_triggerLoop`, image modal helpers, shared icons, and the complete modal engine including `_renderModalVideoGrid` and `_appendModalGrid`; youtube.js no longer has an implicit runtime dependency on tiktok.js
+- Creator action helpers extracted to `common.js` (`_creatorRun`, `_creatorRunProfile`, `_creatorRemove`, `_creatorToggleStar`, `_saveCreatorComment`, `_renderStatGrid`); platform files now contain thin one-line wrappers
 - `ytClearLog` now persists the clear position across page reloads via `localStorage` (matching TikTok behaviour); previously the YouTube log would reset to showing all entries on page reload
 
 ### Added

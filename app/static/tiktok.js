@@ -70,25 +70,16 @@ async function loadCookies() {
 // ── Statistics panel ─────────────────────────────────────────────────────────
 
 function renderStats(s) {
-  const grid = document.getElementById('statsGrid');
-  if (!grid) return;
-  const items = [
+  _renderStatGrid('statsGrid', [
     { label: 'Tracked users', value: (s.user_count    || 0).toLocaleString() },
     { label: 'Saved videos',  value: (s.saved_count   || 0).toLocaleString() },
     { label: 'Video posts',   value: (s.video_count   || 0).toLocaleString() },
     { label: 'Photo posts',   value: (s.photo_count   || 0).toLocaleString() },
     { label: 'Deleted',       value: (s.deleted_count || 0).toLocaleString() },
-    { label: 'Latest saved',  value: s.latest_download
-        ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
+    { label: 'Latest saved',  value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
     { label: 'Total views',   value: _fmtLarge(s.total_views || 0) },
     { label: 'Total likes',   value: _fmtLarge(s.total_likes || 0) },
-  ];
-  grid.innerHTML = items.map(it =>
-    `<div class="stat-item">
-       <span class="stat-value">${esc(it.value)}</span>
-       <span class="stat-label">${esc(it.label)}</span>
-     </div>`
-  ).join('');
+  ]);
 }
 
 async function loadStats() {
@@ -1111,40 +1102,10 @@ async function addUser() {
   renderPending();
 }
 
-async function runUser(tiktokId) {
-  const { ok, data } = await apiJSON(`/api/tiktok/users/${tiktokId}/run`, { method: 'POST' });
-  if (!ok) {
-    showToast(data.error || 'Could not queue run', { type: 'error' });
-    return;
-  }
-  runQueue = [...runQueue, tiktokId];
-  renderUsers();
-}
-
-async function runUserProfile(tiktokId) {
-  const { ok, data } = await apiJSON(`/api/tiktok/users/${tiktokId}/run-profile`, { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Could not queue profile run', { type: 'error' }); return; }
-  runQueue = [...runQueue, tiktokId];
-  renderUsers();
-}
-
-async function removeUser(tiktokId, label) {
-  if (!confirm(`Stop tracking ${label}?\n(Downloaded files will not be deleted.)`)) return;
-  await apiJSON(`/api/tiktok/users/${tiktokId}`, { method: 'DELETE' });
-  loadUsers();
-}
-
-async function toggleUserStar(tiktokId) {
-  const user = users.find(u => u.tiktok_id === tiktokId);
-  if (!user) return;
-  const newVal = !user.starred;
-  user.starred = newVal ? 1 : 0;
-  renderUsers();
-  await apiJSON(`/api/tiktok/users/${tiktokId}/star`, {
-    method: 'PATCH',
-    body: JSON.stringify({ starred: newVal }),
-  });
-}
+async function runUser(id)             { return _creatorRun('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, renderUsers); }
+async function runUserProfile(id)      { return _creatorRunProfile('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, renderUsers); }
+async function removeUser(id, label)   { return _creatorRemove('/api/tiktok/users', id, label, loadUsers); }
+async function toggleUserStar(id)      { return _creatorToggleStar('/api/tiktok/users', id, users, 'tiktok_id', renderUsers); }
 
 async function loadUsers() {
   const { ok, data } = await apiJSON('/api/tiktok/users');
@@ -1667,28 +1628,14 @@ async function setUserTracking(tiktokId, enabled) {
   renderUsers();
 }
 
-async function saveUserComment(tiktokId, value) {
-  const { ok } = await apiJSON(`/api/tiktok/users/${encodeURIComponent(tiktokId)}/comment`, {
-    method: 'PATCH',
-    body: JSON.stringify({ comment: value }),
-  });
-  if (!ok) return;
-  const u = users.find(u => u.tiktok_id === tiktokId);
-  if (u) u.comment = value.trim() || null;
-  if (_modalUser && _modalUser.tiktok_id === tiktokId) _modalUser.comment = value.trim() || null;
-  showToast('Saved.', { type: 'success', duration: 2000 });
+async function saveUserComment(id, value) {
+  const ok = await _saveCreatorComment('/api/tiktok/users', id, value, users, 'tiktok_id');
+  if (ok && _modalUser && _modalUser.tiktok_id === id) _modalUser.comment = value.trim() || null;
 }
 
-async function saveSoundComment(soundId, value) {
-  const { ok } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/comment`, {
-    method: 'PATCH',
-    body: JSON.stringify({ comment: value }),
-  });
-  if (!ok) return;
-  const s = sounds.find(s => s.sound_id === soundId);
-  if (s) s.comment = value.trim() || null;
-  if (_soundModal && _soundModal.sound_id === soundId) _soundModal.comment = value.trim() || null;
-  showToast('Saved.', { type: 'success', duration: 2000 });
+async function saveSoundComment(id, value) {
+  const ok = await _saveCreatorComment('/api/tiktok/sounds', id, value, sounds, 'sound_id');
+  if (ok && _soundModal && _soundModal.sound_id === id) _soundModal.comment = value.trim() || null;
 }
 
 async function setSoundTracking(soundId, enabled) {

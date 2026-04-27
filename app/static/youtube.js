@@ -128,22 +128,13 @@ const _YT_CH_MODAL_CFG = {
 // ── Stats panel ───────────────────────────────────────────────────────────────
 
 function renderYtStats(s) {
-  const grid = document.getElementById('ytStatsGrid');
-  if (!grid) return;
-  const items = [
+  _renderStatGrid('ytStatsGrid', [
     { label: 'Tracked channels', value: (s.channel_count  || 0).toLocaleString() },
     { label: 'Saved videos',     value: (s.saved_count    || 0).toLocaleString() },
     { label: 'Deleted',          value: (s.deleted_count  || 0).toLocaleString() },
-    { label: 'Latest saved',     value: s.latest_download
-        ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
+    { label: 'Latest saved',     value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
     { label: 'Total views',      value: _fmtLarge(s.total_views || 0) },
-  ];
-  grid.innerHTML = items.map(it =>
-    `<div class="stat-item">
-       <span class="stat-value">${esc(it.value)}</span>
-       <span class="stat-label">${esc(it.label)}</span>
-     </div>`
-  ).join('');
+  ]);
 }
 
 async function loadYtStats() {
@@ -615,37 +606,10 @@ async function loadYtChannels() {
   if (ok) { ytChannels = data; renderYtChannels(); }
 }
 
-async function ytRunChannel(channelId) {
-  const { ok, data } = await apiJSON(`/api/youtube/channels/${channelId}/run`, { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Could not queue run', { type: 'error' }); return; }
-  ytRunQueue = [...ytRunQueue, channelId];
-  renderYtChannels();
-}
-
-async function ytRunChProfile(channelId) {
-  const { ok, data } = await apiJSON(`/api/youtube/channels/${channelId}/run-profile`, { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Could not queue profile run', { type: 'error' }); return; }
-  ytRunQueue = [...ytRunQueue, channelId];
-  renderYtChannels();
-}
-
-async function ytRemoveChannel(channelId, label) {
-  if (!confirm(`Stop tracking ${label}?\n(Downloaded files will not be deleted.)`)) return;
-  await apiJSON(`/api/youtube/channels/${channelId}`, { method: 'DELETE' });
-  loadYtChannels();
-}
-
-async function ytToggleChStar(channelId) {
-  const ch = ytChannels.find(c => c.channel_id === channelId);
-  if (!ch) return;
-  const newVal = !ch.starred;
-  ch.starred = newVal ? 1 : 0;
-  renderYtChannels();
-  await apiJSON(`/api/youtube/channels/${channelId}/star`, {
-    method: 'PATCH',
-    body: JSON.stringify({ starred: newVal }),
-  });
-}
+async function ytRunChannel(id)         { return _creatorRun('/api/youtube/channels', id, () => ytRunQueue, q => { ytRunQueue = q; }, renderYtChannels); }
+async function ytRunChProfile(id)       { return _creatorRunProfile('/api/youtube/channels', id, () => ytRunQueue, q => { ytRunQueue = q; }, renderYtChannels); }
+async function ytRemoveChannel(id, label) { return _creatorRemove('/api/youtube/channels', id, label, loadYtChannels); }
+async function ytToggleChStar(id)       { return _creatorToggleStar('/api/youtube/channels', id, ytChannels, 'channel_id', renderYtChannels); }
 
 // ── Channel tracking toggle (in modal) ───────────────────────────────────────
 
@@ -809,16 +773,9 @@ function _renderYtChModalHeader(ch) {
   `;
 }
 
-async function ytSaveChComment(channelId, value) {
-  const { ok } = await apiJSON(`/api/youtube/channels/${channelId}/comment`, {
-    method: 'PATCH',
-    body: JSON.stringify({ comment: value }),
-  });
-  if (!ok) return;
-  const ch = ytChannels.find(c => c.channel_id === channelId);
-  if (ch) ch.comment = value.trim() || null;
-  if (_ytModalChannel && _ytModalChannel.channel_id === channelId) _ytModalChannel.comment = value.trim() || null;
-  showToast('Saved.', { type: 'success', duration: 2000 });
+async function ytSaveChComment(id, value) {
+  const ok = await _saveCreatorComment('/api/youtube/channels', id, value, ytChannels, 'channel_id');
+  if (ok && _ytModalChannel && _ytModalChannel.channel_id === id) _ytModalChannel.comment = value.trim() || null;
 }
 
 // Modal engine delegates

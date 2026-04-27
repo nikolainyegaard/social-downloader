@@ -849,3 +849,57 @@ function _appendModalGrid(cfg, vids) {
     });
   }
 }
+
+// ── Shared creator action helpers ─────────────────────────────────────────────
+
+function _renderStatGrid(gridId, items) {
+  const grid = document.getElementById(gridId);
+  if (!grid) return;
+  grid.innerHTML = items.map(it =>
+    `<div class="stat-item">
+       <span class="stat-value">${esc(it.value)}</span>
+       <span class="stat-label">${esc(it.label)}</span>
+     </div>`
+  ).join('');
+}
+
+async function _creatorRun(apiPath, id, getQueue, setQueue, render) {
+  const { ok, data } = await apiJSON(`${apiPath}/${id}/run`, { method: 'POST' });
+  if (!ok) { showToast(data.error || 'Could not queue run', { type: 'error' }); return; }
+  setQueue([...getQueue(), id]);
+  render();
+}
+
+async function _creatorRunProfile(apiPath, id, getQueue, setQueue, render) {
+  const { ok, data } = await apiJSON(`${apiPath}/${id}/run-profile`, { method: 'POST' });
+  if (!ok) { showToast(data.error || 'Could not queue profile run', { type: 'error' }); return; }
+  setQueue([...getQueue(), id]);
+  render();
+}
+
+async function _creatorRemove(apiPath, id, label, load) {
+  if (!confirm(`Stop tracking ${label}?\n(Downloaded files will not be deleted.)`)) return;
+  await apiJSON(`${apiPath}/${id}`, { method: 'DELETE' });
+  load();
+}
+
+async function _creatorToggleStar(apiPath, id, items, idField, render) {
+  const item = items.find(x => x[idField] === id);
+  if (!item) return;
+  const newVal = !item.starred;
+  item.starred = newVal ? 1 : 0;
+  render();
+  await apiJSON(`${apiPath}/${id}/star`, { method: 'PATCH', body: JSON.stringify({ starred: newVal }) });
+}
+
+async function _saveCreatorComment(apiPath, id, value, items, idField) {
+  const { ok } = await apiJSON(`${apiPath}/${encodeURIComponent(id)}/comment`, {
+    method: 'PATCH',
+    body: JSON.stringify({ comment: value }),
+  });
+  if (!ok) return false;
+  const item = items.find(x => x[idField] === id);
+  if (item) item.comment = value.trim() || null;
+  showToast('Saved.', { type: 'success', duration: 2000 });
+  return true;
+}
