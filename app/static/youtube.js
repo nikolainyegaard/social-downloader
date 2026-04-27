@@ -12,6 +12,7 @@ let ytLoopRunning     = false;
 let ytCurrentChannel  = null;
 let ytLogLines        = [];
 let ytLogClearIndex   = 0;
+let _ytLogClearRestored = false;
 let ytCleanupPoll     = null;
 
 // ── Sort direction labels ─────────────────────────────────────────────────────
@@ -259,6 +260,16 @@ function renderYtStatus(state) {
   // Render logs
   const logBody = document.getElementById('ytLogBody');
   if (logBody && state.logs) {
+    if (!_ytLogClearRestored) {
+      _ytLogClearRestored = true;
+      const mark = localStorage.getItem('yt-logClearWatermark');
+      if (mark) {
+        const lines = state.logs;
+        for (let i = lines.length - 1; i >= 0; i--) {
+          if (lines[i] === mark) { ytLogClearIndex = i + 1; break; }
+        }
+      }
+    }
     const newLines = state.logs.slice(ytLogClearIndex);
     if (newLines.length !== ytLogLines.length || (ytLogLines.length && ytLogLines[ytLogLines.length - 1] !== newLines[newLines.length - 1])) {
       ytLogLines = newLines;
@@ -289,7 +300,13 @@ async function loadYtStatus() {
 }
 
 function ytClearLog() {
-  ytLogClearIndex = (document.getElementById('ytLogBody')?.children.length || 0) + ytLogClearIndex;
+  const lastLine = ytLogLines[ytLogLines.length - 1];
+  if (lastLine) {
+    localStorage.setItem('yt-logClearWatermark', lastLine);
+  } else {
+    localStorage.removeItem('yt-logClearWatermark');
+  }
+  ytLogClearIndex = 0;
   ytLogLines = [];
   const logBody = document.getElementById('ytLogBody');
   if (logBody) logBody.innerHTML = '';
@@ -315,12 +332,7 @@ async function ytSaveLoopSettings() {
   showToast('Settings saved.', { type: 'success', duration: 2500 });
 }
 
-async function ytTriggerLoop() {
-  const btn = document.getElementById('ytTriggerBtn');
-  if (btn) btn.disabled = true;
-  const { ok, data } = await apiJSON('/api/youtube/trigger', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Could not trigger loop', { type: 'error' }); if (btn) btn.disabled = false; }
-}
+function ytTriggerLoop() { return _triggerLoop('ytTriggerBtn', '/api/youtube/trigger', 'Could not trigger loop'); }
 
 // ── DB cleanup ────────────────────────────────────────────────────────────────
 
@@ -784,6 +796,7 @@ function _renderYtChModalHeader(ch) {
         ${ch.video_undeleted ? `<span style="color:var(--yellow)"><strong>${ch.video_undeleted}</strong> restored</span>` : ''}
         <span style="color:var(--muted)">${esc(checked)}</span>
       </div>
+      ${ch.description ? `<div class="modal-bio" onclick="this.classList.toggle('expanded')">${esc(ch.description)}</div>` : ''}
       <div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
         <textarea placeholder="Add a note about this channel…"
           onblur="ytSaveChComment('${esc(ch.channel_id)}', this.value)"

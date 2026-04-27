@@ -6,6 +6,10 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Changed
+- Shared JS helpers consolidated into `common.js`: `apiJSON`, `fmt`, `fmtCount`, date formatters, `_videoStatus`, `_trackingBadge`, scroll lock, pill glider, `_makeJobWidget`, `_triggerLoop`, image modal helpers, shared icons, and the complete modal engine including `_renderModalVideoGrid` and `_appendModalGrid`; youtube.js no longer has an implicit runtime dependency on tiktok.js
+- `ytClearLog` now persists the clear position across page reloads via `localStorage` (matching TikTok behaviour); previously the YouTube log would reset to showing all entries on page reload
+
 ### Added
 - Card action menu (`•••` button) on TikTok user cards and YouTube channel cards: replaces the inline Remove button with a dropdown containing Remove and the new Run Profile action
 - Run Profile action: fetches and updates profile info (avatar, display name, bio/description, subscriber count) without triggering a video fetch or download; available for both TikTok users and YouTube channels via `POST /api/tiktok/users/<id>/run-profile` and `POST /api/youtube/channels/<id>/run-profile`
