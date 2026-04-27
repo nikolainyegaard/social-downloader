@@ -10,6 +10,11 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - YouTube channel modal load time: `get_videos_for_channel` used `SELECT *`, forcing SQLite to read the full `ytdlp_data` blob (avg 336 KB/video, ~200 MB for a large channel) before Python discarded it; now uses an explicit column list that excludes both blob columns; same fix applied to `get_videos_for_user` on TikTok
 
 ### Changed
+- YouTube video storage: `ytdlp_data` and `raw_video_data` TEXT blobs dropped from the videos table; replaced by 30+ dedicated columns (`description`, `tags`, `categories`, `fps`, `vcodec`, `acodec`, `filesize_approx`, `age_limit`, `channel_follower_count`, `availability`, `was_live`, `language`, `dynamic_range`, `chapters`, `timestamp`, `tbr`, `vbr`, `abr`, `asr`, `audio_channels`, `aspect_ratio`, `format`, `format_id`, `format_note`, `resolution`, `duration_string`, `channel_url`, `webpage_url`, `original_url`, `uploader_url`, `channel_name`, `uploader`, `uploader_id`, `channel_is_verified`); `automatic_captions`, `subtitles`, and `heatmap` discarded entirely (expired URL lists and analytics data with no app-level value); average per-video storage drops from ~336 KB to ~1-2 KB; existing data migrated automatically on first startup
+- `get_videos_for_channel` reverted to `SELECT *` (no blob columns remain; explicit list no longer needed)
+- `backfill_upload_dates` now reads from the dedicated `timestamp` column instead of parsing `ytdlp_data` JSON
+
+### Changed
 - Shared JS helpers consolidated into `common.js`: `apiJSON`, `fmt`, `fmtCount`, date formatters, `_videoStatus`, `_trackingBadge`, scroll lock, pill glider, `_makeJobWidget`, `_triggerLoop`, image modal helpers, shared icons, and the complete modal engine including `_renderModalVideoGrid` and `_appendModalGrid`; youtube.js no longer has an implicit runtime dependency on tiktok.js
 - Creator action helpers extracted to `common.js` (`_creatorRun`, `_creatorRunProfile`, `_creatorRemove`, `_creatorToggleStar`, `_saveCreatorComment`, `_renderStatGrid`); platform files now contain thin one-line wrappers
 - `ytClearLog` now persists the clear position across page reloads via `localStorage` (matching TikTok behaviour); previously the YouTube log would reset to showing all entries on page reload

@@ -84,7 +84,6 @@ def init_db():
                 duration               REAL,
                 width                  INTEGER,
                 height                 INTEGER,
-                ytdlp_data             TEXT,
                 FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
             );
 
@@ -103,16 +102,158 @@ def init_db():
 def _migrate_db(conn):
     """Add columns introduced after the initial schema. Safe to run on existing DBs."""
     migrations: list[str] = [
-        "ALTER TABLE channels ADD COLUMN banner_url       TEXT",
-        "ALTER TABLE channels ADD COLUMN banner_cached    INTEGER DEFAULT 0",
-        "ALTER TABLE channels ADD COLUMN raw_channel_data TEXT",
-        "ALTER TABLE videos   ADD COLUMN content_type     TEXT DEFAULT 'video'",
-        "ALTER TABLE videos   ADD COLUMN raw_video_data   TEXT",
+        "ALTER TABLE channels ADD COLUMN banner_url             TEXT",
+        "ALTER TABLE channels ADD COLUMN banner_cached          INTEGER DEFAULT 0",
+        "ALTER TABLE channels ADD COLUMN raw_channel_data       TEXT",
+        "ALTER TABLE videos   ADD COLUMN content_type           TEXT DEFAULT 'video'",
+        "ALTER TABLE videos   ADD COLUMN raw_video_data         TEXT",
+        "ALTER TABLE videos   ADD COLUMN ytdlp_data             TEXT",
+        # Video metadata extracted from yt-dlp info dict
+        "ALTER TABLE videos   ADD COLUMN description            TEXT",
+        "ALTER TABLE videos   ADD COLUMN tags                   TEXT",
+        "ALTER TABLE videos   ADD COLUMN categories             TEXT",
+        "ALTER TABLE videos   ADD COLUMN fps                    INTEGER",
+        "ALTER TABLE videos   ADD COLUMN vcodec                 TEXT",
+        "ALTER TABLE videos   ADD COLUMN acodec                 TEXT",
+        "ALTER TABLE videos   ADD COLUMN filesize_approx        INTEGER",
+        "ALTER TABLE videos   ADD COLUMN age_limit              INTEGER DEFAULT 0",
+        "ALTER TABLE videos   ADD COLUMN channel_follower_count INTEGER",
+        "ALTER TABLE videos   ADD COLUMN availability           TEXT",
+        "ALTER TABLE videos   ADD COLUMN was_live               INTEGER DEFAULT 0",
+        "ALTER TABLE videos   ADD COLUMN language               TEXT",
+        "ALTER TABLE videos   ADD COLUMN dynamic_range          TEXT",
+        "ALTER TABLE videos   ADD COLUMN chapters               TEXT",
+        "ALTER TABLE videos   ADD COLUMN timestamp              INTEGER",
+        "ALTER TABLE videos   ADD COLUMN tbr                    REAL",
+        "ALTER TABLE videos   ADD COLUMN vbr                    REAL",
+        "ALTER TABLE videos   ADD COLUMN abr                    REAL",
+        "ALTER TABLE videos   ADD COLUMN asr                    INTEGER",
+        "ALTER TABLE videos   ADD COLUMN audio_channels         INTEGER",
+        "ALTER TABLE videos   ADD COLUMN aspect_ratio           REAL",
+        "ALTER TABLE videos   ADD COLUMN format                 TEXT",
+        "ALTER TABLE videos   ADD COLUMN format_id              TEXT",
+        "ALTER TABLE videos   ADD COLUMN format_note            TEXT",
+        "ALTER TABLE videos   ADD COLUMN resolution             TEXT",
+        "ALTER TABLE videos   ADD COLUMN duration_string        TEXT",
+        "ALTER TABLE videos   ADD COLUMN channel_url            TEXT",
+        "ALTER TABLE videos   ADD COLUMN webpage_url            TEXT",
+        "ALTER TABLE videos   ADD COLUMN original_url           TEXT",
+        "ALTER TABLE videos   ADD COLUMN uploader_url           TEXT",
+        "ALTER TABLE videos   ADD COLUMN channel_name           TEXT",
+        "ALTER TABLE videos   ADD COLUMN uploader               TEXT",
+        "ALTER TABLE videos   ADD COLUMN uploader_id            TEXT",
+        "ALTER TABLE videos   ADD COLUMN channel_is_verified    INTEGER DEFAULT 0",
     ]
     for sql in migrations:
         try:
             conn.execute(sql)
         except sqlite3.OperationalError:
+            pass
+
+    # ── ONE-TIME MIGRATION: backfill dedicated columns from raw JSON blobs ────────
+    # Migrates the dev database from the "store raw ytdlp JSON" approach to
+    # dedicated columns, then drops the two blob columns. Runs once and becomes
+    # a no-op on any DB that has already been migrated (or was created fresh after
+    # this version). Remove this block (and _one_time_backfill_ytdlp_columns) once
+    # the migration has run on all relevant databases. See CLAUDE.md for details.
+    _one_time_backfill_ytdlp_columns(conn)
+    for col in ("ytdlp_data", "raw_video_data"):
+        try:
+            conn.execute(f"ALTER TABLE videos DROP COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
+    # ── END ONE-TIME MIGRATION ─────────────────────────────────────────────────────
+
+
+def _one_time_backfill_ytdlp_columns(conn) -> None:
+    """Extract individual fields from ytdlp_data JSON blobs into dedicated columns."""
+    try:
+        rows = conn.execute(
+            "SELECT video_id, ytdlp_data FROM videos WHERE ytdlp_data IS NOT NULL"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return  # column doesn't exist; nothing to backfill
+    for row in rows:
+        try:
+            d = json.loads(row["ytdlp_data"])
+        except Exception:
+            continue
+        try:
+            conn.execute("""
+                UPDATE videos SET
+                    description            = COALESCE(description, ?),
+                    tags                   = COALESCE(tags, ?),
+                    categories             = COALESCE(categories, ?),
+                    fps                    = COALESCE(fps, ?),
+                    vcodec                 = COALESCE(vcodec, ?),
+                    acodec                 = COALESCE(acodec, ?),
+                    filesize_approx        = COALESCE(filesize_approx, ?),
+                    age_limit              = COALESCE(age_limit, ?),
+                    channel_follower_count = COALESCE(channel_follower_count, ?),
+                    availability           = COALESCE(availability, ?),
+                    was_live               = COALESCE(was_live, ?),
+                    language               = COALESCE(language, ?),
+                    dynamic_range          = COALESCE(dynamic_range, ?),
+                    chapters               = COALESCE(chapters, ?),
+                    timestamp              = COALESCE(timestamp, ?),
+                    tbr                    = COALESCE(tbr, ?),
+                    vbr                    = COALESCE(vbr, ?),
+                    abr                    = COALESCE(abr, ?),
+                    asr                    = COALESCE(asr, ?),
+                    audio_channels         = COALESCE(audio_channels, ?),
+                    aspect_ratio           = COALESCE(aspect_ratio, ?),
+                    format                 = COALESCE(format, ?),
+                    format_id              = COALESCE(format_id, ?),
+                    format_note            = COALESCE(format_note, ?),
+                    resolution             = COALESCE(resolution, ?),
+                    duration_string        = COALESCE(duration_string, ?),
+                    channel_url            = COALESCE(channel_url, ?),
+                    webpage_url            = COALESCE(webpage_url, ?),
+                    original_url           = COALESCE(original_url, ?),
+                    uploader_url           = COALESCE(uploader_url, ?),
+                    channel_name           = COALESCE(channel_name, ?),
+                    uploader               = COALESCE(uploader, ?),
+                    uploader_id            = COALESCE(uploader_id, ?),
+                    channel_is_verified    = COALESCE(channel_is_verified, ?)
+                WHERE video_id = ?
+            """, (
+                d.get("description"),
+                json.dumps(d["tags"])       if d.get("tags")       else None,
+                json.dumps(d["categories"]) if d.get("categories") else None,
+                d.get("fps"),
+                d.get("vcodec"),
+                d.get("acodec"),
+                d.get("filesize_approx"),
+                d.get("age_limit"),
+                d.get("channel_follower_count"),
+                d.get("availability"),
+                1 if d.get("was_live") else None,
+                d.get("language"),
+                d.get("dynamic_range"),
+                json.dumps(d["chapters"])   if d.get("chapters")   else None,
+                d.get("timestamp"),
+                d.get("tbr"),
+                d.get("vbr"),
+                d.get("abr"),
+                d.get("asr"),
+                d.get("audio_channels"),
+                d.get("aspect_ratio"),
+                d.get("format"),
+                d.get("format_id"),
+                d.get("format_note"),
+                d.get("resolution"),
+                d.get("duration_string"),
+                d.get("channel_url"),
+                d.get("webpage_url"),
+                d.get("original_url"),
+                d.get("uploader_url"),
+                d.get("channel"),
+                d.get("uploader"),
+                d.get("uploader_id"),
+                1 if d.get("channel_is_verified") else None,
+                row["video_id"],
+            ))
+        except Exception:
             pass
 
 
@@ -265,22 +406,126 @@ def get_video_id_sets(channel_id: str) -> tuple[set, set]:
 
 def add_video(video_id: str, channel_id: str, title: str | None, upload_date: int | None,
               view_count: int | None = None, duration: float | None = None,
-              content_type: str | None = None,
-              raw_video_data: str | None = None) -> None:
+              content_type: str | None = None) -> None:
     with get_db() as conn:
         conn.execute("""
             INSERT OR IGNORE INTO videos
-                (video_id, channel_id, title, upload_date, view_count, duration, content_type, raw_video_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (video_id, channel_id, title, upload_date, view_count, duration, content_type or "video", raw_video_data))
+                (video_id, channel_id, title, upload_date, view_count, duration, content_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (video_id, channel_id, title, upload_date, view_count, duration, content_type or "video"))
 
 
-def update_video_downloaded(video_id: str, file_path: str, ytdlp_data: str | None = None) -> None:
+def update_video_downloaded(video_id: str, file_path: str, ytdlp_data_json: str | None = None) -> None:
+    d: dict = {}
+    if ytdlp_data_json:
+        try:
+            d = json.loads(ytdlp_data_json)
+        except Exception:
+            pass
+
+    now = int(time.time())
+
+    if not d:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE videos SET download_date = ?, file_path = ? WHERE video_id = ?",
+                (now, file_path, video_id)
+            )
+        return
+
     with get_db() as conn:
         conn.execute("""
-            UPDATE videos SET download_date = ?, file_path = ?, ytdlp_data = ?
+            UPDATE videos SET
+                download_date          = ?,
+                file_path              = ?,
+                title                  = COALESCE(?, title),
+                view_count             = COALESCE(?, view_count),
+                like_count             = ?,
+                comment_count          = COALESCE(?, comment_count),
+                width                  = COALESCE(?, width),
+                height                 = COALESCE(?, height),
+                duration               = COALESCE(?, duration),
+                description            = ?,
+                tags                   = ?,
+                categories             = ?,
+                fps                    = ?,
+                vcodec                 = ?,
+                acodec                 = ?,
+                filesize_approx        = ?,
+                age_limit              = ?,
+                channel_follower_count = ?,
+                availability           = ?,
+                was_live               = ?,
+                language               = ?,
+                dynamic_range          = ?,
+                chapters               = ?,
+                timestamp              = COALESCE(?, timestamp),
+                tbr                    = ?,
+                vbr                    = ?,
+                abr                    = ?,
+                asr                    = ?,
+                audio_channels         = ?,
+                aspect_ratio           = ?,
+                format                 = ?,
+                format_id              = ?,
+                format_note            = ?,
+                resolution             = ?,
+                duration_string        = ?,
+                channel_url            = ?,
+                webpage_url            = ?,
+                original_url           = ?,
+                uploader_url           = ?,
+                channel_name           = ?,
+                uploader               = ?,
+                uploader_id            = ?,
+                channel_is_verified    = ?
             WHERE video_id = ?
-        """, (int(time.time()), file_path, ytdlp_data, video_id))
+        """, (
+            now,
+            file_path,
+            d.get("title"),
+            d.get("view_count"),
+            d.get("like_count"),
+            d.get("comment_count"),
+            d.get("width"),
+            d.get("height"),
+            d.get("duration"),
+            d.get("description"),
+            json.dumps(d["tags"])       if d.get("tags")       else None,
+            json.dumps(d["categories"]) if d.get("categories") else None,
+            d.get("fps"),
+            d.get("vcodec"),
+            d.get("acodec"),
+            d.get("filesize_approx"),
+            d.get("age_limit"),
+            d.get("channel_follower_count"),
+            d.get("availability"),
+            1 if d.get("was_live") else 0,
+            d.get("language"),
+            d.get("dynamic_range"),
+            json.dumps(d["chapters"])   if d.get("chapters")   else None,
+            d.get("timestamp"),
+            d.get("tbr"),
+            d.get("vbr"),
+            d.get("abr"),
+            d.get("asr"),
+            d.get("audio_channels"),
+            d.get("aspect_ratio"),
+            d.get("format"),
+            d.get("format_id"),
+            d.get("format_note"),
+            d.get("resolution"),
+            d.get("duration_string"),
+            d.get("channel_url"),
+            d.get("webpage_url"),
+            d.get("original_url"),
+            d.get("uploader_url"),
+            d.get("channel"),
+            d.get("uploader"),
+            d.get("uploader_id"),
+            1 if d.get("channel_is_verified") else 0,
+            video_id,
+        ))
 
 
 def mark_video_deleted(video_id: str) -> None:
@@ -310,10 +555,7 @@ def mark_video_undeleted(video_id: str) -> None:
 def get_videos_for_channel(channel_id: str) -> list[dict]:
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
-            "SELECT video_id, channel_id, title, upload_date, download_date, file_path,"
-            " status, deleted_at, undeleted_at, pending_deletion_count, pending_deletion_since,"
-            " view_count, like_count, comment_count, duration, width, height, content_type"
-            " FROM videos WHERE channel_id = ? ORDER BY upload_date DESC",
+            "SELECT * FROM videos WHERE channel_id = ? ORDER BY upload_date DESC",
             (channel_id,)
         ).fetchall()]
 
@@ -332,32 +574,19 @@ def get_video(video_id: str) -> dict | None:
 
 
 def backfill_upload_dates() -> int:
-    """Parse upload_date from ytdlp_data for rows where upload_date IS NULL. Returns rows updated."""
-    updated = 0
+    """Fill upload_date from stored timestamp for rows where upload_date IS NULL."""
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT video_id, ytdlp_data FROM videos WHERE upload_date IS NULL AND ytdlp_data IS NOT NULL"
+            "SELECT video_id, timestamp FROM videos WHERE upload_date IS NULL AND timestamp IS NOT NULL"
         ).fetchall()
+        updated = 0
         for row in rows:
             try:
-                data = json.loads(row["ytdlp_data"])
-                ts: int | None = None
-                raw_date = data.get("upload_date")
-                if raw_date:
-                    try:
-                        ts = int(datetime.strptime(str(raw_date), "%Y%m%d").timestamp())
-                    except (ValueError, TypeError):
-                        pass
-                if ts is None:
-                    raw_ts = data.get("timestamp")
-                    if raw_ts:
-                        try:
-                            ts = int(raw_ts)
-                        except (ValueError, TypeError):
-                            pass
-                if ts:
-                    conn.execute("UPDATE videos SET upload_date = ? WHERE video_id = ?", (ts, row["video_id"]))
-                    updated += 1
+                conn.execute(
+                    "UPDATE videos SET upload_date = ? WHERE video_id = ?",
+                    (int(row["timestamp"]), row["video_id"])
+                )
+                updated += 1
             except Exception:
                 pass
     return updated

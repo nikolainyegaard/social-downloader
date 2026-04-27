@@ -9,8 +9,6 @@ from datetime import datetime
 import yt_dlp
 
 _CHANNEL_STRIP_KEYS = frozenset({"thumbnails", "formats", "requested_formats", "entries"})
-_VIDEO_STRIP_KEYS   = frozenset({"formats", "requested_formats", "requested_downloads",
-                                  "__files_to_move", "__postprocessors", "thumbnails"})
 
 
 def _raw_fetch_entries(channel_id: str, limit: int = 5) -> list[dict]:
@@ -134,13 +132,12 @@ def fetch_channel_videos(channel_id: str) -> list[dict]:
 
     return [
         {
-            "video_id":      e.get("id"),
-            "title":         e.get("title"),
-            "upload_date":   _parse_date(e.get("upload_date")) or e.get("timestamp"),
-            "duration":      e.get("duration"),
-            "view_count":    e.get("view_count"),
-            "content_type":  e.get("_ctype", "video"),
-            "raw_video_data": _safe_json({k: v for k, v in e.items() if k not in _VIDEO_STRIP_KEYS}),
+            "video_id":     e.get("id"),
+            "title":        e.get("title"),
+            "upload_date":  _parse_date(e.get("upload_date")) or e.get("timestamp"),
+            "duration":     e.get("duration"),
+            "view_count":   e.get("view_count"),
+            "content_type": e.get("_ctype", "video"),
         }
         for e in videos.values()
     ]
