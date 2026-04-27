@@ -163,6 +163,7 @@ def _migrate_db(conn):
         "ALTER TABLE sounds ADD COLUMN starred            INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE sounds ADD COLUMN comment            TEXT",
         "ALTER TABLE users  ADD COLUMN profile_fail_count INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE videos ADD COLUMN repost_count      INTEGER",
     ]
     for sql in migrations:
         try:
@@ -455,7 +456,7 @@ def get_video_id_sets(tiktok_id) -> tuple[set, set]:
 
 def add_video(video_id, tiktok_id, video_type, description, upload_date,
               view_count=None, like_count=None, comment_count=None,
-              share_count=None, save_count=None,
+              share_count=None, save_count=None, repost_count=None,
               duration=None, width=None, height=None,
               music_title=None, music_artist=None, music_id=None,
               raw_video_data=None):
@@ -463,12 +464,12 @@ def add_video(video_id, tiktok_id, video_type, description, upload_date,
         conn.execute("""
             INSERT OR IGNORE INTO videos
                 (video_id, tiktok_id, type, description, upload_date,
-                 view_count, like_count, comment_count, share_count, save_count,
+                 view_count, like_count, comment_count, share_count, save_count, repost_count,
                  duration, width, height, music_title, music_artist, music_id,
                  raw_video_data, stats_backfilled_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (video_id, tiktok_id, video_type, description, upload_date,
-              view_count, like_count, comment_count, share_count, save_count,
+              view_count, like_count, comment_count, share_count, save_count, repost_count,
               duration, width, height, music_title, music_artist, music_id,
               raw_video_data,
               int(time.time()) if view_count is not None else None))
@@ -845,7 +846,7 @@ def get_videos_stats_failed() -> list[dict]:
 
 def update_video_stats(video_id: str, view_count=None, like_count=None,
                        comment_count=None, share_count=None, save_count=None,
-                       duration=None, width=None, height=None,
+                       repost_count=None, duration=None, width=None, height=None,
                        music_title=None, music_artist=None, raw_video_data=None):
     with get_db() as conn:
         conn.execute("""
@@ -855,6 +856,7 @@ def update_video_stats(video_id: str, view_count=None, like_count=None,
                 comment_count      = ?,
                 share_count        = ?,
                 save_count         = ?,
+                repost_count       = COALESCE(?, repost_count),
                 duration           = COALESCE(?, duration),
                 width              = COALESCE(?, width),
                 height             = COALESCE(?, height),
@@ -864,13 +866,13 @@ def update_video_stats(video_id: str, view_count=None, like_count=None,
                 stats_backfilled_at = ?
             WHERE video_id = ?
         """, (view_count, like_count, comment_count, share_count, save_count,
-              duration, width, height, music_title, music_artist, raw_video_data,
+              repost_count, duration, width, height, music_title, music_artist, raw_video_data,
               int(time.time()), video_id))
 
 
 def update_video_stats_loop(video_id: str, view_count=None, like_count=None,
                             comment_count=None, share_count=None,
-                            save_count=None) -> None:
+                            save_count=None, repost_count=None) -> None:
     """Lightweight stats upsert called during the user loop (from item_list data).
 
     Uses COALESCE so a None from TikTok never overwrites an existing stored value.
@@ -886,11 +888,12 @@ def update_video_stats_loop(video_id: str, view_count=None, like_count=None,
                 comment_count       = COALESCE(?, comment_count),
                 share_count         = COALESCE(?, share_count),
                 save_count          = COALESCE(?, save_count),
+                repost_count        = COALESCE(?, repost_count),
                 stats_updated_at    = ?,
                 stats_backfilled_at = COALESCE(stats_backfilled_at, ?)
             WHERE video_id = ?
         """, (view_count, like_count, comment_count, share_count, save_count,
-              now, now, video_id))
+              repost_count, now, now, video_id))
 
 
 def delete_video(video_id: str) -> bool:

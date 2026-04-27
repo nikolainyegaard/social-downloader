@@ -315,6 +315,7 @@ async def process_single_user(
                     comment_count=details.get("comment_count"),
                     share_count=details.get("share_count"),
                     save_count=details.get("save_count"),
+                    repost_count=details.get("repost_count"),
                     duration=details.get("duration"),
                     width=details.get("width"),
                     height=details.get("height"),
@@ -352,6 +353,7 @@ async def process_single_user(
                     details.get("comment_count"),
                     details.get("share_count"),
                     details.get("save_count"),
+                    details.get("repost_count"),
                 )
         return _profile_ok
 
@@ -690,6 +692,7 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
                 comment_count=details.get("comment_count"),
                 share_count=details.get("share_count"),
                 save_count=details.get("save_count"),
+                repost_count=details.get("repost_count"),
                 duration=details.get("duration"),
                 width=details.get("width"),
                 height=details.get("height"),
