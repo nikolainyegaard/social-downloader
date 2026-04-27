@@ -510,7 +510,13 @@ def mark_video_undeleted(video_id):
 def get_videos_for_user(tiktok_id):
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
-            "SELECT * FROM videos WHERE tiktok_id = ? ORDER BY upload_date DESC",
+            "SELECT video_id, tiktok_id, type, description, upload_date, download_date, file_path,"
+            " status, deleted_at, undeleted_at, pending_deletion_count, pending_deletion_since,"
+            " view_count, like_count, comment_count, share_count, save_count,"
+            " duration, width, height, music_title, music_artist, music_id,"
+            " stats_backfilled_at, stats_error_count, stats_last_error,"
+            " deleted_reason, stats_updated_at"
+            " FROM videos WHERE tiktok_id = ? ORDER BY upload_date DESC",
             (tiktok_id,)
         ).fetchall()]
 

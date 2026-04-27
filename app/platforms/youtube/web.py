@@ -227,11 +227,7 @@ def remove_channel(channel_id: str):
 
 @youtube_bp.route("/channels/<channel_id>/videos", methods=["GET"])
 def channel_videos(channel_id: str):
-    videos = db.get_videos_for_channel(channel_id)
-    for v in videos:
-        v.pop("ytdlp_data", None)
-        v.pop("raw_video_data", None)
-    return jsonify(videos)
+    return jsonify(db.get_videos_for_channel(channel_id))
 
 
 @youtube_bp.route("/channels/<channel_id>/run", methods=["POST"])

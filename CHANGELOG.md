@@ -6,6 +6,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Fixed
+- YouTube channel modal load time: `get_videos_for_channel` used `SELECT *`, forcing SQLite to read the full `ytdlp_data` blob (avg 336 KB/video, ~200 MB for a large channel) before Python discarded it; now uses an explicit column list that excludes both blob columns; same fix applied to `get_videos_for_user` on TikTok
+
 ### Changed
 - Shared JS helpers consolidated into `common.js`: `apiJSON`, `fmt`, `fmtCount`, date formatters, `_videoStatus`, `_trackingBadge`, scroll lock, pill glider, `_makeJobWidget`, `_triggerLoop`, image modal helpers, shared icons, and the complete modal engine including `_renderModalVideoGrid` and `_appendModalGrid`; youtube.js no longer has an implicit runtime dependency on tiktok.js
 - Creator action helpers extracted to `common.js` (`_creatorRun`, `_creatorRunProfile`, `_creatorRemove`, `_creatorToggleStar`, `_saveCreatorComment`, `_renderStatGrid`); platform files now contain thin one-line wrappers
@@ -38,7 +41,6 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - YouTube recently saved panel now groups consecutive same-channel downloads and shows a count badge (e.g. `@handle x605`), matching TikTok behaviour
 - YouTube download format changed to `bestvideo[height<=1080]+bestaudio/best` (no mp4 merge constraint); video serving now sets the correct MIME type per file extension
 - `upload_date` in YouTube flat extraction now falls back to `timestamp` (Unix epoch) when the formatted date string is absent
-- `ytdlp_data` and `raw_video_data` stripped from video list API responses to reduce payload size
 - Thumbnail generator retries with `seek=0` when ffmpeg exits 0 but produces no output file (videos shorter than 1 s, common for Shorts)
 - Migration panel new-prefix auto-fill now appends `/tiktok` subpath
 - `docker-compose.yml`: loop interval env vars removed; intervals are configurable from the UI
@@ -50,7 +52,6 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Fixed
 - Settings modal crashed on open: `switchSettingsSection` was referencing old nav/section IDs (`cookies`, `loops`, etc.) that no longer exist after the settings restructure
-- YouTube channel modal load speed: `raw_video_data` was not being stripped from the channel videos API response, sending large JSON blobs to the browser for every video; now stripped same as `ytdlp_data`
 - YouTube video upload dates blank: Shorts tab flat extraction returns no date field; `download_video` now extracts it from the full yt-dlp info dict captured during download, and existing NULL rows are backfilled from stored `ytdlp_data` on the next loop run
 - TikTok video playback and thumbnail 404s: `get_video()` now normalizes `file_path` to absolute via `os.path.abspath` before returning; Flask's `send_file` resolves relative paths against `app.root_path` (`/app/app`), not CWD (`/app`), so relative paths stored in the DB by earlier downloads were resolved to the wrong directory
 

@@ -310,7 +310,10 @@ def mark_video_undeleted(video_id: str) -> None:
 def get_videos_for_channel(channel_id: str) -> list[dict]:
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
-            "SELECT * FROM videos WHERE channel_id = ? ORDER BY upload_date DESC",
+            "SELECT video_id, channel_id, title, upload_date, download_date, file_path,"
+            " status, deleted_at, undeleted_at, pending_deletion_count, pending_deletion_since,"
+            " view_count, like_count, comment_count, duration, width, height, content_type"
+            " FROM videos WHERE channel_id = ? ORDER BY upload_date DESC",
             (channel_id,)
         ).fetchall()]
 

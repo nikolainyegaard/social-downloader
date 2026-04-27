@@ -552,11 +552,7 @@ def remove_user(tiktok_id: str):
 
 @tiktok_bp.route("/users/<tiktok_id>/videos", methods=["GET"])
 def user_videos(tiktok_id: str):
-    videos = db.get_videos_for_user(tiktok_id)
-    for v in videos:
-        v.pop("ytdlp_data", None)
-        v.pop("raw_video_data", None)
-    return jsonify(videos)
+    return jsonify(db.get_videos_for_user(tiktok_id))
 
 
 @tiktok_bp.route("/users/<tiktok_id>/avatar", methods=["GET"])
