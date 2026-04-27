@@ -185,16 +185,14 @@ def _migrate_db(conn):
             ON videos(stats_backfilled_at)
     """)
 
-    # One-time stamp for videos that are already fully complete (have both view_count
-    # and raw_video_data, meaning they were downloaded with v1.5.0+ and already have
-    # all backfillable fields). Leaves v1-backfill victims and pre-stats videos as
-    # NULL so they get one re-run to fill the fields the old backfill missed.
+    # One-time stamp for videos that are already fully complete (have view_count,
+    # meaning they were downloaded with stats and already have all backfillable fields).
+    # Leaves pre-stats videos as NULL so they get one re-run.
     conn.execute("""
         UPDATE videos
         SET stats_backfilled_at = COALESCE(download_date, CAST(strftime('%s','now') AS INTEGER))
         WHERE stats_backfilled_at IS NULL
-          AND view_count    IS NOT NULL
-          AND raw_video_data IS NOT NULL
+          AND view_count IS NOT NULL
           AND file_path IS NOT NULL
     """)
 
@@ -210,13 +208,39 @@ def _migrate_db(conn):
           AND file_path IS NOT NULL
     """)
 
-    # Backfill music_id from the stored raw JSON blob for any rows that have it
-    conn.execute("""
-        UPDATE videos
-        SET music_id = json_extract(raw_video_data, '$.music.id')
-        WHERE music_id IS NULL
-          AND raw_video_data IS NOT NULL
-    """)
+    # ── ONE-TIME MIGRATION: backfill repost_count from ytdlp_data, then drop blob columns ──
+    # raw_video_data was never populated on TikTok (0 rows). ytdlp_data has 40 rows;
+    # the only field not already in a dedicated column is repost_count. Backfill it,
+    # then drop both columns. Remove this block and _one_time_backfill_tiktok_ytdlp
+    # once the migration has run. See CLAUDE.md for details.
+    _one_time_backfill_tiktok_ytdlp(conn)
+    for col in ("ytdlp_data", "raw_video_data"):
+        try:
+            conn.execute(f"ALTER TABLE videos DROP COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
+    # ── END ONE-TIME MIGRATION ──────────────────────────────────────────────────────────────
+
+
+def _one_time_backfill_tiktok_ytdlp(conn) -> None:
+    """Backfill repost_count from ytdlp_data blobs before the columns are dropped."""
+    try:
+        rows = conn.execute(
+            "SELECT video_id, ytdlp_data FROM videos WHERE ytdlp_data IS NOT NULL AND repost_count IS NULL"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return  # column doesn't exist; nothing to backfill
+    for row in rows:
+        try:
+            d = json.loads(row["ytdlp_data"])
+            val = d.get("repost_count")
+            if val is not None:
+                conn.execute(
+                    "UPDATE videos SET repost_count = ? WHERE video_id = ?",
+                    (int(val), row["video_id"])
+                )
+        except Exception:
+            pass
 
 
 # Tracking toggle
