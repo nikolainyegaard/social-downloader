@@ -2359,7 +2359,7 @@ PLATFORMS.forEach(p => initDbQueryPane(p.id));
     if (!ok || !data.total_legacy) return;
     const n = data.total_legacy;
     showToast(
-      `${n} video${n !== 1 ? 's' : ''} have paths that need migration.`,
+      `${n.toLocaleString()} post${n !== 1 ? 's' : ''} have paths that need migration.`,
       {
         type: 'warning',
         duration: 0,
