@@ -121,10 +121,12 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_profile_history_tiktok_id
                 ON profile_history(tiktok_id);
         """)
-        _migrate_db(conn)
+        needs_vacuum = _migrate_db(conn)
+    if needs_vacuum:
+        vacuum()
 
 
-def _migrate_db(conn):
+def _migrate_db(conn) -> bool:
     """Add columns introduced after the initial schema. Safe to run on existing DBs."""
     migrations = [
         "ALTER TABLE users  ADD COLUMN sec_uid            TEXT",
@@ -214,12 +216,15 @@ def _migrate_db(conn):
     # then drop both columns. Remove this block and _one_time_backfill_tiktok_ytdlp
     # once the migration has run. See CLAUDE.md for details.
     _one_time_backfill_tiktok_ytdlp(conn)
+    dropped = False
     for col in ("ytdlp_data", "raw_video_data"):
         try:
             conn.execute(f"ALTER TABLE videos DROP COLUMN {col}")
+            dropped = True
         except sqlite3.OperationalError:
             pass
     # ── END ONE-TIME MIGRATION ──────────────────────────────────────────────────────────────
+    return dropped
 
 
 def _one_time_backfill_tiktok_ytdlp(conn) -> None:

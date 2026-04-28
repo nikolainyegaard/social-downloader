@@ -33,6 +33,7 @@ def init_db():
         _conn.commit()
     finally:
         _conn.close()
+    needs_vacuum = False
     with get_db() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -96,10 +97,12 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_profile_history_channel_id
                 ON profile_history(channel_id);
         """)
-        _migrate_db(conn)
+        needs_vacuum = _migrate_db(conn)
+    if needs_vacuum:
+        vacuum()
 
 
-def _migrate_db(conn):
+def _migrate_db(conn) -> bool:
     """Add columns introduced after the initial schema. Safe to run on existing DBs."""
     migrations: list[str] = [
         "ALTER TABLE channels ADD COLUMN banner_url             TEXT",
@@ -157,12 +160,15 @@ def _migrate_db(conn):
     # this version). Remove this block (and _one_time_backfill_ytdlp_columns) once
     # the migration has run on all relevant databases. See CLAUDE.md for details.
     _one_time_backfill_ytdlp_columns(conn)
+    dropped = False
     for col in ("ytdlp_data", "raw_video_data"):
         try:
             conn.execute(f"ALTER TABLE videos DROP COLUMN {col}")
+            dropped = True
         except sqlite3.OperationalError:
             pass
     # ── END ONE-TIME MIGRATION ─────────────────────────────────────────────────────
+    return dropped
 
 
 def _one_time_backfill_ytdlp_columns(conn) -> None:
