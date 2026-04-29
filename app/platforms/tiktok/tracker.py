@@ -322,7 +322,6 @@ async def process_single_user(
                     music_title=details.get("music_title"),
                     music_artist=details.get("music_artist"),
                     music_id=details.get("music_id"),
-                    raw_video_data=details.get("_raw_video_data"),
                 )
                 log(f"  Saved {vid_id} -> {dl_result['file_path']}")
                 db.update_video_downloaded(vid_id, dl_result["file_path"], dl_result.get("ytdlp_data"))

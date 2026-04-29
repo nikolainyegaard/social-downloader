@@ -324,7 +324,6 @@ def _run_backfill() -> None:
                 height=details.get("height"),
                 music_title=details.get("music_title"),
                 music_artist=details.get("music_artist"),
-                raw_video_data=details.get("_raw_video_data"),
             )
             success_details = details
         except Exception as e:
