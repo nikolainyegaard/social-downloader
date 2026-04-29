@@ -24,7 +24,6 @@ const _YT_SORT_DIR_LABELS = {
   video_total:      { asc: 'Low → High', desc: 'High → Low' },
   video_deleted:    { asc: 'Low → High', desc: 'High → Low' },
   added_at:         { asc: 'Oldest first',    desc: 'Newest first'    },
-  starred:          { asc: 'Unstarred first', desc: 'Starred first'   },
 };
 
 // ── YouTube-specific icons and badges ─────────────────────────────────────────
