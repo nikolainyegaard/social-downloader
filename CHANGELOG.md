@@ -6,6 +6,13 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Fixed
+- TikTok loop crash on new downloads: `add_video`, `update_video_downloaded`, and `update_video_stats` still referenced `raw_video_data` and `ytdlp_data` after those columns were dropped by the one-time migration; removed from all INSERT/UPDATE statements and call sites in tracker.py and web.py
+- Migration warning toast showed raw number and said "videos" instead of "posts"; now formats count with locale separators and uses "posts" to correctly cover both video and photo posts
+
+### Changed
+- Starred removed from the sort dropdown in TikTok Users, TikTok Sounds, and YouTube Channels; the "All / Starred" filter pill is unchanged
+
 ## [0.2.0] - 2026-04-28
 
 ### Added
