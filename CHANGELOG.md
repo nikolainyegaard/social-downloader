@@ -12,6 +12,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Changed
 - Starred removed from the sort dropdown in TikTok Users, TikTok Sounds, and YouTube Channels; the "All / Starred" filter pill is unchanged
+- Recently Saved grouping now breaks on gaps larger than 5 minutes between adjacent downloads of the same creator, instead of collapsing all consecutive same-creator rows into one entry regardless of time
 
 ## [0.2.0] - 2026-04-28
 

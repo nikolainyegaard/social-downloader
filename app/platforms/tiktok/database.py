@@ -946,11 +946,15 @@ def _group_consecutive_by_user(rows: list[dict], date_key: str) -> list[dict]:
     """Collapse a newest-first row list into groups of consecutive same-user entries.
 
     Each output dict has: tiktok_id, username, {date_key} (most recent in group), count.
+    Groups break when the gap between adjacent rows exceeds 5 minutes, even for the same user.
     """
     groups: list[dict] = []
     for row in rows:
-        if groups and groups[-1]["tiktok_id"] == row["tiktok_id"]:
+        if (groups
+                and groups[-1]["tiktok_id"] == row["tiktok_id"]
+                and groups[-1]["_last_ts"] - row[date_key] <= 300):
             groups[-1]["count"] += 1
+            groups[-1]["_last_ts"] = row[date_key]
         else:
             groups.append({
                 "tiktok_id": row["tiktok_id"],
@@ -959,8 +963,11 @@ def _group_consecutive_by_user(rows: list[dict], date_key: str) -> list[dict]:
                 "video_id":  row.get("video_id"),
                 "sound_id":  row.get("sound_id"),
                 date_key:    row[date_key],
+                "_last_ts":  row[date_key],
                 "count":     1,
             })
+    for g in groups:
+        del g["_last_ts"]
     return groups
 
 

@@ -690,8 +690,11 @@ def get_aggregate_stats() -> dict:
 def _group_consecutive_by_channel(rows: list[dict], date_key: str) -> list[dict]:
     groups: list[dict] = []
     for row in rows:
-        if groups and groups[-1]["channel_id"] == row["channel_id"]:
+        if (groups
+                and groups[-1]["channel_id"] == row["channel_id"]
+                and groups[-1]["_last_ts"] - row[date_key] <= 300):
             groups[-1]["count"] += 1
+            groups[-1]["_last_ts"] = row[date_key]
         else:
             groups.append({
                 "channel_id": row["channel_id"],
@@ -699,8 +702,11 @@ def _group_consecutive_by_channel(rows: list[dict], date_key: str) -> list[dict]
                 "enabled":    row.get("enabled", 1),
                 "video_id":   row.get("video_id"),
                 date_key:     row[date_key],
+                "_last_ts":   row[date_key],
                 "count":      1,
             })
+    for g in groups:
+        del g["_last_ts"]
     return groups
 
 
