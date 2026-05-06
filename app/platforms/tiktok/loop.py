@@ -63,6 +63,7 @@ user_loop_state = {
 _user_state_lock = threading.Lock()
 
 trigger_user_event = threading.Event()
+_user_stop_event   = threading.Event()
 
 # Set to True when loop interval settings change; cleared by the scheduler thread.
 _user_reschedule_flag  = False
@@ -80,6 +81,7 @@ sound_loop_state = {
 _sound_state_lock = threading.Lock()
 
 trigger_sound_event = threading.Event()
+_sound_stop_event   = threading.Event()
 
 _sound_reschedule_flag = False
 _sound_rflag_lock      = threading.Lock()
@@ -150,6 +152,16 @@ def get_state_snapshot() -> dict:
         state["sound_run_current"] = _sound_run_state["current"]
         state["sound_run_queue"]   = list(_sound_run_state["queue"])
     return state
+
+
+def request_stop_user_loop() -> None:
+    """Signal the user loop to stop after the current creator finishes."""
+    _user_stop_event.set()
+
+
+def request_stop_sound_loop() -> None:
+    """Signal the sound loop to stop after the current sound finishes."""
+    _sound_stop_event.set()
 
 
 def reschedule_user_loop() -> None:
@@ -301,6 +313,7 @@ def run_user_loop():
     _loop_start = time.monotonic()
     _videos_before = db.count_downloaded_videos()
 
+    _user_stop_event.clear()
     _log("=== User loop started ===")
     users      = db.get_all_users()
     _completed = 0
@@ -309,7 +322,7 @@ def run_user_loop():
         _log("No users configured -- nothing to do.")
     else:
         try:
-            _completed = asyncio.run(process_all_users(users, _log, _logd, _set_current_user)) or 0
+            _completed = asyncio.run(process_all_users(users, _log, _logd, _set_current_user, _user_stop_event)) or 0
         except Exception as e:
             _log(f"Unhandled user loop error: {e}")
 
@@ -337,10 +350,11 @@ def run_sound_loop():
     _loop_start = time.monotonic()
     _videos_before = db.count_downloaded_videos()
 
+    _sound_stop_event.clear()
     _log("=== Sound loop started ===")
     _sound_stats: dict | None = None
     try:
-        _sound_stats = asyncio.run(process_all_sounds(_log))
+        _sound_stats = asyncio.run(process_all_sounds(_log, _sound_stop_event))
     except Exception as e:
         _log(f"Unhandled sound loop error: {e}")
 

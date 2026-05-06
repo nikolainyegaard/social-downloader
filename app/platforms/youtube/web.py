@@ -14,7 +14,7 @@ from platforms.youtube import database as db
 from config import MEDIA_DIR
 from platforms.youtube.api import fetch_channel_info, normalize_handle
 from platforms.youtube.loop import (
-    is_running, get_state_snapshot, trigger_event,
+    is_running, get_state_snapshot, trigger_event, request_stop,
     enqueue_channel_run, enqueue_channel_profile_run, reschedule_loop,
     LOOP_INTERVAL_MINUTES,
 )
@@ -471,6 +471,14 @@ def trigger_now():
     if is_running():
         return jsonify({"error": "Loop is already running"}), 409
     trigger_event.set()
+    return jsonify({"ok": True})
+
+
+@youtube_bp.route("/stop", methods=["POST"])
+def stop_loop():
+    if not is_running():
+        return jsonify({"error": "Loop is not running"}), 409
+    request_stop()
     return jsonify({"ok": True})
 
 

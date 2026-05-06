@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import threading
 import time
 from typing import Callable
 
@@ -366,6 +367,7 @@ async def process_all_users(
     log: Callable[[str], None],
     logd: Callable[[str], None],
     set_current_user: Callable[[str | None], None] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> int:
     """Fetch and download new videos for all tracked users.
     Called once per main loop run. Returns the count of users successfully processed.
@@ -460,6 +462,9 @@ async def process_all_users(
             break_for_restart = False
 
             for idx in range(start_idx, total):
+                if stop_event and stop_event.is_set():
+                    log("=== User loop stopped by request ===")
+                    return total_completed
                 user = users[idx]
                 if idx > 0:
                     await asyncio.sleep(random.uniform(2, 5))
@@ -544,7 +549,10 @@ async def run_single_user_with_session(
 
 # ── Sound tracking ────────────────────────────────────────────────────────────
 
-async def process_all_sounds(log: Callable[[str], None]) -> dict:
+async def process_all_sounds(
+    log: Callable[[str], None],
+    stop_event: threading.Event | None = None,
+) -> dict:
     """Fetch and download new videos for all tracked sounds.
     Called once per main loop run, after user processing.
     Returns {"sounds_checked": int, "new_videos": int}.
@@ -557,6 +565,9 @@ async def process_all_sounds(log: Callable[[str], None]) -> dict:
     sounds_checked = 0
     total_new      = 0
     for sound in sounds:
+        if stop_event and stop_event.is_set():
+            log("=== Sound loop stopped by request ===")
+            break
         if not sound.get("tracking_enabled", 1):
             log(f"Skipping '{sound.get('label') or sound['sound_id']}' (tracking disabled)")
             continue

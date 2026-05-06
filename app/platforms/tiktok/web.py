@@ -28,6 +28,7 @@ from platforms.tiktok.loop import (
     trigger_user_event, trigger_sound_event,
     enqueue_user_run, enqueue_user_profile_run, enqueue_sound_run,
     reschedule_user_loop, reschedule_sound_loop,
+    request_stop_user_loop, request_stop_sound_loop,
 )
 from thumbnailer import thumb_path_for, avatar_path
 import photo_converter as _photo_converter
@@ -956,6 +957,22 @@ def trigger_sounds_now():
     if is_sound_loop_running():
         return jsonify({"error": "Sound loop is already running"}), 409
     trigger_sound_event.set()
+    return jsonify({"ok": True})
+
+
+@tiktok_bp.route("/stop", methods=["POST"])
+def stop_user_loop():
+    if not is_user_loop_running():
+        return jsonify({"error": "User loop is not running"}), 409
+    request_stop_user_loop()
+    return jsonify({"ok": True})
+
+
+@tiktok_bp.route("/stop/sounds", methods=["POST"])
+def stop_sound_loop():
+    if not is_sound_loop_running():
+        return jsonify({"error": "Sound loop is not running"}), 409
+    request_stop_sound_loop()
     return jsonify({"ok": True})
 
 

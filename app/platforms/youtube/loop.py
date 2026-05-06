@@ -49,6 +49,7 @@ loop_state = {
 _state_lock = threading.Lock()
 
 trigger_event    = threading.Event()
+_stop_event      = threading.Event()
 _reschedule_flag = False
 _rflag_lock      = threading.Lock()
 
@@ -82,6 +83,11 @@ def get_state_snapshot() -> dict:
         state["run_current"] = _run_state["current"]
         state["run_queue"]   = list(_run_state["queue"])
     return state
+
+
+def request_stop() -> None:
+    """Signal the loop to stop after the current channel finishes."""
+    _stop_event.set()
 
 
 def reschedule_loop() -> None:
@@ -171,6 +177,7 @@ def run_loop() -> None:
     _loop_start    = time.monotonic()
     _videos_before = db.count_downloaded_videos()
 
+    _stop_event.clear()
     _log("=== YouTube loop started ===")
     channels   = db.get_all_channels()
     _completed = 0
@@ -179,7 +186,7 @@ def run_loop() -> None:
         _log("No channels configured -- nothing to do.")
     else:
         try:
-            _completed = process_all_channels(channels, _log, _set_current_channel) or 0
+            _completed = process_all_channels(channels, _log, _set_current_channel, _stop_event) or 0
         except Exception as e:
             _log(f"Unhandled YouTube loop error: {e}")
 

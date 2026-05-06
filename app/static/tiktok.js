@@ -1418,12 +1418,14 @@ const _sEl = {
   uLast:      document.getElementById('userLoopLast'),
   uNext:      document.getElementById('userLoopNext'),
   uBtn:       document.getElementById('triggerUserBtn'),
+  uStopBtn:   document.getElementById('stopUserBtn'),
   uDur:       document.getElementById('userLoopDuration'),
   uNewVids:   document.getElementById('userLoopNewVideos'),
   sLast:      document.getElementById('soundLoopLast'),
   sDur:       document.getElementById('soundLoopDuration'),
   sNext:      document.getElementById('soundLoopNext'),
   sBtn:       document.getElementById('triggerSoundBtn'),
+  sStopBtn:   document.getElementById('stopSoundBtn'),
   sNewVids:   document.getElementById('soundLoopNewVideos'),
   missing:    document.getElementById('missingStatsCount'),
   failed:     document.getElementById('statsFailedCount'),
@@ -1454,7 +1456,8 @@ function renderStatus(state) {
   if (_sEl.uNext)    _sEl.uNext.textContent    = state.user_loop_running
     ? 'Running…'
     : (state.user_loop_next ? `Next: ${fmt.relFuture(state.user_loop_next)}` : '');
-  if (_sEl.uBtn) _sEl.uBtn.disabled = state.user_loop_running;
+  if (_sEl.uBtn)     _sEl.uBtn.disabled     = state.user_loop_running;
+  if (_sEl.uStopBtn) _sEl.uStopBtn.disabled = !state.user_loop_running;
 
   // Sound loop card
   if (_sEl.sLast)    _sEl.sLast.textContent    = state.sound_loop_last_end ? `Last: ${fmt.rel(state.sound_loop_last_end)}` : 'Never run';
@@ -1463,7 +1466,8 @@ function renderStatus(state) {
   if (_sEl.sNext)    _sEl.sNext.textContent    = state.sound_loop_running
     ? 'Running…'
     : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');
-  if (_sEl.sBtn) _sEl.sBtn.disabled = state.sound_loop_running;
+  if (_sEl.sBtn)     _sEl.sBtn.disabled     = state.sound_loop_running;
+  if (_sEl.sStopBtn) _sEl.sStopBtn.disabled = !state.sound_loop_running;
 
   if (_sEl.missing) {
     const n = state.missing_stats_count ?? 0;
@@ -1570,6 +1574,24 @@ async function setSoundTracking(soundId, enabled) {
 
 function triggerUserLoop()  { return _triggerLoop('triggerUserBtn',  '/api/tiktok/trigger',        'Could not trigger user loop'); }
 function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/tiktok/trigger/sounds', 'Could not trigger sound loop'); }
+
+async function stopUserLoop() {
+  if (_sEl.uStopBtn) _sEl.uStopBtn.disabled = true;
+  const { ok } = await apiJSON('/api/tiktok/stop', { method: 'POST' });
+  if (!ok) {
+    if (_sEl.uStopBtn) _sEl.uStopBtn.disabled = false;
+    showToast('Could not stop user loop.', { type: 'error' });
+  }
+}
+
+async function stopSoundLoop() {
+  if (_sEl.sStopBtn) _sEl.sStopBtn.disabled = true;
+  const { ok } = await apiJSON('/api/tiktok/stop/sounds', { method: 'POST' });
+  if (!ok) {
+    if (_sEl.sStopBtn) _sEl.sStopBtn.disabled = false;
+    showToast('Could not stop sound loop.', { type: 'error' });
+  }
+}
 
 async function loadSettings() {
   const { ok, data } = await apiJSON('/api/tiktok/settings');

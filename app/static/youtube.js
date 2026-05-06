@@ -272,6 +272,7 @@ const _ytEl = {
   next:     () => document.getElementById('ytLoopNext'),
   newVids:  () => document.getElementById('ytLoopNewVideos'),
   btn:      () => document.getElementById('ytTriggerBtn'),
+  stopBtn:  () => document.getElementById('ytStopBtn'),
 };
 
 function renderYtStatus(state) {
@@ -285,7 +286,8 @@ function renderYtStatus(state) {
   if (el.duration()) el.duration().textContent = state.loop_last_duration_secs != null ? fmt.dur(state.loop_last_duration_secs) : '';
   if (el.next())     el.next().textContent     = state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '';
   if (el.newVids())  el.newVids().textContent  = state.loop_last_new_videos != null ? `${state.loop_last_new_videos} new` : '';
-  if (el.btn())      el.btn().disabled         = ytLoopRunning;
+  if (el.btn())     el.btn().disabled     = ytLoopRunning;
+  if (el.stopBtn()) el.stopBtn().disabled = !ytLoopRunning;
 
   // Update header badge when on YouTube tab
   const badge = document.getElementById('statusBadge');
@@ -375,6 +377,16 @@ async function ytSaveLoopSettings() {
 }
 
 function ytTriggerLoop() { return _triggerLoop('ytTriggerBtn', '/api/youtube/trigger', 'Could not trigger loop'); }
+
+async function ytStopLoop() {
+  const btn = document.getElementById('ytStopBtn');
+  if (btn) btn.disabled = true;
+  const { ok } = await apiJSON('/api/youtube/stop', { method: 'POST' });
+  if (!ok) {
+    if (btn) btn.disabled = false;
+    showToast('Could not stop loop.', { type: 'error' });
+  }
+}
 
 // ── DB cleanup ────────────────────────────────────────────────────────────────
 

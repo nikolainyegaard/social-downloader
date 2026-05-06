@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import Callable
 
@@ -21,6 +22,7 @@ def process_all_channels(
     channels: list[dict],
     log: Callable[[str], None],
     set_current: Callable[[str | None], None] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> int:
     """Process all tracked YouTube channels. Returns the count of successful channel runs."""
     n = db.backfill_upload_dates()
@@ -28,6 +30,9 @@ def process_all_channels(
         log(f"  Backfilled upload_date for {n} video(s) from stored metadata")
     completed = 0
     for channel in channels:
+        if stop_event and stop_event.is_set():
+            log("=== YouTube loop stopped by request ===")
+            break
         try:
             process_single_channel(channel, log, set_current)
             completed += 1
