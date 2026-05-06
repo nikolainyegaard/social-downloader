@@ -441,9 +441,22 @@ function _doSort(state, field) {
 // ── Scroll lock ───────────────────────────────────────────────────────────────
 // Locks scroll on <html> (the actual scroll root when overflow-x:hidden is set).
 // A counter handles nested modals: the lock stays until every opener has closed.
+// padding-right compensates for the scrollbar gutter that overflow:hidden removes,
+// keeping layout stable. scrollbar-gutter:stable on html handles the non-modal case.
 let _scrollLockDepth = 0;
-function _lockScroll()   { if (++_scrollLockDepth === 1) document.documentElement.classList.add('modal-open'); }
-function _unlockScroll() { if (--_scrollLockDepth === 0) document.documentElement.classList.remove('modal-open'); }
+function _lockScroll() {
+  if (++_scrollLockDepth === 1) {
+    const gutter = window.innerWidth - document.documentElement.clientWidth;
+    if (gutter > 0) document.documentElement.style.paddingRight = `${gutter}px`;
+    document.documentElement.classList.add('modal-open');
+  }
+}
+function _unlockScroll() {
+  if (--_scrollLockDepth === 0) {
+    document.documentElement.classList.remove('modal-open');
+    document.documentElement.style.paddingRight = '';
+  }
+}
 
 // ── Pill glider ───────────────────────────────────────────────────────────────
 

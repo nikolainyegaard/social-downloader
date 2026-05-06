@@ -39,7 +39,7 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { overflow-x: hidden; overscroll-behavior-x: none; }
+html { overflow-x: hidden; overscroll-behavior-x: none; scrollbar-gutter: stable; }
 html.modal-open { overflow: hidden; }
 
 body {
