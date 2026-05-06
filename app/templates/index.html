@@ -119,7 +119,7 @@
           <div class="loop-grid">
             <div id="userLoopLast"      class="loop-cell-main">Never run</div>
             <div id="userLoopDuration"  class="loop-cell-sub"></div>
-            <div style="grid-column:3;grid-row:1/3;align-self:center;display:flex;gap:4px">
+            <div style="grid-column:3;grid-row:1/3;align-self:center;display:flex;gap:8px">
               <button class="btn-run"  id="triggerUserBtn" onclick="triggerUserLoop()">Run Now</button>
               <button class="btn-danger" id="stopUserBtn" onclick="stopUserLoop()" disabled>Stop</button>
             </div>
@@ -135,7 +135,7 @@
           <div class="loop-grid">
             <div id="soundLoopLast"      class="loop-cell-main">Never run</div>
             <div id="soundLoopDuration"  class="loop-cell-sub"></div>
-            <div style="grid-column:3;grid-row:1/3;align-self:center;display:flex;gap:4px">
+            <div style="grid-column:3;grid-row:1/3;align-self:center;display:flex;gap:8px">
               <button class="btn-run"  id="triggerSoundBtn" onclick="triggerSoundLoop()">Run Now</button>
               <button class="btn-danger" id="stopSoundBtn" onclick="stopSoundLoop()" disabled>Stop</button>
             </div>
@@ -325,7 +325,7 @@
           <div class="loop-grid">
             <div id="ytLoopLast"      class="loop-cell-main">Never run</div>
             <div id="ytLoopDuration"  class="loop-cell-sub"></div>
-            <div style="grid-column:3;grid-row:1/3;align-self:center;display:flex;gap:4px">
+            <div style="grid-column:3;grid-row:1/3;align-self:center;display:flex;gap:8px">
               <button class="btn-run"  id="ytTriggerBtn" onclick="ytTriggerLoop()">Run Now</button>
               <button class="btn-danger" id="ytStopBtn" onclick="ytStopLoop()" disabled>Stop</button>
             </div>
@@ -588,11 +588,11 @@
         </p>
         <div id="migrate-preview" style="margin-bottom:16px;font-size:13px;"></div>
         <div style="display:flex;flex-direction:column;gap:10px;max-width:440px;margin-bottom:14px">
-          <label style="display:flex;gap:4px;font-size:13px">
+          <label style="display:flex;gap:8px;font-size:13px">
             <span style="color:var(--text-dim)">Old prefix</span>
             <input type="text" id="migrateOldPrefix" class="text-input" placeholder="/app/videos">
           </label>
-          <label style="display:flex;gap:4px;font-size:13px">
+          <label style="display:flex;gap:8px;font-size:13px">
             <span style="color:var(--text-dim)">New prefix</span>
             <input type="text" id="migrateNewPrefix" class="text-input" placeholder="/app/media">
           </label>
