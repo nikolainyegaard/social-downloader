@@ -94,16 +94,6 @@ const _FIELD_LABELS = {
   account_status: 'Account status', privacy_status: 'Privacy',
 };
 
-function _recentDate(ts, now = new Date()) {
-  const d        = new Date(ts * 1000);
-  const today    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dDay     = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diffDays = Math.round((today - dDay) / 86400000);
-  const timeStr  = _dtFmtTime.format(d);
-  if (diffDays === 0) return `Today, ${timeStr}`;
-  if (diffDays === 1) return `Yesterday, ${timeStr}`;
-  return _dtFmtRecent.format(d);
-}
 
 function renderRecent(data) {
   const leftEl  = document.getElementById('recentLeft');
@@ -208,139 +198,65 @@ const _RECENT_LOG_TITLES = {
   'saved':           'All Saved Videos',
 };
 
-let _recentLogType      = null;
-let _recentLogOffset    = 0;
-let _recentLogDone      = false;
-let _recentLogLoading   = false;
-let _recentLogObs       = null;
-let _recentLogLastGroup = null; // cross-batch stitch for 'saved' collapsing
+function _ttRenderSavedRow(g, now) {
+  const row = document.createElement('div');
+  row.className = 'recent-entry';
+  row.title = `Open @${g.username}`;
+  if (g.enabled !== 0) {
+    row.onclick = g.count === 1
+      ? () => openUserModalAndHighlight(g.tiktok_id, g.video_id, 'all', 'download_date', 'desc')
+      : () => openUserModal(g.tiktok_id);
+  } else if (g.sound_id) {
+    row.onclick = () => openSoundModalAndHighlight(g.sound_id, g.video_id);
+  }
+  row.innerHTML = `
+    <span class="recent-date">${_recentDate(g.download_date, now)}</span>
+    <span class="recent-name" ${g.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(g.username)}</span>
+    <span class="recent-detail">${g.count}x</span>`;
+  return row;
+}
+
+function _ttRenderOtherRow(item, type, now) {
+  const row = document.createElement('div');
+  row.className = 'recent-entry';
+  if (type === 'deletions') {
+    row.title = `Open @${item.username}`;
+    if (item.enabled !== 0) {
+      row.onclick = () => openUserModalAndHighlight(item.tiktok_id, item.video_id);
+    } else if (item.sound_id) {
+      row.onclick = () => openSoundModalAndHighlight(item.sound_id, item.video_id, 'deleted');
+    }
+    row.innerHTML = `
+      <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
+      <span class="recent-name" ${item.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(item.username)}</span>
+      <span class="recent-detail">${esc(item.video_id)}</span>`;
+  } else if (type === 'profile-changes') {
+    const label = _FIELD_LABELS[item.field] || item.field;
+    row.title = `Open @${item.username} · ${label} history`;
+    row.onclick = () => openUserModalWithHistory(item.tiktok_id, item.field);
+    row.innerHTML = `
+      <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
+      <span class="recent-name">@${esc(item.username)}</span>
+      <span class="recent-detail">${esc(label)}</span>`;
+  } else {
+    row.title = `Open @${item.username}`;
+    row.onclick = () => openUserModal(item.tiktok_id);
+    row.innerHTML = `
+      <span class="recent-date">${_recentDate(item.banned_at, now)}</span>
+      <span class="recent-name">@${esc(item.username)}</span>
+      <span class="recent-detail" style="color:var(--red)">Banned</span>`;
+  }
+  return row;
+}
 
 function openRecentLog(type) {
-  _recentLogType      = type;
-  _recentLogOffset    = 0;
-  _recentLogDone      = false;
-  _recentLogLoading   = false;
-  _recentLogLastGroup = null;
-
-  document.getElementById('recentLogTitle').textContent = _RECENT_LOG_TITLES[type] || type;
-  document.getElementById('recentLogBody').innerHTML = '';
-  document.getElementById('recentLogBackdrop').style.display = 'flex';
-  _lockScroll();
-
-  _setupRecentLogScroll();
-  // Initial load is triggered by the IntersectionObserver firing on the
-  // newly-added sentinel (which is immediately visible in the empty container).
-  // No explicit call here to avoid a double-fetch race.
-}
-
-function closeRecentLog() {
-  document.getElementById('recentLogBackdrop').style.display = 'none';
-  _unlockScroll();
-  if (_recentLogObs) { _recentLogObs.disconnect(); _recentLogObs = null; }
-  _recentLogLastGroup = null;
-  _recentLogType    = null;
-  _recentLogLoading = false;
-}
-
-function _setupRecentLogScroll() {
-  if (_recentLogObs) _recentLogObs.disconnect();
-  const sentinel = document.createElement('div');
-  sentinel.id = 'recentLogSentinel';
-  sentinel.style.height = '1px';
-  document.getElementById('recentLogBody').appendChild(sentinel);
-  _recentLogObs = new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting && !_recentLogDone) _loadRecentLogBatch();
-  }, { threshold: 0 });
-  _recentLogObs.observe(sentinel);
-}
-
-async function _loadRecentLogBatch() {
-  if (_recentLogDone || !_recentLogType || _recentLogLoading) return;
-  _recentLogLoading = true;
-  const url = `/api/tiktok/recent/${_recentLogType}?offset=${_recentLogOffset}&limit=50`;
-  const { ok, data } = await apiJSON(url);
-  if (!ok || !_recentLogType) { _recentLogLoading = false; return; }
-
-  // 'saved' returns {items, rows_consumed}; all other types return a plain array.
-  const items   = _recentLogType === 'saved' ? data.items        : data;
-  const advance = _recentLogType === 'saved' ? data.rows_consumed : data.length;
-
-  if (!items.length) { _recentLogDone = true; _recentLogLoading = false; return; }
-  _recentLogOffset += advance;
-  if (items.length < 50) _recentLogDone = true;
-
-  const body = document.getElementById('recentLogBody');
-  const sentinel = document.getElementById('recentLogSentinel');
-  const frag = document.createDocumentFragment();
-  const now = new Date();
-
-  if (_recentLogType === 'saved') {
-    // Server returns pre-grouped consecutive runs; stitch across batch boundaries.
-    let i = 0;
-    if (_recentLogLastGroup && items.length > 0 && _recentLogLastGroup.tiktok_id === items[0].tiktok_id) {
-      // First group of this batch continues the last group of the previous batch.
-      const merged = _recentLogLastGroup.count + items[0].count;
-      _recentLogLastGroup.count = merged;
-      const detailEl = _recentLogLastGroup.el.querySelector('.recent-detail');
-      if (detailEl) detailEl.textContent = `${merged}x`;
-      i = 1;
-    }
-    for (; i < items.length; i++) {
-      const g = items[i];
-      const row = document.createElement('div');
-      row.className = 'recent-entry';
-      row.title = `Open @${g.username}`;
-      if (g.enabled !== 0) {
-        row.onclick = g.count === 1
-          ? () => openUserModalAndHighlight(g.tiktok_id, g.video_id, 'all', 'download_date', 'desc')
-          : () => openUserModal(g.tiktok_id);
-      } else if (g.sound_id) {
-        row.onclick = () => { openSoundModalAndHighlight(g.sound_id, g.video_id); };
-      }
-      row.innerHTML = `
-        <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-        <span class="recent-name" ${g.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(g.username)}</span>
-        <span class="recent-detail">${g.count}x</span>`;
-      frag.appendChild(row);
-      _recentLogLastGroup = { tiktok_id: g.tiktok_id, el: row, count: g.count };
-    }
-  } else {
-    data.forEach(item => {
-      const row = document.createElement('div');
-      row.className = 'recent-entry';
-      if (_recentLogType === 'deletions') {
-        row.title = `Open @${item.username}`;
-        if (item.enabled !== 0) {
-          row.onclick = () => { openUserModalAndHighlight(item.tiktok_id, item.video_id); };
-        } else if (item.sound_id) {
-          row.onclick = () => { openSoundModalAndHighlight(item.sound_id, item.video_id, 'deleted'); };
-        }
-        row.innerHTML = `
-          <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
-          <span class="recent-name" ${item.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(item.username)}</span>
-          <span class="recent-detail">${esc(item.video_id)}</span>`;
-      } else if (_recentLogType === 'profile-changes') {
-        const label = _FIELD_LABELS[item.field] || item.field;
-        row.title = `Open @${item.username} · ${label} history`;
-        row.onclick = () => { openUserModalWithHistory(item.tiktok_id, item.field); };
-        row.innerHTML = `
-          <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
-          <span class="recent-name">@${esc(item.username)}</span>
-          <span class="recent-detail">${esc(label)}</span>`;
-      } else {
-        row.title = `Open @${item.username}`;
-        row.onclick = () => { openUserModal(item.tiktok_id); };
-        row.innerHTML = `
-          <span class="recent-date">${_recentDate(item.banned_at, now)}</span>
-          <span class="recent-name">@${esc(item.username)}</span>
-          <span class="recent-detail" style="color:var(--red)">Banned</span>`;
-      }
-      frag.appendChild(row);
-    });
-  }
-
-  body.insertBefore(frag, sentinel);
-  _recentLogLoading = false;
+  _openRecentLogModal(type, {
+    apiBase:     '/api/tiktok/recent',
+    titles:      _RECENT_LOG_TITLES,
+    groupKey:    'tiktok_id',
+    renderSaved: _ttRenderSavedRow,
+    renderOther: _ttRenderOtherRow,
+  });
 }
 
 // ── Settings modal ────────────────────────────────────────────────────────────

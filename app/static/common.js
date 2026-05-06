@@ -903,3 +903,113 @@ async function _saveCreatorComment(apiPath, id, value, items, idField) {
   showToast('Saved.', { type: 'success', duration: 2000 });
   return true;
 }
+
+// ── Recent date formatting ─────────────────────────────────────────────────────
+
+function _recentDate(ts, now = new Date()) {
+  const d        = new Date(ts * 1000);
+  const today    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dDay     = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((today - dDay) / 86400000);
+  const timeStr  = _dtFmtTime.format(d);
+  if (diffDays === 0) return `Today, ${timeStr}`;
+  if (diffDays === 1) return `Yesterday, ${timeStr}`;
+  return _dtFmtRecent.format(d);
+}
+
+// ── Recent log modal ──────────────────────────────────────────────────────────
+// Generic paginated history modal. Each platform opens it via _openRecentLogModal,
+// passing a cfg object with: apiBase, titles, groupKey, renderSaved, renderOther.
+
+let _recentLogType      = null;
+let _recentLogOffset    = 0;
+let _recentLogDone      = false;
+let _recentLogLoading   = false;
+let _recentLogObs       = null;
+let _recentLogLastGroup = null;
+let _recentLogCfg       = null;
+
+function _openRecentLogModal(type, cfg) {
+  _recentLogCfg       = cfg;
+  _recentLogType      = type;
+  _recentLogOffset    = 0;
+  _recentLogDone      = false;
+  _recentLogLoading   = false;
+  _recentLogLastGroup = null;
+
+  document.getElementById('recentLogTitle').textContent = cfg.titles[type] || type;
+  document.getElementById('recentLogBody').innerHTML = '';
+  document.getElementById('recentLogBackdrop').style.display = 'flex';
+  _lockScroll();
+
+  _setupRecentLogScroll();
+  // Initial load triggered by IntersectionObserver firing on the newly-added
+  // sentinel, which is immediately visible in the empty container.
+}
+
+function closeRecentLog() {
+  document.getElementById('recentLogBackdrop').style.display = 'none';
+  _unlockScroll();
+  if (_recentLogObs) { _recentLogObs.disconnect(); _recentLogObs = null; }
+  _recentLogLastGroup = null;
+  _recentLogType    = null;
+  _recentLogLoading = false;
+  _recentLogCfg     = null;
+}
+
+function _setupRecentLogScroll() {
+  if (_recentLogObs) _recentLogObs.disconnect();
+  const sentinel = document.createElement('div');
+  sentinel.id = 'recentLogSentinel';
+  sentinel.style.height = '1px';
+  document.getElementById('recentLogBody').appendChild(sentinel);
+  _recentLogObs = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting && !_recentLogDone) _loadRecentLogBatch();
+  }, { threshold: 0 });
+  _recentLogObs.observe(sentinel);
+}
+
+async function _loadRecentLogBatch() {
+  if (_recentLogDone || !_recentLogType || !_recentLogCfg || _recentLogLoading) return;
+  _recentLogLoading = true;
+  const url = `${_recentLogCfg.apiBase}/${_recentLogType}?offset=${_recentLogOffset}&limit=50`;
+  const { ok, data } = await apiJSON(url);
+  if (!ok || !_recentLogType) { _recentLogLoading = false; return; }
+
+  // 'saved' returns {items, rows_consumed}; all other types return a plain array.
+  const items   = _recentLogType === 'saved' ? data.items         : data;
+  const advance = _recentLogType === 'saved' ? data.rows_consumed  : data.length;
+
+  if (!items.length) { _recentLogDone = true; _recentLogLoading = false; return; }
+  _recentLogOffset += advance;
+  if (items.length < 50) _recentLogDone = true;
+
+  const body     = document.getElementById('recentLogBody');
+  const sentinel = document.getElementById('recentLogSentinel');
+  const frag     = document.createDocumentFragment();
+  const now      = new Date();
+  const cfg      = _recentLogCfg;
+
+  if (_recentLogType === 'saved') {
+    // Server returns pre-grouped runs; stitch across batch boundaries.
+    let i = 0;
+    if (_recentLogLastGroup && items.length > 0 && _recentLogLastGroup.id === items[0][cfg.groupKey]) {
+      const merged = _recentLogLastGroup.count + items[0].count;
+      _recentLogLastGroup.count = merged;
+      const detailEl = _recentLogLastGroup.el.querySelector('.recent-detail');
+      if (detailEl) detailEl.textContent = `${merged}x`;
+      i = 1;
+    }
+    for (; i < items.length; i++) {
+      const g   = items[i];
+      const row = cfg.renderSaved(g, now);
+      frag.appendChild(row);
+      _recentLogLastGroup = { id: g[cfg.groupKey], el: row, count: g.count };
+    }
+  } else {
+    items.forEach(item => frag.appendChild(cfg.renderOther(item, _recentLogType, now)));
+  }
+
+  body.insertBefore(frag, sentinel);
+  _recentLogLoading = false;
+}

@@ -147,6 +147,58 @@ const _YT_FIELD_LABELS = {
   handle: 'Handle', display_name: 'Display name', description: 'Description', avatar: 'Avatar',
 };
 
+// ── Recent log modal ──────────────────────────────────────────────────────────
+
+const _YT_RECENT_LOG_TITLES = {
+  'deletions':       'All Deleted Videos',
+  'profile-changes': 'All Profile Changes',
+  'saved':           'All Saved Videos',
+};
+
+function _ytRenderSavedRow(g, now) {
+  const row = document.createElement('div');
+  row.className = 'recent-entry';
+  row.title = `Open @${g.handle}`;
+  row.onclick = () => ytOpenChModal(g.channel_id);
+  row.innerHTML = `
+    <span class="recent-date">${_recentDate(g.download_date, now)}</span>
+    <span class="recent-name">@${esc(g.handle)}</span>
+    <span class="recent-detail">${g.count}x</span>`;
+  return row;
+}
+
+function _ytRenderOtherRow(item, type, now) {
+  const row = document.createElement('div');
+  row.className = 'recent-entry';
+  if (type === 'deletions') {
+    row.title = `Open @${item.handle}`;
+    row.onclick = () => ytOpenChModal(item.channel_id);
+    row.innerHTML = `
+      <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
+      <span class="recent-name">@${esc(item.handle)}</span>
+      <span class="recent-detail">${esc((item.video_id || '').slice(0, 11))}</span>`;
+  } else {
+    const label = _YT_FIELD_LABELS[item.field] || item.field;
+    row.title = `Open @${item.handle} · ${label} history`;
+    row.onclick = () => ytOpenChModalWithHistory(item.channel_id, item.field);
+    row.innerHTML = `
+      <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
+      <span class="recent-name">@${esc(item.handle)}</span>
+      <span class="recent-detail">${esc(label)}</span>`;
+  }
+  return row;
+}
+
+function ytOpenRecentLog(type) {
+  _openRecentLogModal(type, {
+    apiBase:     '/api/youtube/recent',
+    titles:      _YT_RECENT_LOG_TITLES,
+    groupKey:    'channel_id',
+    renderSaved: _ytRenderSavedRow,
+    renderOther: _ytRenderOtherRow,
+  });
+}
+
 function renderYtRecent(data) {
   const leftEl  = document.getElementById('ytRecentLeft');
   const rightEl = document.getElementById('ytRecentRight');
@@ -156,7 +208,7 @@ function renderYtRecent(data) {
   let left = '';
 
   left += `<div class="recent-section">`;
-  left += `<div class="recent-section-hdr" style="margin-bottom:2px">Recently deleted</div>`;
+  left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="ytOpenRecentLog('deletions')" title="View all deleted videos">Recently deleted</div>`;
   if (data.deletions && data.deletions.length) {
     left += data.deletions.map(d => {
       const onclick = `ytOpenChModal('${esc(d.channel_id)}')`;
@@ -172,7 +224,7 @@ function renderYtRecent(data) {
   left += `</div>`;
 
   left += `<div class="recent-section">`;
-  left += `<div class="recent-section-hdr" style="margin-bottom:2px">Recently changed profile</div>`;
+  left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="ytOpenRecentLog('profile-changes')" title="View all profile changes">Recently changed profile</div>`;
   if (data.profile_changes && data.profile_changes.length) {
     left += data.profile_changes.map(p =>
       `<div class="recent-entry" onclick="ytOpenChModalWithHistory('${esc(p.channel_id)}','${esc(p.field)}')" title="Open @${esc(p.handle)}">
@@ -190,7 +242,7 @@ function renderYtRecent(data) {
 
   let right = '';
   right += `<div class="recent-section">`;
-  right += `<div class="recent-section-hdr" style="margin-bottom:2px">Recently saved</div>`;
+  right += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="ytOpenRecentLog('saved')" title="View all saved videos">Recently saved</div>`;
   if (data.saved && data.saved.length) {
     right += data.saved.map(g =>
       `<div class="recent-entry" onclick="ytOpenChModal('${esc(g.channel_id)}')" title="Open @${esc(g.handle)}">

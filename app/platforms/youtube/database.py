@@ -733,6 +733,52 @@ def get_recent_activity() -> dict:
     return {"deletions": deletions, "profile_changes": profile_changes, "saved": saved}
 
 
+def get_deletion_history(offset: int = 0, limit: int = 50) -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT v.video_id, v.deleted_at, c.handle, c.channel_id, c.enabled
+               FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+               WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+               ORDER BY v.deleted_at DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_profile_change_history(offset: int = 0, limit: int = 50) -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT ph.field, ph.old_value, ph.changed_at, c.handle, c.channel_id
+               FROM profile_history ph JOIN channels c ON c.channel_id = ph.channel_id
+               ORDER BY ph.changed_at DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+_GROUP_SCAN = 2500  # raw rows scanned per page; generous enough to yield >= 50 groups
+
+
+def get_saved_history(offset: int = 0, limit: int = 50) -> dict:
+    """Return paginated grouped download history (newest first).
+
+    Consecutive downloads by the same channel are collapsed into one group.
+    Returns {"items": [...groups...], "rows_consumed": N} where rows_consumed
+    is the total raw rows spanned by the returned groups -- the caller should
+    advance its raw-row offset by this value for the next page.
+    """
+    with get_db() as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT v.download_date, c.handle, c.channel_id, c.enabled, v.video_id
+               FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+               WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
+               ORDER BY v.download_date DESC LIMIT ? OFFSET ?""",
+            (_GROUP_SCAN, offset),
+        ).fetchall()]
+    groups = _group_consecutive_by_channel(rows, "download_date")[:limit]
+    return {"items": groups, "rows_consumed": sum(g["count"] for g in groups)}
+
+
 def get_all_video_ids() -> set:
     with get_db() as conn:
         return {row[0] for row in conn.execute("SELECT video_id FROM videos").fetchall()}

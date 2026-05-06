@@ -417,6 +417,27 @@ def get_recent():
     return jsonify(db.get_recent_activity())
 
 
+@youtube_bp.route("/recent/deletions", methods=["GET"])
+def get_recent_deletions():
+    offset = int(request.args.get("offset", 0))
+    limit  = int(request.args.get("limit",  50))
+    return jsonify(db.get_deletion_history(offset=offset, limit=limit))
+
+
+@youtube_bp.route("/recent/profile-changes", methods=["GET"])
+def get_recent_profile_changes():
+    offset = int(request.args.get("offset", 0))
+    limit  = int(request.args.get("limit",  50))
+    return jsonify(db.get_profile_change_history(offset=offset, limit=limit))
+
+
+@youtube_bp.route("/recent/saved", methods=["GET"])
+def get_recent_saved():
+    offset = int(request.args.get("offset", 0))
+    limit  = int(request.args.get("limit",  50))
+    return jsonify(db.get_saved_history(offset=offset, limit=limit))
+
+
 # DB cleanup
 
 @youtube_bp.route("/db/cleanup", methods=["GET"])
