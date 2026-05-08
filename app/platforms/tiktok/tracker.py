@@ -427,7 +427,8 @@ async def process_all_users(
     # The outer while loop runs one TikTokApi() context per iteration.
     # Bot detection exits the current context (closing the browser), sleeps, then
     # the next iteration opens a fresh browser. Each user gets up to 2 bot-triggered
-    # restarts (_BOT_SLEEP_1 then _BOT_SLEEP_2) before being skipped.
+    # restarts (_BOT_SLEEP_1 then _BOT_SLEEP_2); a third consecutive failure
+    # cancels the loop entirely and lets the full loop cooldown restart.
     total_completed       = 0
     start_idx             = 0
     bot_retry_counts: dict[int, int] = {}  # {user_idx: restart_count} -- per-user bot retries
@@ -499,7 +500,12 @@ async def process_all_users(
                         )
                         break
                     else:
-                        log(f"  Giving up on @{user['username']} after 2 bot retries -- skipping")
+                        log(
+                            f"  Bot detected a 3rd time after 15 min total sleep;"
+                            f" cancelling loop, cooldown restarting"
+                        )
+                        total_completed += completed
+                        return total_completed
                 except Exception as e:
                     log(f"Unhandled error for @{user['username']}: {e}")
                 if _user_processed:
