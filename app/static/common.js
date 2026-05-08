@@ -314,8 +314,13 @@ const fmt = {
   dur: secs => {
     if (secs == null) return '';
     if (secs < 60) return `took ${secs}s`;
-    const m = Math.floor(secs / 60), s = secs % 60;
-    return s > 0 ? `took ${m}m ${s}s` : `took ${m}m`;
+    if (secs < 3600) {
+      const m = Math.floor(secs / 60), s = secs % 60;
+      return s > 0 ? `took ${m}m ${s}s` : `took ${m}m`;
+    }
+    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+    if (s > 0) return `took ${h}h ${m}m ${s}s`;
+    return m > 0 ? `took ${h}h ${m}m` : `took ${h}h`;
   },
 };
 

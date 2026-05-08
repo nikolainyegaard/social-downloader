@@ -13,6 +13,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - YouTube Recent panel headers (Recently deleted, Recently changed profile, Recently saved) did not open the log modal; added paginated history endpoints and wired up the headers
 
 ### Changed
+- Loop run duration now shows hours when the run exceeds 60 minutes (e.g. "took 5h 32m")
+- TikTok bot detection: a third consecutive detection for the same user (after 5+10 min of sleep) now cancels the loop entirely and restarts the full cooldown interval, instead of skipping the user and continuing
 - Starred removed from the sort dropdown in TikTok Users, TikTok Sounds, and YouTube Channels; the "All / Starred" filter pill is unchanged
 - Recently Saved grouping now breaks on gaps larger than 5 minutes between adjacent downloads of the same creator, instead of collapsing all consecutive same-creator rows into one entry regardless of time
 
