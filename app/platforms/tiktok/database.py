@@ -487,20 +487,19 @@ def add_video(video_id, tiktok_id, video_type, description, upload_date,
               view_count=None, like_count=None, comment_count=None,
               share_count=None, save_count=None, repost_count=None,
               duration=None, width=None, height=None,
-              music_title=None, music_artist=None, music_id=None,
-              raw_video_data=None):
+              music_title=None, music_artist=None, music_id=None):
     with get_db() as conn:
         conn.execute("""
             INSERT OR IGNORE INTO videos
                 (video_id, tiktok_id, type, description, upload_date,
                  view_count, like_count, comment_count, share_count, save_count, repost_count,
                  duration, width, height, music_title, music_artist, music_id,
-                 raw_video_data, stats_backfilled_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 stats_backfilled_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (video_id, tiktok_id, video_type, description, upload_date,
               view_count, like_count, comment_count, share_count, save_count, repost_count,
               duration, width, height, music_title, music_artist, music_id,
-              raw_video_data, int(time.time()) if view_count is not None else None))
+              int(time.time()) if view_count is not None else None))
 
 
 def update_video_downloaded(video_id, file_path, ytdlp_data=None):

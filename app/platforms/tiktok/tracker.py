@@ -715,7 +715,6 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
                 music_title=details.get("music_title"),
                 music_artist=details.get("music_artist"),
                 music_id=details.get("music_id"),
-                raw_video_data=details.get("_raw_video_data"),
             )
             db.update_video_downloaded(vid_id, dl_result["file_path"], dl_result.get("ytdlp_data"))
             db.add_sound_video(sound_id, vid_id)
