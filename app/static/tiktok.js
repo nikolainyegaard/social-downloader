@@ -581,7 +581,8 @@ const _DIAG_ACTIONS = {
                      { value: "user_info_by_id",     label: "User profile by ID (paste tiktok_id:sec_uid)" },
                      { value: "item_list_username",  label: "item_list by username (library resolves sec_uid)" },
                      { value: "item_list_by_id",     label: "item_list by tiktok_id:sec_uid" },
-                     { value: "item_list_from_db",   label: "item_list from DB (mirrors loop — paste @username)" }],
+                     { value: "item_list_from_db",   label: "item_list from DB (mirrors loop -- paste @username)" },
+                     { value: "sound_raw",           label: "Sound raw API output (paste sound_id or URL)" }],
 };
 
 function diagSourceChanged() {
@@ -604,6 +605,7 @@ function diagActionChanged() {
     'tiktokapi:item_list_username':     '@username or username',
     'tiktokapi:item_list_by_id':        'tiktok_id:sec_uid',
     'tiktokapi:item_list_from_db':      '@username (must exist in DB)',
+    'tiktokapi:sound_raw':              'sound_id (numeric) or TikTok sound URL',
   };
   document.getElementById('diagInput').placeholder =
     placeholders[`${source}:${action}`] || '';
@@ -619,10 +621,10 @@ async function diagRun() {
   if (!inp) { outEl.textContent = 'Error: enter a URL or ID first.'; return; }
 
   btn.disabled  = true;
-  const isItemList = action.startsWith('item_list');
-  outEl.textContent = isItemList
-    ? 'Running… item_list paginates with delays — allow several minutes for large accounts'
-    : 'Running… (this may take up to 30 s for TikTokApi calls)';
+  const isSlowAction = action.startsWith('item_list') || action === 'sound_raw';
+  outEl.textContent = isSlowAction
+    ? 'Running... paginates with delays -- allow several minutes for large sounds/accounts'
+    : 'Running... (this may take up to 30 s for TikTokApi calls)';
 
   const { ok, data } = await apiJSON('/api/tiktok/debug/fetch', {
     method: 'POST',

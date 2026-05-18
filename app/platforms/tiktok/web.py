@@ -1329,6 +1329,36 @@ def debug_fetch():
             result = asyncio.run(_item_list_from_db())
             return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
 
+        elif source == "tiktokapi" and action == "sound_raw":
+            from TikTokApi import TikTokApi as _TikTokApi
+            sound_id = re.sub(r'[^0-9]', '', inp)
+            if not sound_id:
+                return jsonify({"ok": False, "output": "Error: could not extract a numeric sound_id from input"})
+
+            async def _fetch_sound_raw():
+                ms_token     = get_ms_token()
+                cookies_flat = get_cookies_flat()
+                async with _TikTokApi() as _api:
+                    await _api.create_sessions(
+                        ms_tokens=[ms_token] if ms_token else [],
+                        num_sessions=1,
+                        sleep_after=3,
+                        executable_path=CHROME_EXECUTABLE,
+                        cookies=[cookies_flat] if cookies_flat else None,
+                    )
+                    raw_items = []
+                    total = 0
+                    async for video in _api.sound(id=sound_id).videos(count=3000):
+                        total += 1
+                        if total <= 3:
+                            raw_items.append(video.as_dict)
+                    return {"sound_id": sound_id, "total_fetched": total,
+                            "note": "first 3 raw items shown below",
+                            "items": raw_items}
+
+            result = asyncio.run(_fetch_sound_raw())
+            return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
+
         else:
             return jsonify({"ok": False, "output": f"Unknown source/action: {source}/{action}"})
 
