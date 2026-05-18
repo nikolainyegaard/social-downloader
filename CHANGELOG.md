@@ -6,7 +6,11 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Added
+- TikTok Diagnostics: sound raw API output tool; fetches all videos for a sound via TikTokApi and returns the total count and first 3 raw items for inspection
+
 ### Fixed
+- TikTok sound loop crash on new video downloads: tracker passed `raw_video_data` to `add_video()` but the column was already dropped by the one-time migration; removed the argument from the call site
 - TikTok loop crash on new downloads: `add_video`, `update_video_downloaded`, and `update_video_stats` still referenced `raw_video_data` and `ytdlp_data` after those columns were dropped by the one-time migration; removed from all INSERT/UPDATE statements and call sites in tracker.py and web.py
 - Migration warning toast showed raw number and said "videos" instead of "posts"; now formats count with locale separators and uses "posts" to correctly cover both video and photo posts
 - Starred sort option still appeared in the TikTok Users, TikTok Sounds, and YouTube Channels sort dropdowns after it was removed from the JS sort label maps; removed the option elements from the HTML
