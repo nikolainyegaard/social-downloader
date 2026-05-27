@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Social Downloader</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ asset_url('style.css') }}">
 </head>
 <body>
 <div class="app">
@@ -876,8 +876,8 @@
   </div>
 </div>
 
-<script src="/static/common.js"></script>
-<script src="/static/tiktok.js"></script>
-<script src="/static/youtube.js"></script>
+<script src="{{ asset_url('common.js') }}"></script>
+<script src="{{ asset_url('tiktok.js') }}"></script>
+<script src="{{ asset_url('youtube.js') }}"></script>
 </body>
 </html>
