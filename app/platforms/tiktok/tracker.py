@@ -12,6 +12,8 @@ from platforms.tiktok import database as db
 from platforms.tiktok.config import (
     get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE,
     DELETION_CONFIRM_THRESHOLD,
+    SESSION_GAP_MEAN_SECS, STATS_REFRESH_DAYS,
+    HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
 )
 from platforms.tiktok.api import (
     get_user_info, get_user_videos, get_user_videos_with_stats,
@@ -26,6 +28,7 @@ _BOT_SLEEP_2                  = 600  # seconds after second bot detection (10 mi
 _PROFILE_FAIL_QUIET_THRESHOLD = 5
 _PROFILE_FAIL_SLEEP           = 30   # seconds to sleep before retrying a failed profile fetch
 _BOT_COOLDOWN_SLEEP           = 600  # seconds for full browser restart on session creation failure
+_SESSION_GAP_MIN_SECS = 15   # minimum inter-user gap within a session (seconds)
 
 
 class _BotDetectedError(Exception):
@@ -53,6 +56,7 @@ async def process_single_user(
     api,
     cookies: dict,
     fetch_videos: bool = True,
+    mode: str = "full",
     progress: str = "",
     log: Callable[[str], None] = print,
     logd: Callable[[str], None] = print,
@@ -186,8 +190,9 @@ async def process_single_user(
 
         if sec_uid:
             try:
+                _max_count = 30 if mode == "quick" else 2000
                 item_list_videos = await get_user_videos_with_stats(
-                    api, sec_uid=sec_uid
+                    api, sec_uid=sec_uid, max_count=_max_count
                 )
                 item_list_map = {v["video_id"]: v for v in item_list_videos}
                 logd(f"  [{tiktok_id}] {len(item_list_map)} videos via item_list (sec_uid={sec_uid})")
@@ -342,19 +347,20 @@ async def process_single_user(
             log(f"  Marked undeleted: {vid_id}")
 
         # ── Stats upsert for already-known videos from item_list ─────────────
-        # item_list returned stats for free -- update them in the DB at no extra cost.
-        # Uses COALESCE to avoid overwriting with None.
-        for vid_id, details in item_list_map.items():
-            if vid_id in known_ids and vid_id not in new_ids:
-                db.update_video_stats_loop(
-                    vid_id,
-                    details.get("view_count"),
-                    details.get("like_count"),
-                    details.get("comment_count"),
-                    details.get("share_count"),
-                    details.get("save_count"),
-                    details.get("repost_count"),
-                )
+        # Only on full-mode runs: item_list fetches all pages so stats are complete.
+        # Quick-mode runs only fetch the first page (30 videos) and skip this step.
+        if mode == "full":
+            for vid_id, details in item_list_map.items():
+                if vid_id in known_ids and vid_id not in new_ids:
+                    db.update_video_stats_loop(
+                        vid_id,
+                        details.get("view_count"),
+                        details.get("like_count"),
+                        details.get("comment_count"),
+                        details.get("share_count"),
+                        details.get("save_count"),
+                        details.get("repost_count"),
+                    )
         return _profile_ok
 
     finally:
@@ -362,22 +368,24 @@ async def process_single_user(
             set_current_user(None)
 
 
-async def process_all_users(
+async def process_user_session(
     users: list[dict],
     log: Callable[[str], None],
     logd: Callable[[str], None],
     set_current_user: Callable[[str | None], None] | None = None,
     stop_event: threading.Event | None = None,
 ) -> int:
-    """Fetch and download new videos for all tracked users.
-    Called once per main loop run. Returns the count of users successfully processed.
-    """
+    """Process a set of users in one session. Returns the count of users successfully processed."""
     from TikTokApi import TikTokApi
 
     random.shuffle(users)
     cookies  = get_cookies_flat()
     ms_token = get_ms_token()
     total    = len(users)
+
+    _stats_refresh_secs = int(db.get_setting("stats_refresh_days", STATS_REFRESH_DAYS)) * 86400
+    _active_secs  = int(db.get_setting("active_check_hours",        ACTIVE_CHECK_HOURS))        * 3600
+    _high_secs    = int(db.get_setting("high_priority_check_hours", HIGH_PRIORITY_CHECK_HOURS)) * 3600
 
     async def _make_session(api) -> bool:
         """(Re)create sessions on an existing TikTokApi instance. Returns True on success.
@@ -468,14 +476,19 @@ async def process_all_users(
                     return total_completed
                 user = users[idx]
                 if idx > 0:
-                    await asyncio.sleep(random.uniform(2, 5))
+                    _gap = max(random.expovariate(1.0 / SESSION_GAP_MEAN_SECS), _SESSION_GAP_MIN_SECS)
+                    await asyncio.sleep(_gap)
                 fetch_videos    = bool(user.get("tracking_enabled", 1))
                 progress        = f"{idx + 1}/{total}"
+                _now_ts         = int(time.time())
+                _last_refresh   = user.get("last_full_refresh_at") or 0
+                _mode           = "full" if (_now_ts - _last_refresh >= _stats_refresh_secs) else "quick"
                 _user_processed = False
                 try:
                     await process_single_user(
                         user, api, cookies,
                         fetch_videos=fetch_videos,
+                        mode=_mode,
                         progress=progress,
                         log=log,
                         logd=logd,
@@ -510,6 +523,12 @@ async def process_all_users(
                     log(f"Unhandled error for @{user['username']}: {e}")
                 if _user_processed:
                     completed += 1
+                    _interval = user.get("check_interval_secs") or (
+                        _high_secs if user.get("starred") else _active_secs
+                    )
+                    db.set_user_next_check(user["tiktok_id"], int(time.time()) + _interval)
+                    if _mode == "full":
+                        db.set_user_last_full_refresh_at(user["tiktok_id"], _now_ts)
 
             if not break_for_restart:
                 total_completed += completed

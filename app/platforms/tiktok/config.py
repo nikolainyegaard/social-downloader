@@ -20,6 +20,13 @@ SOUND_LOOP_INTERVAL_MINUTES = int(os.environ.get("TIKTOK_SOUND_LOOP_INTERVAL_MIN
 
 DELETION_CONFIRM_THRESHOLD = int(os.environ.get("DELETION_CONFIRM_THRESHOLD", 2))
 
+SESSIONS_PER_DAY          = int(os.environ.get("TIKTOK_SESSIONS_PER_DAY", 4))
+HIGH_PRIORITY_CHECK_HOURS = int(os.environ.get("TIKTOK_HIGH_PRIORITY_CHECK_HOURS", 6))
+ACTIVE_CHECK_HOURS        = int(os.environ.get("TIKTOK_ACTIVE_CHECK_HOURS", 24))
+INACTIVE_CHECK_HOURS      = int(os.environ.get("TIKTOK_INACTIVE_CHECK_HOURS", 72))
+STATS_REFRESH_DAYS        = int(os.environ.get("TIKTOK_STATS_REFRESH_DAYS", 7))
+SESSION_GAP_MEAN_SECS     = int(os.environ.get("TIKTOK_SESSION_GAP_MEAN_SECS", 90))
+
 
 def get_ms_token() -> str | None:
     """

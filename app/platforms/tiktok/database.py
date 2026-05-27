@@ -166,6 +166,10 @@ def _migrate_db(conn) -> bool:
         "ALTER TABLE sounds ADD COLUMN comment            TEXT",
         "ALTER TABLE users  ADD COLUMN profile_fail_count INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN repost_count      INTEGER",
+        "ALTER TABLE users ADD COLUMN last_video_at        INTEGER",
+        "ALTER TABLE users ADD COLUMN next_check_at        INTEGER",
+        "ALTER TABLE users ADD COLUMN check_interval_secs  INTEGER",
+        "ALTER TABLE users ADD COLUMN last_full_refresh_at INTEGER",
     ]
     for sql in migrations:
         try:
@@ -185,6 +189,10 @@ def _migrate_db(conn) -> bool:
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_videos_stats_backfilled_at
             ON videos(stats_backfilled_at)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_next_check_at
+            ON users(next_check_at)
     """)
 
     # One-time stamp for videos that are already fully complete (have view_count,
@@ -356,6 +364,85 @@ def get_all_users():
         return [dict(r) for r in conn.execute(
             "SELECT * FROM users WHERE enabled = 1 ORDER BY username"
         ).fetchall()]
+
+
+def get_users_due_for_check(now: int) -> list[dict]:
+    """Return enabled users whose next check is due (next_check_at <= now or NULL).
+    NULL means the user has never been scheduled; treat as due immediately.
+    Ordered by priority (starred first), then by least-recently-checked first."""
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT * FROM users
+               WHERE enabled = 1
+                 AND (next_check_at IS NULL OR next_check_at <= ?)
+               ORDER BY starred DESC, COALESCE(last_checked, 0) ASC""",
+            (now,)
+        ).fetchall()]
+
+
+def set_user_next_check(tiktok_id: str, next_check_at: int | None) -> None:
+    """Write the next scheduled check timestamp for a user. Pass None to reset (due ASAP)."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET next_check_at = ? WHERE tiktok_id = ?",
+            (next_check_at, tiktok_id),
+        )
+
+
+def set_user_last_full_refresh_at(tiktok_id: str, ts: int) -> None:
+    """Record the timestamp of the last full item_list stats refresh for a user."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET last_full_refresh_at = ? WHERE tiktok_id = ?",
+            (ts, tiktok_id),
+        )
+
+
+def recompute_activity_scores(
+    high_priority_secs: int,
+    active_secs: int,
+    inactive_secs: int,
+) -> None:
+    """Recompute last_video_at and check_interval_secs for all enabled users.
+
+    Interval assignment:
+      starred=1 (high priority): high_priority_secs
+      active (posted within 30 days): active_secs
+      inactive (no post in 60+ days): inactive_secs
+      no posts at all: active_secs (default)
+    """
+    now   = int(time.time())
+    ago30 = now - 30 * 86400
+    ago60 = now - 60 * 86400
+    with get_db() as conn:
+        users = conn.execute(
+            "SELECT tiktok_id, starred FROM users WHERE enabled = 1"
+        ).fetchall()
+        for user in users:
+            tiktok_id = user["tiktok_id"]
+            starred   = user["starred"]
+            row = conn.execute(
+                """SELECT MAX(upload_date) AS last_upload,
+                          SUM(CASE WHEN upload_date > ? THEN 1 ELSE 0 END) AS recent_count
+                   FROM videos WHERE tiktok_id = ? AND file_path IS NOT NULL""",
+                (ago30, tiktok_id)
+            ).fetchone()
+            last_video_at = row["last_upload"] if row else None
+            recent_count  = int(row["recent_count"] or 0) if row else 0
+
+            if starred:
+                interval = high_priority_secs
+            elif recent_count > 0:
+                interval = active_secs
+            elif last_video_at and last_video_at < ago60:
+                interval = inactive_secs
+            else:
+                interval = active_secs
+
+            conn.execute(
+                "UPDATE users SET last_video_at = ?, check_interval_secs = ? WHERE tiktok_id = ?",
+                (last_video_at, interval, tiktok_id)
+            )
 
 
 def get_username_history(tiktok_id: str) -> list:

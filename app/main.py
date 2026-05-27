@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import random as _random
 import glob as _glob
 import shutil as _shutil
 from platforms.tiktok import database as db
@@ -12,11 +13,13 @@ from platforms.youtube import database as youtube_db
 from config import DATA_DIR, MEDIA_DIR, WEB_PORT
 from platforms.tiktok.config import (
     USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, TIKTOK_DATA_DIR,
+    SESSIONS_PER_DAY, HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
+    INACTIVE_CHECK_HOURS, STATS_REFRESH_DAYS,
 )
 from platforms.tiktok.loop import (
-    run_user_loop, run_sound_loop,
+    run_user_session, run_sound_loop,
     is_user_loop_running, is_sound_loop_running,
-    set_user_loop_next_run, set_sound_loop_next_run,
+    set_user_loop_next_run, set_user_loop_sessions_today, set_sound_loop_next_run,
     trigger_user_event, trigger_sound_event,
     check_and_clear_user_reschedule, check_and_clear_sound_reschedule,
 )
@@ -189,22 +192,54 @@ def _ts() -> str:
 # ── User loop scheduler ───────────────────────────────────────────────────────
 
 def _user_loop_thread():
+    """Session-based scheduler: distributes N sessions across each 24-hour window."""
+    _24h          = 24 * 3600
+    session_times: list[float] = []
+    window_end    = 0.0
+
     while True:
-        interval_minutes = int(db.get_setting("user_loop_interval_minutes", USER_LOOP_INTERVAL_MINUTES))
-        next_at_ts = time.time() + interval_minutes * 60
-        set_user_loop_next_run(datetime.fromtimestamp(next_at_ts, tz=timezone.utc).isoformat())
+        now = time.time()
+
+        # Regenerate session schedule when the window has expired or the list is empty
+        if not session_times or now >= window_end:
+            n_sessions   = max(1, int(db.get_setting("sessions_per_day", SESSIONS_PER_DAY)))
+            window_end   = now + _24h
+            segment_size = _24h / n_sessions
+            # Pick one random time within each equal segment of the 24-hour window
+            session_times = sorted(
+                now + i * segment_size + _random.uniform(
+                    max(60.0, segment_size * 0.05),
+                    segment_size * 0.95,
+                )
+                for i in range(n_sessions)
+            )
+            # Guarantee the first session is at least 60 s from now
+            session_times[0] = max(session_times[0], now + 60)
+            set_user_loop_sessions_today(session_times)
+            print(
+                f"{_ts()} User loop: {n_sessions} session(s) scheduled for the next 24 h."
+            )
+
+        next_ts   = session_times[0]
+        remaining = next_ts - time.time()
+        set_user_loop_next_run(datetime.fromtimestamp(next_ts, tz=timezone.utc).isoformat())
         print(
-            f"{_ts()} User loop sleeping {interval_minutes} min"
-            f" until {datetime.fromtimestamp(next_at_ts).strftime('%H:%M:%S')}."
+            f"{_ts()} User loop: next session at"
+            f" {datetime.fromtimestamp(next_ts).strftime('%H:%M:%S')}"
+            f" ({remaining / 60:.0f} min)."
         )
 
-        remaining = next_at_ts - time.time()
         triggered = trigger_user_event.wait(timeout=max(remaining, 0))
         trigger_user_event.clear()
 
         if check_and_clear_user_reschedule():
-            print(f"{_ts()} User loop: interval changed, rescheduling.")
+            print(f"{_ts()} User loop: settings changed, rescheduling sessions.")
+            session_times = []
+            window_end    = 0.0
             continue
+
+        # Pop this session from the schedule regardless of how we woke up
+        session_times = session_times[1:]
 
         if triggered:
             print(f"{_ts()} User loop: manual trigger received.")
@@ -221,7 +256,24 @@ def _user_loop_thread():
             trigger_user_event.wait(timeout=5 * 60)
             trigger_user_event.clear()
 
-        run_user_loop()
+        now_ts    = int(time.time())
+        users_due = db.get_users_due_for_check(now_ts)
+
+        if not users_due:
+            print(f"{_ts()} User loop: no users due at this session, skipping.")
+            continue
+
+        run_user_session(users_due)
+
+        # Recompute activity scores after each session so intervals stay current
+        _high  = int(db.get_setting("high_priority_check_hours", HIGH_PRIORITY_CHECK_HOURS)) * 3600
+        _act   = int(db.get_setting("active_check_hours",        ACTIVE_CHECK_HOURS))        * 3600
+        _inact = int(db.get_setting("inactive_check_hours",      INACTIVE_CHECK_HOURS))      * 3600
+        db.recompute_activity_scores(
+            high_priority_secs=_high,
+            active_secs=_act,
+            inactive_secs=_inact,
+        )
 
 
 # ── Sound loop scheduler ──────────────────────────────────────────────────────
@@ -431,6 +483,13 @@ if __name__ == "__main__":
     n = db.backfill_avatar_cached()
     if n:
         print(f"{_ts()} Startup: found {n} avatar file(s) on disk, avatar_cached flags updated.")
+
+    db.recompute_activity_scores(
+        high_priority_secs=HIGH_PRIORITY_CHECK_HOURS * 3600,
+        active_secs=ACTIVE_CHECK_HOURS * 3600,
+        inactive_secs=INACTIVE_CHECK_HOURS * 3600,
+    )
+    print(f"{_ts()} Startup: activity scores computed for all users.")
 
     app = create_app()
 

@@ -21,6 +21,8 @@ from platforms.tiktok.config import (
     get_ms_token, get_cookies_flat, cookies_info,
     COOKIES_PATH, COOKIES_TIMESTAMP_PATH, AVATARS_DIR,
     USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, DELETION_CONFIRM_THRESHOLD,
+    SESSIONS_PER_DAY, HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
+    INACTIVE_CHECK_HOURS, STATS_REFRESH_DAYS,
 )
 from platforms.tiktok.api import get_user_info, get_video_details, UserBannedException
 from platforms.tiktok.loop import (
@@ -588,6 +590,7 @@ def run_user(tiktok_id: str):
         return jsonify({"error": "User not found"}), 404
     if not enqueue_user_run(tiktok_id):
         return jsonify({"error": "Already queued or running"}), 409
+    db.set_user_next_check(tiktok_id, None)
     return jsonify({"ok": True})
 
 
@@ -979,22 +982,40 @@ def stop_sound_loop():
 @tiktok_bp.route("/settings", methods=["GET"])
 def get_settings():
     return jsonify({
-        "user_loop_interval_minutes":  int(db.get_setting("user_loop_interval_minutes",  USER_LOOP_INTERVAL_MINUTES)),
-        "sound_loop_interval_minutes": int(db.get_setting("sound_loop_interval_minutes", SOUND_LOOP_INTERVAL_MINUTES)),
+        "user_loop_interval_minutes":   int(db.get_setting("user_loop_interval_minutes",   USER_LOOP_INTERVAL_MINUTES)),
+        "sound_loop_interval_minutes":  int(db.get_setting("sound_loop_interval_minutes",  SOUND_LOOP_INTERVAL_MINUTES)),
+        "sessions_per_day":             int(db.get_setting("sessions_per_day",             SESSIONS_PER_DAY)),
+        "high_priority_check_hours":    int(db.get_setting("high_priority_check_hours",    HIGH_PRIORITY_CHECK_HOURS)),
+        "active_check_hours":           int(db.get_setting("active_check_hours",           ACTIVE_CHECK_HOURS)),
+        "inactive_check_hours":         int(db.get_setting("inactive_check_hours",         INACTIVE_CHECK_HOURS)),
+        "stats_refresh_days":           int(db.get_setting("stats_refresh_days",           STATS_REFRESH_DAYS)),
     })
 
 
 @tiktok_bp.route("/settings", methods=["PATCH"])
 def update_settings():
     body    = request.get_json(silent=True) or {}
-    allowed = ("user_loop_interval_minutes", "sound_loop_interval_minutes")
+    allowed = (
+        "user_loop_interval_minutes",
+        "sound_loop_interval_minutes",
+        "sessions_per_day",
+        "high_priority_check_hours",
+        "active_check_hours",
+        "inactive_check_hours",
+        "stats_refresh_days",
+    )
     for key in allowed:
         if key in body:
             val = body[key]
             if not isinstance(val, int) or val < 1:
                 return jsonify({"error": f"{key} must be a positive integer"}), 400
             db.set_setting(key, val)
-    if "user_loop_interval_minutes" in body:
+    _user_keys = {
+        "user_loop_interval_minutes", "sessions_per_day",
+        "high_priority_check_hours", "active_check_hours",
+        "inactive_check_hours", "stats_refresh_days",
+    }
+    if body.keys() & _user_keys:
         reschedule_user_loop()
     if "sound_loop_interval_minutes" in body:
         reschedule_sound_loop()

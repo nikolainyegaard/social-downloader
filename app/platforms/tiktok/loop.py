@@ -12,11 +12,11 @@ from collections import deque
 from datetime import datetime, timezone
 
 from platforms.tiktok import database as db
-from platforms.tiktok.config import TIKTOK_DATA_DIR
+from platforms.tiktok.config import TIKTOK_DATA_DIR, HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS
 from thumbnailer import backfill_thumbnails
 import photo_converter as _photo_converter  # noqa: F401 -- starts conversion thread on import
 from platforms.tiktok.tracker import process_all_sounds, process_single_sound
-from platforms.tiktok.tracker import process_all_users, run_single_user_with_session
+from platforms.tiktok.tracker import process_user_session, run_single_user_with_session
 
 LOOP_STATE_PATH = os.path.join(TIKTOK_DATA_DIR, "loop_state.json")
 
@@ -58,6 +58,7 @@ user_loop_state = {
     "last_new_videos":        _persisted.get("user_last_new_videos"),
     "next_run":               None,
     "current_user":           None,
+    "sessions_today":         [],
     "logs":                   deque(maxlen=1000),
 }
 _user_state_lock = threading.Lock()
@@ -127,6 +128,15 @@ def set_sound_loop_next_run(iso: str | None) -> None:
         sound_loop_state["next_run"] = iso
 
 
+def set_user_loop_sessions_today(session_times: list) -> None:
+    """Update the list of planned session timestamps for today."""
+    with _user_state_lock:
+        user_loop_state["sessions_today"] = [
+            datetime.fromtimestamp(t, tz=timezone.utc).isoformat()
+            for t in session_times
+        ]
+
+
 def get_state_snapshot() -> dict:
     """Return a serialisable snapshot of both loop states plus run-queue state."""
     with _user_state_lock:
@@ -137,6 +147,7 @@ def get_state_snapshot() -> dict:
             "user_loop_last_new_videos":    user_loop_state["last_new_videos"],
             "user_loop_next":               user_loop_state["next_run"],
             "user_loop_current_user":       user_loop_state["current_user"],
+            "user_loop_sessions_today":     list(user_loop_state["sessions_today"]),
             "logs":                         list(user_loop_state["logs"]),
         }
     with _sound_state_lock:
@@ -260,6 +271,13 @@ def _run_worker():
                 _log(f"=== Manual {kind} run started: {label} ===")
                 asyncio.run(run_single_user_with_session(user, _log, _logd, profile_only=profile_only))
                 _log(f"=== Manual {kind} run complete: {label} ===")
+                # Schedule next check based on the user's computed interval
+                _active = int(db.get_setting("active_check_hours", ACTIVE_CHECK_HOURS)) * 3600
+                _high   = int(db.get_setting("high_priority_check_hours", HIGH_PRIORITY_CHECK_HOURS)) * 3600
+                _interval = user.get("check_interval_secs") or (_high if user.get("starred") else _active)
+                db.set_user_next_check(tiktok_id, int(time.time()) + _interval)
+                if not profile_only:
+                    db.set_user_last_full_refresh_at(tiktok_id, int(time.time()))
             else:
                 _log(f"Manual run: user {tiktok_id} not found in DB")
         except Exception as e:
@@ -301,8 +319,8 @@ threading.Thread(target=backfill_thumbnails, daemon=True, name="thumb-backfill")
 
 # ── Public entry points ───────────────────────────────────────────────────────
 
-def run_user_loop():
-    """Process all enabled tracked users. Called by the user loop scheduler thread."""
+def run_user_session(users_due: list[dict]) -> None:
+    """Process a pre-assembled set of users due for checking. Called by the session scheduler."""
     from config import get_path_issues
     issues = get_path_issues()
     if issues:
@@ -310,26 +328,25 @@ def run_user_loop():
         return
     with _user_state_lock:
         user_loop_state["running"] = True
-    _loop_start = time.monotonic()
+    _loop_start    = time.monotonic()
     _videos_before = db.count_downloaded_videos()
+    _total         = len(users_due)
 
     _user_stop_event.clear()
-    _log("=== User loop started ===")
-    users      = db.get_all_users()
+    _log(f"=== User session started: {_total} user(s) due ===")
     _completed = 0
 
-    if not users:
-        _log("No users configured -- nothing to do.")
-    else:
-        try:
-            _completed = asyncio.run(process_all_users(users, _log, _logd, _set_current_user, _user_stop_event)) or 0
-        except Exception as e:
-            _log(f"Unhandled user loop error: {e}")
+    try:
+        _completed = asyncio.run(
+            process_user_session(users_due, _log, _logd, _set_current_user, _user_stop_event)
+        ) or 0
+    except Exception as e:
+        _log(f"Unhandled user session error: {e}")
 
     last_run_end  = datetime.now(timezone.utc).isoformat()
     duration_secs = round(time.monotonic() - _loop_start)
     new_videos    = db.count_downloaded_videos() - _videos_before
-    _log(f"=== User loop complete: {_completed}/{len(users)} users, {new_videos} new video(s) ===")
+    _log(f"=== User session complete: {_completed}/{_total} users, {new_videos} new video(s) ===")
     with _user_state_lock:
         user_loop_state["running"]                = False
         user_loop_state["last_run_end"]           = last_run_end
