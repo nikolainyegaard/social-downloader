@@ -372,13 +372,13 @@ def get_all_users():
 def get_users_due_for_check(now: int) -> list[dict]:
     """Return enabled users whose next check is due (next_check_at <= now or NULL).
     NULL means the user has never been scheduled; treat as due immediately.
-    Ordered by priority (starred first), then by least-recently-checked first."""
+    Ordered by priority (starred first), then by most-overdue first."""
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
             """SELECT * FROM users
                WHERE enabled = 1
                  AND (next_check_at IS NULL OR next_check_at <= ?)
-               ORDER BY starred DESC, COALESCE(last_checked, 0) ASC""",
+               ORDER BY starred DESC, COALESCE(next_check_at, 0) ASC""",
             (now,)
         ).fetchall()]
 

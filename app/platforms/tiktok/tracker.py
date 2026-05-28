@@ -247,7 +247,11 @@ async def process_single_user(
         known_ids, active_ids = db.get_video_id_sets(tiktok_id)
 
         new_ids       = remote_ids - known_ids
-        deleted_ids   = active_ids - remote_ids
+        # In quick mode only the first page (~30 videos) was fetched, so the vast
+        # majority of known videos will be absent from remote_ids -- they haven't
+        # been deleted, they're just beyond the page. Deletion checking requires a
+        # full fetch; skip it entirely in quick mode.
+        deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
         undeleted_ids = (known_ids - active_ids) & remote_ids
 
         # Pending-deletion videos that reappeared -- clear their counters immediately
