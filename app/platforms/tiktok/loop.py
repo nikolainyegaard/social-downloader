@@ -278,6 +278,7 @@ def _run_worker():
                 db.set_user_next_check(tiktok_id, int(time.time()) + _interval)
                 if not profile_only:
                     db.set_user_last_full_refresh_at(tiktok_id, int(time.time()))
+                    db.clear_full_refresh_pending(tiktok_id)
             else:
                 _log(f"Manual run: user {tiktok_id} not found in DB")
         except Exception as e:

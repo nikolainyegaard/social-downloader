@@ -12,7 +12,7 @@ from platforms.tiktok import database as db
 from platforms.tiktok.config import (
     get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE,
     DELETION_CONFIRM_THRESHOLD,
-    SESSION_GAP_MEAN_SECS, STATS_REFRESH_DAYS,
+    SESSION_GAP_MEAN_SECS,
     HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
 )
 from platforms.tiktok.api import (
@@ -383,7 +383,6 @@ async def process_user_session(
     ms_token = get_ms_token()
     total    = len(users)
 
-    _stats_refresh_secs = int(db.get_setting("stats_refresh_days", STATS_REFRESH_DAYS)) * 86400
     _active_secs  = int(db.get_setting("active_check_hours",        ACTIVE_CHECK_HOURS))        * 3600
     _high_secs    = int(db.get_setting("high_priority_check_hours", HIGH_PRIORITY_CHECK_HOURS)) * 3600
 
@@ -481,8 +480,7 @@ async def process_user_session(
                 fetch_videos    = bool(user.get("tracking_enabled", 1))
                 progress        = f"{idx + 1}/{total}"
                 _now_ts         = int(time.time())
-                _last_refresh   = user.get("last_full_refresh_at") or 0
-                _mode           = "full" if (_now_ts - _last_refresh >= _stats_refresh_secs) else "quick"
+                _mode           = "full" if user.get("full_refresh_pending") else "quick"
                 _user_processed = False
                 try:
                     await process_single_user(
@@ -529,6 +527,7 @@ async def process_user_session(
                     db.set_user_next_check(user["tiktok_id"], int(time.time()) + _interval)
                     if _mode == "full":
                         db.set_user_last_full_refresh_at(user["tiktok_id"], _now_ts)
+                        db.clear_full_refresh_pending(user["tiktok_id"])
 
             if not break_for_restart:
                 total_completed += completed

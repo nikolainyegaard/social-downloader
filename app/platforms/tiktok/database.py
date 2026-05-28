@@ -1,3 +1,4 @@
+import random
 import sqlite3
 import time
 import os
@@ -166,10 +167,12 @@ def _migrate_db(conn) -> bool:
         "ALTER TABLE sounds ADD COLUMN comment            TEXT",
         "ALTER TABLE users  ADD COLUMN profile_fail_count INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN repost_count      INTEGER",
-        "ALTER TABLE users ADD COLUMN last_video_at        INTEGER",
-        "ALTER TABLE users ADD COLUMN next_check_at        INTEGER",
-        "ALTER TABLE users ADD COLUMN check_interval_secs  INTEGER",
-        "ALTER TABLE users ADD COLUMN last_full_refresh_at INTEGER",
+        "ALTER TABLE users ADD COLUMN last_video_at          INTEGER",
+        "ALTER TABLE users ADD COLUMN next_check_at          INTEGER",
+        "ALTER TABLE users ADD COLUMN check_interval_secs    INTEGER",
+        "ALTER TABLE users ADD COLUMN last_full_refresh_at   INTEGER",
+        "ALTER TABLE users ADD COLUMN full_refresh_pending   INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN refresh_batch          INTEGER",
     ]
     for sql in migrations:
         try:
@@ -443,6 +446,76 @@ def recompute_activity_scores(
                 "UPDATE users SET last_video_at = ?, check_interval_secs = ? WHERE tiktok_id = ?",
                 (last_video_at, interval, tiktok_id)
             )
+
+
+def assign_refresh_batches(n_days: int) -> int:
+    """Start a new full-refresh cycle.
+
+    Sorts all enabled users by last_full_refresh_at ASC (never-refreshed users first),
+    divides them into n_days equal batches, writes refresh_batch (1..n_days) to each
+    user, then immediately activates batch 1 (full_refresh_pending = 1). Resets the
+    pending flag for all other users so no stale flags carry over from the previous cycle.
+
+    Stores refresh_cycle_start and refresh_cycle_activated_batch in settings.
+
+    Returns the total number of users assigned.
+    """
+    now = int(time.time())
+    with get_db() as conn:
+        users = conn.execute(
+            """SELECT tiktok_id FROM users WHERE enabled = 1
+               ORDER BY COALESCE(last_full_refresh_at, 0) ASC"""
+        ).fetchall()
+        n = len(users)
+        if not n:
+            return 0
+        conn.execute("UPDATE users SET full_refresh_pending = 0 WHERE enabled = 1")
+        for i, user in enumerate(users):
+            batch = (i * n_days) // n + 1
+            conn.execute(
+                "UPDATE users SET refresh_batch = ?, full_refresh_pending = ? WHERE tiktok_id = ?",
+                (batch, 1 if batch == 1 else 0, user["tiktok_id"]),
+            )
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('refresh_cycle_start', ?)",
+            (str(now),),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES"
+            " ('refresh_cycle_activated_batch', '1')",
+        )
+    return n
+
+
+def activate_refresh_batch(batch_num: int) -> int:
+    """Flag all users in the given batch for a full refresh.
+
+    Sets full_refresh_pending = 1 for every enabled user whose refresh_batch matches
+    batch_num, and advances the refresh_cycle_activated_batch setting.
+
+    Returns the number of users flagged.
+    """
+    with get_db() as conn:
+        result = conn.execute(
+            "UPDATE users SET full_refresh_pending = 1 WHERE enabled = 1 AND refresh_batch = ?",
+            (batch_num,),
+        )
+        n = result.rowcount
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES"
+            " ('refresh_cycle_activated_batch', ?)",
+            (str(batch_num),),
+        )
+    return n
+
+
+def clear_full_refresh_pending(tiktok_id: str) -> None:
+    """Clear the full-refresh flag after a successful full run."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET full_refresh_pending = 0 WHERE tiktok_id = ?",
+            (tiktok_id,),
+        )
 
 
 def get_username_history(tiktok_id: str) -> list:

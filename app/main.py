@@ -220,6 +220,28 @@ def _user_loop_thread():
                 f"{_ts()} User loop: {n_sessions} session(s) scheduled for the next 24 h."
             )
 
+            # Advance the full-refresh cycle once per 24-hour window.
+            # A new cycle starts when no cycle exists yet, or when the current one has
+            # run its full length. Otherwise, activate the next day's batch if the day
+            # has changed since the last activation.
+            _n_days          = max(1, int(db.get_setting("stats_refresh_days", STATS_REFRESH_DAYS)))
+            _cycle_start     = int(db.get_setting("refresh_cycle_start", 0) or 0)
+            _activated_batch = int(db.get_setting("refresh_cycle_activated_batch", 0) or 0)
+            if _cycle_start == 0 or (now - _cycle_start) >= _n_days * 86400:
+                _n_assigned = db.assign_refresh_batches(_n_days)
+                print(
+                    f"{_ts()} Refresh cycle: new {_n_days}-day cycle started,"
+                    f" {_n_assigned} users distributed across {_n_days} batches."
+                )
+            else:
+                _day_in_cycle = int((now - _cycle_start) / 86400) + 1
+                if _day_in_cycle > _activated_batch:
+                    _n_flagged = db.activate_refresh_batch(_day_in_cycle)
+                    print(
+                        f"{_ts()} Refresh cycle: day {_day_in_cycle}/{_n_days},"
+                        f" {_n_flagged} users flagged for full refresh."
+                    )
+
         next_ts   = session_times[0]
         remaining = next_ts - time.time()
         set_user_loop_next_run(datetime.fromtimestamp(next_ts, tz=timezone.utc).isoformat())
