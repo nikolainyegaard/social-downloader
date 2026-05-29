@@ -378,6 +378,7 @@ async def process_user_session(
     logd: Callable[[str], None],
     set_current_user: Callable[[str | None], None] | None = None,
     stop_event: threading.Event | None = None,
+    set_sleep: Callable[[float | None, str | None], None] | None = None,
 ) -> int:
     """Process a set of users in one session. Returns the count of users successfully processed."""
     from TikTokApi import TikTokApi
@@ -450,9 +451,14 @@ async def process_user_session(
     while start_idx < total:
         if cooldown_pending:
             log(f"Cooling down {cooldown_sleep // 60} min before restarting session...")
+            if set_sleep:
+                _resume = f"resuming @{users[start_idx]['username']}" if start_idx < total else "restarting session"
+                set_sleep(time.time() + cooldown_sleep, _resume)
             await asyncio.sleep(cooldown_sleep)
             cooldown_pending = False
             cooldown_sleep   = 0
+            if set_sleep:
+                set_sleep(None, None)
 
         async with TikTokApi() as api:
             if not await _make_session(api):
@@ -479,8 +485,13 @@ async def process_user_session(
                     return total_completed
                 user = users[idx]
                 if idx > 0:
-                    _gap = max(random.expovariate(1.0 / SESSION_GAP_MEAN_SECS), _SESSION_GAP_MIN_SECS)
+                    _gap       = max(random.expovariate(1.0 / SESSION_GAP_MEAN_SECS), _SESSION_GAP_MIN_SECS)
+                    _next_mode = "full refresh" if user.get("full_refresh_pending") else "quick check"
+                    if set_sleep:
+                        set_sleep(time.time() + _gap, f"{_next_mode} for @{user['username']}")
                     await asyncio.sleep(_gap)
+                    if set_sleep:
+                        set_sleep(None, None)
                 fetch_videos    = bool(user.get("tracking_enabled", 1))
                 progress        = f"{idx + 1}/{total}"
                 _now_ts         = int(time.time())

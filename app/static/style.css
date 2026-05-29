@@ -1468,6 +1468,16 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .log-body .log-dl      { color: var(--green); }
 .log-body .log-profile { color: #c084fc; }
 
+.log-activity-bar {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 12px 5px 10px;
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  color: var(--text-dim);
+}
+.lab-next { color: var(--accent); }
+
 /* ── Back to top ─────────────────────────────────────────────────────────── */
 
 .back-to-top {

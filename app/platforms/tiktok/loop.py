@@ -54,6 +54,8 @@ _persisted = _load_loop_state()
 user_loop_state = {
     "running":                  False,
     "manual_run":               False,
+    "sleep_until":              None,  # Unix timestamp (float) when the current sleep ends
+    "sleep_next":               None,  # Label for what runs after the sleep
     "last_run_end":             _persisted.get("user_last_run_end"),
     "last_run_duration_secs":   _persisted.get("user_last_duration_secs"),
     "last_new_videos":          _persisted.get("user_last_new_videos"),
@@ -147,6 +149,8 @@ def get_state_snapshot() -> dict:
         state = {
             "user_loop_running":               user_loop_state["running"],
             "user_loop_manual_run":            user_loop_state["manual_run"],
+            "user_loop_sleep_until":           user_loop_state["sleep_until"],
+            "user_loop_sleep_next":            user_loop_state["sleep_next"],
             "user_loop_last_end":              user_loop_state["last_run_end"],
             "user_loop_last_duration_secs":    user_loop_state["last_run_duration_secs"],
             "user_loop_last_new_videos":       user_loop_state["last_new_videos"],
@@ -264,6 +268,13 @@ def _set_current_user(username: str | None) -> None:
         user_loop_state["current_user"] = username
 
 
+def _set_sleep(until: float | None, next_label: str | None) -> None:
+    """Set or clear the active sleep indicator shown in the log console."""
+    with _user_state_lock:
+        user_loop_state["sleep_until"] = until
+        user_loop_state["sleep_next"]  = next_label
+
+
 # ── Manual run workers ────────────────────────────────────────────────────────
 
 def _run_worker():
@@ -350,7 +361,7 @@ def run_user_session(users_due: list[dict], manual: bool = False) -> None:
 
     try:
         _completed = asyncio.run(
-            process_user_session(users_due, _log, _logd, _set_current_user, _user_stop_event)
+            process_user_session(users_due, _log, _logd, _set_current_user, _user_stop_event, set_sleep=_set_sleep)
         ) or 0
     except Exception as e:
         _log(f"Unhandled user session error: {e}")
@@ -362,6 +373,8 @@ def run_user_session(users_due: list[dict], manual: bool = False) -> None:
     with _user_state_lock:
         user_loop_state["running"]                  = False
         user_loop_state["manual_run"]               = False
+        user_loop_state["sleep_until"]              = None
+        user_loop_state["sleep_next"]               = None
         user_loop_state["last_run_end"]             = last_run_end
         user_loop_state["last_run_duration_secs"]   = duration_secs
         user_loop_state["last_new_videos"]          = new_videos

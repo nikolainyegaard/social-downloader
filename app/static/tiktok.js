@@ -3,6 +3,8 @@
 let users         = [];
 let currentUser   = null;
 let isRunning     = false;
+let _sleepUntil   = null;   // Unix timestamp (ms) when current sleep ends; null = no sleep
+let _sleepNext    = null;   // Label for what runs after the sleep
 let _logSeq           = 0;    // log_seq from last server response (monotonic, never resets)
 let _logClearSeq      = 0;    // lines before this seq were cleared; don't re-render them
 let _logClearRestored = false;
@@ -1442,8 +1444,10 @@ const _sEl = {
 };
 
 function renderStatus(state) {
-  isRunning   = state.user_loop_running;
-  currentUser = state.user_loop_current_user;
+  isRunning    = state.user_loop_running;
+  currentUser  = state.user_loop_current_user;
+  _sleepUntil  = state.user_loop_sleep_until != null ? state.user_loop_sleep_until * 1000 : null;
+  _sleepNext   = state.user_loop_sleep_next  || null;
   if (state.deletion_confirm_threshold != null) _deletionConfirmThreshold = state.deletion_confirm_threshold;
   runQueue         = state.run_queue         || [];
   runCurrent       = state.run_current       || null;
@@ -1695,6 +1699,19 @@ async function loadStatus() {
     updateRunStates();
   }
 }
+
+function _tickActivityBar() {
+  const bar = document.getElementById('logActivityBar');
+  if (!bar) return;
+  if (!_sleepUntil) { bar.style.display = 'none'; return; }
+  const remSecs = Math.max(0, Math.round((_sleepUntil - Date.now()) / 1000));
+  const m = Math.floor(remSecs / 60), s = remSecs % 60;
+  const dur = m > 0 ? `${m}m ${s}s` : `${s}s`;
+  bar.style.display = '';
+  bar.innerHTML = `sleeping ${dur}`
+    + (_sleepNext ? ` <span class="lab-next">-- up next: ${esc(_sleepNext)}</span>` : '');
+}
+setInterval(_tickActivityBar, 1000);
 
 // ── User detail modal ─────────────────────────────────────────────────────────
 
