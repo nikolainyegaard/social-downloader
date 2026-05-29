@@ -518,6 +518,22 @@ def clear_full_refresh_pending(tiktok_id: str) -> None:
         )
 
 
+def prime_starred_for_manual_run() -> int:
+    """Reset next_check_at and set full_refresh_pending for all enabled starred users.
+
+    Called when the user clicks Run Now. Makes all starred (tier 1) users due
+    immediately and flags them for a full fetch, regardless of their current schedule.
+
+    Returns the number of users affected.
+    """
+    with get_db() as conn:
+        result = conn.execute(
+            "UPDATE users SET next_check_at = NULL, full_refresh_pending = 1"
+            " WHERE enabled = 1 AND starred = 1"
+        )
+        return result.rowcount
+
+
 def get_username_history(tiktok_id: str) -> list:
     """Return all past usernames for a user, oldest first."""
     with get_db() as conn:

@@ -561,11 +561,12 @@ function _makeJobWidget(id) {
 
 // ── Loop trigger ──────────────────────────────────────────────────────────────
 
-async function _triggerLoop(btnId, apiPath, errMsg) {
+async function _triggerLoop(btnId, apiPath, errMsg, onSuccess) {
   const btn = document.getElementById(btnId);
   if (btn) btn.disabled = true;
   const { ok, data } = await apiJSON(apiPath, { method: 'POST' });
   if (!ok) { showToast(data.error || errMsg, { type: 'error' }); if (btn) btn.disabled = false; }
+  else if (onSuccess) onSuccess(data);
 }
 
 // ── Image preview modal ───────────────────────────────────────────────────────

@@ -947,8 +947,9 @@ def trigger_now():
         return jsonify({"error": issues[0]["message"]}), 503
     if is_user_loop_running():
         return jsonify({"error": "User loop is already running"}), 409
+    starred_queued = db.prime_starred_for_manual_run()
     trigger_user_event.set()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "starred_queued": starred_queued})
 
 
 @tiktok_bp.route("/trigger/sounds", methods=["POST"])

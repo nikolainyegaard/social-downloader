@@ -1614,7 +1614,11 @@ async function setSoundTracking(soundId, enabled) {
   renderSounds();
 }
 
-function triggerUserLoop()  { return _triggerLoop('triggerUserBtn',  '/api/tiktok/trigger',        'Could not trigger user loop'); }
+function triggerUserLoop() {
+  return _triggerLoop('triggerUserBtn', '/api/tiktok/trigger', 'Could not trigger user loop', d => {
+    if (d.starred_queued > 0) showToast(`${d.starred_queued} starred user${d.starred_queued === 1 ? '' : 's'} queued for full refresh`);
+  });
+}
 function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/tiktok/trigger/sounds', 'Could not trigger sound loop'); }
 
 async function stopUserLoop() {
