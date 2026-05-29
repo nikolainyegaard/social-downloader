@@ -521,8 +521,8 @@ def clear_full_refresh_pending(tiktok_id: str) -> None:
 def prime_starred_for_manual_run() -> int:
     """Reset next_check_at and set full_refresh_pending for all enabled starred users.
 
-    Called when the user clicks Run Now. Makes all starred (tier 1) users due
-    immediately and flags them for a full fetch, regardless of their current schedule.
+    Full refresh is intentional: starred users are tier 1 and warrant a complete fetch.
+    Non-starred users are untouched -- their schedule continues as normal.
 
     Returns the number of users affected.
     """
@@ -530,6 +530,46 @@ def prime_starred_for_manual_run() -> int:
         result = conn.execute(
             "UPDATE users SET next_check_at = NULL, full_refresh_pending = 1"
             " WHERE enabled = 1 AND starred = 1"
+        )
+        return result.rowcount
+
+
+def prime_half_for_manual_run() -> int:
+    """Reset next_check_at for the 50% of enabled users longest since their last check.
+
+    Users are ranked by last_checked ASC (never-checked users sort first). No
+    full_refresh_pending change -- mode is determined by the normal schedule to
+    avoid overloading the rate limit.
+
+    Returns the number of users affected.
+    """
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT tiktok_id FROM users WHERE enabled = 1"
+            " ORDER BY COALESCE(last_checked, 0) ASC"
+        ).fetchall()
+        if not rows:
+            return 0
+        half = rows[: max(1, len(rows) // 2)]
+        ids  = [r["tiktok_id"] for r in half]
+        conn.execute(
+            f"UPDATE users SET next_check_at = NULL WHERE tiktok_id IN ({','.join('?' * len(ids))})",
+            ids,
+        )
+        return len(ids)
+
+
+def prime_all_for_manual_run() -> int:
+    """Reset next_check_at for all enabled users.
+
+    No full_refresh_pending change -- quick vs full mode is determined by the normal
+    schedule to avoid overloading the rate limit.
+
+    Returns the number of users affected.
+    """
+    with get_db() as conn:
+        result = conn.execute(
+            "UPDATE users SET next_check_at = NULL WHERE enabled = 1"
         )
         return result.rowcount
 

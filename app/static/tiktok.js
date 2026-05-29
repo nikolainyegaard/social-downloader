@@ -1430,7 +1430,9 @@ const _sEl = {
   uNext:      document.getElementById('userLoopNext'),
   uDur:       document.getElementById('userLoopDuration'),
   uSessions:  document.getElementById('userLoopSessions'),
-  uBtn:       document.getElementById('triggerUserBtn'),
+  uBtnStarred: document.getElementById('triggerStarredBtn'),
+  uBtnHalf:    document.getElementById('triggerHalfBtn'),
+  uBtnAll:     document.getElementById('triggerAllBtn'),
   uStopBtn:   document.getElementById('stopUserBtn'),
   sLast:      document.getElementById('soundLoopLast'),
   sDur:       document.getElementById('soundLoopDuration'),
@@ -1503,8 +1505,11 @@ function renderStatus(state) {
       _sEl.uSessions.innerHTML = '';
     }
   }
-  if (_sEl.uBtn)     _sEl.uBtn.disabled     = state.user_loop_running;
-  if (_sEl.uStopBtn) _sEl.uStopBtn.disabled = !state.user_loop_running;
+  const _uRunning = state.user_loop_running;
+  if (_sEl.uBtnStarred) _sEl.uBtnStarred.disabled = _uRunning;
+  if (_sEl.uBtnHalf)    _sEl.uBtnHalf.disabled    = _uRunning;
+  if (_sEl.uBtnAll)     _sEl.uBtnAll.disabled      = _uRunning;
+  if (_sEl.uStopBtn)    _sEl.uStopBtn.disabled     = !_uRunning;
 
   // Sound loop card
   if (_sEl.sLast)    _sEl.sLast.textContent    = state.sound_loop_last_end ? `Last: ${fmt.rel(state.sound_loop_last_end)}` : 'Never run';
@@ -1622,11 +1627,16 @@ async function setSoundTracking(soundId, enabled) {
   renderSounds();
 }
 
-function triggerUserLoop() {
-  return _triggerLoop('triggerUserBtn', '/api/tiktok/trigger', 'Could not trigger user loop', d => {
-    if (d.starred_queued > 0) showToast(`${d.starred_queued} starred user${d.starred_queued === 1 ? '' : 's'} queued for full refresh`);
-  });
+function _triggerUserToast(d) {
+  const n = d.queued ?? 0;
+  if (n === 0) return;
+  const labels = { starred: 'full refresh', half: 'quick check', all: 'quick check' };
+  const mode   = labels[d.mode] || 'check';
+  showToast(`${n} user${n === 1 ? '' : 's'} queued for ${mode}`);
 }
+function triggerStarred() { return _triggerLoop('triggerStarredBtn', '/api/tiktok/trigger',      'Could not trigger user loop', _triggerUserToast); }
+function triggerHalf()    { return _triggerLoop('triggerHalfBtn',    '/api/tiktok/trigger/half', 'Could not trigger user loop', _triggerUserToast); }
+function triggerAll()     { return _triggerLoop('triggerAllBtn',     '/api/tiktok/trigger/all',  'Could not trigger user loop', _triggerUserToast); }
 function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/tiktok/trigger/sounds', 'Could not trigger sound loop'); }
 
 async function stopUserLoop() {

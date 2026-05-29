@@ -939,17 +939,47 @@ def get_status():
     return jsonify(state)
 
 
-@tiktok_bp.route("/trigger", methods=["POST"])
-def trigger_now():
+def _check_trigger_preconditions():
+    """Return (issues, is_running) for the user loop trigger endpoints."""
     from config import get_path_issues
     issues = get_path_issues()
+    return issues, is_user_loop_running()
+
+
+@tiktok_bp.route("/trigger", methods=["POST"])
+def trigger_now():
+    issues, running = _check_trigger_preconditions()
     if issues:
         return jsonify({"error": issues[0]["message"]}), 503
-    if is_user_loop_running():
+    if running:
         return jsonify({"error": "User loop is already running"}), 409
-    starred_queued = db.prime_starred_for_manual_run()
+    n = db.prime_starred_for_manual_run()
     trigger_user_event.set()
-    return jsonify({"ok": True, "starred_queued": starred_queued})
+    return jsonify({"ok": True, "queued": n, "mode": "starred"})
+
+
+@tiktok_bp.route("/trigger/half", methods=["POST"])
+def trigger_half_now():
+    issues, running = _check_trigger_preconditions()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
+    if running:
+        return jsonify({"error": "User loop is already running"}), 409
+    n = db.prime_half_for_manual_run()
+    trigger_user_event.set()
+    return jsonify({"ok": True, "queued": n, "mode": "half"})
+
+
+@tiktok_bp.route("/trigger/all", methods=["POST"])
+def trigger_all_now():
+    issues, running = _check_trigger_preconditions()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
+    if running:
+        return jsonify({"error": "User loop is already running"}), 409
+    n = db.prime_all_for_manual_run()
+    trigger_user_event.set()
+    return jsonify({"ok": True, "queued": n, "mode": "all"})
 
 
 @tiktok_bp.route("/trigger/sounds", methods=["POST"])

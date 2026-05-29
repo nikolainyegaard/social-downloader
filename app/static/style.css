@@ -191,6 +191,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 .btn-run { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px 10px; font-size: 12px; }
 .btn-run:hover:not(:disabled) { background: rgba(79,142,247,.12); }
+.btn-trigger { padding: 4px 8px; font-size: 11px; white-space: nowrap; }
 
 .btn-star { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; font-size: 14px; line-height: 1; }
 .btn-star:hover { color: #f5a623; border-color: #f5a623; }

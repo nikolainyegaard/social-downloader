@@ -119,9 +119,15 @@
           <div class="loop-grid">
             <div id="userLoopLast"     class="loop-cell-main">Never run</div>
             <div id="userLoopStats"    class="loop-cell-sub"></div>
-            <div style="grid-column:3;grid-row:1/3;align-self:center;display:flex;gap:8px">
-              <button class="btn-run"    id="triggerUserBtn" onclick="triggerUserLoop()">Run Now</button>
-              <button class="btn-danger" id="stopUserBtn"    onclick="stopUserLoop()" disabled>Stop</button>
+            <div style="grid-column:3;grid-row:1/3;align-self:center;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;gap:5px">
+                <button class="btn-run btn-trigger" id="triggerStarredBtn" onclick="triggerStarred()">Run Starred</button>
+                <button class="btn-run btn-trigger" id="triggerHalfBtn"    onclick="triggerHalf()">Run Half</button>
+                <button class="btn-run btn-trigger" id="triggerAllBtn"     onclick="triggerAll()">Run All</button>
+              </div>
+              <div style="display:flex;justify-content:flex-end">
+                <button class="btn-danger" id="stopUserBtn" onclick="stopUserLoop()" disabled>Stop</button>
+              </div>
             </div>
             <div id="userLoopNext"     class="loop-cell-sub"></div>
             <div id="userLoopDuration" class="loop-cell-sub"></div>
