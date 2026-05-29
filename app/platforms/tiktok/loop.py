@@ -52,16 +52,19 @@ def _save_loop_state() -> None:
 _persisted = _load_loop_state()
 
 user_loop_state = {
-    "running":                False,
-    "last_run_end":           _persisted.get("user_last_run_end"),
-    "last_run_duration_secs": _persisted.get("user_last_duration_secs"),
-    "last_new_videos":        _persisted.get("user_last_new_videos"),
-    "next_run":               None,
-    "current_user":           None,
-    "sessions_today":         [],
-    "logs":                   deque(maxlen=1000),
+    "running":                  False,
+    "last_run_end":             _persisted.get("user_last_run_end"),
+    "last_run_duration_secs":   _persisted.get("user_last_duration_secs"),
+    "last_new_videos":          _persisted.get("user_last_new_videos"),
+    "last_session_completed":   None,
+    "last_session_total":       None,
+    "next_run":                 None,
+    "current_user":             None,
+    "sessions_today":           [],
+    "logs":                     deque(maxlen=1000),
 }
 _user_state_lock = threading.Lock()
+_log_seq = 0  # monotonic counter: total log lines ever written; never resets
 
 trigger_user_event = threading.Event()
 _user_stop_event   = threading.Event()
@@ -141,14 +144,17 @@ def get_state_snapshot() -> dict:
     """Return a serialisable snapshot of both loop states plus run-queue state."""
     with _user_state_lock:
         state = {
-            "user_loop_running":            user_loop_state["running"],
-            "user_loop_last_end":           user_loop_state["last_run_end"],
-            "user_loop_last_duration_secs": user_loop_state["last_run_duration_secs"],
-            "user_loop_last_new_videos":    user_loop_state["last_new_videos"],
-            "user_loop_next":               user_loop_state["next_run"],
-            "user_loop_current_user":       user_loop_state["current_user"],
-            "user_loop_sessions_today":     list(user_loop_state["sessions_today"]),
-            "logs":                         list(user_loop_state["logs"]),
+            "user_loop_running":               user_loop_state["running"],
+            "user_loop_last_end":              user_loop_state["last_run_end"],
+            "user_loop_last_duration_secs":    user_loop_state["last_run_duration_secs"],
+            "user_loop_last_new_videos":       user_loop_state["last_new_videos"],
+            "user_loop_last_session_completed": user_loop_state["last_session_completed"],
+            "user_loop_last_session_total":    user_loop_state["last_session_total"],
+            "user_loop_next":                  user_loop_state["next_run"],
+            "user_loop_current_user":          user_loop_state["current_user"],
+            "user_loop_sessions_today":        list(user_loop_state["sessions_today"]),
+            "logs":                            list(user_loop_state["logs"]),
+            "log_seq":                         _log_seq,
         }
     with _sound_state_lock:
         state["sound_loop_running"]            = sound_loop_state["running"]
@@ -236,11 +242,13 @@ def enqueue_sound_run(sound_id: str) -> bool:
 
 def _log(msg: str):
     """Log to both the terminal and the in-app log shown in the UI."""
+    global _log_seq
     ts   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
     print(line)
     with _user_state_lock:
         user_loop_state["logs"].append(line)
+        _log_seq += 1
 
 
 def _logd(msg: str):
@@ -349,10 +357,12 @@ def run_user_session(users_due: list[dict]) -> None:
     new_videos    = db.count_downloaded_videos() - _videos_before
     _log(f"=== User session complete: {_completed}/{_total} users, {new_videos} new video(s) ===")
     with _user_state_lock:
-        user_loop_state["running"]                = False
-        user_loop_state["last_run_end"]           = last_run_end
-        user_loop_state["last_run_duration_secs"] = duration_secs
-        user_loop_state["last_new_videos"]        = new_videos
+        user_loop_state["running"]                  = False
+        user_loop_state["last_run_end"]             = last_run_end
+        user_loop_state["last_run_duration_secs"]   = duration_secs
+        user_loop_state["last_new_videos"]          = new_videos
+        user_loop_state["last_session_completed"]   = _completed
+        user_loop_state["last_session_total"]       = _total
     _save_loop_state()
 
 

@@ -1085,6 +1085,25 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .loop-cell-main { font-size: 12px; color: var(--text-dim); }
 .loop-cell-sub  { font-size: 11px; color: var(--muted); }
 
+.loop-sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.loop-session-pill {
+  font-size: 10px;
+  font-family: var(--mono);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.loop-session-pill.done    { color: var(--text-dim); }
+.loop-session-pill.next    { color: var(--accent); border-color: var(--accent); }
+.loop-session-pill.running { color: var(--green);  border-color: var(--green); }
+
 /* Stats grid */
 .stat-grid {
   display: grid;

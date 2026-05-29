@@ -3,10 +3,10 @@
 let users         = [];
 let currentUser   = null;
 let isRunning     = false;
-let logLines      = [];
-let _deletionConfirmThreshold = 3;  // synced from /api/status
-let logClearIndex = 0;
+let _logSeq           = 0;    // log_seq from last server response (monotonic, never resets)
+let _logClearSeq      = 0;    // lines before this seq were cleared; don't re-render them
 let _logClearRestored = false;
+let _deletionConfirmThreshold = 3;  // synced from /api/status
 let pending       = {};
 const dismissed   = new Set();
 let runQueue      = [];   // tiktok_ids queued for manual run
@@ -675,6 +675,10 @@ function setTrackingView(view) {
   document.getElementById('usersGrid').style.display  = view === 'users'  ? '' : 'none';
   document.getElementById('soundsGrid').style.display = view === 'sounds' ? '' : 'none';
   document.getElementById('logPanel').style.display   = view === 'log'    ? '' : 'none';
+  if (view === 'log') {
+    const body = document.getElementById('logBody');
+    requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+  }
   document.getElementById('userControls').style.display    = view === 'users' ? '' : 'none';
   document.getElementById('soundControls').style.display   = view === 'sounds' ? 'flex' : 'none';
   renderUsers();
@@ -1418,11 +1422,12 @@ const _sEl = {
   badge:      document.getElementById('statusBadge'),
   text:       document.getElementById('statusText'),
   uLast:      document.getElementById('userLoopLast'),
+  uStats:     document.getElementById('userLoopStats'),
   uNext:      document.getElementById('userLoopNext'),
+  uDur:       document.getElementById('userLoopDuration'),
+  uSessions:  document.getElementById('userLoopSessions'),
   uBtn:       document.getElementById('triggerUserBtn'),
   uStopBtn:   document.getElementById('stopUserBtn'),
-  uDur:       document.getElementById('userLoopDuration'),
-  uNewVids:   document.getElementById('userLoopNewVideos'),
   sLast:      document.getElementById('soundLoopLast'),
   sDur:       document.getElementById('soundLoopDuration'),
   sNext:      document.getElementById('soundLoopNext'),
@@ -1452,12 +1457,44 @@ function renderStatus(state) {
     : 'Idle';
 
   // User loop card
-  if (_sEl.uLast)    _sEl.uLast.textContent    = state.user_loop_last_end ? `Last: ${fmt.rel(state.user_loop_last_end)}` : 'Never run';
-  if (_sEl.uDur)     _sEl.uDur.textContent     = state.user_loop_last_duration_secs != null ? fmt.dur(state.user_loop_last_duration_secs) : '';
-  if (_sEl.uNewVids) _sEl.uNewVids.textContent = state.user_loop_last_new_videos    != null ? `${state.user_loop_last_new_videos} new` : '';
-  if (_sEl.uNext)    _sEl.uNext.textContent    = state.user_loop_running
+  if (_sEl.uLast) _sEl.uLast.textContent = state.user_loop_last_end ? `Last: ${fmt.rel(state.user_loop_last_end)}` : 'Never run';
+  if (_sEl.uStats) {
+    const comp  = state.user_loop_last_session_completed;
+    const total = state.user_loop_last_session_total;
+    const nvids = state.user_loop_last_new_videos;
+    const parts = [];
+    if (comp != null && total != null) parts.push(`${comp}/${total} users`);
+    if (nvids != null) parts.push(`${nvids} new`);
+    _sEl.uStats.textContent = parts.join(' · ');
+  }
+  if (_sEl.uNext) _sEl.uNext.textContent = state.user_loop_running
     ? 'Running…'
     : (state.user_loop_next ? `Next: ${fmt.relFuture(state.user_loop_next)}` : '');
+  if (_sEl.uDur) _sEl.uDur.textContent = state.user_loop_last_duration_secs != null ? fmt.dur(state.user_loop_last_duration_secs) : '';
+  if (_sEl.uSessions) {
+    const sessions = state.user_loop_sessions_today || [];
+    if (sessions.length) {
+      const nowMs = Date.now();
+      let foundNext = false;
+      _sEl.uSessions.innerHTML = sessions.map(isoStr => {
+        const ts   = new Date(isoStr).getTime();
+        const time = new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        let cls = 'loop-session-pill';
+        if (state.user_loop_running && !foundNext && ts >= nowMs) {
+          foundNext = true;
+          cls += ' running';
+        } else if (ts < nowMs) {
+          cls += ' done';
+        } else if (!foundNext) {
+          foundNext = true;
+          cls += ' next';
+        }
+        return `<span class="${cls}">${time}</span>`;
+      }).join('');
+    } else {
+      _sEl.uSessions.innerHTML = '';
+    }
+  }
   if (_sEl.uBtn)     _sEl.uBtn.disabled     = state.user_loop_running;
   if (_sEl.uStopBtn) _sEl.uStopBtn.disabled = !state.user_loop_running;
 
@@ -1491,29 +1528,32 @@ function renderStatus(state) {
 }
 
 function clearLog() {
-  logClearIndex = logLines.length;
+  _logClearSeq = _logSeq;
   document.getElementById('logBody').innerHTML = '';
-  if (logLines.length > 0) {
-    localStorage.setItem('logClearWatermark', logLines[logLines.length - 1]);
-  } else {
-    localStorage.removeItem('logClearWatermark');
-  }
+  localStorage.setItem('logClearSeq', String(_logSeq));
 }
 
-function renderLogs(lines) {
-  if (!lines?.length) return;
+function renderLogs(lines, log_seq) {
+  if (!lines?.length || log_seq == null) return;
+
+  // Restore clear watermark once on first load
   if (!_logClearRestored) {
     _logClearRestored = true;
-    const mark = localStorage.getItem('logClearWatermark');
-    if (mark) {
-      for (let i = lines.length - 1; i >= 0; i--) {
-        if (lines[i] === mark) { logClearIndex = i + 1; break; }
-      }
-    }
+    const saved = localStorage.getItem('logClearSeq');
+    if (saved != null) _logClearSeq = parseInt(saved, 10) || 0;
   }
-  const start    = Math.max(logLines.length, logClearIndex);
-  const newLines = lines.slice(start);
-  logLines = lines;
+
+  if (log_seq <= _logSeq) return;  // nothing new
+
+  // Sequence number of lines[i] = log_seq - lines.length + i
+  const bufStart  = log_seq - lines.length;
+  // Start from whichever is later: last seen seq, or clear watermark
+  const startSeq  = Math.max(_logSeq, _logClearSeq);
+  const startIdx  = Math.max(0, startSeq - bufStart);
+  const newLines  = lines.slice(startIdx);
+
+  _logSeq = log_seq;
+
   if (!newLines.length) return;
 
   const body       = document.getElementById('logBody');
@@ -1521,12 +1561,12 @@ function renderLogs(lines) {
 
   newLines.forEach(line => {
     const span = document.createElement('span');
-    if      (/=== .+ (started|complete)/i.test(line))                               span.className = 'log-sep';
+    if      (/=== .+ (started|complete)/i.test(line))                                span.className = 'log-sep';
     else if (/\] Processing @/.test(line) || /\[sound\] Processing sound/i.test(line)) span.className = 'log-user';
-    else if (/error|failed|unexpected/i.test(line))                                  span.className = 'log-err';
-    else if (/warn|deleted|corrupt/i.test(line))                                     span.className = 'log-warn';
-    else if (/download|saved/i.test(line))                                           span.className = 'log-dl';
-    else if (/Profile change:|avatar changed|\[sound\] Discovered/i.test(line))      span.className = 'log-profile';
+    else if (/error|failed|unexpected/i.test(line))                                   span.className = 'log-err';
+    else if (/warn|deleted|corrupt/i.test(line))                                      span.className = 'log-warn';
+    else if (/download|saved/i.test(line))                                            span.className = 'log-dl';
+    else if (/Profile change:|avatar changed|\[sound\] Discovered/i.test(line))       span.className = 'log-profile';
     span.textContent = line + '\n';
     body.appendChild(span);
   });
@@ -1647,7 +1687,7 @@ async function loadStatus() {
   const { ok, data } = await apiJSON('/api/tiktok/status');
   if (ok) {
     renderStatus(data);
-    renderLogs(data.logs);
+    renderLogs(data.logs, data.log_seq);
     updateRunStates();
   }
 }
