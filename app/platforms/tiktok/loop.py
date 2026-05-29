@@ -53,6 +53,7 @@ _persisted = _load_loop_state()
 
 user_loop_state = {
     "running":                  False,
+    "manual_run":               False,
     "last_run_end":             _persisted.get("user_last_run_end"),
     "last_run_duration_secs":   _persisted.get("user_last_duration_secs"),
     "last_new_videos":          _persisted.get("user_last_new_videos"),
@@ -145,6 +146,7 @@ def get_state_snapshot() -> dict:
     with _user_state_lock:
         state = {
             "user_loop_running":               user_loop_state["running"],
+            "user_loop_manual_run":            user_loop_state["manual_run"],
             "user_loop_last_end":              user_loop_state["last_run_end"],
             "user_loop_last_duration_secs":    user_loop_state["last_run_duration_secs"],
             "user_loop_last_new_videos":       user_loop_state["last_new_videos"],
@@ -328,7 +330,7 @@ threading.Thread(target=backfill_thumbnails, daemon=True, name="thumb-backfill")
 
 # ── Public entry points ───────────────────────────────────────────────────────
 
-def run_user_session(users_due: list[dict]) -> None:
+def run_user_session(users_due: list[dict], manual: bool = False) -> None:
     """Process a pre-assembled set of users due for checking. Called by the session scheduler."""
     from config import get_path_issues
     issues = get_path_issues()
@@ -336,7 +338,8 @@ def run_user_session(users_due: list[dict]) -> None:
         _log(f"User loop blocked: {issues[0]['message']}")
         return
     with _user_state_lock:
-        user_loop_state["running"] = True
+        user_loop_state["running"]    = True
+        user_loop_state["manual_run"] = manual
     _loop_start    = time.monotonic()
     _videos_before = db.count_downloaded_videos()
     _total         = len(users_due)
@@ -358,6 +361,7 @@ def run_user_session(users_due: list[dict]) -> None:
     _log(f"=== User session complete: {_completed}/{_total} users, {new_videos} new video(s) ===")
     with _user_state_lock:
         user_loop_state["running"]                  = False
+        user_loop_state["manual_run"]               = False
         user_loop_state["last_run_end"]             = last_run_end
         user_loop_state["last_run_duration_secs"]   = duration_secs
         user_loop_state["last_new_videos"]          = new_videos

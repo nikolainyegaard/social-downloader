@@ -1478,9 +1478,9 @@ function renderStatus(state) {
       let foundNext = false;
       _sEl.uSessions.innerHTML = sessions.map(isoStr => {
         const ts   = new Date(isoStr).getTime();
-        const time = new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const time = new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
         let cls = 'loop-session-pill';
-        if (state.user_loop_running && !foundNext && ts >= nowMs) {
+        if (state.user_loop_running && !state.user_loop_manual_run && !foundNext && ts >= nowMs) {
           foundNext = true;
           cls += ' running';
         } else if (ts < nowMs) {

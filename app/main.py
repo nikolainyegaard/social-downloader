@@ -287,7 +287,7 @@ def _user_loop_thread():
             print(f"{_ts()} User loop: no users due at this session, skipping.")
             continue
 
-        run_user_session(users_due)
+        run_user_session(users_due, manual=triggered)
 
         # Recompute activity scores after each session so intervals stay current
         _high  = int(db.get_setting("high_priority_check_hours", HIGH_PRIORITY_CHECK_HOURS)) * 3600
