@@ -5,6 +5,8 @@ let currentUser   = null;
 let isRunning     = false;
 let _sleepUntil   = null;   // Unix timestamp (ms) when current sleep ends; null = no sleep
 let _sleepNext    = null;   // Label for what runs after the sleep
+let _nextUserRun  = null;   // ISO string of next scheduled user session
+let _nextSoundRun = null;   // ISO string of next scheduled sound loop
 let _logSeq           = 0;    // log_seq from last server response (monotonic, never resets)
 let _logClearSeq      = 0;    // lines before this seq were cleared; don't re-render them
 let _logClearRestored = false;
@@ -1446,8 +1448,10 @@ const _sEl = {
 function renderStatus(state) {
   isRunning    = state.user_loop_running;
   currentUser  = state.user_loop_current_user;
-  _sleepUntil  = state.user_loop_sleep_until != null ? state.user_loop_sleep_until * 1000 : null;
-  _sleepNext   = state.user_loop_sleep_next  || null;
+  _sleepUntil   = state.user_loop_sleep_until != null ? state.user_loop_sleep_until * 1000 : null;
+  _sleepNext    = state.user_loop_sleep_next  || null;
+  _nextUserRun  = state.user_loop_next  || null;
+  _nextSoundRun = state.sound_loop_next || null;
   if (state.deletion_confirm_threshold != null) _deletionConfirmThreshold = state.deletion_confirm_threshold;
   runQueue         = state.run_queue         || [];
   runCurrent       = state.run_current       || null;
@@ -1703,13 +1707,31 @@ async function loadStatus() {
 function _tickActivityBar() {
   const bar = document.getElementById('logActivityBar');
   if (!bar) return;
-  if (!_sleepUntil) { bar.style.display = 'none'; return; }
-  const remSecs = Math.max(0, Math.round((_sleepUntil - Date.now()) / 1000));
-  const m = Math.floor(remSecs / 60), s = remSecs % 60;
-  const dur = m > 0 ? `${m}m ${s}s` : `${s}s`;
-  bar.style.display = '';
-  bar.innerHTML = `sleeping ${dur}`
-    + (_sleepNext ? ` <span class="lab-next">-- up next: ${esc(_sleepNext)}</span>` : '');
+  if (_sleepUntil) {
+    const remSecs = Math.max(0, Math.round((_sleepUntil - Date.now()) / 1000));
+    const m = Math.floor(remSecs / 60), s = remSecs % 60;
+    const dur = m > 0 ? `${m}m ${s}s` : `${s}s`;
+    bar.innerHTML = `sleeping ${dur}`
+      + (_sleepNext ? ` <span class="lab-next">-- up next: ${esc(_sleepNext)}</span>` : '');
+    return;
+  }
+  // Idle: show the nearest upcoming scheduled run
+  const now = Date.now();
+  const candidates = [
+    _nextUserRun  ? { ts: new Date(_nextUserRun).getTime(),  label: 'user loop' }  : null,
+    _nextSoundRun ? { ts: new Date(_nextSoundRun).getTime(), label: 'sound loop' } : null,
+  ].filter(c => c && c.ts > now).sort((a, b) => a.ts - b.ts);
+  if (candidates.length) {
+    const { ts, label } = candidates[0];
+    const remSecs = Math.max(0, Math.round((ts - now) / 1000));
+    const m = Math.floor(remSecs / 60), s = remSecs % 60;
+    const dur = m >= 60
+      ? `${Math.floor(m / 60)}h ${m % 60}m`
+      : m > 0 ? `${m}m ${s}s` : `${s}s`;
+    bar.innerHTML = `waiting ${dur} <span class="lab-next">-- up next: ${esc(label)}</span>`;
+  } else {
+    bar.innerHTML = 'idle';
+  }
 }
 setInterval(_tickActivityBar, 1000);
 
