@@ -6,6 +6,30 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Added
+- Session-based TikTok user loop: replaces the fixed-interval loop with N sessions per 24-hour window (default 4), each firing at a random time within its equal segment; sessions only process users whose `next_check_at` has elapsed, so the workload scales naturally with the number of tracked users
+- Activity scoring for check intervals: starred users checked every 6h, active users (posted within 30 days) every 24h, inactive users every 72h; intervals recomputed after each session; configurable via settings UI or env vars
+- Quick vs full refresh split: normal session checks use quick mode (first ~30 videos, no stats upsert); full item_list stats refresh runs on a weekly cycle per user; mode determined by `full_refresh_pending` flag set by the batch scheduler
+- Weekly full-refresh batch cycle: users are divided into 7 equal batches sorted by `last_full_refresh_at`; one batch is activated per day so item_list calls are spread evenly across the week instead of hitting all users at once
+- Four new DB columns on `users`: `next_check_at`, `check_interval_secs`, `last_video_at`, `last_full_refresh_at`; two batch columns: `full_refresh_pending`, `refresh_batch`
+- New settings: `sessions_per_day`, `high_priority_check_hours`, `active_check_hours`, `inactive_check_hours`, `stats_refresh_days` (UI + env vars)
+- Session timeline pills on the loop card: shows today's scheduled session times with done/running/next visual states
+- Live sleep countdown bar pinned to the top of the TikTok log panel: counts down the current inter-user or cooldown sleep in place (no new log lines), shows an "up next" label with the next user and check mode; when idle, counts down to the nearest scheduled user or sound loop session
+- Run Starred, Run Half, and Run All buttons replace the single "Run Now" button on the TikTok user loop card; Run Starred triggers a full refresh for starred users only; Run Half triggers a quick check for the 50% of users longest since their last check; Run All triggers a quick check for all enabled users without setting full_refresh_pending to avoid rate limit overload
+- Content-hash asset URLs: `style.css`, `common.js`, `tiktok.js`, and `youtube.js` are served at `/assets/<name>-<8-char-hash>.<ext>` with `Cache-Control: immutable`; hashes computed at startup so Cloudflare and browser caches are busted automatically on each new deploy without a build step
+
+### Fixed
+- Banned users sorted to the front of every session: `get_users_due_for_check` sorted by `last_checked ASC` but `last_checked` is never written on the ban path, so banned users had a permanent sort advantage; now sorts by `next_check_at ASC` which is always written after every processed user
+- Quick-mode false "Possibly deleted" log spam: deletion diff ran in quick mode against all known videos, but quick mode only fetches the first ~30; all other known videos were flagged missing; deletion diff is now skipped entirely in quick mode
+- Log viewer stopping after 1000 lines: the client used `lines.length` as the slice index; once the server buffer filled to 1000 the slice was always empty; fixed with a monotonic `_log_seq` counter that increments on every log call and is returned in the status response so the client tracks position independently of buffer size
+- Manual trigger consuming a scheduled session slot: session slot was always popped on wake regardless of whether the wake was manual or scheduled; now only popped on scheduled wakes
+- Session timeline pills showing 12h AM/PM time; now 24h
+
+### Changed
+- Inter-user gap within a session changed from uniform 2-5s to exponential distribution (mean 90s, min 15s) to better mimic organic browsing behavior and reduce bot detection
+- Log panel scrolls to the bottom automatically when the Log tab is opened
+- Manual trigger (Run Starred / Run Half / Run All) no longer lights up the next scheduled session pill as running; that pill represents the scheduled session time, not the manual trigger
+
 ## [0.2.1] - 2026-05-18
 
 ### Added
