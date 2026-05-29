@@ -260,11 +260,13 @@ def _user_loop_thread():
             window_end    = 0.0
             continue
 
-        # Pop this session from the schedule regardless of how we woke up
-        session_times = session_times[1:]
-
         if triggered:
             print(f"{_ts()} User loop: manual trigger received.")
+        else:
+            # Scheduled wake-up: consume this session slot.
+            # Manual triggers do not consume a slot so the next
+            # scheduled session still fires at its planned time.
+            session_times = session_times[1:]
 
         set_user_loop_next_run(None)
 
