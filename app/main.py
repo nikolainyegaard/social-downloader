@@ -23,6 +23,7 @@ from platforms.tiktok.loop import (
     trigger_user_event, trigger_sound_event,
     check_and_clear_user_reschedule, check_and_clear_sound_reschedule,
     get_and_clear_trigger_scope,
+    recover_loop_state_from_db,
 )
 from platforms.youtube import loop as youtube_loop
 from platforms.youtube.loop import LOOP_INTERVAL_MINUTES as YOUTUBE_LOOP_INTERVAL_MINUTES
@@ -495,6 +496,7 @@ if __name__ == "__main__":
     print(f"{_ts()} Initialising databases...")
     db.init_db()
     youtube_db.init_db()
+    recover_loop_state_from_db()
 
     n = db.migrate_video_file_paths_to_platform(MEDIA_DIR)
     if n:

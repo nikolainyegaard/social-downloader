@@ -31,17 +31,24 @@ def _load_loop_state() -> dict:
 
 def _save_loop_state() -> None:
     with _user_state_lock:
-        data = {
-            "user_last_run_end":       user_loop_state["last_run_end"],
-            "user_last_duration_secs": user_loop_state["last_run_duration_secs"],
-            "user_last_new_videos":    user_loop_state["last_new_videos"],
-        }
+        u_end = user_loop_state["last_run_end"]
+        u_dur = user_loop_state["last_run_duration_secs"]
+        u_new = user_loop_state["last_new_videos"]
     with _sound_state_lock:
-        data.update({
-            "sound_last_run_end":       sound_loop_state["last_run_end"],
-            "sound_last_duration_secs": sound_loop_state["last_run_duration_secs"],
-            "sound_last_new_videos":    sound_loop_state["last_new_videos"],
-        })
+        s_end = sound_loop_state["last_run_end"]
+        s_dur = sound_loop_state["last_run_duration_secs"]
+        s_new = sound_loop_state["last_new_videos"]
+    # COALESCE: don't overwrite a previously persisted non-null value with null.
+    # This prevents the sound loop from clobbering user state before any user session runs.
+    _prev = _load_loop_state()
+    data = {
+        "user_last_run_end":        u_end if u_end is not None else _prev.get("user_last_run_end"),
+        "user_last_duration_secs":  u_dur if u_dur is not None else _prev.get("user_last_duration_secs"),
+        "user_last_new_videos":     u_new if u_new is not None else _prev.get("user_last_new_videos"),
+        "sound_last_run_end":       s_end if s_end is not None else _prev.get("sound_last_run_end"),
+        "sound_last_duration_secs": s_dur if s_dur is not None else _prev.get("sound_last_duration_secs"),
+        "sound_last_new_videos":    s_new if s_new is not None else _prev.get("sound_last_new_videos"),
+    }
     os.makedirs(TIKTOK_DATA_DIR, exist_ok=True)
     _tmp = LOOP_STATE_PATH + ".tmp"
     with open(_tmp, "w", encoding="utf-8") as f:
@@ -126,6 +133,24 @@ is_running = is_user_loop_running
 def is_sound_loop_running() -> bool:
     with _sound_state_lock:
         return sound_loop_state["running"]
+
+
+def recover_loop_state_from_db() -> None:
+    """If user last_run_end is still null after loading the state file, infer it from the DB.
+
+    Called once at startup after db.init_db(). Uses MAX(last_checked) from users as a proxy
+    for the last completed user session. Saves the recovered value so subsequent restarts pick it up.
+    """
+    with _user_state_lock:
+        if user_loop_state["last_run_end"] is not None:
+            return
+    ts = db.get_last_user_check_time()
+    if not ts:
+        return
+    iso = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    with _user_state_lock:
+        user_loop_state["last_run_end"] = iso
+    _save_loop_state()
 
 
 def set_user_loop_next_run(iso: str | None) -> None:

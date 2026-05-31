@@ -396,6 +396,15 @@ def get_users_due_for_check(now: int) -> list[dict]:
         ).fetchall()]
 
 
+def get_last_user_check_time() -> int | None:
+    """Return MAX(last_checked) across all enabled users, or None if no users have been checked."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT MAX(last_checked) FROM users WHERE enabled = 1"
+        ).fetchone()
+        return row[0] if row and row[0] else None
+
+
 def set_user_next_check(tiktok_id: str, next_check_at: int | None) -> None:
     """Write the next scheduled check timestamp for a user. Pass None to reset (due ASAP)."""
     with get_db() as conn:
