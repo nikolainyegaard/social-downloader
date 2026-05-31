@@ -1380,6 +1380,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 6px; color: var(--text);
 }
+.loop-interval-field {
+  display: grid;
+  grid-template-columns: 72px 32px;
+  align-items: center;
+  gap: 6px;
+}
+.loop-interval-field .loop-interval-input { width: 100%; }
+.loop-interval-field span { color: var(--muted); font-size: 13px; }
 /* ── Settings sub-tabs ─────────────────────────────────────────────────────── */
 
 .settings-sub-tabs {

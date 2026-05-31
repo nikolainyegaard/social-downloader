@@ -476,34 +476,37 @@
         <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
           <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
             <span>Sessions per day</span>
-            <input type="number" id="settingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
+            <div class="loop-interval-field">
+              <input type="number" id="settingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
+              <span></span>
+            </div>
           </label>
           <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
             <span>Starred check interval</span>
-            <div style="display:flex;align-items:center;gap:6px">
+            <div class="loop-interval-field">
               <input type="number" id="settingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
-              <span style="color:var(--muted)">h</span>
+              <span>h</span>
             </div>
           </label>
           <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
             <span>Active user check interval</span>
-            <div style="display:flex;align-items:center;gap:6px">
+            <div class="loop-interval-field">
               <input type="number" id="settingsActiveHours" min="1" max="168" class="loop-interval-input">
-              <span style="color:var(--muted)">h</span>
+              <span>h</span>
             </div>
           </label>
           <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
             <span>Inactive user check interval</span>
-            <div style="display:flex;align-items:center;gap:6px">
+            <div class="loop-interval-field">
               <input type="number" id="settingsInactiveHours" min="1" max="720" class="loop-interval-input">
-              <span style="color:var(--muted)">h</span>
+              <span>h</span>
             </div>
           </label>
           <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
             <span>Full refresh cycle</span>
-            <div style="display:flex;align-items:center;gap:6px">
+            <div class="loop-interval-field">
               <input type="number" id="settingsStatsRefreshDays" min="1" max="30" class="loop-interval-input">
-              <span style="color:var(--muted)">days</span>
+              <span>days</span>
             </div>
           </label>
         </div>
@@ -512,9 +515,9 @@
         <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
           <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
             <span>Sound loop interval</span>
-            <div style="display:flex;align-items:center;gap:6px">
+            <div class="loop-interval-field">
               <input type="number" id="soundLoopIntervalInput" min="1" max="9999" class="loop-interval-input">
-              <span style="color:var(--muted)">min</span>
+              <span>min</span>
             </div>
           </label>
         </div>
