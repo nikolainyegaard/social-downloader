@@ -437,15 +437,12 @@ def _migrate_data_to_platform_dirs() -> None:
 
     # ── Cleanup: tiktok-downloader leftover artifacts ─────────────────────────
 
-    # loop_state.json served no purpose in the new layout; delete from both
-    # root (pre-move) and data/tiktok/ (post-move from a previous migration run)
-    for path in (
-        os.path.join(DATA_DIR,       "loop_state.json"),
-        os.path.join(TIKTOK_DATA_DIR, "loop_state.json"),
-    ):
-        if os.path.isfile(path):
-            os.remove(path)
-            print(f"{_ts()} Cleanup: removed {os.path.relpath(path, DATA_DIR)}")
+    # loop_state.json at the DATA_DIR root is a tiktok-downloader artifact;
+    # the one at data/tiktok/ is now used by the session scheduler and must not be removed.
+    _legacy_loop_state = os.path.join(DATA_DIR, "loop_state.json")
+    if os.path.isfile(_legacy_loop_state):
+        os.remove(_legacy_loop_state)
+        print(f"{_ts()} Cleanup: removed loop_state.json (legacy root location)")
 
     # Flat date-rotation logs at data/logs/ root (run_YYYYMMDD.log).
     # social-downloader never writes these at the root level; they are all
