@@ -776,7 +776,91 @@ function _sortedUsers() {
 const _GHOST_CARD = '<div class="user-card" aria-hidden="true" style="visibility:hidden;pointer-events:none;min-height:220px"></div>';
 function _ghostCards(n) { return n > 0 ? Array(n).fill(_GHOST_CARD).join('') : ''; }
 
+const _USER_CARD_BATCH = 9;
+let _userGridObs       = null;
+let _userRenderedCount = 0;
+let _userSortedCache   = [];
+
+function _renderUserCard(u) {
+  const isCurrent  = u.username === currentUser;
+  const isInactive = u.tracking_enabled === 0;
+  const isBanned   = u.account_status === 'banned';
+
+  const { cls: trackingCls, label: trackingLabel } = _trackingBadge(u.tracking_enabled);
+  const accountBadge = u.account_status === 'banned'
+    ? `<span class="privacy-status banned">Banned</span>`
+    : (PRIVACY_MAP[u.privacy_status]
+        ? `<span class="privacy-status ${PRIVACY_MAP[u.privacy_status][0]}">${PRIVACY_MAP[u.privacy_status][1]}</span>`
+        : '');
+  const checked = _fmtLastChecked(u.last_checked);
+
+  const oldNames   = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
+  const oldNameTag = oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
+  const idLine     = `id:${esc(u.tiktok_id)}`;
+
+  const inRunQueue   = runQueue.includes(u.tiktok_id);
+  const isRunCurrent = runCurrent === u.tiktok_id;
+  const runLabel     = isRunCurrent ? 'Running…' : inRunQueue ? 'Queued' : 'Run';
+  const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
+
+  return `
+    <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned ? ' user-card-inactive' : ''}${isBanned ? ' user-card-banned' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
+      <div class="user-card-top">
+        <div class="avatar-wrap">
+          <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
+          ${u.avatar_cached ? `<img class="user-avatar" src="/api/tiktok/users/${esc(u.tiktok_id)}/avatar" alt=""
+               onerror="this.style.display='none'"
+               onclick="event.stopPropagation();openImgModalUrl('/api/tiktok/users/${esc(u.tiktok_id)}/avatar')">` : ''}
+        </div>
+        <div class="user-identity">
+          <div class="user-display-name">${esc(u.display_name || u.username)}</div>
+          <div class="user-handle">@${esc(u.username)}${oldNameTag}</div>
+          <div class="user-id-line">${idLine}</div>
+        </div>
+        <div class="user-badges">
+          <span class="account-status ${trackingCls}">${trackingLabel}</span>
+          ${accountBadge}
+        </div>
+      </div>
+
+      <div class="user-bio-area">
+        ${u.bio ? `<div class="user-bio">${esc(u.bio)}</div>` : ''}
+      </div>
+
+      <div class="user-stats">
+        <span class="stat-item"><span class="stat-item-label">followers</span><span class="stat-item-value">${(u.follower_count||0).toLocaleString()}</span></span>
+        <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${u.video_total||0}</span></span>
+        ${u.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${u.video_deleted}</span></span>` : ''}
+        ${u.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:#ff9800">${u.video_missing}</span></span>` : ''}
+        ${u.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${u.video_undeleted}</span></span>` : ''}
+      </div>
+
+      <div class="user-card-footer">
+        <span class="user-checked">${checked}</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-star${u.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleUserStar('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
+          <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.tiktok_id)}')},{label:'Remove',danger:true,onclick:()=>removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')}])">•••</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function _appendUserCards() {
+  const grid = document.getElementById('usersGrid');
+  _userGridObs = null;
+  const next = _userSortedCache.slice(_userRenderedCount, _userRenderedCount + _USER_CARD_BATCH);
+  if (!next.length) return;
+  grid.insertAdjacentHTML('beforeend', next.map(_renderUserCard).join(''));
+  _userRenderedCount += next.length;
+  if (_userSortedCache.length > _userRenderedCount) {
+    _userGridObs = _attachGridSentinel(grid, _appendUserCards);
+  }
+}
+
 function renderUsers() {
+  if (_userGridObs) { _userGridObs.disconnect(); _userGridObs = null; }
   const grid     = document.getElementById('usersGrid');
   const filtered = _filteredUsers();
   const isFiltered = userFilter.priv !== 'all' || userFilter.stat !== 'all' || userFilter.star !== 'all' || !!_trackingSearch;
@@ -787,79 +871,25 @@ function renderUsers() {
 
   if (!users.length) {
     grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users tracked yet.</div>';
+    _userRenderedCount = 0;
     return;
   }
   if (!filtered.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users match this filter.</div>' + _ghostCards(Math.min(users.length, 9));
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users match this filter.</div>' + _ghostCards(Math.min(users.length, _USER_CARD_BATCH));
+    _userRenderedCount = 0;
     return;
   }
 
-  const _sorted = _sortedUsers();
-  grid.innerHTML = _sorted.map(u => {
-    const isCurrent  = u.username === currentUser;
-    const isInactive = u.tracking_enabled === 0;
-    const isBanned   = u.account_status === 'banned';
+  _userSortedCache    = _sortedUsers();
+  const toShow        = Math.min(Math.max(_USER_CARD_BATCH, _userRenderedCount), _userSortedCache.length);
+  const slice         = _userSortedCache.slice(0, toShow);
+  grid.innerHTML      = slice.map(_renderUserCard).join('')
+    + (toShow < _USER_CARD_BATCH ? _ghostCards(_USER_CARD_BATCH - toShow) : '');
+  _userRenderedCount  = slice.length;
 
-    const { cls: trackingCls, label: trackingLabel } = _trackingBadge(u.tracking_enabled);
-    const accountBadge = u.account_status === 'banned'
-      ? `<span class="privacy-status banned">Banned</span>`
-      : (PRIVACY_MAP[u.privacy_status]
-          ? `<span class="privacy-status ${PRIVACY_MAP[u.privacy_status][0]}">${PRIVACY_MAP[u.privacy_status][1]}</span>`
-          : '');
-    const checked = _fmtLastChecked(u.last_checked);
-
-    const oldNames   = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
-    const oldNameTag = oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
-    const idLine     = `id:${esc(u.tiktok_id)}`;
-
-    const inRunQueue   = runQueue.includes(u.tiktok_id);
-    const isRunCurrent = runCurrent === u.tiktok_id;
-    const runLabel     = isRunCurrent ? 'Running…' : inRunQueue ? 'Queued' : 'Run';
-    const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
-
-    return `
-      <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned ? ' user-card-inactive' : ''}${isBanned ? ' user-card-banned' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
-        <div class="user-card-top">
-          <div class="avatar-wrap">
-            <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
-            ${u.avatar_cached ? `<img class="user-avatar" src="/api/tiktok/users/${esc(u.tiktok_id)}/avatar" alt=""
-                 onerror="this.style.display='none'"
-                 onclick="event.stopPropagation();openImgModalUrl('/api/tiktok/users/${esc(u.tiktok_id)}/avatar')">` : ''}
-          </div>
-          <div class="user-identity">
-            <div class="user-display-name">${esc(u.display_name || u.username)}</div>
-            <div class="user-handle">@${esc(u.username)}${oldNameTag}</div>
-            <div class="user-id-line">${idLine}</div>
-          </div>
-          <div class="user-badges">
-            <span class="account-status ${trackingCls}">${trackingLabel}</span>
-            ${accountBadge}
-          </div>
-        </div>
-
-        <div class="user-bio-area">
-          ${u.bio ? `<div class="user-bio">${esc(u.bio)}</div>` : ''}
-        </div>
-
-        <div class="user-stats">
-          <span class="stat-item"><span class="stat-item-label">followers</span><span class="stat-item-value">${(u.follower_count||0).toLocaleString()}</span></span>
-          <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${u.video_total||0}</span></span>
-          ${u.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${u.video_deleted}</span></span>` : ''}
-          ${u.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:#ff9800">${u.video_missing}</span></span>` : ''}
-          ${u.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${u.video_undeleted}</span></span>` : ''}
-        </div>
-
-        <div class="user-card-footer">
-          <span class="user-checked">${checked}</span>
-          <div style="display:flex;gap:6px;">
-            <button class="btn-star${u.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleUserStar('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
-            <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
-            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.tiktok_id)}')},{label:'Remove',danger:true,onclick:()=>removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')}])">•••</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('') + _ghostCards(Math.max(0, Math.min(users.length, 9) - _sorted.length));
+  if (_userSortedCache.length > _userRenderedCount) {
+    _userGridObs = _attachGridSentinel(grid, _appendUserCards);
+  }
 }
 
 function renderPending() {

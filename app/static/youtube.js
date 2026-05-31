@@ -587,7 +587,82 @@ function _sortedYtChannels() {
 
 // ── Channel cards ─────────────────────────────────────────────────────────────
 
+const _YT_CARD_BATCH    = 9;
+let _ytGridObs          = null;
+let _ytRenderedCount    = 0;
+let _ytSortedCache      = [];
+
+function _renderYtChannelCard(ch) {
+  const isCurrent  = !!ytCurrentChannel && ch.handle === ytCurrentChannel;
+  const isInactive = ch.tracking_enabled === 0;
+  const { cls: trackingCls, label: trackingLabel } = _trackingBadge(ch.tracking_enabled);
+  const checked    = _fmtLastChecked(ch.last_checked);
+  const inQueue    = ytRunQueue.includes(ch.channel_id);
+  const isRunCur   = ytRunCurrent === ch.channel_id;
+  const runLabel   = isRunCur ? 'Running…' : inQueue ? 'Queued' : 'Run';
+  const runDis     = (inQueue || isRunCur) ? 'disabled' : '';
+  const subStr     = ch.subscriber_count != null ? `${_fmtLarge(ch.subscriber_count)} subs` : '';
+
+  return `
+    <div class="user-card yt-channel-card${isCurrent ? ' user-card-current' : ''}${isInactive ? ' user-card-inactive' : ''}"
+         data-channelid="${esc(ch.channel_id)}"
+         onclick="if(!event.target.closest('button'))ytOpenChModal('${esc(ch.channel_id)}')"
+         role="button" tabindex="0">
+      <div class="user-card-top">
+        <div class="avatar-wrap">
+          <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
+          ${ch.avatar_cached ? `<img class="user-avatar" src="/api/youtube/channels/${esc(ch.channel_id)}/avatar" alt=""
+               onerror="this.style.display='none'"
+               onclick="event.stopPropagation();openImgModalUrl('/api/youtube/channels/${esc(ch.channel_id)}/avatar')">` : ''}
+        </div>
+        <div class="user-identity">
+          <div class="user-display-name">${esc(ch.display_name || ch.handle)}</div>
+          <div class="user-handle">@${esc(ch.handle)}</div>
+          ${subStr ? `<div class="user-id-line">${esc(subStr)}</div>` : `<div class="user-id-line">${esc(ch.channel_id)}</div>`}
+        </div>
+        <div class="user-badges">
+          <span class="account-status ${trackingCls}">${trackingLabel}</span>
+        </div>
+      </div>
+
+      <div class="user-bio-area">
+        ${ch.description ? `<div class="user-bio">${esc(ch.description)}</div>` : ''}
+      </div>
+
+      <div class="user-stats">
+        ${subStr ? `<span class="stat-item"><span class="stat-item-label">subs</span><span class="stat-item-value">${_fmtLarge(ch.subscriber_count)}</span></span>` : ''}
+        <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${ch.video_total || 0}</span></span>
+        ${ch.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${ch.video_deleted}</span></span>` : ''}
+        ${ch.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:#ff9800">${ch.video_missing}</span></span>` : ''}
+        ${ch.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${ch.video_undeleted}</span></span>` : ''}
+      </div>
+
+      <div class="user-card-footer">
+        <span class="user-checked">${checked}</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="event.stopPropagation();ytToggleChStar('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
+          <button class="btn-run" ${runDis} onclick="event.stopPropagation();ytRunChannel('${esc(ch.channel_id)}')">${runLabel}</button>
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>ytRunChProfile('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>ytRemoveChannel('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">•••</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function _appendYtChannelCards() {
+  const grid = document.getElementById('ytChannelsGrid');
+  _ytGridObs = null;
+  const next = _ytSortedCache.slice(_ytRenderedCount, _ytRenderedCount + _YT_CARD_BATCH);
+  if (!next.length) return;
+  grid.insertAdjacentHTML('beforeend', next.map(_renderYtChannelCard).join(''));
+  _ytRenderedCount += next.length;
+  if (_ytSortedCache.length > _ytRenderedCount) {
+    _ytGridObs = _attachGridSentinel(grid, _appendYtChannelCards);
+  }
+}
+
 function renderYtChannels() {
+  if (_ytGridObs) { _ytGridObs.disconnect(); _ytGridObs = null; }
   const grid     = document.getElementById('ytChannelsGrid');
   if (!grid) return;
   const filtered = _filteredYtChannels();
@@ -597,71 +672,26 @@ function renderYtChannels() {
 
   if (!ytChannels.length) {
     grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No channels tracked yet.</div>';
+    _ytRenderedCount = 0;
     return;
   }
   if (!filtered.length) {
     grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No channels match this filter.</div>'
-      + _ghostCards(Math.min(ytChannels.length, 9));
+      + _ghostCards(Math.min(ytChannels.length, _YT_CARD_BATCH));
+    _ytRenderedCount = 0;
     return;
   }
 
-  const sorted = _sortedYtChannels();
-  grid.innerHTML = sorted.map(ch => {
-    const isCurrent  = !!ytCurrentChannel && ch.handle === ytCurrentChannel;
-    const isInactive = ch.tracking_enabled === 0;
-    const { cls: trackingCls, label: trackingLabel } = _trackingBadge(ch.tracking_enabled);
-    const checked    = _fmtLastChecked(ch.last_checked);
-    const inQueue    = ytRunQueue.includes(ch.channel_id);
-    const isRunCur   = ytRunCurrent === ch.channel_id;
-    const runLabel   = isRunCur ? 'Running…' : inQueue ? 'Queued' : 'Run';
-    const runDis     = (inQueue || isRunCur) ? 'disabled' : '';
-    const subStr     = ch.subscriber_count != null ? `${_fmtLarge(ch.subscriber_count)} subs` : '';
+  _ytSortedCache      = _sortedYtChannels();
+  const toShow        = Math.min(Math.max(_YT_CARD_BATCH, _ytRenderedCount), _ytSortedCache.length);
+  const slice         = _ytSortedCache.slice(0, toShow);
+  grid.innerHTML      = slice.map(_renderYtChannelCard).join('')
+    + (toShow < _YT_CARD_BATCH ? _ghostCards(_YT_CARD_BATCH - toShow) : '');
+  _ytRenderedCount    = slice.length;
 
-    return `
-      <div class="user-card yt-channel-card${isCurrent ? ' user-card-current' : ''}${isInactive ? ' user-card-inactive' : ''}"
-           data-channelid="${esc(ch.channel_id)}"
-           onclick="if(!event.target.closest('button'))ytOpenChModal('${esc(ch.channel_id)}')"
-           role="button" tabindex="0">
-        <div class="user-card-top">
-          <div class="avatar-wrap">
-            <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
-            ${ch.avatar_cached ? `<img class="user-avatar" src="/api/youtube/channels/${esc(ch.channel_id)}/avatar" alt=""
-                 onerror="this.style.display='none'"
-                 onclick="event.stopPropagation();openImgModalUrl('/api/youtube/channels/${esc(ch.channel_id)}/avatar')">` : ''}
-          </div>
-          <div class="user-identity">
-            <div class="user-display-name">${esc(ch.display_name || ch.handle)}</div>
-            <div class="user-handle">@${esc(ch.handle)}</div>
-            ${subStr ? `<div class="user-id-line">${esc(subStr)}</div>` : `<div class="user-id-line">${esc(ch.channel_id)}</div>`}
-          </div>
-          <div class="user-badges">
-            <span class="account-status ${trackingCls}">${trackingLabel}</span>
-          </div>
-        </div>
-
-        <div class="user-bio-area">
-          ${ch.description ? `<div class="user-bio">${esc(ch.description)}</div>` : ''}
-        </div>
-
-        <div class="user-stats">
-          ${subStr ? `<span class="stat-item"><span class="stat-item-label">subs</span><span class="stat-item-value">${_fmtLarge(ch.subscriber_count)}</span></span>` : ''}
-          <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${ch.video_total || 0}</span></span>
-          ${ch.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${ch.video_deleted}</span></span>` : ''}
-          ${ch.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:#ff9800">${ch.video_missing}</span></span>` : ''}
-          ${ch.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${ch.video_undeleted}</span></span>` : ''}
-        </div>
-
-        <div class="user-card-footer">
-          <span class="user-checked">${checked}</span>
-          <div style="display:flex;gap:6px">
-            <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="event.stopPropagation();ytToggleChStar('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
-            <button class="btn-run" ${runDis} onclick="event.stopPropagation();ytRunChannel('${esc(ch.channel_id)}')">${runLabel}</button>
-            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>ytRunChProfile('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>ytRemoveChannel('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">•••</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('') + _ghostCards(Math.max(0, Math.min(ytChannels.length, 9) - sorted.length));
+  if (_ytSortedCache.length > _ytRenderedCount) {
+    _ytGridObs = _attachGridSentinel(grid, _appendYtChannelCards);
+  }
 }
 
 async function loadYtChannels() {

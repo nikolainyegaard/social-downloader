@@ -506,6 +506,22 @@ function _attachSentinel(listEl, callback) {
   return obs;
 }
 
+// Viewport-based sentinel for full-page grids (cards, channels).
+// Unlike _attachSentinel, root is null so the browser viewport is used.
+function _attachGridSentinel(gridEl, callback) {
+  const s = document.createElement('div');
+  s.style.cssText = 'height:1px;grid-column:1/-1';
+  gridEl.appendChild(s);
+  const obs = new IntersectionObserver(entries => {
+    if (!entries[0].isIntersecting) return;
+    obs.disconnect();
+    s.remove();
+    callback();
+  }, { rootMargin: '400px' });
+  obs.observe(s);
+  return obs;
+}
+
 // ── Toolbar helpers ───────────────────────────────────────────────────────────
 // Shared toolbar expand/collapse body. Returns the new expanded value so
 // the caller can write it back to its own state variable.
