@@ -17,7 +17,7 @@ from platforms.tiktok.config import (
 )
 from platforms.tiktok.api import (
     get_user_info, get_user_videos, get_user_videos_with_stats,
-    fetch_sound_video_ids, get_video_details, UserBannedException,
+    fetch_sound_video_ids, get_video_details, UserBannedException, UserPrivateException,
 )
 from downloader import download_video, download_photos, rename_creator_folder
 from thumbnailer import cache_avatar, generate_thumbnail
@@ -157,11 +157,21 @@ async def process_single_user(
                         db.set_user_tracking_enabled(tiktok_id, False)
                         log(f"  Banned for 14+ consecutive days -- tracking disabled")
                 else:
-                    log(f"  Account banned/removed (TikTok 10202), marking as banned")
+                    log(f"  Account banned/removed (TikTok ban code), marking as banned")
                     db.set_user_account_status(tiktok_id, "banned")
                     n = db.ban_user_videos(tiktok_id)
                     if n:
                         log(f"  {_npost(n)} marked deleted (user_banned)")
+                return _profile_ok
+            except UserPrivateException:
+                # Account set to private at the API level (statusCode 10222).
+                # Distinct from a public account with secret=True, which still returns user data.
+                # Video content is inaccessible; skip the fetch but keep tracking in case
+                # the account goes public again.
+                _profile_ok = True
+                db.reset_profile_fail_count(tiktok_id)
+                log(f"  Account is fully private (TikTok 10222), skipping video fetch")
+                db.update_user_privacy_status(tiktok_id, "private_blocked")
                 return _profile_ok
             except Exception as e:
                 if _is_bot_error(e):

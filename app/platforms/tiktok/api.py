@@ -8,7 +8,23 @@ import re
 
 
 class UserBannedException(Exception):
-    """Raised when TikTok returns statusCode 10202 (account banned or removed)."""
+    """Raised when TikTok returns a ban/removal/restriction status code.
+
+    Codes handled:
+      10202 USER_NOT_EXIST      -- account permanently deleted or removed
+      10221 USER_BAN            -- account banned by TikTok
+      10223 USER_FTC            -- account restricted under COPPA/FTC rules
+      10225 USER_UNIQUE_SENSITIVITY -- account restricted for content sensitivity
+    """
+
+
+class UserPrivateException(Exception):
+    """Raised when TikTok returns statusCode 10222 (USER_PRIVATE).
+
+    The account exists but has restricted its profile. No public data is accessible.
+    Distinct from a ban: the account may go public again, so tracking is preserved
+    but the video fetch is skipped.
+    """
 
 
 async def get_user_info(api, username: str | None = None,
@@ -41,10 +57,21 @@ async def get_user_info(api, username: str | None = None,
                     f"TikTokApi returned None for sec_uid={sec_uid} "
                     f"-- TikTok may have blocked the request or cookies are stale"
                 )
-            if data.get("statusCode") in (10202, 10223):
+            _sc = data.get("statusCode")
+            if _sc in (10202, 10221, 10223, 10225):
                 raise UserBannedException(
-                    f"TikTok returned statusCode {data.get('statusCode')} for sec_uid={sec_uid} "
-                    f"-- account is banned, removed, or FTC-restricted"
+                    f"TikTok returned statusCode {_sc} for sec_uid={sec_uid} "
+                    f"-- account is banned, removed, restricted, or FTC-restricted"
+                )
+            if _sc == 10222:
+                raise UserPrivateException(
+                    f"TikTok returned statusCode 10222 for sec_uid={sec_uid} "
+                    f"-- account is private"
+                )
+            if _sc == 10102:
+                raise ValueError(
+                    f"TikTok returned statusCode 10102 for sec_uid={sec_uid} "
+                    f"-- session is not authenticated; cookies may be stale or expired"
                 )
             # statusCode 0 with empty user object is a transient session artifact.
             # The session is degraded but not blocked -- a short wait and one retry
@@ -70,10 +97,21 @@ async def get_user_info(api, username: str | None = None,
                 f"TikTokApi returned incomplete data for @{username} "
                 f"(missing key {exc}) -- cookies may be stale"
             ) from exc
-        if data.get("statusCode") in (10202, 10223):
+        _sc = data.get("statusCode")
+        if _sc in (10202, 10221, 10223, 10225):
             raise UserBannedException(
-                f"TikTok returned statusCode {data.get('statusCode')} for @{username} "
-                f"-- account is banned, removed, or FTC-restricted"
+                f"TikTok returned statusCode {_sc} for @{username} "
+                f"-- account is banned, removed, restricted, or FTC-restricted"
+            )
+        if _sc == 10222:
+            raise UserPrivateException(
+                f"TikTok returned statusCode 10222 for @{username} "
+                f"-- account is private"
+            )
+        if _sc == 10102:
+            raise ValueError(
+                f"TikTok returned statusCode 10102 for @{username} "
+                f"-- session is not authenticated; cookies may be stale or expired"
             )
     u = data.get("userInfo", {}).get("user", {})
     s = data.get("userInfo", {}).get("stats", {})
