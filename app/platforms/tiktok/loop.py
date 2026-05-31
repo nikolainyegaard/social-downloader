@@ -25,7 +25,7 @@ def _load_loop_state() -> dict:
     try:
         with open(LOOP_STATE_PATH, encoding="utf-8") as f:
             return json.load(f)
-    except (FileNotFoundError, ValueError):
+    except (OSError, ValueError):
         return {}
 
 
@@ -43,8 +43,10 @@ def _save_loop_state() -> None:
             "sound_last_new_videos":    sound_loop_state["last_new_videos"],
         })
     os.makedirs(TIKTOK_DATA_DIR, exist_ok=True)
-    with open(LOOP_STATE_PATH, "w", encoding="utf-8") as f:
+    _tmp = LOOP_STATE_PATH + ".tmp"
+    with open(_tmp, "w", encoding="utf-8") as f:
         json.dump(data, f)
+    os.replace(_tmp, LOOP_STATE_PATH)
 
 
 # ── User loop state ───────────────────────────────────────────────────────────
