@@ -1425,21 +1425,17 @@ async function editSoundLabel(soundId) {
 const _sEl = {
   badge:      document.getElementById('statusBadge'),
   text:       document.getElementById('statusText'),
-  uLast:      document.getElementById('userLoopLast'),
-  uStats:     document.getElementById('userLoopStats'),
-  uNext:      document.getElementById('userLoopNext'),
-  uDur:       document.getElementById('userLoopDuration'),
-  uSessions:  document.getElementById('userLoopSessions'),
+  uMeta:       document.getElementById('userLoopMeta'),
+  uNext:       document.getElementById('userLoopNext'),
+  uSessions:   document.getElementById('userLoopSessions'),
   uBtnStarred: document.getElementById('triggerStarredBtn'),
   uBtnHalf:    document.getElementById('triggerHalfBtn'),
   uBtnAll:     document.getElementById('triggerAllBtn'),
   uStopBtn:   document.getElementById('stopUserBtn'),
-  sLast:      document.getElementById('soundLoopLast'),
-  sDur:       document.getElementById('soundLoopDuration'),
+  sMeta:      document.getElementById('soundLoopMeta'),
   sNext:      document.getElementById('soundLoopNext'),
   sBtn:       document.getElementById('triggerSoundBtn'),
   sStopBtn:   document.getElementById('stopSoundBtn'),
-  sNewVids:   document.getElementById('soundLoopNewVideos'),
   missing:    document.getElementById('missingStatsCount'),
   failed:     document.getElementById('statsFailedCount'),
   retryBtn:   document.getElementById('retryFailedBtn'),
@@ -1467,20 +1463,19 @@ function renderStatus(state) {
     : 'Idle';
 
   // User loop card
-  if (_sEl.uLast) _sEl.uLast.textContent = state.user_loop_last_end ? `Last: ${fmt.rel(state.user_loop_last_end)}` : 'Never run';
-  if (_sEl.uStats) {
-    const comp  = state.user_loop_last_session_completed;
-    const total = state.user_loop_last_session_total;
-    const nvids = state.user_loop_last_new_videos;
+  if (_sEl.uMeta) {
     const parts = [];
+    if (state.user_loop_last_end) parts.push(`Last: ${fmt.rel(state.user_loop_last_end)}`);
+    else parts.push('Never run');
+    const comp = state.user_loop_last_session_completed, total = state.user_loop_last_session_total;
     if (comp != null && total != null) parts.push(`${comp}/${total} users`);
-    if (nvids != null) parts.push(`${nvids} new`);
-    _sEl.uStats.textContent = parts.join(' · ');
+    if (state.user_loop_last_new_videos != null) parts.push(`${state.user_loop_last_new_videos} new`);
+    if (state.user_loop_last_duration_secs != null) parts.push(fmt.dur(state.user_loop_last_duration_secs));
+    _sEl.uMeta.textContent = parts.join(' · ');
   }
   if (_sEl.uNext) _sEl.uNext.textContent = state.user_loop_running
     ? 'Running…'
     : (state.user_loop_next ? `Next: ${fmt.relFuture(state.user_loop_next)}` : '');
-  if (_sEl.uDur) _sEl.uDur.textContent = state.user_loop_last_duration_secs != null ? fmt.dur(state.user_loop_last_duration_secs) : '';
   if (_sEl.uSessions) {
     const sessions = state.user_loop_sessions_today || [];
     if (sessions.length) {
@@ -1512,9 +1507,14 @@ function renderStatus(state) {
   if (_sEl.uStopBtn)    _sEl.uStopBtn.disabled     = !_uRunning;
 
   // Sound loop card
-  if (_sEl.sLast)    _sEl.sLast.textContent    = state.sound_loop_last_end ? `Last: ${fmt.rel(state.sound_loop_last_end)}` : 'Never run';
-  if (_sEl.sDur)     _sEl.sDur.textContent     = state.sound_loop_last_duration_secs != null ? fmt.dur(state.sound_loop_last_duration_secs) : '';
-  if (_sEl.sNewVids) _sEl.sNewVids.textContent = state.sound_loop_last_new_videos    != null ? `${state.sound_loop_last_new_videos} new` : '';
+  if (_sEl.sMeta) {
+    const parts = [];
+    if (state.sound_loop_last_end) parts.push(`Last: ${fmt.rel(state.sound_loop_last_end)}`);
+    else parts.push('Never run');
+    if (state.sound_loop_last_new_videos != null) parts.push(`${state.sound_loop_last_new_videos} new`);
+    if (state.sound_loop_last_duration_secs != null) parts.push(fmt.dur(state.sound_loop_last_duration_secs));
+    _sEl.sMeta.textContent = parts.join(' · ');
+  }
   if (_sEl.sNext)    _sEl.sNext.textContent    = state.sound_loop_running
     ? 'Running…'
     : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');

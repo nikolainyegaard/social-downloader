@@ -1070,21 +1070,26 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   gap: 14px;
 }
 
-/* Loop grid */
-.loop-section-label {
-  font-size: 10px;
-  margin-bottom: 6px;
+/* Loop block */
+.loop-block { display: flex; flex-direction: column; gap: 6px; }
+
+.loop-block-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
 }
-.loop-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  grid-template-rows: auto auto;
-  row-gap: 4px;
-  column-gap: 12px;
+.loop-section-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.loop-next          { font-size: 11px; color: var(--accent); }
+
+.loop-meta    { font-size: 12px; color: var(--text-dim); }
+
+.loop-actions {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 2px;
 }
-.loop-cell-main { font-size: 12px; color: var(--text-dim); }
-.loop-cell-sub  { font-size: 11px; color: var(--muted); }
 
 .loop-sessions {
   display: flex;
