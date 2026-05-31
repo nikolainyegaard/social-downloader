@@ -172,7 +172,7 @@ function _ytRenderOtherRow(item, type, now) {
   row.className = 'recent-entry';
   if (type === 'deletions') {
     row.title = `Open @${item.handle}`;
-    row.onclick = () => ytOpenChModal(item.channel_id);
+    row.onclick = () => ytOpenChModalAndHighlight(item.channel_id, item.video_id);
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
       <span class="recent-name">@${esc(item.handle)}</span>
@@ -211,7 +211,7 @@ function renderYtRecent(data) {
   left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="ytOpenRecentLog('deletions')" title="View all deleted videos">Recently deleted</div>`;
   if (data.deletions && data.deletions.length) {
     left += data.deletions.map(d => {
-      const onclick = `ytOpenChModal('${esc(d.channel_id)}')`;
+      const onclick = `ytOpenChModalAndHighlight('${esc(d.channel_id)}','${esc(d.video_id)}')`;
       return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.handle)}">
         <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
         <span class="recent-name">@${esc(d.handle)}</span>
@@ -700,6 +700,16 @@ let _ytModalPendingHighlight = null;
 let _ytPhistData   = [];
 let _ytPhistField  = 'all';
 let _ytPhistChId   = null;
+
+function ytOpenChModalAndHighlight(channelId, videoId, filter, sortField, sortDir) {
+  _ytModalPendingHighlight = {
+    videoId,
+    filter:    filter    || 'all',
+    sortField: sortField || 'upload_date',
+    sortDir:   sortDir   || 'desc',
+  };
+  ytOpenChModal(channelId);
+}
 
 function ytOpenChModal(channelId) {
   const ch = ytChannels.find(c => c.channel_id === channelId);

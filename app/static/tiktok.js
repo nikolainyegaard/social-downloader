@@ -116,7 +116,7 @@ function renderRecent(data) {
     left += data.deletions.map(d => {
       const onclick = d.enabled !== 0
         ? `openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')`
-        : d.sound_id ? `openSoundModalAndHighlight('${esc(d.sound_id)}','${esc(d.video_id)}','deleted')` : '';
+        : d.sound_id ? `openSoundModalAndHighlight('${esc(d.sound_id)}','${esc(d.video_id)}')` : '';
       return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.username)}">
         <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
         <span class="recent-name" ${d.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(d.username)}</span>
@@ -228,7 +228,7 @@ function _ttRenderOtherRow(item, type, now) {
     if (item.enabled !== 0) {
       row.onclick = () => openUserModalAndHighlight(item.tiktok_id, item.video_id);
     } else if (item.sound_id) {
-      row.onclick = () => openSoundModalAndHighlight(item.sound_id, item.video_id, 'deleted');
+      row.onclick = () => openSoundModalAndHighlight(item.sound_id, item.video_id);
     }
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
@@ -1816,8 +1816,8 @@ function openUserModal(tiktokId) {
 function openUserModalAndHighlight(tiktokId, videoId, filter, sortField, sortDir) {
   _modalPendingHighlight = {
     videoId,
-    filter:    filter    || 'deleted',
-    sortField: sortField || 'deleted_at',
+    filter:    filter    || 'all',
+    sortField: sortField || 'upload_date',
     sortDir:   sortDir   || 'desc',
   };
   openUserModal(tiktokId);
