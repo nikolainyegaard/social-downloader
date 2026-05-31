@@ -22,6 +22,7 @@ from platforms.tiktok.loop import (
     set_user_loop_next_run, set_user_loop_sessions_today, set_sound_loop_next_run,
     trigger_user_event, trigger_sound_event,
     check_and_clear_user_reschedule, check_and_clear_sound_reschedule,
+    get_and_clear_trigger_scope,
 )
 from platforms.youtube import loop as youtube_loop
 from platforms.youtube.loop import LOOP_INTERVAL_MINUTES as YOUTUBE_LOOP_INTERVAL_MINUTES
@@ -280,14 +281,19 @@ def _user_loop_thread():
             trigger_user_event.wait(timeout=5 * 60)
             trigger_user_event.clear()
 
-        now_ts    = int(time.time())
-        users_due = db.get_users_due_for_check(now_ts)
+        now_ts = int(time.time())
+        scope  = get_and_clear_trigger_scope() if triggered else None
+
+        if scope == "starred":
+            users_due = db.get_starred_users_due(now_ts)
+        else:
+            users_due = db.get_users_due_for_check(now_ts)
 
         if not users_due:
             print(f"{_ts()} User loop: no users due at this session, skipping.")
             continue
 
-        run_user_session(users_due, manual=triggered)
+        run_user_session(users_due, manual=triggered, session_kind=scope or "scheduled")
 
         # Recompute activity scores after each session so intervals stay current
         _high  = int(db.get_setting("high_priority_check_hours", HIGH_PRIORITY_CHECK_HOURS)) * 3600

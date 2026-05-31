@@ -1434,6 +1434,7 @@ const _sEl = {
   uStopBtn:   document.getElementById('stopUserBtn'),
   sMeta:      document.getElementById('soundLoopMeta'),
   sNext:      document.getElementById('soundLoopNext'),
+  sSessions:  document.getElementById('soundLoopSessions'),
   sBtn:       document.getElementById('triggerSoundBtn'),
   sStopBtn:   document.getElementById('stopSoundBtn'),
   missing:    document.getElementById('missingStatsCount'),
@@ -1515,9 +1516,33 @@ function renderStatus(state) {
     if (state.sound_loop_last_duration_secs != null) parts.push(fmt.dur(state.sound_loop_last_duration_secs));
     _sEl.sMeta.textContent = parts.join(' · ');
   }
-  if (_sEl.sNext)    _sEl.sNext.textContent    = state.sound_loop_running
+  if (_sEl.sNext) _sEl.sNext.textContent = state.sound_loop_running
     ? 'Running…'
     : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');
+  if (_sEl.sSessions) {
+    const nextIso    = state.sound_loop_next;
+    const intervalMs = (state.sound_loop_interval_minutes || 60) * 60 * 1000;
+    if (nextIso && intervalMs) {
+      const nowMs   = Date.now();
+      const nextMs  = new Date(nextIso).getTime();
+      const times   = [nextMs, nextMs + intervalMs, nextMs + 2 * intervalMs, nextMs + 3 * intervalMs];
+      let   foundNext = false;
+      _sEl.sSessions.innerHTML = times.map(ts => {
+        const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        let cls = 'loop-session-pill';
+        if (state.sound_loop_running && !foundNext && ts >= nowMs) {
+          foundNext = true; cls += ' running';
+        } else if (ts < nowMs) {
+          cls += ' done';
+        } else if (!foundNext) {
+          foundNext = true; cls += ' next';
+        }
+        return `<span class="${cls}">${time}</span>`;
+      }).join('');
+    } else {
+      _sEl.sSessions.innerHTML = '';
+    }
+  }
   if (_sEl.sBtn)     _sEl.sBtn.disabled     = state.sound_loop_running;
   if (_sEl.sStopBtn) _sEl.sStopBtn.disabled = !state.sound_loop_running;
 
@@ -1660,23 +1685,30 @@ async function stopSoundLoop() {
 async function loadSettings() {
   const { ok, data } = await apiJSON('/api/tiktok/settings');
   if (!ok) return;
-  const uEl = document.getElementById('userLoopIntervalInput');
-  const sEl = document.getElementById('soundLoopIntervalInput');
-  if (uEl) uEl.value = data.user_loop_interval_minutes;
-  if (sEl) sEl.value = data.sound_loop_interval_minutes;
+  const _sv = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+  _sv('settingsSessionsPerDay',    data.sessions_per_day);
+  _sv('settingsHighPriorityHours', data.high_priority_check_hours);
+  _sv('settingsActiveHours',       data.active_check_hours);
+  _sv('settingsInactiveHours',     data.inactive_check_hours);
+  _sv('settingsStatsRefreshDays',  data.stats_refresh_days);
+  _sv('soundLoopIntervalInput',    data.sound_loop_interval_minutes);
 }
 
 async function saveLoopSettings() {
-  const uVal = parseInt(document.getElementById('userLoopIntervalInput')?.value, 10);
-  const sVal = parseInt(document.getElementById('soundLoopIntervalInput')?.value, 10);
-  if (!uVal || !sVal || uVal < 1 || sVal < 1) {
-    showToast('Intervals must be positive integers.', { type: 'warning', duration: 4000 });
+  const _iv = id => { const el = document.getElementById(id); return el ? parseInt(el.value, 10) : null; };
+  const body = {
+    sessions_per_day:          _iv('settingsSessionsPerDay'),
+    high_priority_check_hours: _iv('settingsHighPriorityHours'),
+    active_check_hours:        _iv('settingsActiveHours'),
+    inactive_check_hours:      _iv('settingsInactiveHours'),
+    stats_refresh_days:        _iv('settingsStatsRefreshDays'),
+    sound_loop_interval_minutes: _iv('soundLoopIntervalInput'),
+  };
+  if (Object.values(body).some(v => !v || v < 1)) {
+    showToast('All values must be positive integers.', { type: 'warning', duration: 4000 });
     return;
   }
-  const { ok, data } = await apiJSON('/api/tiktok/settings', {
-    method: 'PATCH',
-    body: JSON.stringify({ user_loop_interval_minutes: uVal, sound_loop_interval_minutes: sVal }),
-  });
+  const { ok, data } = await apiJSON('/api/tiktok/settings', { method: 'PATCH', body: JSON.stringify(body) });
   if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
   showToast('Settings saved.', { type: 'success', duration: 2500 });
 }

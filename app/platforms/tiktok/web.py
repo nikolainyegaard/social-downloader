@@ -31,6 +31,7 @@ from platforms.tiktok.loop import (
     enqueue_user_run, enqueue_user_profile_run, enqueue_sound_run,
     reschedule_user_loop, reschedule_sound_loop,
     request_stop_user_loop, request_stop_sound_loop,
+    set_user_trigger_scope,
 )
 from thumbnailer import thumb_path_for, avatar_path
 import photo_converter as _photo_converter
@@ -954,6 +955,7 @@ def trigger_now():
     if running:
         return jsonify({"error": "User loop is already running"}), 409
     n = db.prime_starred_for_manual_run()
+    set_user_trigger_scope("starred")
     trigger_user_event.set()
     return jsonify({"ok": True, "queued": n, "mode": "starred"})
 
@@ -966,6 +968,7 @@ def trigger_half_now():
     if running:
         return jsonify({"error": "User loop is already running"}), 409
     n = db.prime_half_for_manual_run()
+    set_user_trigger_scope("half")
     trigger_user_event.set()
     return jsonify({"ok": True, "queued": n, "mode": "half"})
 
@@ -978,6 +981,7 @@ def trigger_all_now():
     if running:
         return jsonify({"error": "User loop is already running"}), 409
     n = db.prime_all_for_manual_run()
+    set_user_trigger_scope("all")
     trigger_user_event.set()
     return jsonify({"ok": True, "queued": n, "mode": "all"})
 

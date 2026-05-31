@@ -139,12 +139,10 @@
             <span id="soundLoopNext" class="loop-next"></span>
           </div>
           <div id="soundLoopMeta" class="loop-meta">Never run</div>
+          <div id="soundLoopSessions" class="loop-sessions"></div>
           <div class="loop-actions">
-            <div></div>
-            <div style="display:flex;gap:5px">
-              <button class="btn-run btn-trigger" id="triggerSoundBtn" onclick="triggerSoundLoop()">Run Now</button>
-              <button class="btn-danger btn-trigger" id="stopSoundBtn" onclick="stopSoundLoop()" disabled>Stop</button>
-            </div>
+            <button class="btn-run btn-trigger" id="triggerSoundBtn" onclick="triggerSoundLoop()">Run Now</button>
+            <button class="btn-danger btn-trigger" id="stopSoundBtn" onclick="stopSoundLoop()" disabled>Stop</button>
           </div>
         </div>
 
@@ -469,28 +467,59 @@
 
         <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
 
-        <div class="settings-section-title">Loop Intervals</div>
+        <div class="settings-section-title">Loop Schedule</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
-          Each loop runs independently. If both are due at the same time, the second one waits
-          for the first to finish plus a 5-minute buffer. Changes take effect at the next scheduled run.
+          Changes take effect at the next scheduled run.
         </p>
-        <div style="display:flex;flex-direction:column;gap:12px;max-width:340px">
+
+        <div class="settings-section-title" style="font-size:11px;color:var(--muted);margin-bottom:8px">User Loop</div>
+        <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
           <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
-            <span>User loop every</span>
+            <span>Sessions per day</span>
+            <input type="number" id="settingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Starred check interval</span>
             <div style="display:flex;align-items:center;gap:6px">
-              <input type="number" id="userLoopIntervalInput" min="1" max="9999" class="loop-interval-input">
-              <span style="color:var(--muted)">min</span>
+              <input type="number" id="settingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
+              <span style="color:var(--muted)">h</span>
             </div>
           </label>
           <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
-            <span>Sound loop every</span>
+            <span>Active user check interval</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="settingsActiveHours" min="1" max="168" class="loop-interval-input">
+              <span style="color:var(--muted)">h</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Inactive user check interval</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="settingsInactiveHours" min="1" max="720" class="loop-interval-input">
+              <span style="color:var(--muted)">h</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Full refresh cycle</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="settingsStatsRefreshDays" min="1" max="30" class="loop-interval-input">
+              <span style="color:var(--muted)">days</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="settings-section-title" style="font-size:11px;color:var(--muted);margin-bottom:8px">Sound Loop</div>
+        <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Sound loop interval</span>
             <div style="display:flex;align-items:center;gap:6px">
               <input type="number" id="soundLoopIntervalInput" min="1" max="9999" class="loop-interval-input">
               <span style="color:var(--muted)">min</span>
             </div>
           </label>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
           <button class="btn-primary" onclick="saveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
         </div>
 

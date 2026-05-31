@@ -76,6 +76,11 @@ _user_stop_event   = threading.Event()
 _user_reschedule_flag  = False
 _user_rflag_lock       = threading.Lock()
 
+# Scope of the pending manual trigger: "starred" | "half" | "all" | None (scheduled).
+# Set by web.py before firing trigger_user_event; read+cleared by main.py after waking.
+_user_trigger_scope      = None
+_user_trigger_scope_lock = threading.Lock()
+
 # ── Sound loop state ──────────────────────────────────────────────────────────
 
 sound_loop_state = {
@@ -168,6 +173,8 @@ def get_state_snapshot() -> dict:
         state["sound_loop_last_duration_secs"] = sound_loop_state["last_run_duration_secs"]
         state["sound_loop_last_new_videos"]    = sound_loop_state["last_new_videos"]
         state["sound_loop_next"]               = sound_loop_state["next_run"]
+    from platforms.tiktok.config import SOUND_LOOP_INTERVAL_MINUTES
+    state["sound_loop_interval_minutes"] = int(db.get_setting("sound_loop_interval_minutes", SOUND_LOOP_INTERVAL_MINUTES))
     with _run_state_lock:
         state["run_current"] = _run_state["current"]
         state["run_queue"]   = list(_run_state["queue"])
@@ -200,6 +207,22 @@ def check_and_clear_user_reschedule() -> bool:
     with _user_rflag_lock:
         val = _user_reschedule_flag
         _user_reschedule_flag = False
+    return val
+
+
+def set_user_trigger_scope(scope: str | None) -> None:
+    """Set the scope for the next manual trigger. Call before firing trigger_user_event."""
+    global _user_trigger_scope
+    with _user_trigger_scope_lock:
+        _user_trigger_scope = scope
+
+
+def get_and_clear_trigger_scope() -> str | None:
+    """Read and clear the pending trigger scope. Returns None for scheduled wakes."""
+    global _user_trigger_scope
+    with _user_trigger_scope_lock:
+        val = _user_trigger_scope
+        _user_trigger_scope = None
     return val
 
 
@@ -341,7 +364,7 @@ threading.Thread(target=backfill_thumbnails, daemon=True, name="thumb-backfill")
 
 # ── Public entry points ───────────────────────────────────────────────────────
 
-def run_user_session(users_due: list[dict], manual: bool = False) -> None:
+def run_user_session(users_due: list[dict], manual: bool = False, session_kind: str | None = None) -> None:
     """Process a pre-assembled set of users due for checking. Called by the session scheduler."""
     from config import get_path_issues
     issues = get_path_issues()
@@ -356,7 +379,10 @@ def run_user_session(users_due: list[dict], manual: bool = False) -> None:
     _total         = len(users_due)
 
     _user_stop_event.clear()
-    _log(f"=== User session started: {_total} user(s) due ===")
+    if session_kind and session_kind != "scheduled":
+        _log(f"=== User session started ({session_kind}): {_total} user(s) ===")
+    else:
+        _log(f"=== User session started: {_total} user(s) due ===")
     _completed = 0
 
     try:
