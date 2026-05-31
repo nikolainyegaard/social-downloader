@@ -947,6 +947,20 @@ def _check_trigger_preconditions():
     return issues, is_user_loop_running()
 
 
+@tiktok_bp.route("/trigger/next", methods=["POST"])
+def trigger_next_now():
+    issues, running = _check_trigger_preconditions()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
+    if running:
+        return jsonify({"error": "User loop is already running"}), 409
+    now_ts = int(time.time())
+    due = db.get_users_due_for_check(now_ts)
+    set_user_trigger_scope("next")
+    trigger_user_event.set()
+    return jsonify({"ok": True, "queued": len(due), "mode": "next"})
+
+
 @tiktok_bp.route("/trigger", methods=["POST"])
 def trigger_now():
     issues, running = _check_trigger_preconditions()

@@ -1458,6 +1458,7 @@ const _sEl = {
   uMeta:       document.getElementById('userLoopMeta'),
   uNext:       document.getElementById('userLoopNext'),
   uSessions:   document.getElementById('userLoopSessions'),
+  uBtnNext:    document.getElementById('triggerNextBtn'),
   uBtnStarred: document.getElementById('triggerStarredBtn'),
   uBtnHalf:    document.getElementById('triggerHalfBtn'),
   uBtnAll:     document.getElementById('triggerAllBtn'),
@@ -1532,6 +1533,7 @@ function renderStatus(state) {
     }
   }
   const _uRunning = state.user_loop_running;
+  if (_sEl.uBtnNext)    _sEl.uBtnNext.disabled     = _uRunning;
   if (_sEl.uBtnStarred) _sEl.uBtnStarred.disabled = _uRunning;
   if (_sEl.uBtnHalf)    _sEl.uBtnHalf.disabled    = _uRunning;
   if (_sEl.uBtnAll)     _sEl.uBtnAll.disabled      = _uRunning;
@@ -1685,10 +1687,11 @@ async function setSoundTracking(soundId, enabled) {
 function _triggerUserToast(d) {
   const n = d.queued ?? 0;
   if (n === 0) return;
-  const labels = { starred: 'full refresh', half: 'quick check', all: 'quick check' };
+  const labels = { next: 'scheduled check', starred: 'full refresh', half: 'quick check', all: 'quick check' };
   const mode   = labels[d.mode] || 'check';
   showToast(`${n} user${n === 1 ? '' : 's'} queued for ${mode}`);
 }
+function triggerNext()    { return _triggerLoop('triggerNextBtn',    '/api/tiktok/trigger/next', 'Could not trigger user loop', _triggerUserToast); }
 function triggerStarred() { return _triggerLoop('triggerStarredBtn', '/api/tiktok/trigger',      'Could not trigger user loop', _triggerUserToast); }
 function triggerHalf()    { return _triggerLoop('triggerHalfBtn',    '/api/tiktok/trigger/half', 'Could not trigger user loop', _triggerUserToast); }
 function triggerAll()     { return _triggerLoop('triggerAllBtn',     '/api/tiktok/trigger/all',  'Could not trigger user loop', _triggerUserToast); }
