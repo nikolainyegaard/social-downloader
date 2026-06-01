@@ -117,9 +117,10 @@ function renderRecent(data) {
       const onclick = d.enabled !== 0
         ? `openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')`
         : d.sound_id ? `openSoundModalAndHighlight('${esc(d.sound_id)}','${esc(d.video_id)}')` : '';
+      const nameStyle = d.enabled === 0 ? 'style="color:var(--text-dim)"' : d.starred ? 'style="color:var(--yellow)"' : '';
       return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.username)}">
         <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
-        <span class="recent-name" ${d.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(d.username)}</span>
+        <span class="recent-name" ${nameStyle}>@${esc(d.username)}</span>
         <span class="recent-detail">${esc(d.video_id.slice(0, 10))}\u2026</span>
       </div>`;
     }).join('');
@@ -135,7 +136,7 @@ function renderRecent(data) {
     left += data.profile_changes.map(p =>
       `<div class="recent-entry" onclick="openUserModalWithHistory('${esc(p.tiktok_id)}','${esc(p.field)}')" title="Open @${esc(p.username)} · ${esc(_FIELD_LABELS[p.field] || p.field)} history">
         <span class="recent-date">${_recentDate(p.changed_at, now)}</span>
-        <span class="recent-name">@${esc(p.username)}</span>
+        <span class="recent-name" ${p.starred ? 'style="color:var(--yellow)"' : ''}>@${esc(p.username)}</span>
         <span class="recent-detail">${esc(_FIELD_LABELS[p.field] || p.field)}</span>
       </div>`
     ).join('');
@@ -151,7 +152,7 @@ function renderRecent(data) {
     const b = data.bans[0];
     left += `<div class="recent-entry" onclick="openUserModal('${esc(b.tiktok_id)}')" title="Open @${esc(b.username)}">
       <span class="recent-date">${_recentDate(b.banned_at, now)}</span>
-      <span class="recent-name">@${esc(b.username)}</span>
+      <span class="recent-name" ${b.starred ? 'style="color:var(--yellow)"' : ''}>@${esc(b.username)}</span>
       <span class="recent-detail" style="color:var(--red)">Banned</span>
     </div>`;
   } else {
@@ -173,7 +174,7 @@ function renderRecent(data) {
             ? `openUserModalAndHighlight('${esc(g.tiktok_id)}','${esc(g.video_id)}','all','download_date','desc')`
             : `openUserModal('${esc(g.tiktok_id)}')`)
         : g.sound_id ? `openSoundModalAndHighlight('${esc(g.sound_id)}','${esc(g.video_id)}')` : '';
-      const nameStyle = g.enabled !== 0 ? '' : 'style="color:var(--text-dim)"';
+      const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : '';
       return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(g.username)}">
         <span class="recent-date">${_recentDate(g.download_date, now)}</span>
         <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>

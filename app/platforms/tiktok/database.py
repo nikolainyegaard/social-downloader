@@ -1198,6 +1198,7 @@ def _group_consecutive_by_user(rows: list[dict], date_key: str) -> list[dict]:
                 "tiktok_id": row["tiktok_id"],
                 "username":  row["username"],
                 "enabled":   row.get("enabled", 1),
+                "starred":   row.get("starred", 0),
                 "video_id":  row.get("video_id"),
                 "sound_id":  row.get("sound_id"),
                 date_key:    row[date_key],
@@ -1213,7 +1214,7 @@ def get_recent_activity() -> dict:
     """Return recent deletions, profile changes, bans, and saves for the Recent panel."""
     with get_db() as conn:
         deletions = [dict(r) for r in conn.execute(
-            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled,
+            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
@@ -1221,18 +1222,18 @@ def get_recent_activity() -> dict:
                ORDER BY v.deleted_at DESC LIMIT 3"""
         ).fetchall()]
         profile_changes = [dict(r) for r in conn.execute(
-            """SELECT ph.field, ph.changed_at, u.username, u.tiktok_id
+            """SELECT ph.field, ph.changed_at, u.username, u.tiktok_id, u.starred
                FROM profile_history ph JOIN users u ON u.tiktok_id = ph.tiktok_id
                ORDER BY ph.changed_at DESC LIMIT 3"""
         ).fetchall()]
         bans = [dict(r) for r in conn.execute(
-            """SELECT tiktok_id, username, banned_at
+            """SELECT tiktok_id, username, banned_at, starred
                FROM users
                WHERE account_status = 'banned' AND banned_at IS NOT NULL
                ORDER BY banned_at DESC LIMIT 1"""
         ).fetchall()]
         saved_rows = [dict(r) for r in conn.execute(
-            """SELECT v.download_date, u.username, u.tiktok_id, u.enabled, v.video_id,
+            """SELECT v.download_date, u.username, u.tiktok_id, u.enabled, u.starred, v.video_id,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
