@@ -214,9 +214,10 @@ function _ttRenderSavedRow(g, now) {
   } else if (g.sound_id) {
     row.onclick = () => openSoundModalAndHighlight(g.sound_id, g.video_id);
   }
+  const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : '';
   row.innerHTML = `
     <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-    <span class="recent-name" ${g.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(g.username)}</span>
+    <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>
     <span class="recent-detail">${g.count}x</span>`;
   return row;
 }
@@ -231,9 +232,10 @@ function _ttRenderOtherRow(item, type, now) {
     } else if (item.sound_id) {
       row.onclick = () => openSoundModalAndHighlight(item.sound_id, item.video_id);
     }
+    const nameStyle = item.enabled === 0 ? 'style="color:var(--text-dim)"' : item.starred ? 'style="color:var(--yellow)"' : '';
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
-      <span class="recent-name" ${item.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(item.username)}</span>
+      <span class="recent-name" ${nameStyle}>@${esc(item.username)}</span>
       <span class="recent-detail">${esc(item.video_id)}</span>`;
   } else if (type === 'profile-changes') {
     const label = _FIELD_LABELS[item.field] || item.field;
@@ -241,14 +243,14 @@ function _ttRenderOtherRow(item, type, now) {
     row.onclick = () => openUserModalWithHistory(item.tiktok_id, item.field);
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
-      <span class="recent-name">@${esc(item.username)}</span>
+      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : ''}>@${esc(item.username)}</span>
       <span class="recent-detail">${esc(label)}</span>`;
   } else {
     row.title = `Open @${item.username}`;
     row.onclick = () => openUserModal(item.tiktok_id);
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.banned_at, now)}</span>
-      <span class="recent-name">@${esc(item.username)}</span>
+      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : ''}>@${esc(item.username)}</span>
       <span class="recent-detail" style="color:var(--red)">Banned</span>`;
   }
   return row;
