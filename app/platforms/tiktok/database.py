@@ -686,6 +686,27 @@ def get_user_by_username(username: str):
         return dict(row) if row else None
 
 
+def update_user_info_from_item_list(tiktok_id, username, display_name, bio,
+                                    sec_uid=None, avatar_url=None):
+    """Update profile fields recoverable from item_list author data.
+
+    Used for private accounts (TikTok 10222) where the profile endpoint returns no data.
+    Follower/following/video counts are not available and are preserved via COALESCE.
+    """
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE users SET
+                sec_uid      = COALESCE(?, sec_uid),
+                username     = ?,
+                display_name = ?,
+                bio          = ?,
+                avatar_url   = COALESCE(?, avatar_url),
+                last_checked = ?
+            WHERE tiktok_id = ?
+        """, (sec_uid, username, display_name, bio,
+              avatar_url, int(time.time()), tiktok_id))
+
+
 def update_user_info(tiktok_id, username, display_name, bio,
                      follower_count, following_count, video_count,
                      sec_uid=None, verified=None, avatar_url=None, raw_user_data=None):

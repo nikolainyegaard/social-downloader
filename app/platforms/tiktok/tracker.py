@@ -216,6 +216,38 @@ async def process_single_user(
                 log(f"  Video fetch failed, trying fallback...")
                 logd(f"  [{tiktok_id}] item_list error: {e}")
 
+        # For 10222 accounts: recover username, display name, bio, and avatar from
+        # item_list author data. Follower/video counts remain unavailable.
+        if is_private and not info and item_list_map:
+            _sample      = next(iter(item_list_map.values()))
+            _a_username  = _sample.get("author_username")
+            _a_display   = _sample.get("author_display_name")
+            _a_bio       = _sample.get("author_bio")
+            _a_avatar    = _sample.get("author_avatar")
+            _a_sec_uid   = _sample.get("author_sec_uid")
+            if _a_sec_uid:
+                sec_uid = _a_sec_uid
+            if _a_username and _a_username != username:
+                old_username = username
+                log(f"  Username changed: @{old_username} -> @{_a_username}")
+                if rename_creator_folder("tiktok", old_username, _a_username):
+                    db.rename_user_video_paths(tiktok_id, old_username, _a_username)
+                    log(f"  Folder renamed and DB paths updated")
+                db.record_profile_change(tiktok_id, "username", old_username)
+                username = _a_username
+            if _a_display and _a_display != user.get("display_name"):
+                db.record_profile_change(tiktok_id, "display_name", user.get("display_name"))
+                log(f"  Profile change: Display name updated")
+            if _a_display:
+                display_name = _a_display
+            if _a_avatar:
+                if cache_avatar(tiktok_id, _a_avatar) == "changed":
+                    log(f"  Profile change: avatar changed")
+            db.update_user_info_from_item_list(
+                tiktok_id, username, display_name, _a_bio,
+                sec_uid=sec_uid, avatar_url=_a_avatar,
+            )
+
         # Inaccessible private account: relation & 1 == 0 means we don't follow them.
         # (relation bitmask: 0=none, 1=we follow them, 2=they follow us, 3=mutual)
         # Accessible private accounts with 0 videos fall through to the diff so

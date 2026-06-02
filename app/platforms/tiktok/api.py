@@ -271,6 +271,10 @@ def _normalise_item_list_entry(item: dict) -> dict:
         "author_username":     author.get("uniqueId"),
         "author_sec_uid":      author.get("secUid"),
         "author_display_name": author.get("nickname"),
+        "author_bio":          author.get("signature"),
+        "author_avatar":       (author.get("avatarLarger")
+                                or author.get("avatarMedium")
+                                or author.get("avatarThumb")),
         "_raw_video_data":     None,
     }
 
