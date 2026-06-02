@@ -133,8 +133,11 @@ async def get_user_info(api, username: str | None = None,
         "video_count":     s.get("videoCount", 0),
         # 'secret' flag means the account is private (not necessarily banned)
         "is_private":      bool(u.get("secret")),
-        # relation & 1 == 1 means the authenticated cookie holder follows this account;
-        # for private accounts this is the reliable signal that content is accessible
+        # relation is a bitmask describing the follow relationship between the cookies
+        # account and this account: 0=none, 1=you follow them, 2=they follow you, 3=mutual.
+        # relation & 1 == 1 is the reliable signal that private content is accessible.
+        # Note: relation is absent when TikTok returns statusCode 10222 (USER_PRIVATE),
+        # which is why the tracker falls back to attempting the video fetch directly.
         "relation":        int(u.get("relation") or 0),
         "verified":        bool(u.get("verified")),
         "avatar_url":      u.get("avatarLarger") or u.get("avatarMedium") or u.get("avatarThumb"),

@@ -164,15 +164,19 @@ async def process_single_user(
                         log(f"  {_npost(n)} marked deleted (user_banned)")
                 return _profile_ok
             except UserPrivateException:
-                # Account set to private at the API level (statusCode 10222).
+                # Profile data unavailable (TikTok 10222 -- account is fully private at API level).
                 # Distinct from a public account with secret=True, which still returns user data.
-                # Video content is inaccessible; skip the fetch but keep tracking in case
-                # the account goes public again.
+                # The profile API returns 10222 regardless of follow status; the video list may
+                # still be accessible if we follow the account and have valid cookies.
+                # Fall through to the video fetch rather than assuming blocked.
                 _profile_ok = True
                 db.reset_profile_fail_count(tiktok_id)
-                log(f"  Account is fully private (TikTok 10222), skipping video fetch")
-                db.update_user_privacy_status(tiktok_id, "private_blocked")
-                return _profile_ok
+                log(f"  Profile data unavailable (private account, TikTok 10222), attempting video fetch")
+                is_private = True
+                info = {}
+                username     = user["username"]
+                display_name = user.get("display_name") or user["username"]
+                break
             except Exception as e:
                 if _is_bot_error(e):
                     raise _BotDetectedError(str(e)) from e
@@ -212,10 +216,13 @@ async def process_single_user(
                 log(f"  Video fetch failed, trying fallback...")
                 logd(f"  [{tiktok_id}] item_list error: {e}")
 
-        # Inaccessible private account: no relation means we don't follow them.
+        # Inaccessible private account: relation & 1 == 0 means we don't follow them.
+        # (relation bitmask: 0=none, 1=we follow them, 2=they follow us, 3=mutual)
         # Accessible private accounts with 0 videos fall through to the diff so
         # deletion tracking of any previously-downloaded videos still runs.
-        if not item_list_map and is_private is True:
+        # info is empty for 10222 accounts (no relation data available); those skip
+        # this check and rely on item_list / yt-dlp success to determine accessibility.
+        if not item_list_map and is_private is True and info:
             if not (info.get("relation") or 0) & 1:
                 log(f"  Private account, cannot be accessed")
                 db.update_user_privacy_status(tiktok_id, "private_blocked")
@@ -232,7 +239,7 @@ async def process_single_user(
         # Only runs when item_list returned nothing (failed or no sec_uid).
         # Skipped for accessible private accounts with 0 videos -- yt-dlp cannot
         # access private content and would incorrectly trigger private_blocked.
-        if not item_list_map and not (is_private and (info.get("relation") or 0) & 1):
+        if not item_list_map and not (is_private and info and (info.get("relation") or 0) & 1):
             try:
                 ydlp_videos = get_user_videos(tiktok_id, sec_uid=sec_uid,
                                               cookies_path=COOKIES_PATH)
