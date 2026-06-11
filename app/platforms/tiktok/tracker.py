@@ -162,6 +162,7 @@ async def process_single_user(
                     n = db.ban_user_videos(tiktok_id)
                     if n:
                         log(f"  {_npost(n)} marked deleted (user_banned)")
+                db.touch_user_last_checked(tiktok_id)
                 return _profile_ok
             except UserPrivateException:
                 # Profile data unavailable (TikTok 10222 -- account is fully private at API level).
@@ -247,6 +248,10 @@ async def process_single_user(
                 tiktok_id, username, display_name, _a_bio,
                 sec_uid=sec_uid, avatar_url=_a_avatar,
             )
+        elif is_private and not info:
+            # 10222 account, item_list returned no data (access lost or transient failure).
+            # Still stamp last_checked so the card reflects when this account was last visited.
+            db.touch_user_last_checked(tiktok_id)
 
         # Inaccessible private account: relation & 1 == 0 means we don't follow them.
         # (relation bitmask: 0=none, 1=we follow them, 2=they follow us, 3=mutual)

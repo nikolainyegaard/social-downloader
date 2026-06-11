@@ -707,6 +707,19 @@ def update_user_info_from_item_list(tiktok_id, username, display_name, bio,
               avatar_url, int(time.time()), tiktok_id))
 
 
+def touch_user_last_checked(tiktok_id: str) -> None:
+    """Write last_checked = now without touching any other fields.
+
+    Used when TikTok responded but no full profile data is available (banned accounts,
+    10222 private accounts with inaccessible item_list).
+    """
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET last_checked = ? WHERE tiktok_id = ?",
+            (int(time.time()), tiktok_id),
+        )
+
+
 def update_user_info(tiktok_id, username, display_name, bio,
                      follower_count, following_count, video_count,
                      sec_uid=None, verified=None, avatar_url=None, raw_user_data=None):

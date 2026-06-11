@@ -295,17 +295,23 @@ const fmt = {
   rel: ts => {
     if (!ts) return '—';
     const diff = Math.round((Date.now() - new Date(ts)) / 1000);
-    if (diff < 60)   return `${diff}s ago`;
-    if (diff < 3600) return `${Math.round(diff/60)}m ago`;
-    return `${Math.round(diff/3600)}h ago`;
+    if (diff < 60)       return `${diff}s ago`;
+    if (diff < 3600)     return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400)  { const h = Math.floor(diff / 3600),   m = Math.floor((diff % 3600) / 60);          return m > 0 ? `${h}h ${m}m ago`   : `${h}h ago`;   }
+    if (diff < 30*86400) { const d = Math.floor(diff / 86400), h = Math.floor((diff % 86400) / 3600);       return h > 0 ? `${d}d ${h}h ago`   : `${d}d ago`;   }
+    const mo = Math.floor(diff / (30*86400)), d = Math.floor((diff % (30*86400)) / 86400);
+    return d > 0 ? `${mo}mo ${d}d ago` : `${mo}mo ago`;
   },
   relFuture: ts => {
     if (!ts) return '—';
     const diff = Math.round((new Date(ts) - Date.now()) / 1000);
-    if (diff <= 0)   return 'soon';
-    if (diff < 60)   return `in ${diff}s`;
-    if (diff < 3600) return `in ${Math.round(diff/60)}m`;
-    return `in ${Math.round(diff/3600)}h`;
+    if (diff <= 0)       return 'soon';
+    if (diff < 60)       return `in ${diff}s`;
+    if (diff < 3600)     return `in ${Math.floor(diff / 60)}m`;
+    if (diff < 86400)  { const h = Math.floor(diff / 3600),   m = Math.floor((diff % 3600) / 60);          return m > 0 ? `in ${h}h ${m}m`    : `in ${h}h`;    }
+    if (diff < 30*86400) { const d = Math.floor(diff / 86400), h = Math.floor((diff % 86400) / 3600);       return h > 0 ? `in ${d}d ${h}h`    : `in ${d}d`;    }
+    const mo = Math.floor(diff / (30*86400)), d = Math.floor((diff % (30*86400)) / 86400);
+    return d > 0 ? `in ${mo}mo ${d}d` : `in ${mo}mo`;
   },
   date: unix => {
     if (!unix) return '—';

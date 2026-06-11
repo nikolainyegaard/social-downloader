@@ -22,6 +22,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Star, Run Now, Run Profile, and Remove action buttons in the TikTok user detail modal header, alongside the existing tracking toggle; the star button re-renders the modal header to reflect the updated state; Remove closes the modal before reloading
 
 ### Fixed
+- "Last checked" not updating for banned accounts: the `UserBannedException` path returned before `update_user_info` was called; now stamps `last_checked` unconditionally before returning
+- "Last checked" not updating for inaccessible 10222 private accounts: `update_user_info_from_item_list` was gated on item_list returning data; when item_list returns nothing (access lost), `last_checked` was never written; now stamped via `touch_user_last_checked` in that path
 - Banned users sorted to the front of every session: `get_users_due_for_check` sorted by `last_checked ASC` but `last_checked` is never written on the ban path, so banned users had a permanent sort advantage; now sorts by `next_check_at ASC` which is always written after every processed user
 - Quick-mode false "Possibly deleted" log spam: deletion diff ran in quick mode against all known videos, but quick mode only fetches the first ~30; all other known videos were flagged missing; deletion diff is now skipped entirely in quick mode
 - Log viewer stopping after 1000 lines: the client used `lines.length` as the slice index; once the server buffer filled to 1000 the slice was always empty; fixed with a monotonic `_log_seq` counter that increments on every log call and is returned in the status response so the client tracks position independently of buffer size
@@ -29,6 +31,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Session timeline pills showing 12h AM/PM time; now 24h
 
 ### Changed
+- Relative timestamps (Last checked, Last saved, loop run times, etc.) now show two components instead of collapsing to hours: `Xmo Yd`, `Xd Yh`, `Xh Ym`, `Xm`, `Xs`
 - Inter-user gap within a session changed from uniform 2-5s to exponential distribution (mean 90s, min 15s) to better mimic organic browsing behavior and reduce bot detection
 - Log panel scrolls to the bottom automatically when the Log tab is opened
 - Manual trigger (Run Starred / Run Half / Run All) no longer lights up the next scheduled session pill as running; that pill represents the scheduled session time, not the manual trigger
