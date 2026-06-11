@@ -1,5 +1,6 @@
 Dockerfile
 docker-compose.override.yml
+scratch/
 data/
 videos/
 __pycache__/
