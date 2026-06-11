@@ -17,6 +17,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Live sleep countdown bar pinned to the top of the TikTok log panel: counts down the current inter-user or cooldown sleep in place (no new log lines), shows an "up next" label with the next user and check mode; when idle, counts down to the nearest scheduled user or sound loop session
 - Run Starred, Run Half, and Run All buttons replace the single "Run Now" button on the TikTok user loop card; Run Starred triggers a full refresh for starred users only; Run Half triggers a quick check for the 50% of users longest since their last check; Run All triggers a quick check for all enabled users without setting full_refresh_pending to avoid rate limit overload
 - Content-hash asset URLs: `style.css`, `common.js`, `tiktok.js`, and `youtube.js` are served at `/assets/<name>-<8-char-hash>.<ext>` with `Cache-Control: immutable`; hashes computed at startup so Cloudflare and browser caches are busted automatically on each new deploy without a build step
+- "Last saved" timestamp on TikTok user cards, showing when the most recent video from that user was downloaded (derived from `MAX(download_date)` in `get_all_video_stats`); displayed below "Last checked" in the card footer
+- "Last checked" and "Last saved" sort options for the TikTok user view, both defaulting to newest first
+- Star, Run Now, Run Profile, and Remove action buttons in the TikTok user detail modal header, alongside the existing tracking toggle; the star button re-renders the modal header to reflect the updated state; Remove closes the modal before reloading
 
 ### Fixed
 - Banned users sorted to the front of every session: `get_users_due_for_check` sorted by `last_checked ASC` but `last_checked` is never written on the ban path, so banned users had a permanent sort advantage; now sorts by `next_check_at ASC` which is always written after every processed user

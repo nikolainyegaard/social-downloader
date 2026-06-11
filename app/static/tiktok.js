@@ -665,6 +665,8 @@ const _SORT_DIR_LABELS = {
   video_total:    { asc: 'Low → High',      desc: 'High → Low'      },
   video_deleted:  { asc: 'Low → High',      desc: 'High → Low'      },
   added_at:       { asc: 'Oldest first',    desc: 'Newest first'    },
+  last_checked:   { asc: 'Oldest first',    desc: 'Newest first'    },
+  last_saved:     { asc: 'Oldest first',    desc: 'Newest first'    },
   label:          { asc: 'A → Z',           desc: 'Z → A'           },
   video_count:    { asc: 'Low → High',      desc: 'High → Low'      },
 };
@@ -796,6 +798,7 @@ function _renderUserCard(u) {
         ? `<span class="privacy-status ${PRIVACY_MAP[u.privacy_status][0]}">${PRIVACY_MAP[u.privacy_status][1]}</span>`
         : '');
   const checked = _fmtLastChecked(u.last_checked);
+  const saved   = u.last_saved ? `Last saved ${fmt.rel(new Date(u.last_saved * 1000).toISOString())}` : null;
 
   const oldNames   = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
   const oldNameTag = oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
@@ -839,7 +842,10 @@ function _renderUserCard(u) {
       </div>
 
       <div class="user-card-footer">
-        <span class="user-checked">${checked}</span>
+        <div class="user-checked">
+          <div>${checked}</div>
+          ${saved ? `<div>${saved}</div>` : ''}
+        </div>
         <div style="display:flex;gap:6px;">
           <button class="btn-star${u.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleUserStar('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
           <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
@@ -2012,6 +2018,16 @@ function onSoundModalSearch(val) {
   _mRenderList(_SOUND_MODAL_CFG);
 }
 
+async function toggleUserStarModal(id) {
+  await toggleUserStar(id);
+  const u = users.find(u => u.tiktok_id === id);
+  if (u) _renderModalHeader(u);
+}
+
+async function removeUserModal(id, label) {
+  return _creatorRemove('/api/tiktok/users', id, label, () => { closeModal(); loadUsers(); });
+}
+
 function _renderModalHeader(u) {
   const oldNames = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
 
@@ -2034,6 +2050,11 @@ function _renderModalHeader(u) {
     if (daysLeft <= 0) return '';
     return `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} until inactive`;
   })();
+
+  const inRunQueue   = runQueue.includes(u.tiktok_id);
+  const isRunCurrent = runCurrent === u.tiktok_id;
+  const runLabel     = isRunCurrent ? 'Running…' : inRunQueue ? 'Queued' : 'Run Now';
+  const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
   document.getElementById('modalHeader').innerHTML = `
     <div class="modal-avatar-wrap">
@@ -2070,6 +2091,12 @@ function _renderModalHeader(u) {
         ${u.video_missing   ? `<span style="color:#ff9800"><strong>${u.video_missing}</strong> missing</span>` : ''}
         ${u.video_undeleted ? `<span style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
         ${u.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="openProfileHistory()" title="Open profile change history"><strong>${u.profile_history_count}</strong> profile ${u.profile_history_count === 1 ? 'update' : 'updates'}</span>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn-star${u.starred ? ' starred' : ''}" onclick="toggleUserStarModal('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
+        <button class="btn-run" ${runDisabled} onclick="runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
+        <button class="btn-run" onclick="runUserProfile('${esc(u.tiktok_id)}')">Run Profile</button>
+        <button class="btn-danger" onclick="removeUserModal('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
       </div>
       <div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
         <textarea placeholder="Add a note about this user…"

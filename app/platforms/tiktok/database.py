@@ -840,7 +840,8 @@ def get_all_video_stats() -> dict:
                 COUNT(download_date)                                                              AS video_downloaded,
                 SUM(CASE WHEN status = 'deleted'                              THEN 1 ELSE 0 END) AS video_deleted,
                 SUM(CASE WHEN status = 'undeleted'                            THEN 1 ELSE 0 END) AS video_undeleted,
-                SUM(CASE WHEN status = 'up' AND pending_deletion_count > 0    THEN 1 ELSE 0 END) AS video_missing
+                SUM(CASE WHEN status = 'up' AND pending_deletion_count > 0    THEN 1 ELSE 0 END) AS video_missing,
+                MAX(download_date)                                                                AS last_saved
             FROM videos
             GROUP BY tiktok_id
         """).fetchall()

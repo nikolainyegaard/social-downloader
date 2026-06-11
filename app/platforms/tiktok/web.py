@@ -494,6 +494,7 @@ def list_users():
         user["video_deleted"]          = stats.get("video_deleted",     0)
         user["video_undeleted"]        = stats.get("video_undeleted",   0)
         user["video_missing"]          = stats.get("video_missing",     0)
+        user["last_saved"]             = stats.get("last_saved")
         user["profile_history_count"]  = all_ph_counts.get(tid, 0)
         ph   = all_ph.get(tid, {})
         cur  = user["username"]
