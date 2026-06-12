@@ -93,6 +93,7 @@ async def process_single_user(
                 if _was_banned:
                     restored = db.restore_banned_videos(tiktok_id)
                     db.set_user_account_status(tiktok_id, "active")
+                    db.set_user_tracking_enabled(tiktok_id, True)
                     log(f"  Account restored: ban cleared, {_npost(restored)} re-activated")
 
                 # Record profile field changes before overwriting stored values.
@@ -297,6 +298,16 @@ async def process_single_user(
         elif is_private is False:
             db.update_user_privacy_status(tiktok_id, "public")
         # if is_private is None (profile fetch failed), leave privacy_status unchanged
+
+        # If the account was previously marked banned but videos are now accessible,
+        # clear the ban status. This covers 10222 private accounts: get_user_info raises
+        # UserPrivateException so the profile-level recovery block never runs.
+        # Public accounts that recover go through the profile-level block above; skip here.
+        if _was_banned and is_private is True and remote_ids:
+            db.restore_banned_videos(tiktok_id)
+            db.set_user_account_status(tiktok_id, "active")
+            db.set_user_tracking_enabled(tiktok_id, True)
+            log(f"  Account recovered (videos accessible): ban cleared")
 
         known_ids, active_ids = db.get_video_id_sets(tiktok_id)
 

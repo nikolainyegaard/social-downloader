@@ -22,6 +22,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Star, Run Now, Run Profile, and Remove action buttons in the TikTok user detail modal header, alongside the existing tracking toggle; the star button re-renders the modal header to reflect the updated state; Remove closes the modal before reloading
 
 ### Fixed
+- Banned 10222 private accounts not recovering when videos become accessible: `UserPrivateException` bypasses the profile-level recovery block; account stayed `banned` in the DB even after item_list returned videos and undeleted them; recovery now runs at the post-fetch point when `_was_banned` and `is_private` and `remote_ids` are all true
+- `tracking_enabled` not restored when a banned account recovers: the ban recovery block called `restore_banned_videos` and `set_user_account_status("active")` but not `set_user_tracking_enabled(True)`; accounts auto-disabled after 14 days stayed in no-track state permanently after recovery
 - "Last checked" not updating for banned accounts: the `UserBannedException` path returned before `update_user_info` was called; now stamps `last_checked` unconditionally before returning
 - "Last checked" not updating for inaccessible 10222 private accounts: `update_user_info_from_item_list` was gated on item_list returning data; when item_list returns nothing (access lost), `last_checked` was never written; now stamped via `touch_user_last_checked` in that path
 - Banned users sorted to the front of every session: `get_users_due_for_check` sorted by `last_checked ASC` but `last_checked` is never written on the ban path, so banned users had a permanent sort advantage; now sorts by `next_check_at ASC` which is always written after every processed user
