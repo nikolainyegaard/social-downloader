@@ -1066,8 +1066,8 @@ async function addUser() {
   renderPending();
 }
 
-async function runUser(id)             { return _creatorRun('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, renderUsers); }
-async function runUserProfile(id)      { return _creatorRunProfile('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, renderUsers); }
+async function runUser(id)             { return _creatorRun('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }); }
+async function runUserProfile(id)      { return _creatorRunProfile('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }); }
 async function removeUser(id, label)   { return _creatorRemove('/api/tiktok/users', id, label, loadUsers); }
 async function toggleUserStar(id)      { return _creatorToggleStar('/api/tiktok/users', id, users, 'tiktok_id', renderUsers); }
 
@@ -1777,6 +1777,18 @@ function updateRunStates() {
     btn.textContent = isCur ? 'Running…' : inQueue ? 'Queued' : 'Run';
     btn.disabled    = inQueue || isCur;
   });
+  if (_modalUser) {
+    const id      = _modalUser.tiktok_id;
+    const inQueue = runQueue.includes(id);
+    const isCur   = runCurrent === id;
+    const runBtn  = document.getElementById('modalRunBtn');
+    const profBtn = document.getElementById('modalRunProfileBtn');
+    if (runBtn) {
+      runBtn.textContent = isCur ? 'Running…' : inQueue ? 'Queued' : 'Run Now';
+      runBtn.disabled    = inQueue || isCur;
+    }
+    if (profBtn) profBtn.disabled = inQueue || isCur;
+  }
 }
 
 async function loadStatus() {
@@ -2094,8 +2106,8 @@ function _renderModalHeader(u) {
       </div>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
         <button class="btn-star${u.starred ? ' starred' : ''}" onclick="toggleUserStarModal('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
-        <button class="btn-run" ${runDisabled} onclick="runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
-        <button class="btn-run" onclick="runUserProfile('${esc(u.tiktok_id)}')">Run Profile</button>
+        <button id="modalRunBtn" class="btn-run" ${runDisabled} onclick="runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
+        <button id="modalRunProfileBtn" class="btn-run" onclick="runUserProfile('${esc(u.tiktok_id)}')">Run Profile</button>
         <button class="btn-danger" onclick="removeUserModal('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
       </div>
       <div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
