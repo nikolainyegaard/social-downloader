@@ -189,7 +189,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 5px 10px; font-size: 12px; }
 .btn-danger:hover:not(:disabled) { background: var(--red-bg-h); }
 
-.btn-run { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px 10px; font-size: 12px; }
+.btn-run { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
 .btn-run:hover:not(:disabled) { background: rgba(79,142,247,.12); }
 .btn-trigger { padding: 4px 8px; font-size: 11px; white-space: nowrap; }
 

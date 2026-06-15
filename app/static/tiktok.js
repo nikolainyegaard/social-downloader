@@ -806,7 +806,6 @@ function _renderUserCard(u) {
 
   const inRunQueue   = runQueue.includes(u.tiktok_id);
   const isRunCurrent = runCurrent === u.tiktok_id;
-  const runLabel     = isRunCurrent ? 'Running…' : inRunQueue ? 'Queued' : 'Run';
   const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
   return `
@@ -848,7 +847,8 @@ function _renderUserCard(u) {
         </div>
         <div style="display:flex;gap:6px;">
           <button class="btn-star${u.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleUserStar('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
-          <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
+          <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUserQuick('${esc(u.tiktok_id)}')">${_refreshIcon} Quick</button>
+          <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.tiktok_id)}')">${_refreshIcon} Full</button>
           <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.tiktok_id)}')},{label:'Remove',danger:true,onclick:()=>removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')}])">•••</button>
         </div>
       </div>
@@ -1066,7 +1066,8 @@ async function addUser() {
   renderPending();
 }
 
-async function runUser(id)             { return _creatorRun('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }); }
+async function runUser(id)             { return _creatorRun('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }, 'full'); }
+async function runUserQuick(id)        { return _creatorRun('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }, 'quick'); }
 async function runUserProfile(id)      { return _creatorRunProfile('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }); }
 async function removeUser(id, label)   { return _creatorRemove('/api/tiktok/users', id, label, loadUsers); }
 async function toggleUserStar(id)      { return _creatorToggleStar('/api/tiktok/users', id, users, 'tiktok_id', renderUsers); }
@@ -1758,15 +1759,11 @@ async function saveLoopSettings() {
 function updateRunStates() {
   // Patch only the dynamic run-state parts of existing cards without rebuilding DOM.
   document.querySelectorAll('.user-card[data-userid]').forEach(card => {
-    const id      = card.dataset.userid;
-    const inQueue = runQueue.includes(id);
-    const isCur   = runCurrent === id;
-    const uObj    = users.find(u => u.tiktok_id === id);
+    const id    = card.dataset.userid;
+    const busy  = runQueue.includes(id) || runCurrent === id;
+    const uObj  = users.find(u => u.tiktok_id === id);
     card.classList.toggle('user-card-current', !!(uObj && uObj.username === currentUser));
-    const btn = card.querySelector('.btn-run');
-    if (!btn) return;
-    btn.textContent = isCur ? 'Running…' : inQueue ? 'Queued' : 'Run';
-    btn.disabled    = inQueue || isCur;
+    card.querySelectorAll('.btn-run').forEach(b => { b.disabled = busy; });
   });
   document.querySelectorAll('.user-card[data-soundid]').forEach(card => {
     const id      = card.dataset.soundid;
@@ -1778,16 +1775,14 @@ function updateRunStates() {
     btn.disabled    = inQueue || isCur;
   });
   if (_modalUser) {
-    const id      = _modalUser.tiktok_id;
-    const inQueue = runQueue.includes(id);
-    const isCur   = runCurrent === id;
-    const runBtn  = document.getElementById('modalRunBtn');
-    const profBtn = document.getElementById('modalRunProfileBtn');
-    if (runBtn) {
-      runBtn.textContent = isCur ? 'Running…' : inQueue ? 'Queued' : 'Run Now';
-      runBtn.disabled    = inQueue || isCur;
-    }
-    if (profBtn) profBtn.disabled = inQueue || isCur;
+    const id    = _modalUser.tiktok_id;
+    const busy  = runQueue.includes(id) || runCurrent === id;
+    const qBtn  = document.getElementById('modalRunQuickBtn');
+    const fBtn  = document.getElementById('modalRunFullBtn');
+    const pBtn  = document.getElementById('modalRunProfileBtn');
+    if (qBtn) qBtn.disabled = busy;
+    if (fBtn) fBtn.disabled = busy;
+    if (pBtn) pBtn.disabled = busy;
   }
 }
 
@@ -2065,7 +2060,6 @@ function _renderModalHeader(u) {
 
   const inRunQueue   = runQueue.includes(u.tiktok_id);
   const isRunCurrent = runCurrent === u.tiktok_id;
-  const runLabel     = isRunCurrent ? 'Running…' : inRunQueue ? 'Queued' : 'Run Now';
   const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
   document.getElementById('modalHeader').innerHTML = `
@@ -2106,7 +2100,8 @@ function _renderModalHeader(u) {
       </div>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
         <button class="btn-star${u.starred ? ' starred' : ''}" onclick="toggleUserStarModal('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
-        <button id="modalRunBtn" class="btn-run" ${runDisabled} onclick="runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
+        <button id="modalRunQuickBtn" class="btn-run" ${runDisabled} onclick="runUserQuick('${esc(u.tiktok_id)}')">${_refreshIcon} Quick</button>
+        <button id="modalRunFullBtn" class="btn-run" ${runDisabled} onclick="runUser('${esc(u.tiktok_id)}')">${_refreshIcon} Full</button>
         <button id="modalRunProfileBtn" class="btn-run" onclick="runUserProfile('${esc(u.tiktok_id)}')">Run Profile</button>
         <button class="btn-danger" onclick="removeUserModal('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
       </div>

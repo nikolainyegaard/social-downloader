@@ -6,7 +6,11 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Changed
+- Per-user run buttons on user cards and the user modal split into Quick and Full; Quick fetches the first 30 videos only and skips the stats upsert (matching the session loop's quick-check mode); Full is the previous behavior and does not advance the weekly full-refresh cycle any sooner
+
 ### Fixed
+- Startup crash (`sqlite3.OperationalError: near ")": syntax error`) caused by a trailing comma left in the `CREATE TABLE users` statement after removing the `pending_ban_count` and `pending_ban_since` columns
 - YouTube loop state file corrupted on crash: `_save_state()` opened the file with `"w"` before writing, truncating it immediately; a crash mid-write left an empty or partial JSON file and lost all loop state on next startup; now writes to a `.tmp` file and atomically renames it (matching the TikTok loop)
 
 ### Removed

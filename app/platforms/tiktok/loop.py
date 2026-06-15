@@ -269,13 +269,13 @@ def check_and_clear_sound_reschedule() -> bool:
     return val
 
 
-def enqueue_user_run(tiktok_id: str, profile_only: bool = False) -> bool:
+def enqueue_user_run(tiktok_id: str, profile_only: bool = False, mode: str = "full") -> bool:
     """Queue a single-user manual run. Returns False if already queued/running."""
     with _run_state_lock:
         if tiktok_id in _run_state["queue"] or _run_state["current"] == tiktok_id:
             return False
         _run_state["queue"].append(tiktok_id)
-    _run_queue.put((tiktok_id, profile_only))
+    _run_queue.put((tiktok_id, profile_only, mode))
     return True
 
 
@@ -329,7 +329,7 @@ def _set_sleep(until: float | None, next_label: str | None) -> None:
 
 def _run_worker():
     while True:
-        tiktok_id, profile_only = _run_queue.get()
+        tiktok_id, profile_only, mode = _run_queue.get()
         with _run_state_lock:
             if tiktok_id in _run_state["queue"]:
                 _run_state["queue"].remove(tiktok_id)
@@ -338,16 +338,16 @@ def _run_worker():
             user = db.get_user(tiktok_id)
             if user:
                 label = f"@{user['username']}"
-                kind  = "profile" if profile_only else "user"
+                kind  = "profile" if profile_only else mode
                 _log(f"=== Manual {kind} run started: {label} ===")
-                asyncio.run(run_single_user_with_session(user, _log, _logd, profile_only=profile_only))
+                asyncio.run(run_single_user_with_session(user, _log, _logd, profile_only=profile_only, mode=mode))
                 _log(f"=== Manual {kind} run complete: {label} ===")
                 # Schedule next check based on the user's computed interval
                 _active = int(db.get_setting("active_check_hours", ACTIVE_CHECK_HOURS)) * 3600
                 _high   = int(db.get_setting("high_priority_check_hours", HIGH_PRIORITY_CHECK_HOURS)) * 3600
                 _interval = user.get("check_interval_secs") or (_high if user.get("starred") else _active)
                 db.set_user_next_check(tiktok_id, int(time.time()) + _interval)
-                if not profile_only:
+                if not profile_only and mode == "full":
                     db.set_user_last_full_refresh_at(tiktok_id, int(time.time()))
                     db.clear_full_refresh_pending(tiktok_id)
             else:

@@ -590,7 +590,10 @@ def user_profile_history(tiktok_id: str):
 def run_user(tiktok_id: str):
     if not db.get_user(tiktok_id):
         return jsonify({"error": "User not found"}), 404
-    if not enqueue_user_run(tiktok_id):
+    mode = request.args.get("mode", "full")
+    if mode not in ("quick", "full"):
+        return jsonify({"error": "mode must be quick or full"}), 400
+    if not enqueue_user_run(tiktok_id, mode=mode):
         return jsonify({"error": "Already queued or running"}), 409
     db.set_user_next_check(tiktok_id, None)
     return jsonify({"ok": True})
