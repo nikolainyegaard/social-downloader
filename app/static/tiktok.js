@@ -797,9 +797,6 @@ function _renderUserCard(u) {
     : (PRIVACY_MAP[u.privacy_status]
         ? `<span class="privacy-status ${PRIVACY_MAP[u.privacy_status][0]}">${PRIVACY_MAP[u.privacy_status][1]}</span>`
         : '');
-  const checked = _fmtLastChecked(u.last_checked);
-  const saved   = u.last_saved ? `Last saved ${fmt.rel(new Date(u.last_saved * 1000).toISOString())}` : null;
-
   const oldNames   = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
   const oldNameTag = oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
   const idLine     = `id:${esc(u.tiktok_id)}`;
@@ -841,15 +838,25 @@ function _renderUserCard(u) {
       </div>
 
       <div class="user-card-footer">
-        <div class="user-checked">
-          <div>${checked}</div>
-          ${saved ? `<div>${saved}</div>` : ''}
-        </div>
         <div style="display:flex;gap:6px;">
           <button class="btn-star${u.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleUserStar('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
           <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUserQuick('${esc(u.tiktok_id)}')">${_refreshIcon} Quick</button>
           <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.tiktok_id)}')">${_refreshIcon} Full</button>
           <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.tiktok_id)}')},{label:'Remove',danger:true,onclick:()=>removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')}])">•••</button>
+        </div>
+      </div>
+      <div class="user-card-meta-footer">
+        <div class="user-card-meta-item">
+          <span class="meta-label">Added</span>
+          <span class="meta-value">${fmtDateOnly(u.added_at)}</span>
+        </div>
+        <div class="user-card-meta-item">
+          <span class="meta-label">Last checked</span>
+          <span class="meta-value">${u.last_checked ? fmt.rel(new Date(u.last_checked * 1000).toISOString()) : 'never'}</span>
+        </div>
+        <div class="user-card-meta-item">
+          <span class="meta-label">Last saved</span>
+          <span class="meta-value">${u.last_saved ? fmt.rel(new Date(u.last_saved * 1000).toISOString()) : 'never'}</span>
         </div>
       </div>
     </div>

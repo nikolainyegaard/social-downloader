@@ -531,6 +531,21 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   gap: 8px;
 }
 .user-checked { font-size: 11px; color: var(--muted); }
+.user-card-meta-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.user-card-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.user-card-meta-item .meta-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.user-card-meta-item .meta-value { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .user-card-current { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
 
 .empty-state { color: var(--muted); padding: 32px 0; text-align: center; }

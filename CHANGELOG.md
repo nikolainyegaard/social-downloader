@@ -8,6 +8,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Changed
 - Per-user run buttons on user cards and the user modal split into Quick and Full; Quick fetches the first 30 videos only and skips the stats upsert (matching the session loop's quick-check mode); Full is the previous behavior and does not advance the weekly full-refresh cycle any sooner
+- TikTok user cards: "Last checked" and "Last saved" moved from the button row into a slim meta footer below a faint divider, alongside a new "Added" date field; the three items are shown as uppercase label / value column pairs
 
 ### Fixed
 - Startup crash (`sqlite3.OperationalError: near ")": syntax error`) caused by a trailing comma left in the `CREATE TABLE users` statement after removing the `pending_ban_count` and `pending_ban_since` columns
