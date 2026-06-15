@@ -54,7 +54,7 @@ def init_db():
                 privacy_status      TEXT DEFAULT 'public',
                 added_at            INTEGER NOT NULL,
                 last_checked        INTEGER,
-                enabled             INTEGER DEFAULT 1,
+                enabled             INTEGER DEFAULT 1
             );
 
             CREATE TABLE IF NOT EXISTS username_history (
