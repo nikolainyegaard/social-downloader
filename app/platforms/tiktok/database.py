@@ -55,8 +55,6 @@ def init_db():
                 added_at            INTEGER NOT NULL,
                 last_checked        INTEGER,
                 enabled             INTEGER DEFAULT 1,
-                pending_ban_count   INTEGER NOT NULL DEFAULT 0,
-                pending_ban_since   INTEGER
             );
 
             CREATE TABLE IF NOT EXISTS username_history (
@@ -131,8 +129,6 @@ def _migrate_db(conn) -> bool:
     """Add columns introduced after the initial schema. Safe to run on existing DBs."""
     migrations = [
         "ALTER TABLE users  ADD COLUMN sec_uid            TEXT",
-        "ALTER TABLE users  ADD COLUMN pending_ban_count  INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE users  ADD COLUMN pending_ban_since  INTEGER",
         "ALTER TABLE videos ADD COLUMN pending_deletion_count INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN pending_deletion_since INTEGER",
         "ALTER TABLE users  ADD COLUMN privacy_status TEXT DEFAULT 'public'",

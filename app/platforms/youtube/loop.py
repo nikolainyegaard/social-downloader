@@ -31,8 +31,10 @@ def _save_state() -> None:
             "last_new_videos":        loop_state["last_new_videos"],
         }
     os.makedirs(YOUTUBE_DATA_DIR, exist_ok=True)
-    with open(LOOP_STATE_PATH, "w", encoding="utf-8") as f:
+    _tmp = LOOP_STATE_PATH + ".tmp"
+    with open(_tmp, "w", encoding="utf-8") as f:
         json.dump(data, f)
+    os.replace(_tmp, LOOP_STATE_PATH)
 
 
 _persisted = _load_state()

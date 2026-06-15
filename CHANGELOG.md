@@ -6,6 +6,15 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Fixed
+- YouTube loop state file corrupted on crash: `_save_state()` opened the file with `"w"` before writing, truncating it immediately; a crash mid-write left an empty or partial JSON file and lost all loop state on next startup; now writes to a `.tmp` file and atomically renames it (matching the TikTok loop)
+
+### Removed
+- `get_cookies_for_playwright()` from `platforms/tiktok/config.py`: defined but never called anywhere
+- `pending_ban_count` and `pending_ban_since` columns from the TikTok `users` table schema and migration list: columns were never read or written by any database function
+- `PlatformAdapter` base class (`platforms/base.py`): never subclassed; both trackers call platform API functions directly
+- YouTube one-time migration block and `_one_time_backfill_ytdlp_columns()` from `platforms/youtube/database.py`: YouTube has never shipped so no database in the wild needed this migration; it was a permanent no-op
+
 ### Added
 - Session-based TikTok user loop: replaces the fixed-interval loop with N sessions per 24-hour window (default 4), each firing at a random time within its equal segment; sessions only process users whose `next_check_at` has elapsed, so the workload scales naturally with the number of tracked users
 - Activity scoring for check intervals: starred users checked every 6h, active users (posted within 30 days) every 24h, inactive users every 72h; intervals recomputed after each session; configurable via settings UI or env vars
