@@ -69,7 +69,8 @@ async def process_single_user(
         set_current_user(user["username"])
 
     try:
-        log(f"Processing @{user['username']} ({progress or f'ID: {tiktok_id}'})")
+        _mode_tag = "[Quick]" if mode == "quick" else "[Full] "
+        log(f"{_mode_tag} Processing @{user['username']} ({progress or f'ID: {tiktok_id}'})")
 
         is_private: bool | None = None
 
@@ -649,7 +650,7 @@ async def process_user_session(
                         db.clear_full_refresh_pending(user["tiktok_id"])
                         if _deletion_detected:
                             db.set_user_next_check(user["tiktok_id"], None)
-                            log(f"  Deletion candidates found -- scheduling ASAP re-check")
+                            log(f"  Deletion candidates found; scheduling ASAP re-check")
 
             if not break_for_restart:
                 total_completed += completed
