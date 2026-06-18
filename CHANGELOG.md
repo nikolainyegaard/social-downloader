@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Changed
+- Loops panel trigger buttons: removed "Run" prefix, added refresh icon to match the user card Quick/Full button style; labels are now "Next", "Starred", "Half", "All"
 - Per-user run buttons on user cards and the user modal split into Quick and Full; Quick fetches the first 30 videos only and skips the stats upsert (matching the session loop's quick-check mode); Full is the previous behavior and does not advance the weekly full-refresh cycle any sooner
 - TikTok user cards: "Last checked" and "Last saved" moved from the button row into a slim meta footer below a faint divider, alongside a new "Added" date field; the three items are shown as uppercase label / value column pairs
 
