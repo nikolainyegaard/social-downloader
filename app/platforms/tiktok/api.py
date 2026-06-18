@@ -196,11 +196,12 @@ def get_user_videos(tiktok_id: str, sec_uid: str | None = None,
 
 
 async def get_user_videos_with_stats(api, sec_uid: str,
-                                     max_count: int = 2000) -> list[dict]:
+                                     max_count: int = 2000,
+                                     stop_event=None) -> list[dict]:
     """Page through /api/post/item_list/ and return all reachable videos with stats.
 
     Uses the already-open TikTokApi session (no new browser launch).
-    Stops when hasMore=False or max_count reached.
+    Stops when hasMore=False, max_count reached, or stop_event is set.
     Returns a list of normalised dicts in the same shape as get_video_details().
 
     A randomised delay is inserted after every 10 items (~every 3 items within a
@@ -212,6 +213,8 @@ async def get_user_videos_with_stats(api, sec_uid: str,
 
     results = []
     async for video in api.user(sec_uid=sec_uid).videos(count=max_count):
+        if stop_event and stop_event.is_set():
+            break
         results.append(_normalise_item_list_entry(video.as_dict))
         if len(results) % 10 == 0:
             await asyncio.sleep(round(random.uniform(0.5, 1.5), 2))

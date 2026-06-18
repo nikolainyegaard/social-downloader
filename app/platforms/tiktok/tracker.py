@@ -212,7 +212,7 @@ async def process_single_user(
             try:
                 _max_count = 30 if mode == "quick" else 2000
                 item_list_videos = await get_user_videos_with_stats(
-                    api, sec_uid=sec_uid, max_count=_max_count
+                    api, sec_uid=sec_uid, max_count=_max_count, stop_event=stop_event
                 )
                 curr_ordered  = [v["video_id"] for v in item_list_videos]
                 item_list_map = {v["video_id"]: v for v in item_list_videos}
@@ -296,6 +296,11 @@ async def process_single_user(
                     db.update_user_privacy_status(tiktok_id, "private_blocked")
                 return _profile_ok, _deletion_detected  # both sources failed; propagate profile result
 
+        # If stop was requested during the item_list fetch, the result is partial.
+        # Treat it the same as quick mode: skip the full deletion diff and don't
+        # update the stored ordered IDs, to avoid falsely flagging un-fetched videos.
+        _fetch_interrupted = bool(stop_event and stop_event.is_set())
+
         remote_ids = set(item_list_map) | set(ydlp_map)
 
         if is_private is True:
@@ -320,7 +325,9 @@ async def process_single_user(
         # In quick mode only the first page (~30 videos) was fetched, so the vast
         # majority of known videos will be absent from remote_ids -- they haven't
         # been deleted, they're just beyond the page. Full deletion diff skipped.
-        deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
+        # Also skip if the fetch was interrupted by stop: the partial result would
+        # falsely flag all un-fetched videos as missing.
+        deleted_ids   = (active_ids - remote_ids) if (mode == "full" and not _fetch_interrupted) else set()
         undeleted_ids = (known_ids - active_ids) & remote_ids
 
         # Position-aware deletion detection for quick mode: compare the ordered ID list
@@ -467,10 +474,12 @@ async def process_single_user(
                     )
 
         # Update the stored ordered ID list for the next position-aware quick check.
-        if mode == "quick" and curr_ordered:
-            db.set_user_last_quick_video_ids(tiktok_id, curr_ordered)
-        elif mode == "full" and curr_ordered:
-            db.set_user_last_quick_video_ids(tiktok_id, curr_ordered[:30])
+        # Skip if the fetch was interrupted: a partial list would corrupt the detection baseline.
+        if not _fetch_interrupted:
+            if mode == "quick" and curr_ordered:
+                db.set_user_last_quick_video_ids(tiktok_id, curr_ordered)
+            elif mode == "full" and curr_ordered:
+                db.set_user_last_quick_video_ids(tiktok_id, curr_ordered[:30])
 
         return _profile_ok, _deletion_detected
 
