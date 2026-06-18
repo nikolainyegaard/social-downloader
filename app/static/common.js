@@ -386,11 +386,11 @@ function _videoStatus(v) {
   const isMissing = v.status === 'up' && v.pending_deletion_count > 0;
   const cls   = v.status === 'deleted'   ? 'deleted'
               : v.status === 'undeleted' ? 'undeleted'
-              : isMissing                ? 'missing'
+              : isMissing                ? 'deleted'
               :                           'up';
   const label = v.status === 'deleted'   ? 'Deleted'
               : v.status === 'undeleted' ? 'Restored'
-              : isMissing                ? 'Missing'
+              : isMissing                ? 'Deleted'
               :                           'Active';
   return { cls, label };
 }
@@ -425,11 +425,10 @@ function _cmp(av, bv, dir) {
   return av < bv ? (dir === 'asc' ? -1 : 1) : av > bv ? (dir === 'asc' ? 1 : -1) : 0;
 }
 
-// Status sort rank: active=0, missing=1, restored=2, deleted=3
+// Status sort rank: active=0, restored=2, deleted=3
 function _statusSortVal(v) {
-  if (v.status === 'deleted')              return 3;
+  if (v.status === 'deleted' || (v.pending_deletion_count || 0) > 0) return 3;
   if (v.status === 'undeleted')            return 2;
-  if ((v.pending_deletion_count || 0) > 0) return 1;
   return 0;
 }
 
@@ -620,8 +619,7 @@ const _playBadge      = `<span style="${_badgeStyle}"><svg width="18" height="18
 function _mFiltered(cfg, skipSearch = false) {
   let vids = cfg.st.videos;
   if (cfg.st.filter === 'active')   vids = vids.filter(v => v.status === 'up' && !(v.pending_deletion_count > 0));
-  if (cfg.st.filter === 'missing')  vids = vids.filter(v => v.status === 'up' && v.pending_deletion_count > 0);
-  if (cfg.st.filter === 'deleted')  vids = vids.filter(v => v.status === 'deleted');
+  if (cfg.st.filter === 'deleted')  vids = vids.filter(v => v.status === 'deleted' || (v.status === 'up' && v.pending_deletion_count > 0));
   if (cfg.st.filter === 'restored') vids = vids.filter(v => v.status === 'undeleted');
   if (cfg.st.typeFilter === 'video') vids = vids.filter(v => v.type === 'video');
   if (cfg.st.typeFilter === 'photo') vids = vids.filter(v => v.type === 'photo');
@@ -639,14 +637,13 @@ function _mFiltered(cfg, skipSearch = false) {
 }
 
 function _mRenderToolbar(cfg, vids) {
-  const counts     = { all: 0, active: 0, missing: 0, deleted: 0, restored: 0 };
+  const counts     = { all: 0, active: 0, deleted: 0, restored: 0 };
   const typeCounts = { video: 0, photo: 0 };
   vids.forEach(v => {
     counts.all++;
-    if      (v.status === 'up' && !(v.pending_deletion_count > 0)) counts.active++;
-    else if (v.status === 'up' &&   v.pending_deletion_count > 0)  counts.missing++;
-    else if (v.status === 'deleted')                               counts.deleted++;
-    else if (v.status === 'undeleted')                             counts.restored++;
+    if      (v.status === 'up' && !(v.pending_deletion_count > 0))                          counts.active++;
+    else if (v.status === 'deleted' || (v.status === 'up' && v.pending_deletion_count > 0)) counts.deleted++;
+    else if (v.status === 'undeleted')                                                       counts.restored++;
     if      (v.type === 'video') typeCounts.video++;
     else if (v.type === 'photo') typeCounts.photo++;
   });
@@ -689,7 +686,6 @@ function _mRenderToolbar(cfg, vids) {
     + `<div class="toolbar-filter-wrap${cfg.st.toolbarExpanded ? '' : ' collapsed'}">`
     + `<div class="filter-pills">`
     + pill('all', 'All') + pill('active', 'Active')
-    + (counts.missing  ? pill('missing',  'Missing')  : '')
     + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
     + (counts.restored ? pill('restored', 'Restored') : '')
     + `</div>`

@@ -6,8 +6,13 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Added
+- Position-aware deletion detection in quick mode: stores the ordered video ID list from each quick fetch in `users.last_quick_video_ids`; on subsequent quick checks, videos missing from the window that cannot be explained by new posts scrolling older ones off the bottom are flagged as deletion candidates
+- Fast follow-up full re-check: after a full-mode run that finds any deletion candidates, `next_check_at` is reset to NULL so the user is processed again in the next session to confirm or clear the pending deletions
+
 ### Changed
 - Loops panel trigger buttons: removed "Run" prefix, added refresh icon to match the user card Quick/Full button style; labels are now "Next", "Starred", "Half", "All"
+- "Possibly deleted" videos (pending deletion count > 0) now display identically to confirmed deleted videos in the frontend: same "Deleted" label, same red colour, counted together with deleted in user card and modal stats, included in the "Deleted" filter pill in the video modal; the internal `pending_deletion_count` state is unchanged
 - Per-user run buttons on user cards and the user modal split into Quick and Full; Quick fetches the first 30 videos only and skips the stats upsert (matching the session loop's quick-check mode); Full is the previous behavior and does not advance the weekly full-refresh cycle any sooner
 - TikTok user cards: "Last checked" and "Last saved" moved from the button row into a slim meta footer below a faint divider, alongside a new "Added" date field; the three items are shown as uppercase label / value column pairs
 

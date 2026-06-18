@@ -76,8 +76,10 @@ async def process_single_user(
         # Best sec_uid we have: from DB initially, refreshed if profile fetch returns a newer one
         sec_uid = user.get("sec_uid")
 
-        _was_banned = user.get("account_status") == "banned"
-        _profile_ok = False  # set True on any valid TikTok response (success or ban)
+        _was_banned        = user.get("account_status") == "banned"
+        _profile_ok        = False  # set True on any valid TikTok response (success or ban)
+        _deletion_detected = False  # set True in full mode when deletion candidates are found
+        curr_ordered: list = []     # ordered video IDs from this fetch (item_list only)
 
         for _attempt in range(2):
             try:
@@ -164,7 +166,7 @@ async def process_single_user(
                     if n:
                         log(f"  {_npost(n)} marked deleted (user_banned)")
                 db.touch_user_last_checked(tiktok_id)
-                return _profile_ok
+                return _profile_ok, _deletion_detected
             except UserPrivateException:
                 # Profile data unavailable (TikTok 10222 -- account is fully private at API level).
                 # Distinct from a public account with secret=True, which still returns user data.
@@ -196,7 +198,7 @@ async def process_single_user(
 
         if not fetch_videos:
             log(f"  Video fetch skipped (tracking disabled for @{username})")
-            return _profile_ok
+            return _profile_ok, _deletion_detected
 
         # ── Primary: item_list (has stats, paginated with inter-page delay) ──
         # sec_uid is required: without it the library calls self.info() to
@@ -210,6 +212,7 @@ async def process_single_user(
                 item_list_videos = await get_user_videos_with_stats(
                     api, sec_uid=sec_uid, max_count=_max_count
                 )
+                curr_ordered  = [v["video_id"] for v in item_list_videos]
                 item_list_map = {v["video_id"]: v for v in item_list_videos}
                 logd(f"  [{tiktok_id}] {len(item_list_map)} videos via item_list (sec_uid={sec_uid})")
             except Exception as e:
@@ -264,7 +267,7 @@ async def process_single_user(
             if not (info.get("relation") or 0) & 1:
                 log(f"  Private account, cannot be accessed")
                 db.update_user_privacy_status(tiktok_id, "private_blocked")
-                return _profile_ok
+                return _profile_ok, _deletion_detected
 
         if item_list_map:
             log(f"  {_npost(len(item_list_map))} found")
@@ -289,7 +292,7 @@ async def process_single_user(
                 logd(f"  [{tiktok_id}] yt-dlp fallback error: {e}")
                 if "private" in str(e).lower():
                     db.update_user_privacy_status(tiktok_id, "private_blocked")
-                return _profile_ok  # both sources failed; propagate profile result
+                return _profile_ok, _deletion_detected  # both sources failed; propagate profile result
 
         remote_ids = set(item_list_map) | set(ydlp_map)
 
@@ -314,10 +317,24 @@ async def process_single_user(
         new_ids       = remote_ids - known_ids
         # In quick mode only the first page (~30 videos) was fetched, so the vast
         # majority of known videos will be absent from remote_ids -- they haven't
-        # been deleted, they're just beyond the page. Deletion checking requires a
-        # full fetch; skip it entirely in quick mode.
+        # been deleted, they're just beyond the page. Full deletion diff skipped.
         deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
         undeleted_ids = (known_ids - active_ids) & remote_ids
+
+        # Position-aware deletion detection for quick mode: compare the ordered ID list
+        # from the previous quick fetch to the current one. New videos push older ones
+        # off the bottom of the 30-item window -- those are expected drop-offs. Anything
+        # else missing from the window was likely deleted.
+        quick_deleted_ids: set = set()
+        if mode == "quick" and curr_ordered:
+            prev_ordered = db.get_user_last_quick_video_ids(tiktok_id)
+            if prev_ordered:
+                prev_set = set(prev_ordered)
+                curr_set = set(curr_ordered)
+                n_new    = len(curr_set - prev_set)
+                if n_new < len(prev_ordered):
+                    expected_dropoffs  = set(prev_ordered[-n_new:]) if n_new > 0 else set()
+                    quick_deleted_ids  = ((prev_set - curr_set) - expected_dropoffs) & active_ids
 
         # Pending-deletion videos that reappeared -- clear their counters immediately
         pending_deletion_ids = db.get_pending_deletion_video_ids(tiktok_id)
@@ -330,9 +347,11 @@ async def process_single_user(
             log(f"  New: {len(new_ids)}")
         if deleted_ids:
             log(f"  Missing (checking for deletion): {len(deleted_ids)}")
+        if quick_deleted_ids:
+            log(f"  Missing from quick window (checking for deletion): {len(quick_deleted_ids)}")
         if undeleted_ids:
             log(f"  Undeleted: {len(undeleted_ids)}")
-        if not (new_ids or deleted_ids or undeleted_ids or recovered_pending):
+        if not (new_ids or deleted_ids or quick_deleted_ids or undeleted_ids or recovered_pending):
             log("  No changes.")
 
         for vid_id in new_ids:
@@ -411,6 +430,17 @@ async def process_single_user(
             else:
                 log(f"  Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
 
+        if deleted_ids:
+            _deletion_detected = True
+
+        for vid_id in quick_deleted_ids:
+            count = db.increment_video_pending_deletion(vid_id)
+            if count >= _CONFIRM_THRESHOLD:
+                db.mark_video_deleted(vid_id)
+                log(f"  Marked deleted (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD}): {vid_id}")
+            else:
+                log(f"  Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
+
         for vid_id in undeleted_ids:
             db.mark_video_undeleted(vid_id)
             log(f"  Marked undeleted: {vid_id}")
@@ -430,7 +460,14 @@ async def process_single_user(
                         details.get("save_count"),
                         details.get("repost_count"),
                     )
-        return _profile_ok
+
+        # Update the stored ordered ID list for the next position-aware quick check.
+        if mode == "quick" and curr_ordered:
+            db.set_user_last_quick_video_ids(tiktok_id, curr_ordered)
+        elif mode == "full" and curr_ordered:
+            db.set_user_last_quick_video_ids(tiktok_id, curr_ordered[:30])
+
+        return _profile_ok, _deletion_detected
 
     finally:
         if set_current_user:
@@ -561,9 +598,10 @@ async def process_user_session(
                 progress        = f"{idx + 1}/{total}"
                 _now_ts         = int(time.time())
                 _mode           = "full" if user.get("full_refresh_pending") else "quick"
-                _user_processed = False
+                _user_processed    = False
+                _deletion_detected = False
                 try:
-                    await process_single_user(
+                    _result = await process_single_user(
                         user, api, cookies,
                         fetch_videos=fetch_videos,
                         mode=_mode,
@@ -572,6 +610,7 @@ async def process_user_session(
                         logd=logd,
                         set_current_user=set_current_user,
                     )
+                    _deletion_detected = _result[1] if isinstance(_result, tuple) else False
                     _user_processed = True
                 except _BotDetectedError as exc:
                     logd(f"  [{user['tiktok_id']}] bot detection: {exc}")
@@ -608,6 +647,9 @@ async def process_user_session(
                     if _mode == "full":
                         db.set_user_last_full_refresh_at(user["tiktok_id"], _now_ts)
                         db.clear_full_refresh_pending(user["tiktok_id"])
+                        if _deletion_detected:
+                            db.set_user_next_check(user["tiktok_id"], None)
+                            log(f"  Deletion candidates found -- scheduling ASAP re-check")
 
             if not break_for_restart:
                 total_completed += completed

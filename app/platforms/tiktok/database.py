@@ -1,3 +1,4 @@
+import json
 import random
 import sqlite3
 import time
@@ -169,6 +170,7 @@ def _migrate_db(conn) -> bool:
         "ALTER TABLE users ADD COLUMN last_full_refresh_at   INTEGER",
         "ALTER TABLE users ADD COLUMN full_refresh_pending   INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN refresh_batch          INTEGER",
+        "ALTER TABLE users ADD COLUMN last_quick_video_ids   TEXT",
     ]
     for sql in migrations:
         try:
@@ -408,6 +410,30 @@ def set_user_next_check(tiktok_id: str, next_check_at: int | None) -> None:
             "UPDATE users SET next_check_at = ? WHERE tiktok_id = ?",
             (next_check_at, tiktok_id),
         )
+
+
+def set_user_last_quick_video_ids(tiktok_id: str, ordered_ids: list) -> None:
+    """Store the ordered list of video IDs from the last quick-mode fetch."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET last_quick_video_ids = ? WHERE tiktok_id = ?",
+            (json.dumps(ordered_ids) if ordered_ids else None, tiktok_id),
+        )
+
+
+def get_user_last_quick_video_ids(tiktok_id: str) -> list:
+    """Return the ordered video ID list from the last quick-mode fetch, or []."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT last_quick_video_ids FROM users WHERE tiktok_id = ?",
+            (tiktok_id,),
+        ).fetchone()
+    if not row or not row[0]:
+        return []
+    try:
+        return json.loads(row[0])
+    except Exception:
+        return []
 
 
 def set_user_last_full_refresh_at(tiktok_id: str, ts: int) -> None:
