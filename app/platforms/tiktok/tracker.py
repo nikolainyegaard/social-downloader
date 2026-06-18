@@ -61,6 +61,7 @@ async def process_single_user(
     log: Callable[[str], None] = print,
     logd: Callable[[str], None] = print,
     set_current_user: Callable[[str | None], None] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> bool:
     """Process a single user. Returns True if the profile fetch succeeded, False if it failed."""
     tiktok_id = user["tiktok_id"]
@@ -356,6 +357,9 @@ async def process_single_user(
             log("  No changes.")
 
         for vid_id in new_ids:
+            if stop_event and stop_event.is_set():
+                log("  Loop stop requested: skipping remaining downloads")
+                break
             if vid_id in item_list_map:
                 # Already have full details from item_list -- no page scrape needed.
                 details = item_list_map[vid_id]
@@ -610,6 +614,7 @@ async def process_user_session(
                         log=log,
                         logd=logd,
                         set_current_user=set_current_user,
+                        stop_event=stop_event,
                     )
                     _deletion_detected = _result[1] if isinstance(_result, tuple) else False
                     _user_processed = True

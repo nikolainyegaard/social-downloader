@@ -31,23 +31,31 @@ def _load_loop_state() -> dict:
 
 def _save_loop_state() -> None:
     with _user_state_lock:
-        u_end = user_loop_state["last_run_end"]
-        u_dur = user_loop_state["last_run_duration_secs"]
-        u_new = user_loop_state["last_new_videos"]
+        u_start = user_loop_state["last_run_start"]
+        u_cur   = user_loop_state["current_run_start"]
+        u_end   = user_loop_state["last_run_end"]
+        u_dur   = user_loop_state["last_run_duration_secs"]
+        u_new   = user_loop_state["last_new_videos"]
     with _sound_state_lock:
-        s_end = sound_loop_state["last_run_end"]
-        s_dur = sound_loop_state["last_run_duration_secs"]
-        s_new = sound_loop_state["last_new_videos"]
+        s_start = sound_loop_state["last_run_start"]
+        s_cur   = sound_loop_state["current_run_start"]
+        s_end   = sound_loop_state["last_run_end"]
+        s_dur   = sound_loop_state["last_run_duration_secs"]
+        s_new   = sound_loop_state["last_new_videos"]
     # COALESCE: don't overwrite a previously persisted non-null value with null.
     # This prevents the sound loop from clobbering user state before any user session runs.
     _prev = _load_loop_state()
     data = {
-        "user_last_run_end":        u_end if u_end is not None else _prev.get("user_last_run_end"),
-        "user_last_duration_secs":  u_dur if u_dur is not None else _prev.get("user_last_duration_secs"),
-        "user_last_new_videos":     u_new if u_new is not None else _prev.get("user_last_new_videos"),
-        "sound_last_run_end":       s_end if s_end is not None else _prev.get("sound_last_run_end"),
-        "sound_last_duration_secs": s_dur if s_dur is not None else _prev.get("sound_last_duration_secs"),
-        "sound_last_new_videos":    s_new if s_new is not None else _prev.get("sound_last_new_videos"),
+        "user_last_run_start":     u_start if u_start is not None else _prev.get("user_last_run_start"),
+        "user_current_run_start":  u_cur,   # always write; None clears the in-progress marker
+        "user_last_run_end":       u_end    if u_end    is not None else _prev.get("user_last_run_end"),
+        "user_last_duration_secs": u_dur    if u_dur    is not None else _prev.get("user_last_duration_secs"),
+        "user_last_new_videos":    u_new    if u_new    is not None else _prev.get("user_last_new_videos"),
+        "sound_last_run_start":    s_start  if s_start  is not None else _prev.get("sound_last_run_start"),
+        "sound_current_run_start": s_cur,
+        "sound_last_run_end":      s_end    if s_end    is not None else _prev.get("sound_last_run_end"),
+        "sound_last_duration_secs": s_dur   if s_dur    is not None else _prev.get("sound_last_duration_secs"),
+        "sound_last_new_videos":   s_new    if s_new    is not None else _prev.get("sound_last_new_videos"),
     }
     os.makedirs(TIKTOK_DATA_DIR, exist_ok=True)
     _tmp = LOOP_STATE_PATH + ".tmp"
@@ -60,11 +68,32 @@ def _save_loop_state() -> None:
 
 _persisted = _load_loop_state()
 
+# Recover start time for display. Three cases:
+# 1. Normal: user_last_run_start is set from a completed run -- use it directly.
+# 2. Killed mid-run: user_current_run_start is set but the service never completed the run;
+#    promote it so "Last:" still shows the start of the interrupted run.
+# 3. Upgrade from old JSON (no start key): fall back to user_last_run_end as an approximation.
+_u_last_start = _persisted.get("user_last_run_start")
+_u_cur_start  = _persisted.get("user_current_run_start")
+if _u_cur_start:
+    _u_last_start = _u_cur_start
+elif not _u_last_start:
+    _u_last_start = _persisted.get("user_last_run_end")
+
+_s_last_start = _persisted.get("sound_last_run_start")
+_s_cur_start  = _persisted.get("sound_current_run_start")
+if _s_cur_start:
+    _s_last_start = _s_cur_start
+elif not _s_last_start:
+    _s_last_start = _persisted.get("sound_last_run_end")
+
 user_loop_state = {
     "running":                  False,
     "manual_run":               False,
     "sleep_until":              None,  # Unix timestamp (float) when the current sleep ends
     "sleep_next":               None,  # Label for what runs after the sleep
+    "last_run_start":           _u_last_start,
+    "current_run_start":        None,
     "last_run_end":             _persisted.get("user_last_run_end"),
     "last_run_duration_secs":   _persisted.get("user_last_duration_secs"),
     "last_new_videos":          _persisted.get("user_last_new_videos"),
@@ -94,6 +123,8 @@ _user_trigger_scope_lock = threading.Lock()
 
 sound_loop_state = {
     "running":                False,
+    "last_run_start":         _s_last_start,
+    "current_run_start":      None,
     "last_run_end":           _persisted.get("sound_last_run_end"),
     "last_run_duration_secs": _persisted.get("sound_last_duration_secs"),
     "last_new_videos":        _persisted.get("sound_last_new_videos"),
@@ -149,7 +180,8 @@ def recover_loop_state_from_db() -> None:
         return
     iso = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
     with _user_state_lock:
-        user_loop_state["last_run_end"] = iso
+        user_loop_state["last_run_end"]   = iso
+        user_loop_state["last_run_start"] = iso
     _save_loop_state()
 
 
@@ -183,6 +215,7 @@ def get_state_snapshot() -> dict:
             "user_loop_manual_run":            user_loop_state["manual_run"],
             "user_loop_sleep_until":           user_loop_state["sleep_until"],
             "user_loop_sleep_next":            user_loop_state["sleep_next"],
+            "user_loop_last_start":            user_loop_state["last_run_start"],
             "user_loop_last_end":              user_loop_state["last_run_end"],
             "user_loop_last_duration_secs":    user_loop_state["last_run_duration_secs"],
             "user_loop_last_new_videos":       user_loop_state["last_new_videos"],
@@ -196,6 +229,7 @@ def get_state_snapshot() -> dict:
         }
     with _sound_state_lock:
         state["sound_loop_running"]            = sound_loop_state["running"]
+        state["sound_loop_last_start"]         = sound_loop_state["last_run_start"]
         state["sound_loop_last_end"]           = sound_loop_state["last_run_end"]
         state["sound_loop_last_duration_secs"] = sound_loop_state["last_run_duration_secs"]
         state["sound_loop_last_new_videos"]    = sound_loop_state["last_new_videos"]
@@ -398,9 +432,12 @@ def run_user_session(users_due: list[dict], manual: bool = False, session_kind: 
     if issues:
         _log(f"User loop blocked: {issues[0]['message']}")
         return
+    _run_start = datetime.now(timezone.utc).isoformat()
     with _user_state_lock:
-        user_loop_state["running"]    = True
-        user_loop_state["manual_run"] = manual
+        user_loop_state["running"]           = True
+        user_loop_state["manual_run"]        = manual
+        user_loop_state["current_run_start"] = _run_start
+    _save_loop_state()  # persist current_run_start immediately so a kill mid-run is recoverable
     _loop_start    = time.monotonic()
     _videos_before = db.count_downloaded_videos()
     _total         = len(users_due)
@@ -428,6 +465,8 @@ def run_user_session(users_due: list[dict], manual: bool = False, session_kind: 
         user_loop_state["manual_run"]               = False
         user_loop_state["sleep_until"]              = None
         user_loop_state["sleep_next"]               = None
+        user_loop_state["last_run_start"]           = user_loop_state["current_run_start"]
+        user_loop_state["current_run_start"]        = None
         user_loop_state["last_run_end"]             = last_run_end
         user_loop_state["last_run_duration_secs"]   = duration_secs
         user_loop_state["last_new_videos"]          = new_videos
@@ -443,8 +482,11 @@ def run_sound_loop():
     if issues:
         _log(f"Sound loop blocked: {issues[0]['message']}")
         return
+    _run_start = datetime.now(timezone.utc).isoformat()
     with _sound_state_lock:
-        sound_loop_state["running"] = True
+        sound_loop_state["running"]           = True
+        sound_loop_state["current_run_start"] = _run_start
+    _save_loop_state()
     _loop_start = time.monotonic()
     _videos_before = db.count_downloaded_videos()
 
@@ -465,8 +507,10 @@ def run_sound_loop():
     else:
         _log("=== Sound loop complete ===")
     with _sound_state_lock:
-        sound_loop_state["running"]                = False
-        sound_loop_state["last_run_end"]           = last_run_end
+        sound_loop_state["running"]               = False
+        sound_loop_state["last_run_start"]        = sound_loop_state["current_run_start"]
+        sound_loop_state["current_run_start"]     = None
+        sound_loop_state["last_run_end"]          = last_run_end
         sound_loop_state["last_run_duration_secs"] = duration_secs
-        sound_loop_state["last_new_videos"]        = new_videos
+        sound_loop_state["last_new_videos"]       = new_videos
     _save_loop_state()

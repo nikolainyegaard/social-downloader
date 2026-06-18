@@ -1513,7 +1513,7 @@ function renderStatus(state) {
   // User loop card
   if (_sEl.uMeta) {
     const parts = [];
-    if (state.user_loop_last_end) parts.push(`Last: ${fmt.rel(state.user_loop_last_end)}`);
+    if (state.user_loop_last_start) parts.push(`Last: ${fmt.rel(state.user_loop_last_start)}`);
     else parts.push('Never run');
     const comp = state.user_loop_last_session_completed, total = state.user_loop_last_session_total;
     if (comp != null && total != null) parts.push(`${comp}/${total} users`);
@@ -1558,7 +1558,7 @@ function renderStatus(state) {
   // Sound loop card
   if (_sEl.sMeta) {
     const parts = [];
-    if (state.sound_loop_last_end) parts.push(`Last: ${fmt.rel(state.sound_loop_last_end)}`);
+    if (state.sound_loop_last_start) parts.push(`Last: ${fmt.rel(state.sound_loop_last_start)}`);
     else parts.push('Never run');
     if (state.sound_loop_last_new_videos != null) parts.push(`${state.sound_loop_last_new_videos} new`);
     if (state.sound_loop_last_duration_secs != null) parts.push(fmt.dur(state.sound_loop_last_duration_secs));

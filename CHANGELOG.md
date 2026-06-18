@@ -6,6 +6,10 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Fixed
+- Loops panel "Last:" showed the time the loop completed, not when it started; loop start time is now written to `loop_state.json` at session start and used for the display; a service killed mid-run still shows the start time of the interrupted run on next startup
+- Stop button did not interrupt a user mid-download; the stop event is now checked between individual video downloads inside `process_single_user`, so pressing Stop takes effect after the current download finishes rather than after all downloads for the current user finish
+
 ### Added
 - Position-aware deletion detection in quick mode: stores the ordered video ID list from each quick fetch in `users.last_quick_video_ids`; on subsequent quick checks, videos missing from the window that cannot be explained by new posts scrolling older ones off the bottom are flagged as deletion candidates
 - Fast follow-up full re-check: after a full-mode run that finds any deletion candidates, `next_check_at` is reset to NULL so the user is processed again in the next session to confirm or clear the pending deletions
