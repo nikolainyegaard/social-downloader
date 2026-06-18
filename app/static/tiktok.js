@@ -1648,7 +1648,7 @@ function renderLogs(lines, log_seq) {
   newLines.forEach(line => {
     const span = document.createElement('span');
     if      (/=== .+ (started|complete)/i.test(line))                                span.className = 'log-sep';
-    else if (/\] Processing @/.test(line) || /\[sound\] Processing sound/i.test(line)) span.className = 'log-user';
+    else if (/\]\s+Processing @/.test(line) || /\[sound\] Processing sound/i.test(line)) span.className = 'log-user';
     else if (/error|failed|unexpected/i.test(line))                                   span.className = 'log-err';
     else if (/warn|deleted|corrupt/i.test(line))                                      span.className = 'log-warn';
     else if (/download|saved/i.test(line))                                            span.className = 'log-dl';
