@@ -1271,12 +1271,14 @@ def get_recent_activity() -> dict:
     """Return recent deletions, profile changes, bans, and saves for the Recent panel."""
     with get_db() as conn:
         deletions = [dict(r) for r in conn.execute(
-            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred,
+            """SELECT v.video_id,
+                      COALESCE(v.deleted_at, v.pending_deletion_since) AS deleted_at,
+                      u.username, u.tiktok_id, u.enabled, u.starred,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
-               WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
-                 AND v.deleted_reason = 'video_deleted'
-               ORDER BY v.deleted_at DESC LIMIT 3"""
+               WHERE (v.status = 'deleted' AND v.deleted_at IS NOT NULL AND v.deleted_reason = 'video_deleted')
+                  OR (v.status = 'up' AND v.pending_deletion_count > 0)
+               ORDER BY COALESCE(v.deleted_at, v.pending_deletion_since) DESC LIMIT 3"""
         ).fetchall()]
         profile_changes = [dict(r) for r in conn.execute(
             """SELECT ph.field, ph.changed_at, u.username, u.tiktok_id, u.starred
@@ -1304,12 +1306,14 @@ def get_deletion_history(offset: int = 0, limit: int = 50) -> list[dict]:
     """Return paginated video deletion history (newest first), excluding user_banned."""
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred,
+            """SELECT v.video_id,
+                      COALESCE(v.deleted_at, v.pending_deletion_since) AS deleted_at,
+                      u.username, u.tiktok_id, u.enabled, u.starred,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
-               WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
-                 AND v.deleted_reason = 'video_deleted'
-               ORDER BY v.deleted_at DESC LIMIT ? OFFSET ?""",
+               WHERE (v.status = 'deleted' AND v.deleted_at IS NOT NULL AND v.deleted_reason = 'video_deleted')
+                  OR (v.status = 'up' AND v.pending_deletion_count > 0)
+               ORDER BY COALESCE(v.deleted_at, v.pending_deletion_since) DESC LIMIT ? OFFSET ?""",
             (limit, offset),
         ).fetchall()
     return [dict(r) for r in rows]
