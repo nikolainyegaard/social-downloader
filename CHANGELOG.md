@@ -9,6 +9,10 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ### Fixed
 - Loops panel "Last:" showed the time the loop completed, not when it started; loop start time is now written to `loop_state.json` at session start and used for the display; a service killed mid-run still shows the start time of the interrupted run on next startup
 - Stop button did not interrupt a user mid-download; the stop event is now checked between individual video downloads inside `process_single_user`, so pressing Stop takes effect after the current download finishes rather than after all downloads for the current user finish
+- Recently deleted panel showed nothing after the frontend collapse of "possibly deleted" into "deleted" display; root cause was the pending-deletion schema refactor below
+
+### Changed
+- TikTok deletion tracking schema: `pending_deletion_count` and `pending_deletion_since` columns replaced by `deletion_confirmed INTEGER` and `false_positive_count INTEGER`; first absence now sets `status='deleted', deletion_confirmed=0, deleted_at=now`; second consecutive absence sets `deletion_confirmed=1`; a video that returns before confirmation is silently reverted to `status='up'` and `false_positive_count` is incremented; `deleted_at` now reflects when the video was first noticed missing (was: when it was confirmed); ban deletions set `deletion_confirmed=1` immediately; existing rows migrated automatically on first startup
 
 ### Added
 - Position-aware deletion detection in quick mode: stores the ordered video ID list from each quick fetch in `users.last_quick_video_ids`; on subsequent quick checks, videos missing from the window that cannot be explained by new posts scrolling older ones off the bottom are flagged as deletion candidates

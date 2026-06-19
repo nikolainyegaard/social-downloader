@@ -87,8 +87,8 @@ def init_db():
                 status                  TEXT DEFAULT 'up',
                 deleted_at              INTEGER,
                 undeleted_at            INTEGER,
-                pending_deletion_count  INTEGER NOT NULL DEFAULT 0,
-                pending_deletion_since  INTEGER,
+                deletion_confirmed      INTEGER NOT NULL DEFAULT 0,
+                false_positive_count    INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (tiktok_id) REFERENCES users(tiktok_id)
             );
 
@@ -170,7 +170,9 @@ def _migrate_db(conn) -> bool:
         "ALTER TABLE users ADD COLUMN last_full_refresh_at   INTEGER",
         "ALTER TABLE users ADD COLUMN full_refresh_pending   INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN refresh_batch          INTEGER",
-        "ALTER TABLE users ADD COLUMN last_quick_video_ids   TEXT",
+        "ALTER TABLE users  ADD COLUMN last_quick_video_ids   TEXT",
+        "ALTER TABLE videos ADD COLUMN deletion_confirmed   INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE videos ADD COLUMN false_positive_count INTEGER NOT NULL DEFAULT 0",
     ]
     for sql in migrations:
         try:
@@ -185,6 +187,36 @@ def _migrate_db(conn) -> bool:
         SET deleted_reason = 'video_deleted'
         WHERE status = 'deleted' AND deleted_reason IS NULL
     """)
+
+    # ── ONE-TIME MIGRATION: collapse pending_deletion_count/pending_deletion_since
+    # into the new deletion_confirmed / deleted_at schema.
+    #
+    # pending_deletion_count > 0 (status='up') → status='deleted', deletion_confirmed=0,
+    #   deleted_at = pending_deletion_since (first-absence timestamp)
+    # status='deleted' (already confirmed) → deletion_confirmed=1
+    #
+    # Then drop the two old columns. Safe to run repeatedly: the UPDATE WHERE guards are
+    # idempotent and the DROP is wrapped in try/except.
+    try:
+        conn.execute("""
+            UPDATE videos
+            SET status             = 'deleted',
+                deleted_reason     = 'video_deleted',
+                deleted_at         = pending_deletion_since,
+                deletion_confirmed = 0
+            WHERE status = 'up' AND pending_deletion_count > 0
+        """)
+    except sqlite3.OperationalError:
+        pass  # columns already dropped
+    conn.execute("UPDATE videos SET deletion_confirmed = 1 WHERE status = 'deleted' AND deletion_confirmed = 0")
+    for _drop in (
+        "ALTER TABLE videos DROP COLUMN pending_deletion_count",
+        "ALTER TABLE videos DROP COLUMN pending_deletion_since",
+    ):
+        try:
+            conn.execute(_drop)
+        except sqlite3.OperationalError:
+            pass  # already dropped or column never existed
 
     # Index depends on stats_backfilled_at which may have been added by migration above.
     conn.execute("""
@@ -766,15 +798,21 @@ def update_user_info(tiktok_id, username, display_name, bio,
 
 # Video operations
 
-def get_video_id_sets(tiktok_id) -> tuple[set, set]:
-    """Return (known_ids, active_ids) for a user."""
+def get_video_id_sets(tiktok_id) -> tuple[set, set, set]:
+    """Return (known_ids, active_ids, pending_ids) for a user.
+
+    active_ids:  status in ('up', 'undeleted') -- videos we believe are currently live
+    pending_ids: status='deleted' AND deletion_confirmed=0 -- seen missing once, not yet confirmed
+    """
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT video_id, status FROM videos WHERE tiktok_id = ?", (tiktok_id,)
+            "SELECT video_id, status, deletion_confirmed FROM videos WHERE tiktok_id = ?",
+            (tiktok_id,)
         ).fetchall()
-    known  = {r["video_id"] for r in rows}
-    active = {r["video_id"] for r in rows if r["status"] in ("up", "undeleted")}
-    return known, active
+    known   = {r["video_id"] for r in rows}
+    active  = {r["video_id"] for r in rows if r["status"] in ("up", "undeleted")}
+    pending = {r["video_id"] for r in rows if r["status"] == "deleted" and not r["deletion_confirmed"]}
+    return known, active, pending
 
 
 def add_video(video_id, tiktok_id, video_type, description, upload_date,
@@ -804,36 +842,66 @@ def update_video_downloaded(video_id, file_path, ytdlp_data=None):
         )
 
 
-def mark_video_deleted(video_id):
+def mark_video_possibly_deleted(video_id: str) -> None:
+    """First absence: set status='deleted', stamp deleted_at, leave deletion_confirmed=0."""
     with get_db() as conn:
         conn.execute("""
             UPDATE videos
-            SET status                 = 'deleted',
-                deleted_reason         = 'video_deleted',
-                deleted_at             = COALESCE(pending_deletion_since, ?),
-                pending_deletion_count = 0,
-                pending_deletion_since = NULL
+            SET status             = 'deleted',
+                deleted_reason     = 'video_deleted',
+                deleted_at         = COALESCE(deleted_at, ?)
             WHERE video_id = ? AND status IN ('up', 'undeleted')
         """, (int(time.time()), video_id))
 
 
-def mark_video_undeleted(video_id):
+def confirm_video_deletion(video_id: str) -> None:
+    """Second consecutive absence: confirm the deletion."""
     with get_db() as conn:
         conn.execute("""
-            UPDATE videos
-            SET status                 = 'undeleted',
-                undeleted_at           = ?,
-                pending_deletion_count = 0,
-                pending_deletion_since = NULL
+            UPDATE videos SET deletion_confirmed = 1
             WHERE video_id = ? AND status = 'deleted'
-        """, (int(time.time()), video_id))
+        """, (video_id,))
+
+
+def revert_or_undelete_video(video_id: str) -> str:
+    """Handle a deleted video that is visible again.
+
+    deletion_confirmed=0 (false positive): silently revert to 'up', clear deleted_at,
+      increment false_positive_count. Returns 'reverted'.
+    deletion_confirmed=1 (genuine recovery): mark as 'undeleted', record undeleted_at.
+      Returns 'undeleted'.
+    """
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT deletion_confirmed FROM videos WHERE video_id = ?", (video_id,)
+        ).fetchone()
+        if not row:
+            return "reverted"
+        if row["deletion_confirmed"]:
+            conn.execute("""
+                UPDATE videos
+                SET status       = 'undeleted',
+                    undeleted_at = ?
+                WHERE video_id = ? AND status = 'deleted'
+            """, (int(time.time()), video_id))
+            return "undeleted"
+        else:
+            conn.execute("""
+                UPDATE videos
+                SET status               = 'up',
+                    deleted_at           = NULL,
+                    deletion_confirmed   = 0,
+                    false_positive_count = false_positive_count + 1
+                WHERE video_id = ? AND status = 'deleted'
+            """, (video_id,))
+            return "reverted"
 
 
 def get_videos_for_user(tiktok_id):
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
             "SELECT video_id, tiktok_id, type, description, upload_date, download_date, file_path,"
-            " status, deleted_at, undeleted_at, pending_deletion_count, pending_deletion_since,"
+            " status, deleted_at, undeleted_at, deletion_confirmed, false_positive_count,"
             " view_count, like_count, comment_count, share_count, save_count,"
             " duration, width, height, music_title, music_artist, music_id,"
             " stats_backfilled_at, stats_error_count, stats_last_error,"
@@ -873,10 +941,9 @@ def get_all_video_stats() -> dict:
                 tiktok_id,
                 COUNT(*)                                                                          AS video_total,
                 COUNT(download_date)                                                              AS video_downloaded,
-                SUM(CASE WHEN status = 'deleted'                              THEN 1 ELSE 0 END) AS video_deleted,
-                SUM(CASE WHEN status = 'undeleted'                            THEN 1 ELSE 0 END) AS video_undeleted,
-                SUM(CASE WHEN status = 'up' AND pending_deletion_count > 0    THEN 1 ELSE 0 END) AS video_missing,
-                MAX(download_date)                                                                AS last_saved
+                SUM(CASE WHEN status = 'deleted'  THEN 1 ELSE 0 END) AS video_deleted,
+                SUM(CASE WHEN status = 'undeleted' THEN 1 ELSE 0 END) AS video_undeleted,
+                MAX(download_date)                                     AS last_saved
             FROM videos
             GROUP BY tiktok_id
         """).fetchall()
@@ -933,9 +1000,10 @@ def ban_user_videos(tiktok_id: str) -> int:
     with get_db() as conn:
         conn.execute("""
             UPDATE videos
-            SET status         = 'deleted',
-                deleted_reason = 'user_banned',
-                deleted_at     = ?
+            SET status             = 'deleted',
+                deleted_reason     = 'user_banned',
+                deleted_at         = COALESCE(deleted_at, ?),
+                deletion_confirmed = 1
             WHERE tiktok_id = ? AND status IN ('up', 'undeleted')
         """, (int(time.time()), tiktok_id))
         row = conn.execute(
@@ -975,45 +1043,14 @@ def get_sound_active_video_ids(sound_id: str) -> set:
 
 
 def get_sound_pending_deletion_video_ids(sound_id: str) -> set:
-    """Video IDs linked to a sound that have a pending deletion counter."""
+    """Video IDs linked to a sound that are possibly deleted (seen missing once, not yet confirmed)."""
     with get_db() as conn:
         rows = conn.execute("""
             SELECT v.video_id FROM videos v
             JOIN sound_videos sv ON v.video_id = sv.video_id
-            WHERE sv.sound_id = ? AND v.pending_deletion_count > 0
+            WHERE sv.sound_id = ? AND v.status = 'deleted' AND v.deletion_confirmed = 0
         """, (sound_id,)).fetchall()
     return {r["video_id"] for r in rows}
-
-
-def get_pending_deletion_video_ids(tiktok_id: str) -> set:
-    with get_db() as conn:
-        rows = conn.execute(
-            "SELECT video_id FROM videos WHERE tiktok_id = ? AND pending_deletion_count > 0",
-            (tiktok_id,),
-        ).fetchall()
-    return {r["video_id"] for r in rows}
-
-
-def increment_video_pending_deletion(video_id: str) -> int:
-    with get_db() as conn:
-        conn.execute("""
-            UPDATE videos
-            SET pending_deletion_count = pending_deletion_count + 1,
-                pending_deletion_since = COALESCE(pending_deletion_since, ?)
-            WHERE video_id = ?
-        """, (int(time.time()), video_id))
-        row = conn.execute(
-            "SELECT pending_deletion_count FROM videos WHERE video_id = ?", (video_id,)
-        ).fetchone()
-    return row["pending_deletion_count"] if row else 0
-
-
-def clear_video_pending_deletion(video_id: str):
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE videos SET pending_deletion_count = 0, pending_deletion_since = NULL WHERE video_id = ?",
-            (video_id,),
-        )
 
 
 def rename_user_video_paths(tiktok_id: str, old_username: str, new_username: str,
@@ -1089,8 +1126,7 @@ def get_videos_missing_stats() -> list[dict]:
                WHERE v.stats_backfilled_at IS NULL
                  AND COALESCE(v.stats_error_count, 0) < ?
                  AND v.file_path IS NOT NULL
-                 AND v.status != 'deleted'
-                 AND v.pending_deletion_count = 0
+                 AND v.status NOT IN ('deleted', 'undeleted')
                ORDER BY v.download_date""",
             (_STATS_ERROR_THRESHOLD,)
         ).fetchall()]
@@ -1111,8 +1147,7 @@ def count_videos_missing_stats() -> int:
                WHERE v.stats_backfilled_at IS NULL
                  AND COALESCE(v.stats_error_count, 0) < ?
                  AND v.file_path IS NOT NULL
-                 AND v.status != 'deleted'
-                 AND v.pending_deletion_count = 0""",
+                 AND v.status NOT IN ('deleted', 'undeleted')""",
             (_STATS_ERROR_THRESHOLD,)
         ).fetchone()
     return row[0] if row else 0
@@ -1271,14 +1306,12 @@ def get_recent_activity() -> dict:
     """Return recent deletions, profile changes, bans, and saves for the Recent panel."""
     with get_db() as conn:
         deletions = [dict(r) for r in conn.execute(
-            """SELECT v.video_id,
-                      COALESCE(v.deleted_at, v.pending_deletion_since) AS deleted_at,
-                      u.username, u.tiktok_id, u.enabled, u.starred,
+            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
-               WHERE (v.status = 'deleted' AND v.deleted_at IS NOT NULL AND v.deleted_reason = 'video_deleted')
-                  OR (v.status = 'up' AND v.pending_deletion_count > 0)
-               ORDER BY COALESCE(v.deleted_at, v.pending_deletion_since) DESC LIMIT 3"""
+               WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+                 AND v.deleted_reason = 'video_deleted'
+               ORDER BY v.deleted_at DESC LIMIT 3"""
         ).fetchall()]
         profile_changes = [dict(r) for r in conn.execute(
             """SELECT ph.field, ph.changed_at, u.username, u.tiktok_id, u.starred
@@ -1306,14 +1339,12 @@ def get_deletion_history(offset: int = 0, limit: int = 50) -> list[dict]:
     """Return paginated video deletion history (newest first), excluding user_banned."""
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT v.video_id,
-                      COALESCE(v.deleted_at, v.pending_deletion_since) AS deleted_at,
-                      u.username, u.tiktok_id, u.enabled, u.starred,
+            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
-               WHERE (v.status = 'deleted' AND v.deleted_at IS NOT NULL AND v.deleted_reason = 'video_deleted')
-                  OR (v.status = 'up' AND v.pending_deletion_count > 0)
-               ORDER BY COALESCE(v.deleted_at, v.pending_deletion_since) DESC LIMIT ? OFFSET ?""",
+               WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+                 AND v.deleted_reason = 'video_deleted'
+               ORDER BY v.deleted_at DESC LIMIT ? OFFSET ?""",
             (limit, offset),
         ).fetchall()
     return [dict(r) for r in rows]

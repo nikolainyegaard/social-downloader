@@ -20,7 +20,7 @@ from config import DATA_DIR, MEDIA_DIR, CHROME_EXECUTABLE
 from platforms.tiktok.config import (
     get_ms_token, get_cookies_flat, cookies_info,
     COOKIES_PATH, COOKIES_TIMESTAMP_PATH, AVATARS_DIR,
-    USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, DELETION_CONFIRM_THRESHOLD,
+    USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES,
     SESSIONS_PER_DAY, HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
     INACTIVE_CHECK_HOURS, STATS_REFRESH_DAYS,
 )
@@ -493,7 +493,6 @@ def list_users():
         user["video_downloaded"]       = stats.get("video_downloaded",  0)
         user["video_deleted"]          = stats.get("video_deleted",     0)
         user["video_undeleted"]        = stats.get("video_undeleted",   0)
-        user["video_missing"]          = stats.get("video_missing",     0)
         user["last_saved"]             = stats.get("last_saved")
         user["profile_history_count"]  = all_ph_counts.get(tid, 0)
         ph   = all_ph.get(tid, {})
@@ -940,7 +939,6 @@ def get_status():
     state = get_state_snapshot()
     state["missing_stats_count"]        = db.count_videos_missing_stats()
     state["stats_failed_count"]         = db.count_videos_stats_failed()
-    state["deletion_confirm_threshold"] = DELETION_CONFIRM_THRESHOLD
     return jsonify(state)
 
 

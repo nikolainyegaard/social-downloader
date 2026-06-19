@@ -10,7 +10,6 @@ let _nextSoundRun = null;   // ISO string of next scheduled sound loop
 let _logSeq           = 0;    // log_seq from last server response (monotonic, never resets)
 let _logClearSeq      = 0;    // lines before this seq were cleared; don't re-render them
 let _logClearRestored = false;
-let _deletionConfirmThreshold = 3;  // synced from /api/status
 let pending       = {};
 const dismissed   = new Set();
 let runQueue      = [];   // tiktok_ids queued for manual run
@@ -832,7 +831,7 @@ function _renderUserCard(u) {
       <div class="user-stats">
         <span class="stat-item"><span class="stat-item-label">followers</span><span class="stat-item-value">${(u.follower_count||0).toLocaleString()}</span></span>
         <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${u.video_total||0}</span></span>
-        ${(u.video_deleted || 0) + (u.video_missing || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${(u.video_deleted || 0) + (u.video_missing || 0)}</span></span>` : ''}
+        ${(u.video_deleted || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${(u.video_deleted || 0)}</span></span>` : ''}
         ${u.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${u.video_undeleted}</span></span>` : ''}
       </div>
 
@@ -1498,7 +1497,6 @@ function renderStatus(state) {
   _sleepNext    = state.user_loop_sleep_next  || null;
   _nextUserRun  = state.user_loop_next  || null;
   _nextSoundRun = state.sound_loop_next || null;
-  if (state.deletion_confirm_threshold != null) _deletionConfirmThreshold = state.deletion_confirm_threshold;
   runQueue         = state.run_queue         || [];
   runCurrent       = state.run_current       || null;
   soundRunQueue    = state.sound_run_queue   || [];
@@ -2099,7 +2097,7 @@ function _renderModalHeader(u) {
         ${u.following_count != null ? `<span><strong>${u.following_count.toLocaleString()}</strong> following</span>` : ''}
         ${u.video_count     != null ? `<span><strong>${u.video_count.toLocaleString()}</strong> on TikTok</span>` : ''}
         <span><strong>${u.video_total || 0}</strong> saved locally</span>
-        ${(u.video_deleted || 0) + (u.video_missing || 0) > 0 ? `<span style="color:var(--red)"><strong>${(u.video_deleted || 0) + (u.video_missing || 0)}</strong> deleted</span>` : ''}
+        ${(u.video_deleted || 0) > 0 ? `<span style="color:var(--red)"><strong>${(u.video_deleted || 0)}</strong> deleted</span>` : ''}
         ${u.video_undeleted ? `<span style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
         ${u.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="openProfileHistory()" title="Open profile change history"><strong>${u.profile_history_count}</strong> profile ${u.profile_history_count === 1 ? 'update' : 'updates'}</span>` : ''}
       </div>

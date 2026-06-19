@@ -11,7 +11,6 @@ from typing import Callable
 from platforms.tiktok import database as db
 from platforms.tiktok.config import (
     get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE,
-    DELETION_CONFIRM_THRESHOLD,
     SESSION_GAP_MEAN_SECS,
     HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
 )
@@ -22,7 +21,6 @@ from platforms.tiktok.api import (
 from downloader import download_video, download_photos, rename_creator_folder
 from thumbnailer import cache_avatar, generate_thumbnail
 
-_CONFIRM_THRESHOLD            = DELETION_CONFIRM_THRESHOLD
 _BOT_SLEEP_1                  = 300  # seconds after first bot detection (5 min)
 _BOT_SLEEP_2                  = 600  # seconds after second bot detection (10 min)
 _PROFILE_FAIL_QUIET_THRESHOLD = 5
@@ -319,21 +317,21 @@ async def process_single_user(
             db.set_user_tracking_enabled(tiktok_id, True)
             log(f"  Account recovered (videos accessible): ban cleared")
 
-        known_ids, active_ids = db.get_video_id_sets(tiktok_id)
+        known_ids, active_ids, pending_ids = db.get_video_id_sets(tiktok_id)
 
-        new_ids       = remote_ids - known_ids
-        # In quick mode only the first page (~30 videos) was fetched, so the vast
-        # majority of known videos will be absent from remote_ids -- they haven't
-        # been deleted, they're just beyond the page. Full deletion diff skipped.
-        # Also skip if the fetch was interrupted by stop: the partial result would
-        # falsely flag all un-fetched videos as missing.
-        deleted_ids   = (active_ids - remote_ids) if (mode == "full" and not _fetch_interrupted) else set()
+        new_ids = remote_ids - known_ids
+
+        # Full deletion diff: active videos not in the API response are possibly deleted.
+        # pending_ids (seen missing once) that are still absent get confirmed.
+        # Both skipped in quick mode (partial fetch) and on interrupted fetches.
+        _full_diff = mode == "full" and not _fetch_interrupted
+        deleted_ids = (active_ids - remote_ids) if _full_diff else set()
+        confirm_ids = (pending_ids - remote_ids) if _full_diff else set()
+
+        # Any deleted video (confirmed or not) that's visible again: revert or undelete.
         undeleted_ids = (known_ids - active_ids) & remote_ids
 
-        # Position-aware deletion detection for quick mode: compare the ordered ID list
-        # from the previous quick fetch to the current one. New videos push older ones
-        # off the bottom of the 30-item window -- those are expected drop-offs. Anything
-        # else missing from the window was likely deleted.
+        # Position-aware deletion detection for quick mode.
         quick_deleted_ids: set = set()
         if mode == "quick" and curr_ordered:
             prev_ordered = db.get_user_last_quick_video_ids(tiktok_id)
@@ -342,25 +340,21 @@ async def process_single_user(
                 curr_set = set(curr_ordered)
                 n_new    = len(curr_set - prev_set)
                 if n_new < len(prev_ordered):
-                    expected_dropoffs  = set(prev_ordered[-n_new:]) if n_new > 0 else set()
-                    quick_deleted_ids  = ((prev_set - curr_set) - expected_dropoffs) & active_ids
-
-        # Pending-deletion videos that reappeared -- clear their counters immediately
-        pending_deletion_ids = db.get_pending_deletion_video_ids(tiktok_id)
-        recovered_pending    = pending_deletion_ids & remote_ids
-        for vid_id in recovered_pending:
-            db.clear_video_pending_deletion(vid_id)
-            log(f"  Deletion check cleared: {vid_id} (back on TikTok)")
+                    expected_dropoffs = set(prev_ordered[-n_new:]) if n_new > 0 else set()
+                    # Include both active (first sighting) and pending (confirmation) videos
+                    quick_deleted_ids = ((prev_set - curr_set) - expected_dropoffs) & (active_ids | pending_ids)
 
         if new_ids:
             log(f"  New: {len(new_ids)}")
         if deleted_ids:
             log(f"  Missing (checking for deletion): {len(deleted_ids)}")
+        if confirm_ids:
+            log(f"  Confirming deletion: {len(confirm_ids)}")
         if quick_deleted_ids:
-            log(f"  Missing from quick window (checking for deletion): {len(quick_deleted_ids)}")
+            log(f"  Missing from quick window: {len(quick_deleted_ids)}")
         if undeleted_ids:
-            log(f"  Undeleted: {len(undeleted_ids)}")
-        if not (new_ids or deleted_ids or quick_deleted_ids or undeleted_ids or recovered_pending):
+            log(f"  Back on TikTok: {len(undeleted_ids)}")
+        if not (new_ids or deleted_ids or confirm_ids or quick_deleted_ids or undeleted_ids):
             log("  No changes.")
 
         for vid_id in new_ids:
@@ -435,27 +429,28 @@ async def process_single_user(
                 log(f"  Failed to download {vid_id}")
 
         for vid_id in deleted_ids:
-            count = db.increment_video_pending_deletion(vid_id)
-            if count >= _CONFIRM_THRESHOLD:
-                db.mark_video_deleted(vid_id)
-                log(f"  Marked deleted (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD}): {vid_id}")
-            else:
-                log(f"  Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
+            db.mark_video_possibly_deleted(vid_id)
+            log(f"  Possibly deleted: {vid_id}")
 
-        if deleted_ids:
+        for vid_id in confirm_ids:
+            db.confirm_video_deletion(vid_id)
+            log(f"  Confirmed deleted: {vid_id}")
+
+        if deleted_ids or confirm_ids:
             _deletion_detected = True
 
         for vid_id in quick_deleted_ids:
-            count = db.increment_video_pending_deletion(vid_id)
-            if count >= _CONFIRM_THRESHOLD:
-                db.mark_video_deleted(vid_id)
-                log(f"  Marked deleted (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD}): {vid_id}")
+            if vid_id in pending_ids:
+                db.confirm_video_deletion(vid_id)
+                log(f"  Confirmed deleted: {vid_id}")
             else:
-                log(f"  Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
+                db.mark_video_possibly_deleted(vid_id)
+                log(f"  Possibly deleted: {vid_id}")
 
         for vid_id in undeleted_ids:
-            db.mark_video_undeleted(vid_id)
-            log(f"  Marked undeleted: {vid_id}")
+            result = db.revert_or_undelete_video(vid_id)
+            if result == "undeleted":
+                log(f"  Undeleted: {vid_id}")
 
         # ── Stats upsert for already-known videos from item_list ─────────────
         # Only on full-mode runs: item_list fetches all pages so stats are complete.
@@ -770,21 +765,22 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
 
     # Deletion tracking: active videos no longer in the remote listing
     active_ids  = db.get_sound_active_video_ids(sound_id)
-    missing_ids = active_ids - remote_id_set
-
-    # Clear pending counter for any video that came back
     pending_ids = db.get_sound_pending_deletion_video_ids(sound_id)
-    for vid_id in pending_ids & remote_id_set:
-        db.clear_video_pending_deletion(vid_id)
-        log(f"Deletion check cleared: {vid_id} (back in sound listing)")
+
+    missing_ids  = active_ids - remote_id_set   # first absence: mark possibly deleted
+    confirm_ids  = pending_ids - remote_id_set   # still absent: confirm deletion
+    returned_ids = pending_ids & remote_id_set   # came back: revert silently
+
+    for vid_id in returned_ids:
+        db.revert_or_undelete_video(vid_id)
 
     for vid_id in missing_ids:
-        count = db.increment_video_pending_deletion(vid_id)
-        if count >= _CONFIRM_THRESHOLD:
-            db.mark_video_deleted(vid_id)
-            log(f"Marked deleted (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD}): {vid_id}")
-        else:
-            log(f"Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
+        db.mark_video_possibly_deleted(vid_id)
+        log(f"Possibly deleted: {vid_id}")
+
+    for vid_id in confirm_ids:
+        db.confirm_video_deletion(vid_id)
+        log(f"Confirmed deleted: {vid_id}")
 
     if not new_ids:
         if not missing_ids:
