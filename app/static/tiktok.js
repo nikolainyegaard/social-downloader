@@ -1650,7 +1650,7 @@ function renderLogs(lines, log_seq) {
     else if (/error|failed|unexpected/i.test(line))                                   span.className = 'log-err';
     else if (/warn|deleted|corrupt/i.test(line))                                      span.className = 'log-warn';
     else if (/download|saved/i.test(line))                                            span.className = 'log-dl';
-    else if (/Profile change:|avatar changed|\[sound\] Discovered/i.test(line))       span.className = 'log-profile';
+    else if (/Profile change:|Username changed:|avatar changed|Account (banned|restored|recovered)|Private account|\[sound\] Discovered/i.test(line))       span.className = 'log-profile';
     span.textContent = line + '\n';
     body.appendChild(span);
   });
