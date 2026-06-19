@@ -2,6 +2,7 @@
 TikTok download loops (user and sound) and shared state used by both loop threads and the web server.
 """
 
+import atexit
 import asyncio
 import json
 import os
@@ -68,22 +69,27 @@ def _save_loop_state() -> None:
 
 _persisted = _load_loop_state()
 
-# Recover start time for display. Three cases:
+# Recover start time and duration for display. Three cases:
 # 1. Normal: user_last_run_start is set from a completed run -- use it directly.
-# 2. Killed mid-run: user_current_run_start is set but the service never completed the run;
-#    promote it so "Last:" still shows the start of the interrupted run.
+# 2. Killed mid-run (SIGKILL, no atexit): user_current_run_start is set but the service never
+#    wrote an end time; promote it so "Last:" shows the start of the interrupted run, and clear
+#    the stale duration from the prior completed run so we don't show a contradictory "Took".
 # 3. Upgrade from old JSON (no start key): fall back to user_last_run_end as an approximation.
 _u_last_start = _persisted.get("user_last_run_start")
 _u_cur_start  = _persisted.get("user_current_run_start")
+_u_dur        = _persisted.get("user_last_duration_secs")
 if _u_cur_start:
     _u_last_start = _u_cur_start
+    _u_dur = None  # stale duration from prior completed run would contradict the new start time
 elif not _u_last_start:
     _u_last_start = _persisted.get("user_last_run_end")
 
 _s_last_start = _persisted.get("sound_last_run_start")
 _s_cur_start  = _persisted.get("sound_current_run_start")
+_s_dur        = _persisted.get("sound_last_duration_secs")
 if _s_cur_start:
     _s_last_start = _s_cur_start
+    _s_dur = None
 elif not _s_last_start:
     _s_last_start = _persisted.get("sound_last_run_end")
 
@@ -95,7 +101,7 @@ user_loop_state = {
     "last_run_start":           _u_last_start,
     "current_run_start":        None,
     "last_run_end":             _persisted.get("user_last_run_end"),
-    "last_run_duration_secs":   _persisted.get("user_last_duration_secs"),
+    "last_run_duration_secs":   _u_dur,
     "last_new_videos":          _persisted.get("user_last_new_videos"),
     "last_session_completed":   None,
     "last_session_total":       None,
@@ -126,7 +132,7 @@ sound_loop_state = {
     "last_run_start":         _s_last_start,
     "current_run_start":      None,
     "last_run_end":           _persisted.get("sound_last_run_end"),
-    "last_run_duration_secs": _persisted.get("sound_last_duration_secs"),
+    "last_run_duration_secs": _s_dur,
     "last_new_videos":        _persisted.get("sound_last_new_videos"),
     "next_run":               None,
 }
@@ -421,6 +427,48 @@ def _sound_run_worker():
 threading.Thread(target=_run_worker,        daemon=True, name="run-worker").start()
 threading.Thread(target=_sound_run_worker,  daemon=True, name="sound-run-worker").start()
 threading.Thread(target=backfill_thumbnails, daemon=True, name="thumb-backfill").start()
+
+
+def _shutdown_save() -> None:
+    """On clean shutdown (SIGTERM, Ctrl+C), persist the in-progress run duration.
+    Runs via atexit so the next startup shows an accurate "Took" even after docker compose down.
+    Does not run on SIGKILL; startup recovery handles that by clearing the stale duration."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    now_ts  = time.time()
+    changed = False
+    with _user_state_lock:
+        cur = user_loop_state.get("current_run_start")
+        if cur:
+            try:
+                start_ts = datetime.fromisoformat(cur).timestamp()
+                dur: int | None = round(now_ts - start_ts)
+            except (ValueError, TypeError):
+                dur = None
+            user_loop_state["last_run_start"]         = cur
+            user_loop_state["current_run_start"]      = None
+            user_loop_state["last_run_end"]           = now_iso
+            user_loop_state["last_run_duration_secs"] = dur
+            user_loop_state["running"]                = False
+            changed = True
+    with _sound_state_lock:
+        cur = sound_loop_state.get("current_run_start")
+        if cur:
+            try:
+                start_ts = datetime.fromisoformat(cur).timestamp()
+                dur = round(now_ts - start_ts)
+            except (ValueError, TypeError):
+                dur = None
+            sound_loop_state["last_run_start"]         = cur
+            sound_loop_state["current_run_start"]      = None
+            sound_loop_state["last_run_end"]           = now_iso
+            sound_loop_state["last_run_duration_secs"] = dur
+            sound_loop_state["running"]                = False
+            changed = True
+    if changed:
+        _save_loop_state()
+
+
+atexit.register(_shutdown_save)
 
 
 # ── Public entry points ───────────────────────────────────────────────────────
