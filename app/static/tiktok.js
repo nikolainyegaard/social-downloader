@@ -1898,8 +1898,19 @@ function _renderUntrackedHeader(tiktokId, username) {
     <div class="modal-avatar-wrap">
       <span class="avatar-letter">${esc((username || '?')[0])}</span>
     </div>
-    <div class="modal-name-row"></div>
-    <div class="modal-user-meta"></div>
+    <div class="modal-name-row">
+      <span class="modal-name">@${esc(username)}</span>
+    </div>
+    <div class="modal-user-meta">
+      <div class="modal-handle">@${esc(username)}</div>
+      <div class="modal-id-line">id:${esc(tiktokId)}</div>
+      <div class="modal-stats-row">
+        <span><strong>-</strong> followers</span>
+        <span><strong>-</strong> following</span>
+        <span><strong>-</strong> on TikTok</span>
+        <span><strong>0</strong> saved locally</span>
+      </div>
+    </div>
     <div class="modal-untracked-overlay" id="untrackedOverlay">
       <div class="modal-untracked-content">
         <div class="modal-untracked-identity">@${esc(username)}</div>
