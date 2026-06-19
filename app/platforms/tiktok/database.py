@@ -405,7 +405,7 @@ def get_starred_users_due(now: int) -> list[dict]:
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
             """SELECT * FROM users
-               WHERE enabled = 1 AND starred = 1
+               WHERE enabled = 1 AND tracking_enabled = 1 AND starred = 1
                  AND (next_check_at IS NULL OR next_check_at <= ?)
                ORDER BY COALESCE(next_check_at, 0) ASC""",
             (now,)
@@ -419,7 +419,7 @@ def get_users_due_for_check(now: int) -> list[dict]:
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
             """SELECT * FROM users
-               WHERE enabled = 1
+               WHERE enabled = 1 AND tracking_enabled = 1
                  AND (next_check_at IS NULL OR next_check_at <= ?)
                ORDER BY starred DESC, COALESCE(next_check_at, 0) ASC""",
             (now,)
