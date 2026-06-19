@@ -665,6 +665,28 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 #modalHeader .modal-avatar-wrap { grid-column: 1; grid-row: 1 / 3; }
 #modalHeader .modal-name-row { grid-column: 2; grid-row: 1; padding-right: 32px; }
 #modalHeader .modal-user-meta { grid-column: 2; grid-row: 2; }
+
+/* Untracked user: blur overlay covering the header until profile fetch completes */
+.modal-header-untracked { position: relative; min-height: 130px; }
+.modal-untracked-overlay {
+  position: absolute; inset: 0;
+  background: rgba(28, 30, 33, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 5;
+}
+.modal-untracked-content {
+  display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;
+}
+.modal-untracked-identity { font-size: 17px; font-weight: 600; color: var(--text); }
+.btn-track-user { font-size: 13px; padding: 6px 16px; }
+.modal-untracked-spinner {
+  display: flex; align-items: center; justify-content: center; height: 48px;
+}
+.modal-untracked-error {
+  font-size: 13px; color: var(--red); text-align: center; padding: 8px 16px;
+}
 .modal-name       { font-size: 20px; font-weight: 700; line-height: 1.2; word-break: break-word; }
 .modal-verified   { font-size: 11px; color: var(--accent); font-weight: 700; }
 .modal-handle     { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
@@ -833,7 +855,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   transition: background .1s;
 }
 .author-chip:hover { background: var(--accent-bg-h); }
-.author-chip.untracked { background: var(--surface2); color: var(--muted); cursor: default; }
+.author-chip.untracked { background: var(--surface2); color: var(--muted); cursor: pointer; }
 
 .modal-video-list { flex: 1; overflow-y: auto; }
 

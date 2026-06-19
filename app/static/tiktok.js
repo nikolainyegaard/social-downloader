@@ -1316,7 +1316,7 @@ const _SOUND_MODAL_CFG = {
     const name = v.author_username || v.tiktok_id || '?';
     return v.author_enabled === 1
       ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();openUserModal('${esc(v.tiktok_id)}')">@${esc(name)}</span>`
-      : `<span class="author-chip untracked">@${esc(name)}</span>`;
+      : `<span class="author-chip untracked" onclick="event.stopPropagation();closeSoundModal();openUntrackedUserModal('${esc(v.tiktok_id)}','${esc(name)}')">@${esc(name)}</span>`;
   },
   hasSearch: true, hasViewToggle: true, viewFn: 'setSoundModalView',
   gridId: 'soundVideoGrid', hasPhistBtn: false,
@@ -1864,6 +1864,103 @@ function openUserModal(tiktokId) {
     '<div class="vlist-loading">Loading videos…</div>';
 
   _loadModalVideos(tiktokId);
+}
+
+function openUntrackedUserModal(tiktokId, username) {
+  _modalUserId = tiktokId;
+  _modalUser   = { tiktok_id: tiktokId, username, enabled: 0 };
+  Object.assign(_userState, {
+    videos: [], filter: 'all', typeFilter: 'all', search: '',
+    sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
+    view: window.innerWidth <= 640 ? 'grid' : 'list',
+  });
+  if (_userState.obs) { _userState.obs.disconnect(); _userState.obs = null; }
+  _phistData   = [];
+  _phistField  = 'all';
+  _phistUserId = null;
+  document.getElementById('phistPanel').style.display     = 'none';
+  document.getElementById('modalVideoList').style.display = '';
+
+  document.getElementById('modalBackdrop').style.display = 'flex';
+  _lockScroll();
+
+  _renderUntrackedHeader(tiktokId, username);
+  _mRenderToolbar(_USER_MODAL_CFG, []);
+  document.getElementById('modalVideoList').innerHTML =
+    '<div class="vlist-loading">Loading videos…</div>';
+  _loadModalVideos(tiktokId);
+}
+
+function _renderUntrackedHeader(tiktokId, username) {
+  const hdr = document.getElementById('modalHeader');
+  hdr.classList.add('modal-header-untracked');
+  hdr.innerHTML = `
+    <div class="modal-avatar-wrap">
+      <span class="avatar-letter">${esc((username || '?')[0])}</span>
+    </div>
+    <div class="modal-name-row"></div>
+    <div class="modal-user-meta"></div>
+    <div class="modal-untracked-overlay" id="untrackedOverlay">
+      <div class="modal-untracked-content">
+        <div class="modal-untracked-identity">@${esc(username)}</div>
+        <button class="btn-run btn-track-user"
+                onclick="_trackUser('${esc(tiktokId)}','${esc(username)}')">Track user</button>
+      </div>
+    </div>`;
+}
+
+async function _trackUser(tiktokId, username) {
+  const overlay = document.getElementById('untrackedOverlay');
+  if (!overlay) return;
+  overlay.innerHTML = '<div class="modal-untracked-spinner"><div class="spinner" style="width:24px;height:24px;border-width:3px"></div></div>';
+
+  const { ok, data } = await apiJSON(
+    `/api/tiktok/users/${encodeURIComponent(tiktokId)}/track`,
+    { method: 'POST' }
+  );
+  if (!ok) {
+    overlay.innerHTML = `<div class="modal-untracked-error">${esc(data?.error || 'Failed to start tracking')}</div>`;
+    return;
+  }
+  _pollUntilTracked(tiktokId, data.username, overlay);
+}
+
+function _pollUntilTracked(tiktokId, username, overlay) {
+  const iv = setInterval(async () => {
+    const { ok: qOk, data: queue } = await apiJSON('/api/tiktok/queue');
+    if (!qOk) return;
+    const entry = queue[username];
+    if (entry?.status === 'error') {
+      clearInterval(iv);
+      overlay.innerHTML = `<div class="modal-untracked-error">${esc(entry.message || 'Tracking failed')}</div>`;
+      return;
+    }
+    if (!entry) {
+      clearInterval(iv);
+      const { ok, data } = await apiJSON('/api/tiktok/users');
+      if (ok) users = data;
+      const u = users.find(u => u.tiktok_id === tiktokId);
+      if (u) {
+        _modalUser = u;
+        const hdr = document.getElementById('modalHeader');
+        _renderModalHeader(u);  // replaces innerHTML; overlay detached, class + position:relative kept
+        const fadeEl = document.createElement('div');
+        fadeEl.className = 'modal-untracked-overlay';
+        hdr.appendChild(fadeEl);
+        requestAnimationFrame(() => {
+          fadeEl.style.transition = 'opacity 0.3s';
+          fadeEl.style.opacity    = '0';
+        });
+        setTimeout(() => {
+          fadeEl.remove();
+          hdr.classList.remove('modal-header-untracked');
+        }, 320);
+        _loadModalVideos(tiktokId);
+      } else {
+        overlay.innerHTML = '<div class="modal-untracked-error">User data not found after tracking.</div>';
+      }
+    }
+  }, 2000);
 }
 
 function openUserModalAndHighlight(tiktokId, videoId, filter, sortField, sortDir) {

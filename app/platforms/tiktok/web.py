@@ -607,6 +607,24 @@ def run_user_profile(tiktok_id: str):
     return jsonify({"ok": True})
 
 
+@tiktok_bp.route("/users/<tiktok_id>/track", methods=["POST"])
+def track_discovered_user(tiktok_id: str):
+    """Promote a sound-discovered (enabled=0) user to fully tracked.
+    Reuses the add-user queue so _process_add handles the full profile fetch."""
+    user = db.get_user(tiktok_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    if user.get("enabled", 0) == 1:
+        return jsonify({"error": "User is already tracked"}), 409
+    username = user["username"]
+    with _pending_lock:
+        if _pending.get(username, {}).get("status") == "pending":
+            return jsonify({"queued": True, "username": username}), 202
+        _pending[username] = {"status": "pending"}
+    _add_queue.put(username)
+    return jsonify({"queued": True, "username": username}), 202
+
+
 @tiktok_bp.route("/users/<tiktok_id>/tracking", methods=["PATCH"])
 def set_user_tracking(tiktok_id: str):
     if not db.get_user(tiktok_id):
