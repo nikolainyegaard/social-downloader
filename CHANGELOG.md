@@ -15,6 +15,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - TikTok deletion tracking schema: `pending_deletion_count` and `pending_deletion_since` columns replaced by `deletion_confirmed INTEGER` and `false_positive_count INTEGER`; first absence now sets `status='deleted', deletion_confirmed=0, deleted_at=now`; second consecutive absence sets `deletion_confirmed=1`; a video that returns before confirmation is silently reverted to `status='up'` and `false_positive_count` is incremented; `deleted_at` now reflects when the video was first noticed missing (was: when it was confirmed); ban deletions set `deletion_confirmed=1` immediately; existing rows migrated automatically on first startup
 
 ### Added
+- Scheduled daily database backup: both `tiktok.db` and `youtube.db` are copied to `data/backups/` at midnight each day using the SQLite backup API; a backup also runs immediately on startup; backups older than 14 days are pruned automatically
 - Position-aware deletion detection in quick mode: stores the ordered video ID list from each quick fetch in `users.last_quick_video_ids`; on subsequent quick checks, videos missing from the window that cannot be explained by new posts scrolling older ones off the bottom are flagged as deletion candidates
 - Fast follow-up full re-check: after a full-mode run that finds any deletion candidates, `next_check_at` is reset to NULL so the user is processed again in the next session to confirm or clear the pending deletions
 

@@ -28,6 +28,7 @@ from platforms.tiktok.loop import (
 from platforms.youtube import loop as youtube_loop
 from platforms.youtube.loop import LOOP_INTERVAL_MINUTES as YOUTUBE_LOOP_INTERVAL_MINUTES
 from web import create_app
+from backup import start_backup_thread
 
 LOGS_DIR = os.path.join(DATA_DIR, "logs")
 _RUNS_DIR = os.path.join(LOGS_DIR, "runs")
@@ -527,6 +528,7 @@ if __name__ == "__main__":
     threading.Thread(target=_sound_loop_thread,   daemon=True, name="sound-loop-thread").start()
     threading.Thread(target=_youtube_loop_thread, daemon=True, name="yt-loop-thread").start()
     threading.Thread(target=_file_check_thread,   daemon=True, name="file-check-thread").start()
+    start_backup_thread()
 
     print(f"{_ts()} Web UI available at http://0.0.0.0:{WEB_PORT}")
     try:
