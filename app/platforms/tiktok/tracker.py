@@ -26,7 +26,8 @@ _BOT_SLEEP_2                  = 600  # seconds after second bot detection (10 mi
 _PROFILE_FAIL_QUIET_THRESHOLD = 5
 _PROFILE_FAIL_SLEEP           = 30   # seconds to sleep before retrying a failed profile fetch
 _BOT_COOLDOWN_SLEEP           = 600  # seconds for full browser restart on session creation failure
-_SESSION_GAP_MIN_SECS = 15   # minimum inter-user gap within a session (seconds)
+_SESSION_GAP_MIN_SECS         = 15   # minimum inter-user gap within a session (seconds)
+_LARGE_DELETION_THRESHOLD     = 10   # first-pass missing count that triggers an isolated full re-scan
 
 
 class _BotDetectedError(Exception):
@@ -76,10 +77,11 @@ async def process_single_user(
         # Best sec_uid we have: from DB initially, refreshed if profile fetch returns a newer one
         sec_uid = user.get("sec_uid")
 
-        _was_banned        = user.get("account_status") == "banned"
-        _profile_ok        = False  # set True on any valid TikTok response (success or ban)
-        _deletion_detected = False  # set True in full mode when deletion candidates are found
-        curr_ordered: list = []     # ordered video IDs from this fetch (item_list only)
+        _was_banned           = user.get("account_status") == "banned"
+        _profile_ok           = False  # set True on any valid TikTok response (success or ban)
+        _deletion_detected    = False  # set True in full mode when deletion candidates are found
+        _large_deletion_spike = False  # set True when first-pass missing count >= threshold
+        curr_ordered: list    = []     # ordered video IDs from this fetch (item_list only)
 
         for _attempt in range(2):
             try:
@@ -438,6 +440,8 @@ async def process_single_user(
 
         if deleted_ids or confirm_ids:
             _deletion_detected = True
+        if len(deleted_ids) >= _LARGE_DELETION_THRESHOLD:
+            _large_deletion_spike = True
 
         for vid_id in quick_deleted_ids:
             if vid_id in pending_ids:
@@ -476,7 +480,7 @@ async def process_single_user(
             elif mode == "full" and curr_ordered:
                 db.set_user_last_quick_video_ids(tiktok_id, curr_ordered[:30])
 
-        return _profile_ok, _deletion_detected
+        return _profile_ok, _deletion_detected, _large_deletion_spike
 
     finally:
         if set_current_user:
@@ -490,6 +494,7 @@ async def process_user_session(
     set_current_user: Callable[[str | None], None] | None = None,
     stop_event: threading.Event | None = None,
     set_sleep: Callable[[float | None, str | None], None] | None = None,
+    on_large_deletion: Callable[[str], None] | None = None,
 ) -> int:
     """Process a set of users in one session. Returns the count of users successfully processed."""
     from TikTokApi import TikTokApi
@@ -621,6 +626,7 @@ async def process_user_session(
                         stop_event=stop_event,
                     )
                     _deletion_detected = _result[1] if isinstance(_result, tuple) else False
+                    _large_deletion    = _result[2] if isinstance(_result, tuple) and len(_result) > 2 else False
                     _user_processed = True
                 except _BotDetectedError as exc:
                     logd(f"  [{user['tiktok_id']}] bot detection: {exc}")
@@ -658,8 +664,11 @@ async def process_user_session(
                         db.set_user_last_full_refresh_at(user["tiktok_id"], _now_ts)
                         db.clear_full_refresh_pending(user["tiktok_id"])
                         if _deletion_detected:
-                            db.set_user_next_check(user["tiktok_id"], None)
-                            log(f"  Deletion candidates found; scheduling ASAP re-check")
+                            if _large_deletion and on_large_deletion:
+                                on_large_deletion(user["tiktok_id"])
+                            else:
+                                db.set_user_next_check(user["tiktok_id"], None)
+                                log(f"  Deletion candidates found; scheduling ASAP re-check")
 
             if not break_for_restart:
                 total_completed += completed

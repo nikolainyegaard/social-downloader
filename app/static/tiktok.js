@@ -14,6 +14,7 @@ let pending       = {};
 const dismissed   = new Set();
 let runQueue      = [];   // tiktok_ids queued for manual run
 let runCurrent    = null; // tiktok_id currently being run manually
+let pendingRescans = {};  // {tiktok_id: fires_at_unix_secs} for large-spike midpoint re-scans
 let userSort      = { field: 'username', dir: 'asc' };
 let userFilter    = { priv: 'all', stat: 'all', star: 'all' };
 
@@ -804,6 +805,11 @@ function _renderUserCard(u) {
   const isRunCurrent = runCurrent === u.tiktok_id;
   const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
+  const rescanAt = pendingRescans[u.tiktok_id];
+  const rescanBadge = rescanAt
+    ? `<div class="user-rescan-notice" title="Isolated full re-scan scheduled to verify deletion candidates">Re-scan ${fmt.rel(new Date(rescanAt * 1000).toISOString())}</div>`
+    : '';
+
   return `
     <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned ? ' user-card-inactive' : ''}${isBanned ? ' user-card-banned' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
       <div class="user-card-top">
@@ -834,6 +840,8 @@ function _renderUserCard(u) {
         ${(u.video_deleted || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${(u.video_deleted || 0)}</span></span>` : ''}
         ${u.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${u.video_undeleted}</span></span>` : ''}
       </div>
+
+      ${rescanBadge}
 
       <div class="user-card-footer">
         <div style="display:flex;gap:6px;">
@@ -1501,6 +1509,7 @@ function renderStatus(state) {
   runCurrent       = state.run_current       || null;
   soundRunQueue    = state.sound_run_queue   || [];
   soundRunCurrent  = state.sound_run_current || null;
+  pendingRescans   = state.pending_rescans   || {};
 
   const anyActive = isRunning || state.sound_loop_running || !!runCurrent || !!soundRunCurrent;
   _sEl.badge.className  = `status-badge${anyActive ? ' running' : ''}`;

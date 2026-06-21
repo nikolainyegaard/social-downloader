@@ -156,6 +156,13 @@ _sound_run_queue:      _queue_module.Queue = _queue_module.Queue()
 _sound_run_state_lock  = threading.Lock()
 _sound_run_state: dict = {"current": None, "queue": []}
 
+# ── Pending midpoint re-scans ─────────────────────────────────────────────────
+# Keyed by tiktok_id. Each entry holds the Timer object and the Unix timestamp
+# when it will fire, so the UI can show a countdown on the user card.
+
+_pending_rescans: dict[str, dict] = {}
+_pending_rescans_lock = threading.Lock()
+
 
 # ── Public accessors ──────────────────────────────────────────────────────────
 
@@ -248,6 +255,8 @@ def get_state_snapshot() -> dict:
     with _sound_run_state_lock:
         state["sound_run_current"] = _sound_run_state["current"]
         state["sound_run_queue"]   = list(_sound_run_state["queue"])
+    with _pending_rescans_lock:
+        state["pending_rescans"] = {tid: info["fires_at"] for tid, info in _pending_rescans.items()}
     return state
 
 
@@ -310,7 +319,12 @@ def check_and_clear_sound_reschedule() -> bool:
 
 
 def enqueue_user_run(tiktok_id: str, profile_only: bool = False, mode: str = "full") -> bool:
-    """Queue a single-user manual run. Returns False if already queued/running."""
+    """Queue a single-user manual run. Returns False if already queued/running.
+    Cancels any pending midpoint re-scan for this user."""
+    with _pending_rescans_lock:
+        pending = _pending_rescans.pop(tiktok_id, None)
+    if pending:
+        pending["timer"].cancel()
     with _run_state_lock:
         if tiktok_id in _run_state["queue"] or _run_state["current"] == tiktok_id:
             return False
@@ -473,6 +487,43 @@ atexit.register(_shutdown_save)
 
 # ── Public entry points ───────────────────────────────────────────────────────
 
+def _schedule_midpoint_run(tiktok_id: str) -> None:
+    """Schedule an isolated full re-scan at the midpoint before the next loop run.
+
+    Called when a large deletion spike is detected in a full run. Uses a fresh
+    dedicated session (same as pressing Run Full) rather than the shared loop session,
+    which avoids the session degradation that can cause item_list to return partial results
+    for large accounts."""
+    with _user_state_lock:
+        next_run_iso = user_loop_state.get("next_run")
+    delay = 1800.0  # default: 30 min if next run is unknown
+    if next_run_iso:
+        try:
+            next_ts = datetime.fromisoformat(next_run_iso).timestamp()
+            delay   = max((next_ts - time.time()) / 2, 60.0)
+        except (ValueError, TypeError):
+            pass
+
+    def _fire():
+        with _pending_rescans_lock:
+            _pending_rescans.pop(tiktok_id, None)
+        enqueue_user_run(tiktok_id, mode="full")
+
+    fires_at = time.time() + delay
+    timer    = threading.Timer(delay, _fire)
+    with _pending_rescans_lock:
+        existing = _pending_rescans.get(tiktok_id)
+        if existing:
+            existing["timer"].cancel()
+        _pending_rescans[tiktok_id] = {"timer": timer, "fires_at": fires_at}
+    timer.start()
+
+    mins  = round(delay / 60)
+    user  = db.get_user(tiktok_id)
+    label = f"@{user['username']}" if user else tiktok_id
+    _log(f"  Large deletion spike: isolated full re-scan for {label} in {mins}m")
+
+
 def run_user_session(users_due: list[dict], manual: bool = False, session_kind: str | None = None) -> None:
     """Process a pre-assembled set of users due for checking. Called by the session scheduler."""
     from config import get_path_issues
@@ -499,7 +550,8 @@ def run_user_session(users_due: list[dict], manual: bool = False, session_kind: 
 
     try:
         _completed = asyncio.run(
-            process_user_session(users_due, _log, _logd, _set_current_user, _user_stop_event, set_sleep=_set_sleep)
+            process_user_session(users_due, _log, _logd, _set_current_user, _user_stop_event,
+                                 set_sleep=_set_sleep, on_large_deletion=_schedule_midpoint_run)
         ) or 0
     except Exception as e:
         _log(f"Unhandled user session error: {e}")
