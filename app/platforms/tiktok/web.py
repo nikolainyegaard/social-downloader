@@ -46,7 +46,7 @@ _pending_lock = threading.Lock()
 _pending: dict = {}  # username -> {"status": "pending"|"error", "message": str}
 
 
-def _process_add(username: str) -> None:
+def _process_add(username: str, sec_uid: str | None = None) -> None:
     ms_token     = get_ms_token()
     cookies_flat = get_cookies_flat()
 
@@ -60,6 +60,8 @@ def _process_add(username: str) -> None:
                 executable_path=CHROME_EXECUTABLE,
                 cookies=[cookies_flat] if cookies_flat else None,
             )
+            if sec_uid:
+                return await get_user_info(api, sec_uid=sec_uid)
             return await get_user_info(api, username=username)
 
     try:
@@ -128,9 +130,10 @@ def _process_add(username: str) -> None:
 
 def _add_worker() -> None:
     while True:
-        username = _add_queue.get()
+        item = _add_queue.get()
+        username, sec_uid = item if isinstance(item, tuple) else (item, None)
         try:
-            _process_add(username)
+            _process_add(username, sec_uid)
         except Exception as e:
             with _pending_lock:
                 _pending[username] = {"status": "error", "message": str(e)}
@@ -527,7 +530,7 @@ def add_user():
             return jsonify({"error": "Already queued"}), 409
         _pending[username] = {"status": "pending"}
 
-    _add_queue.put(username)
+    _add_queue.put((username, None))
     return jsonify({"queued": True, "username": username}), 202
 
 
@@ -617,11 +620,12 @@ def track_discovered_user(tiktok_id: str):
     if user.get("enabled", 0) == 1:
         return jsonify({"error": "User is already tracked"}), 409
     username = user["username"]
+    sec_uid  = user.get("sec_uid")
     with _pending_lock:
         if _pending.get(username, {}).get("status") == "pending":
             return jsonify({"queued": True, "username": username}), 202
         _pending[username] = {"status": "pending"}
-    _add_queue.put(username)
+    _add_queue.put((username, sec_uid))
     return jsonify({"queued": True, "username": username}), 202
 
 
