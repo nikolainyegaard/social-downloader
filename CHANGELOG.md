@@ -11,37 +11,46 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Activity scoring for check intervals: starred users checked every 6h, active users (posted within 30 days) every 24h, inactive users every 72h; intervals recomputed after each session; configurable via settings UI or env vars
 - Quick vs full refresh split: normal session checks use quick mode (first ~30 videos, no stats upsert); full item_list stats refresh runs on a weekly cycle per user; mode determined by `full_refresh_pending` flag set by the batch scheduler
 - Weekly full-refresh batch cycle: users are divided into 7 equal batches sorted by `last_full_refresh_at`; one batch is activated per day so item_list calls are spread evenly across the week instead of hitting all users at once
-- Four new DB columns on `users`: `next_check_at`, `check_interval_secs`, `last_video_at`, `last_full_refresh_at`; two batch columns: `full_refresh_pending`, `refresh_batch`
+- Five new DB columns on `users`: `next_check_at`, `check_interval_secs`, `last_video_at`, `last_full_refresh_at`, `last_quick_video_ids`; two batch columns: `full_refresh_pending`, `refresh_batch`
 - New settings: `sessions_per_day`, `high_priority_check_hours`, `active_check_hours`, `inactive_check_hours`, `stats_refresh_days` (UI + env vars)
-- Session timeline pills on the loop card: shows today's scheduled session times with done/running/next visual states
+- Session timeline pills on both the user loop card and the sound loop card: shows today's scheduled session times with done/running/next visual states
 - Live sleep countdown bar pinned to the top of the TikTok log panel: counts down the current inter-user or cooldown sleep in place (no new log lines), shows an "up next" label with the next user and check mode; when idle, counts down to the nearest scheduled user or sound loop session
-- Run Starred, Run Half, and Run All buttons replace the single "Run Now" button on the TikTok user loop card; Run Starred triggers a full refresh for starred users only; Run Half triggers a quick check for the 50% of users longest since their last check; Run All triggers a quick check for all enabled users without setting full_refresh_pending to avoid rate limit overload
+- Next, Starred, Half, and All trigger buttons replace the single "Run Now" button on the TikTok user loop card; Next runs whoever is due without forcing a full refresh; Starred triggers a full refresh for starred users only; Half triggers a quick check for the 50% of users longest since their last check; All triggers a quick check for all enabled users without setting full_refresh_pending to avoid rate limit overload
 - Content-hash asset URLs: `style.css`, `common.js`, `tiktok.js`, and `youtube.js` are served at `/assets/<name>-<8-char-hash>.<ext>` with `Cache-Control: immutable`; hashes computed at startup so Cloudflare and browser caches are busted automatically on each new deploy without a build step
 - "Last saved" timestamp on TikTok user cards, showing when the most recent video from that user was downloaded (derived from `MAX(download_date)` in `get_all_video_stats`); displayed below "Last checked" in the card footer
 - "Last checked" and "Last saved" sort options for the TikTok user view, both defaulting to newest first
-- Star, Run Now, Run Profile, and Remove action buttons in the TikTok user detail modal header, alongside the existing tracking toggle; the star button re-renders the modal header to reflect the updated state; Remove closes the modal before reloading
+- Star, Quick, Full, Run Profile, and Remove action buttons in the TikTok user detail modal header, alongside the existing tracking toggle; Quick and Full match the per-user card buttons; the star button re-renders the modal header to reflect the updated state; Remove closes the modal before reloading
 - Scheduled daily database backup: both `tiktok.db` and `youtube.db` are copied to `data/backups/` at midnight each day using the SQLite backup API; a backup also runs immediately on startup; backups older than 14 days are pruned automatically
 - Position-aware deletion detection in quick mode: stores the ordered video ID list from each quick fetch in `users.last_quick_video_ids`; on subsequent quick checks, videos missing from the window that cannot be explained by new posts scrolling older ones off the bottom are flagged as deletion candidates
-- Fast follow-up full re-check: after a full-mode run that finds any deletion candidates, `next_check_at` is reset to NULL so the user is processed again in the next session to confirm or clear the pending deletions
+- Fast follow-up full re-check: after a full-mode run that finds any non-large deletion candidates (fewer than 10), `next_check_at` is reset to NULL so the user is processed again in the next session to confirm or clear the pending deletions; runs with 10 or more deletions use the midpoint re-scan path instead
 - item_list page-progress log line emitted after every 30 videos fetched during a full run: `[item_list] page N fetched (M videos)`; visible in the log panel during full runs and useful for diagnosing session degradation on large accounts
 - Large deletion spike isolation: when 10 or more deletions are detected in a single full run, a dedicated full re-scan is automatically scheduled to fire at the midpoint between the current run and the next scheduled session (minimum 60 seconds, default 30 minutes if no next session is known); the re-scan uses a fresh dedicated session via the same path as the "Run Full" button, avoiding shared-session degradation that can cause false confirmations on large accounts
 - Pending re-scan badge on user cards: a yellow countdown pill showing when the isolated midpoint re-scan will fire; cleared automatically if a manual run is triggered for the same user before it fires
+- `UserPrivateException`: TikTok error 10222 (USER_PRIVATE) is now a distinct exception from `UserBannedException`; the private path still attempts the item_list fetch instead of treating the account as banned, enabling recovery when access is restored
+- `UserBannedException` extended to cover status codes 10202, 10221, 10223, and 10225 (was 10202 and 10223 only); status code 10102 (stale session) now raises `ValueError` instead of a ban exception
+- Track-user flow for sound-discovered users: `POST /api/tiktok/users/<tiktok_id>/track` endpoint and `openUntrackedUserModal` frontend modal for adding a user discovered via the sound tracker without leaving the sounds view
+- Lazy-batch rendering for user cards: cards render in batches of 9 as the user scrolls via IntersectionObserver, replacing the previous all-at-once render; reduces jank on large libraries
+- Starred usernames highlighted in yellow in the Recents panel and recent-log modals
+- `recover_loop_state_from_db()`: on startup, if the state file has no run history, infers `last_run_end` from `MAX(last_checked)` so the loop panel shows a meaningful "Last" time after an upgrade
+- Loop state persisted on clean shutdown via `atexit`: `_shutdown_save()` writes the in-progress run duration so the "Took" display is accurate after `docker compose down`
+- New trigger API endpoints: `POST /api/tiktok/trigger/next`, `/trigger/half`, `/trigger/all` (matching the four new loop card buttons)
 
 ### Changed
 - TikTok deletion tracking schema: `pending_deletion_count` and `pending_deletion_since` columns replaced by `deletion_confirmed INTEGER` and `false_positive_count INTEGER`; first absence now sets `status='deleted', deletion_confirmed=0, deleted_at=now`; second consecutive absence sets `deletion_confirmed=1`; a video that returns before confirmation is silently reverted to `status='up'` and `false_positive_count` is incremented; `deleted_at` now reflects when the video was first noticed missing (was: when it was confirmed); ban deletions set `deletion_confirmed=1` immediately; existing rows migrated automatically on first startup
 - Loops panel trigger buttons: removed "Run" prefix, added refresh icon to match the user card Quick/Full button style; labels are now "Next", "Starred", "Half", "All"
-- "Possibly deleted" videos (pending deletion count > 0) now display identically to confirmed deleted videos in the frontend: same "Deleted" label, same red colour, counted together with deleted in user card and modal stats, included in the "Deleted" filter pill in the video modal; the internal `pending_deletion_count` state is unchanged
+- Unconfirmed deleted videos (`status='deleted', deletion_confirmed=0`) now display identically to confirmed deleted videos in the frontend: same "Deleted" label, same red colour, counted together in user card and modal stats, included in the "Deleted" filter pill; the "Missing" filter pill is removed entirely
 - Per-user run buttons on user cards and the user modal split into Quick and Full; Quick fetches the first 30 videos only and skips the stats upsert (matching the session loop's quick-check mode); Full is the previous behavior and does not advance the weekly full-refresh cycle any sooner
 - TikTok user cards: "Last checked" and "Last saved" moved from the button row into a slim meta footer below a faint divider, alongside a new "Added" date field; the three items are shown as uppercase label / value column pairs
 - Relative timestamps (Last checked, Last saved, loop run times, etc.) now show two components instead of collapsing to hours: `Xmo Yd`, `Xd Yh`, `Xh Ym`, `Xm`, `Xs`
 - Inter-user gap within a session changed from uniform 2-5s to exponential distribution (mean 90s, min 15s) to better mimic organic browsing behavior and reduce bot detection
 - Log panel scrolls to the bottom automatically when the Log tab is opened
-- Manual trigger (Run Starred / Run Half / Run All) no longer lights up the next scheduled session pill as running; that pill represents the scheduled session time, not the manual trigger
+- Manual trigger (Starred / Half / All) no longer lights up the next scheduled session pill as running; that pill represents the scheduled session time, not the manual trigger
 - Recently deleted Recents panel and modal now groups consecutive same-user deletions with a count badge (e.g. `@handle 3x`), matching the Recently Saved grouping logic; single-entry rows highlight the video directly, multi-entry rows open the user deletion modal
 - Recents panel grouped-response detection in common.js is now dynamic: dispatches on `{items, rows_consumed}` response shape rather than checking the endpoint type, so any future grouped endpoint works without frontend changes
 - Usernames in the Recents panel and modals are now left-aligned within their column (was centered)
 - Recents panel grid changed to 2fr 3fr 1fr: date gets 2/6, username gets 3/6 (left-aligned text centered between the outer columns), detail gets 1/6
 - Profile change field labels shortened: "Username" to "Handle", "Display name" to "Name", "Account status" to "Status", "Privacy status" to "Privacy"
+- `get_recent_activity()` deletion query now scans up to 300 rows (was LIMIT 3) to feed server-side grouping before the panel renders
 
 ### Fixed
 - Loops panel "Last:" showed the time the loop completed, not when it started; loop start time is now written to `loop_state.json` at session start and used for the display; a service killed mid-run still shows the start time of the interrupted run on next startup
@@ -58,12 +67,15 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Log viewer stopping after 1000 lines: the client used `lines.length` as the slice index; once the server buffer filled to 1000 the slice was always empty; fixed with a monotonic `_log_seq` counter that increments on every log call and is returned in the status response so the client tracks position independently of buffer size
 - Manual trigger consuming a scheduled session slot: session slot was always popped on wake regardless of whether the wake was manual or scheduled; now only popped on scheduled wakes
 - Session timeline pills showing 12h AM/PM time; now 24h
+- Profile change log lines not colored pink in the log panel; coloring regex was expanded to match "Profile change:" lines
 
 ### Removed
 - `get_cookies_for_playwright()` from `platforms/tiktok/config.py`: defined but never called anywhere
 - `pending_ban_count` and `pending_ban_since` columns from the TikTok `users` table schema and migration list: columns were never read or written by any database function
 - `PlatformAdapter` base class (`platforms/base.py`): never subclassed; both trackers call platform API functions directly
 - YouTube one-time migration block and `_one_time_backfill_ytdlp_columns()` from `platforms/youtube/database.py`: YouTube has never shipped so no database in the wild needed this migration; it was a permanent no-op
+- `mark_video_deleted()` and `mark_video_undeleted()` from `database.py`: replaced by `mark_video_possibly_deleted()`, `confirm_video_deletion()`, and `revert_or_undelete_video()` to match the new two-step deletion schema
+- `deletion_confirm_threshold` field removed from the `/api/tiktok/status` response: threshold is now an internal constant, not exposed to the frontend
 
 ## [0.2.1] - 2026-05-18
 
