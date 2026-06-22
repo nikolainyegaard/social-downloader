@@ -1185,7 +1185,7 @@ function renderSounds() {
     return;
   }
   if (!filtered.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds match this search.</div>' + _ghostCards(Math.min(sounds.length, 9));
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds match this search.</div>' + _ghostCards(9);
     return;
   }
   grid.innerHTML = filtered.map(s => {
@@ -1233,7 +1233,7 @@ function renderSounds() {
           </div>
         </div>
       </div>`;
-  }).join('') + _ghostCards(Math.max(0, Math.min(sounds.length, 9) - filtered.length));
+  }).join('') + _ghostCards(Math.max(0, 9 - filtered.length));
 }
 
 async function loadSounds() {

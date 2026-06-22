@@ -51,6 +51,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Usernames in the Recents panel and modals are now left-aligned within their column (was centered)
 - Recents panel grid changed to 2fr 3fr 1fr: date gets 2/6, username gets 3/6 (left-aligned text centered between the outer columns), detail gets 1/6
 - Profile change field labels shortened: "Username" to "Handle", "Display name" to "Name", "Account status" to "Status", "Privacy status" to "Privacy"
+- Sounds catalog grid pads to a minimum of 9 ghost cards, matching the Users tab; prevents the page from jumping upward when switching tabs with few sounds tracked
 - `get_recent_activity()` deletion query now scans up to 300 rows (was LIMIT 3) to feed server-side grouping before the panel renders
 
 ### Fixed
