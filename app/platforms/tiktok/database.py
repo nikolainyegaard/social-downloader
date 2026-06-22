@@ -1287,15 +1287,16 @@ def _group_consecutive_by_user(rows: list[dict], date_key: str) -> list[dict]:
             groups[-1]["_last_ts"] = row[date_key]
         else:
             groups.append({
-                "tiktok_id": row["tiktok_id"],
-                "username":  row["username"],
-                "enabled":   row.get("enabled", 1),
-                "starred":   row.get("starred", 0),
-                "video_id":  row.get("video_id"),
-                "sound_id":  row.get("sound_id"),
-                date_key:    row[date_key],
-                "_last_ts":  row[date_key],
-                "count":     1,
+                "tiktok_id":      row["tiktok_id"],
+                "username":       row["username"],
+                "enabled":        row.get("enabled", 1),
+                "starred":        row.get("starred", 0),
+                "account_status": row.get("account_status"),
+                "video_id":       row.get("video_id"),
+                "sound_id":       row.get("sound_id"),
+                date_key:         row[date_key],
+                "_last_ts":       row[date_key],
+                "count":          1,
             })
     for g in groups:
         del g["_last_ts"]
