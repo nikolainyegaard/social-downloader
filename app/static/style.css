@@ -1189,7 +1189,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Recent panel entries */
 .recent-section {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 2fr 3fr 1fr;
   column-gap: 6px;
 }
 .recent-entry {

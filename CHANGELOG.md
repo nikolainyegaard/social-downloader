@@ -66,6 +66,16 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Inter-user gap within a session changed from uniform 2-5s to exponential distribution (mean 90s, min 15s) to better mimic organic browsing behavior and reduce bot detection
 - Log panel scrolls to the bottom automatically when the Log tab is opened
 - Manual trigger (Run Starred / Run Half / Run All) no longer lights up the next scheduled session pill as running; that pill represents the scheduled session time, not the manual trigger
+- Recently deleted Recents panel and modal now groups consecutive same-user deletions with a count badge (e.g. `@handle 3x`), matching the Recently Saved grouping logic; single-entry rows highlight the video directly, multi-entry rows open the user deletion modal
+- Recents panel grouped-response detection in common.js is now dynamic: dispatches on `{items, rows_consumed}` response shape rather than checking the endpoint type, so any future grouped endpoint works without frontend changes
+- Usernames in the Recents panel and modals are now left-aligned within their column (was centered)
+- Recents panel grid changed to 2fr 3fr 1fr: date gets 2/6, username gets 3/6 (left-aligned text centered between the outer columns), detail gets 1/6
+- Profile change field labels shortened: "Username" to "Handle", "Display name" to "Name", "Account status" to "Status", "Privacy status" to "Privacy"
+
+### Added
+- item_list page-progress log line emitted after every 30 videos fetched during a full run: `[item_list] page N fetched (M videos)`; visible in the log panel during full runs and useful for diagnosing session degradation on large accounts
+- Large deletion spike isolation: when 10 or more deletions are detected in a single full run, a dedicated full re-scan is automatically scheduled to fire at the midpoint between the current run and the next scheduled session (minimum 60 seconds, default 30 minutes if no next session is known); the re-scan uses a fresh dedicated session via the same path as the "Run Full" button, avoiding shared-session degradation that can cause false confirmations on large accounts
+- Pending re-scan badge on user cards: a yellow countdown pill showing when the isolated midpoint re-scan will fire; cleared automatically if a manual run is triggered for the same user before it fires
 
 ## [0.2.1] - 2026-05-18
 

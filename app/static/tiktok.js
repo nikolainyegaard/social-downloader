@@ -94,8 +94,8 @@ async function loadStats() {
 // ── Recent panel ──────────────────────────────────────────────────────────────
 
 const _FIELD_LABELS = {
-  username: 'Username', display_name: 'Display name', bio: 'Bio', avatar: 'Avatar',
-  account_status: 'Account status', privacy_status: 'Privacy',
+  username: 'Handle', display_name: 'Name', bio: 'Bio', avatar: 'Avatar',
+  account_status: 'Status', privacy_status: 'Privacy',
 };
 
 
