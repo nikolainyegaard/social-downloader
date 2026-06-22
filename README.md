@@ -27,13 +27,16 @@ Key environment variables (set in `docker-compose.yml`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TIKTOK_USER_LOOP_INTERVAL_MINUTES` | `180` | How often to check tracked TikTok users |
+| `TIKTOK_SESSIONS_PER_DAY` | `4` | Number of TikTok user-check sessions per 24-hour window; fire times are randomised within each segment |
+| `TIKTOK_HIGH_PRIORITY_CHECK_HOURS` | `6` | Check interval for starred TikTok users (hours) |
+| `TIKTOK_ACTIVE_CHECK_HOURS` | `24` | Check interval for active TikTok users (posted within 30 days) |
+| `TIKTOK_INACTIVE_CHECK_HOURS` | `72` | Check interval for inactive TikTok users |
 | `TIKTOK_SOUND_LOOP_INTERVAL_MINUTES` | `60` | How often to check tracked TikTok sounds |
 | `YOUTUBE_LOOP_INTERVAL_MINUTES` | `180` | How often to check tracked YouTube channels |
 | `TZ` | system | Timezone for log timestamps (e.g. `Europe/Oslo`) |
 | `WEB_PORT` | `5000` | Flask listen port |
 
-Loop intervals can also be changed from the UI without restarting.
+All loop settings can also be changed from the UI without restarting.
 
 ---
 

@@ -6,6 +6,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-22
+
 ### Added
 - Session-based TikTok user loop: replaces the fixed-interval loop with N sessions per 24-hour window (default 4), each firing at a random time within its equal segment; sessions only process users whose `next_check_at` has elapsed, so the workload scales naturally with the number of tracked users
 - Activity scoring for check intervals: starred users checked every 6h, active users (posted within 30 days) every 24h, inactive users every 72h; intervals recomputed after each session; configurable via settings UI or env vars
@@ -167,4 +169,5 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 [0.1.0]: https://github.com/nikolainyegaard/social-downloader/releases/tag/v0.1.0
 [0.2.0]: https://github.com/nikolainyegaard/social-downloader/compare/v0.1.0...v0.2.0
 [0.2.1]: https://github.com/nikolainyegaard/social-downloader/compare/v0.2.0...v0.2.1
-[Unreleased]: https://github.com/nikolainyegaard/social-downloader/compare/v0.2.1...HEAD
+[0.3.0]: https://github.com/nikolainyegaard/social-downloader/compare/v0.2.1...v0.3.0
+[Unreleased]: https://github.com/nikolainyegaard/social-downloader/compare/v0.3.0...HEAD
