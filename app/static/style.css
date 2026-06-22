@@ -1666,6 +1666,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .track-panels > section:first-child,
   .track-panels > section:last-child { display: none; }
 
+  /* Loop trigger buttons: allow Stop to wrap to its own row on narrow screens */
+  .loop-actions { flex-wrap: wrap; }
+
   /* Collapsible modal toolbar on mobile */
   .modal-toolbar { flex-direction: column; align-items: stretch; padding: 8px 12px; gap: 6px; }
   .toolbar-main-row { flex: none; gap: 8px; }
