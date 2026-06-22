@@ -31,6 +31,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Track-user flow for sound-discovered users: `POST /api/tiktok/users/<tiktok_id>/track` endpoint and `openUntrackedUserModal` frontend modal for adding a user discovered via the sound tracker without leaving the sounds view
 - Lazy-batch rendering for user cards: cards render in batches of 9 as the user scrolls via IntersectionObserver, replacing the previous all-at-once render; reduces jank on large libraries
 - Starred usernames highlighted in yellow in the Recents panel and recent-log modals
+- Banned usernames highlighted in red in the Recents panel and recent-log modals; `account_status` added to all Recents queries so ban status is available in every section, not just the Recently Banned block
 - `recover_loop_state_from_db()`: on startup, if the state file has no run history, infers `last_run_end` from `MAX(last_checked)` so the loop panel shows a meaningful "Last" time after an upgrade
 - Loop state persisted on clean shutdown via `atexit`: `_shutdown_save()` writes the in-progress run duration so the "Took" display is accurate after `docker compose down`
 - New trigger API endpoints: `POST /api/tiktok/trigger/next`, `/trigger/half`, `/trigger/all` (matching the four new loop card buttons)

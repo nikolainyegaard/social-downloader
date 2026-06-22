@@ -1306,7 +1306,7 @@ def get_recent_activity() -> dict:
     """Return recent deletions, profile changes, bans, and saves for the Recent panel."""
     with get_db() as conn:
         del_rows = [dict(r) for r in conn.execute(
-            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred,
+            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred, u.account_status,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
@@ -1314,7 +1314,7 @@ def get_recent_activity() -> dict:
                ORDER BY v.deleted_at DESC LIMIT 300"""
         ).fetchall()]
         profile_changes = [dict(r) for r in conn.execute(
-            """SELECT ph.field, ph.changed_at, u.username, u.tiktok_id, u.starred
+            """SELECT ph.field, ph.changed_at, u.username, u.tiktok_id, u.starred, u.account_status
                FROM profile_history ph JOIN users u ON u.tiktok_id = ph.tiktok_id
                ORDER BY ph.changed_at DESC LIMIT 3"""
         ).fetchall()]
@@ -1325,7 +1325,7 @@ def get_recent_activity() -> dict:
                ORDER BY banned_at DESC LIMIT 1"""
         ).fetchall()]
         saved_rows = [dict(r) for r in conn.execute(
-            """SELECT v.download_date, u.username, u.tiktok_id, u.enabled, u.starred, v.video_id,
+            """SELECT v.download_date, u.username, u.tiktok_id, u.enabled, u.starred, u.account_status, v.video_id,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
@@ -1359,7 +1359,7 @@ def get_deletion_history_grouped(offset: int = 0, limit: int = 50) -> dict:
     """
     with get_db() as conn:
         rows = [dict(r) for r in conn.execute(
-            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred,
+            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred, u.account_status,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
@@ -1375,7 +1375,7 @@ def get_profile_change_history(offset: int = 0, limit: int = 50) -> list[dict]:
     """Return paginated profile change history (newest first)."""
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT ph.field, ph.old_value, ph.changed_at, u.username, u.tiktok_id, u.starred
+            """SELECT ph.field, ph.old_value, ph.changed_at, u.username, u.tiktok_id, u.starred, u.account_status
                FROM profile_history ph JOIN users u ON u.tiktok_id = ph.tiktok_id
                ORDER BY ph.changed_at DESC LIMIT ? OFFSET ?""",
             (limit, offset),
@@ -1408,7 +1408,7 @@ def get_saved_history(offset: int = 0, limit: int = 50) -> dict:
     """
     with get_db() as conn:
         rows = [dict(r) for r in conn.execute(
-            """SELECT v.download_date, u.username, u.tiktok_id, u.enabled, u.starred, v.video_id,
+            """SELECT v.download_date, u.username, u.tiktok_id, u.enabled, u.starred, u.account_status, v.video_id,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL

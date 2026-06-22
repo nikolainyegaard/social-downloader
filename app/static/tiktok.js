@@ -119,7 +119,7 @@ function renderRecent(data) {
             ? `openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')`
             : `openUserModal('${esc(d.tiktok_id)}')`)
         : d.sound_id ? `openSoundModalAndHighlight('${esc(d.sound_id)}','${esc(d.video_id)}')` : '';
-      const nameStyle = d.enabled === 0 ? 'style="color:var(--text-dim)"' : d.starred ? 'style="color:var(--yellow)"' : '';
+      const nameStyle = d.enabled === 0 ? 'style="color:var(--text-dim)"' : d.starred ? 'style="color:var(--yellow)"' : d.account_status === 'banned' ? 'style="color:var(--red)"' : '';
       return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.username)}">
         <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
         <span class="recent-name" ${nameStyle}>@${esc(d.username)}</span>
@@ -138,7 +138,7 @@ function renderRecent(data) {
     left += data.profile_changes.map(p =>
       `<div class="recent-entry" onclick="openUserModalWithHistory('${esc(p.tiktok_id)}','${esc(p.field)}')" title="Open @${esc(p.username)} · ${esc(_FIELD_LABELS[p.field] || p.field)} history">
         <span class="recent-date">${_recentDate(p.changed_at, now)}</span>
-        <span class="recent-name" ${p.starred ? 'style="color:var(--yellow)"' : ''}>@${esc(p.username)}</span>
+        <span class="recent-name" ${p.starred ? 'style="color:var(--yellow)"' : p.account_status === 'banned' ? 'style="color:var(--red)"' : ''}>@${esc(p.username)}</span>
         <span class="recent-detail">${esc(_FIELD_LABELS[p.field] || p.field)}</span>
       </div>`
     ).join('');
@@ -154,7 +154,7 @@ function renderRecent(data) {
     const b = data.bans[0];
     left += `<div class="recent-entry" onclick="openUserModal('${esc(b.tiktok_id)}')" title="Open @${esc(b.username)}">
       <span class="recent-date">${_recentDate(b.banned_at, now)}</span>
-      <span class="recent-name" ${b.starred ? 'style="color:var(--yellow)"' : ''}>@${esc(b.username)}</span>
+      <span class="recent-name" ${b.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(b.username)}</span>
       <span class="recent-detail" style="color:var(--red)">Banned</span>
     </div>`;
   } else {
@@ -176,7 +176,7 @@ function renderRecent(data) {
             ? `openUserModalAndHighlight('${esc(g.tiktok_id)}','${esc(g.video_id)}','all','download_date','desc')`
             : `openUserModal('${esc(g.tiktok_id)}')`)
         : g.sound_id ? `openSoundModalAndHighlight('${esc(g.sound_id)}','${esc(g.video_id)}')` : '';
-      const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : '';
+      const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : g.account_status === 'banned' ? 'style="color:var(--red)"' : '';
       return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(g.username)}">
         <span class="recent-date">${_recentDate(g.download_date, now)}</span>
         <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>
@@ -216,7 +216,7 @@ function _ttRenderSavedRow(g, now) {
   } else if (g.sound_id) {
     row.onclick = () => openSoundModalAndHighlight(g.sound_id, g.video_id);
   }
-  const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : '';
+  const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : g.account_status === 'banned' ? 'style="color:var(--red)"' : '';
   row.innerHTML = `
     <span class="recent-date">${_recentDate(g.download_date, now)}</span>
     <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>
@@ -235,7 +235,7 @@ function _ttRenderDeletedGroupRow(g, now) {
   } else if (g.sound_id) {
     row.onclick = () => openSoundModalAndHighlight(g.sound_id, g.video_id);
   }
-  const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : '';
+  const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : g.account_status === 'banned' ? 'style="color:var(--red)"' : '';
   row.innerHTML = `
     <span class="recent-date">${_recentDate(g.deleted_at, now)}</span>
     <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>
@@ -253,7 +253,7 @@ function _ttRenderOtherRow(item, type, now) {
     } else if (item.sound_id) {
       row.onclick = () => openSoundModalAndHighlight(item.sound_id, item.video_id);
     }
-    const nameStyle = item.enabled === 0 ? 'style="color:var(--text-dim)"' : item.starred ? 'style="color:var(--yellow)"' : '';
+    const nameStyle = item.enabled === 0 ? 'style="color:var(--text-dim)"' : item.starred ? 'style="color:var(--yellow)"' : item.account_status === 'banned' ? 'style="color:var(--red)"' : '';
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
       <span class="recent-name" ${nameStyle}>@${esc(item.username)}</span>
@@ -264,14 +264,14 @@ function _ttRenderOtherRow(item, type, now) {
     row.onclick = () => openUserModalWithHistory(item.tiktok_id, item.field);
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
-      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : ''}>@${esc(item.username)}</span>
+      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : item.account_status === 'banned' ? 'style="color:var(--red)"' : ''}>@${esc(item.username)}</span>
       <span class="recent-detail">${esc(label)}</span>`;
   } else {
     row.title = `Open @${item.username}`;
     row.onclick = () => openUserModal(item.tiktok_id);
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.banned_at, now)}</span>
-      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : ''}>@${esc(item.username)}</span>
+      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(item.username)}</span>
       <span class="recent-detail" style="color:var(--red)">Banned</span>`;
   }
   return row;
