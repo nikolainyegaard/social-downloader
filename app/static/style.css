@@ -627,7 +627,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .modal-close::after,  .media-modal-close::after  { transform: translate(-50%, -50%) rotate(-45deg); }
 .modal-close:hover,
 .media-modal-close:hover { background: var(--border); color: var(--text); }
-.modal-close { top: 14px; right: 14px; z-index: 1; flex-shrink: 0; }
+.modal-close { top: 14px; right: 14px; z-index: 10; flex-shrink: 0; }
 
 /* ── Modal header ─────────────────────────────────────────────────────────── */
 
