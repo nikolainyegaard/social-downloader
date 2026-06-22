@@ -1574,7 +1574,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   /* Recent entries: give detail column a bounded max-width so it truncates
      cleanly instead of overflowing the panel. */
   .recent-section,
-  .recent-log-modal-body { grid-template-columns: 80px 1fr max-content; }
+  .recent-log-modal-body { grid-template-columns: 33% 1fr max-content; }
 
   /* Track a sound: label input overflows the row on mobile. */
   #soundLabelInput { display: none; }
