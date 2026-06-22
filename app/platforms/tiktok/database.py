@@ -1305,13 +1305,13 @@ def _group_consecutive_by_user(rows: list[dict], date_key: str) -> list[dict]:
 def get_recent_activity() -> dict:
     """Return recent deletions, profile changes, bans, and saves for the Recent panel."""
     with get_db() as conn:
-        deletions = [dict(r) for r in conn.execute(
+        del_rows = [dict(r) for r in conn.execute(
             """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred,
                       (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
                FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
                  AND v.deleted_reason = 'video_deleted'
-               ORDER BY v.deleted_at DESC LIMIT 3"""
+               ORDER BY v.deleted_at DESC LIMIT 300"""
         ).fetchall()]
         profile_changes = [dict(r) for r in conn.execute(
             """SELECT ph.field, ph.changed_at, u.username, u.tiktok_id, u.starred
@@ -1331,7 +1331,8 @@ def get_recent_activity() -> dict:
                WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
                ORDER BY v.download_date DESC LIMIT 2000"""
         ).fetchall()]
-    saved = _group_consecutive_by_user(saved_rows, "download_date")[:9]
+    deletions = _group_consecutive_by_user(del_rows, "deleted_at")[:3]
+    saved     = _group_consecutive_by_user(saved_rows, "download_date")[:9]
     return {"deletions": deletions, "profile_changes": profile_changes, "bans": bans, "saved": saved}
 
 
@@ -1348,6 +1349,26 @@ def get_deletion_history(offset: int = 0, limit: int = 50) -> list[dict]:
             (limit, offset),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_deletion_history_grouped(offset: int = 0, limit: int = 50) -> dict:
+    """Return paginated grouped deletion history (newest first), excluding user_banned.
+
+    Consecutive deletions for the same user are collapsed into one group.
+    Returns {"items": [...groups...], "rows_consumed": N}.
+    """
+    with get_db() as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id, u.enabled, u.starred,
+                      (SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1) AS sound_id
+               FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+                 AND v.deleted_reason = 'video_deleted'
+               ORDER BY v.deleted_at DESC LIMIT ? OFFSET ?""",
+            (_GROUP_SCAN, offset),
+        ).fetchall()]
+    groups = _group_consecutive_by_user(rows, "deleted_at")[:limit]
+    return {"items": groups, "rows_consumed": sum(g["count"] for g in groups)}
 
 
 def get_profile_change_history(offset: int = 0, limit: int = 50) -> list[dict]:

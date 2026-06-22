@@ -1012,9 +1012,10 @@ async function _loadRecentLogBatch() {
   const { ok, data } = await apiJSON(url);
   if (!ok || !_recentLogType) { _recentLogLoading = false; return; }
 
-  // 'saved' returns {items, rows_consumed}; all other types return a plain array.
-  const items   = _recentLogType === 'saved' ? data.items         : data;
-  const advance = _recentLogType === 'saved' ? data.rows_consumed  : data.length;
+  // Grouped responses return {items, rows_consumed}; flat responses return a plain array.
+  const isGrouped = !Array.isArray(data) && Array.isArray(data.items);
+  const items   = isGrouped ? data.items         : data;
+  const advance = isGrouped ? data.rows_consumed  : data.length;
 
   if (!items.length) { _recentLogDone = true; _recentLogLoading = false; return; }
   _recentLogOffset += advance;
@@ -1026,8 +1027,9 @@ async function _loadRecentLogBatch() {
   const now      = new Date();
   const cfg      = _recentLogCfg;
 
-  if (_recentLogType === 'saved') {
+  if (isGrouped) {
     // Server returns pre-grouped runs; stitch across batch boundaries.
+    const renderFn = _recentLogType === 'saved' ? cfg.renderSaved : cfg.renderGrouped;
     let i = 0;
     if (_recentLogLastGroup && items.length > 0 && _recentLogLastGroup.id === items[0][cfg.groupKey]) {
       const merged = _recentLogLastGroup.count + items[0].count;
@@ -1038,7 +1040,7 @@ async function _loadRecentLogBatch() {
     }
     for (; i < items.length; i++) {
       const g   = items[i];
-      const row = cfg.renderSaved(g, now);
+      const row = renderFn(g, now);
       frag.appendChild(row);
       _recentLogLastGroup = { id: g[cfg.groupKey], el: row, count: g.count };
     }

@@ -815,7 +815,7 @@ def get_recent():
 def get_recent_deletions():
     offset = int(request.args.get("offset", 0))
     limit  = int(request.args.get("limit",  50))
-    return jsonify(db.get_deletion_history(offset=offset, limit=limit))
+    return jsonify(db.get_deletion_history_grouped(offset=offset, limit=limit))
 
 
 @tiktok_bp.route("/recent/profile-changes", methods=["GET"])

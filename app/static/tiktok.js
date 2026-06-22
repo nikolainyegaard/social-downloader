@@ -115,13 +115,15 @@ function renderRecent(data) {
   if (data.deletions.length) {
     left += data.deletions.map(d => {
       const onclick = d.enabled !== 0
-        ? `openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')`
+        ? (d.count === 1
+            ? `openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')`
+            : `openUserModal('${esc(d.tiktok_id)}')`)
         : d.sound_id ? `openSoundModalAndHighlight('${esc(d.sound_id)}','${esc(d.video_id)}')` : '';
       const nameStyle = d.enabled === 0 ? 'style="color:var(--text-dim)"' : d.starred ? 'style="color:var(--yellow)"' : '';
       return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.username)}">
         <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
         <span class="recent-name" ${nameStyle}>@${esc(d.username)}</span>
-        <span class="recent-detail">${esc(d.video_id.slice(0, 10))}\u2026</span>
+        <span class="recent-detail">${d.count}x</span>
       </div>`;
     }).join('');
   } else {
@@ -222,6 +224,25 @@ function _ttRenderSavedRow(g, now) {
   return row;
 }
 
+function _ttRenderDeletedGroupRow(g, now) {
+  const row = document.createElement('div');
+  row.className = 'recent-entry';
+  row.title = `Open @${g.username}`;
+  if (g.enabled !== 0) {
+    row.onclick = g.count === 1
+      ? () => openUserModalAndHighlight(g.tiktok_id, g.video_id)
+      : () => openUserModal(g.tiktok_id);
+  } else if (g.sound_id) {
+    row.onclick = () => openSoundModalAndHighlight(g.sound_id, g.video_id);
+  }
+  const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : '';
+  row.innerHTML = `
+    <span class="recent-date">${_recentDate(g.deleted_at, now)}</span>
+    <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>
+    <span class="recent-detail">${g.count}x</span>`;
+  return row;
+}
+
 function _ttRenderOtherRow(item, type, now) {
   const row = document.createElement('div');
   row.className = 'recent-entry';
@@ -258,11 +279,12 @@ function _ttRenderOtherRow(item, type, now) {
 
 function openRecentLog(type) {
   _openRecentLogModal(type, {
-    apiBase:     '/api/tiktok/recent',
-    titles:      _RECENT_LOG_TITLES,
-    groupKey:    'tiktok_id',
-    renderSaved: _ttRenderSavedRow,
-    renderOther: _ttRenderOtherRow,
+    apiBase:        '/api/tiktok/recent',
+    titles:         _RECENT_LOG_TITLES,
+    groupKey:       'tiktok_id',
+    renderSaved:    _ttRenderSavedRow,
+    renderGrouped:  _ttRenderDeletedGroupRow,
+    renderOther:    _ttRenderOtherRow,
   });
 }
 

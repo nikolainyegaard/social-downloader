@@ -1204,7 +1204,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .recent-entry:hover { background: var(--surface2); }
 .recent-date   { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; }
-.recent-name   { color: var(--accent); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.recent-name   { color: var(--accent); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-detail { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); text-align: right; }
 .recent-empty  { font-size: 11px; color: var(--muted); padding: 2px 6px; grid-column: 1 / -1; }
 .recent-section-hdr {
