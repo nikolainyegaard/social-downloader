@@ -2240,23 +2240,30 @@ function _renderModalHeader(u) {
         ${u.video_undeleted ? `<span style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
         ${u.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="openProfileHistory()" title="Open profile change history"><strong>${u.profile_history_count}</strong> profile ${u.profile_history_count === 1 ? 'update' : 'updates'}</span>` : ''}
       </div>
-      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
         <button class="btn-star${u.starred ? ' starred' : ''}" onclick="toggleUserStarModal('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
         <button id="modalRunQuickBtn" class="btn-run" ${runDisabled} onclick="runUserQuick('${esc(u.tiktok_id)}')">${_refreshIcon} Quick</button>
         <button id="modalRunFullBtn" class="btn-run" ${runDisabled} onclick="runUser('${esc(u.tiktok_id)}')">${_refreshIcon} Full</button>
-        <button id="modalRunProfileBtn" class="btn-run" onclick="runUserProfile('${esc(u.tiktok_id)}')">Run Profile</button>
-        <button class="btn-danger" onclick="removeUserModal('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
+        <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.tiktok_id)}')},{label:'Add note',onclick:_toggleUserNote},{label:'Remove',danger:true,onclick:()=>removeUserModal('${esc(u.tiktok_id)}','@${esc(u.username)}')}])">•••</button>
       </div>
-      <div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
+      <div id="modalNoteArea" style="display:none;margin-top:8px">
         <textarea placeholder="Add a note about this user…"
           onblur="saveUserComment('${esc(u.tiktok_id)}', this.value)"
-          style="flex:1;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
+          style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
                  background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
                  color:var(--text);font-family:inherit;line-height:1.5"
         >${esc(u.comment || '')}</textarea>
       </div>
     </div>
   `;
+}
+
+function _toggleUserNote() {
+  const area = document.getElementById('modalNoteArea');
+  if (!area) return;
+  const hidden = area.style.display === 'none';
+  area.style.display = hidden ? '' : 'none';
+  if (hidden) setTimeout(() => area.querySelector('textarea').focus(), 0);
 }
 
 // ── Profile history ──────────────────────────────────────────────────────────
