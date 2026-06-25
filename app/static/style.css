@@ -10,6 +10,7 @@
   --accent:       #4f8ef7;
   --accent-h:     #3a78e8;
   --red:          #e05252;
+  --orange:       #e07832;
   --green:        #4caf7d;
   --yellow:       #e0a83a;
   --muted:        #6b717f;
@@ -21,6 +22,7 @@
   --accent-bg-h:  rgba(79,142,247,.28);
   --red-bg:       rgba(224,82,82,.15);
   --red-bg-h:     rgba(224,82,82,.12);
+  --orange-bg:    rgba(224,120,50,.15);
   --green-bg:     rgba(76,175,125,.15);
   --yellow-bg:    rgba(224,168,58,.15);
   --yellow-bg-h:  rgba(224,168,58,.28);
@@ -469,17 +471,28 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .privacy-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
 .privacy-status.public             { background: var(--green-bg); color: var(--green); }
 .privacy-status.private-accessible { background: var(--yellow-bg); color: var(--yellow); }
-.privacy-status.private-blocked    { background: var(--red-bg);  color: var(--red); }
-.privacy-status.banned             { background: var(--red-bg);  color: var(--red); }
+.privacy-status.private-blocked    { background: var(--red-bg);    color: var(--red); }
+.privacy-status.blocked            { background: var(--orange-bg); color: var(--orange); }
+.privacy-status.banned             { background: var(--red-bg);    color: var(--red); }
 
 /* Inactive card — dim content, leave footer/pills/buttons unchanged */
 .user-card-inactive .user-card-top,
 .user-card-inactive .user-bio-area,
 .user-card-inactive .user-stats { opacity: 0.4; }
 
-/* Banned card: muted red border, content dimmed same as inactive */
+/* Banned / blocked card: muted red border, content dimmed same as inactive */
 .user-card-banned { border-color: rgba(224,82,82,.4) !important; box-shadow: 0 0 0 1px rgba(224,82,82,.4); }
 .user-card-banned:hover { box-shadow: 0 0 0 2px rgba(224,82,82,.4) !important; }
+
+/* Private-blocked card: muted yellow border, same dim treatment as inactive */
+.user-card-private { border-color: rgba(224,168,58,.4) !important; box-shadow: 0 0 0 1px rgba(224,168,58,.4); }
+.user-card-private:hover { box-shadow: 0 0 0 2px rgba(224,168,58,.4) !important; }
+
+/* Padlock icon next to display name for private accounts */
+.lock-icon { width: 13px; height: 13px; vertical-align: -1px; margin-right: 4px; opacity: 0.6; flex-shrink: 0; }
+
+/* Relationship / status pill (grey; replaces the coloured privacy pill on cards) */
+.relation-pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; background: var(--surface2); color: var(--muted); }
 
 /* YouTube channel card banner strip */
 .yt-channel-card-banner {

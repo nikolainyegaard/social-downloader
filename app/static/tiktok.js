@@ -777,6 +777,7 @@ function _filteredUsers() {
   return users.filter(u => {
     if (userFilter.priv === 'public'   && (u.privacy_status !== 'public' || u.account_status === 'banned')) return false;
     if (userFilter.priv === 'private'  && (!['private_accessible','private_blocked'].includes(u.privacy_status) || u.account_status === 'banned')) return false;
+    if (userFilter.priv === 'blocked'  && (u.privacy_status !== 'blocked' || u.account_status === 'banned')) return false;
     if (userFilter.priv === 'banned'   && u.account_status !== 'banned') return false;
     if (userFilter.stat === 'active'   && u.tracking_enabled === 0) return false;
     if (userFilter.stat === 'inactive' && u.tracking_enabled !== 0) return false;
@@ -808,17 +809,27 @@ let _userGridObs       = null;
 let _userRenderedCount = 0;
 let _userSortedCache   = [];
 
+function _relationPill(u) {
+  if (u.account_status === 'banned') return `<span class="privacy-status banned">Banned</span>`;
+  if (u.privacy_status === 'blocked') return `<span class="relation-pill">Blocked</span>`;
+  if (u.privacy_status === 'private_blocked') return `<span class="relation-pill">Private</span>`;
+  const rel = u.relation || 0;
+  if ((rel & 3) === 3) return `<span class="relation-pill">Friends</span>`;
+  if (rel & 1)         return `<span class="relation-pill">Following</span>`;
+  if (rel & 2)         return `<span class="relation-pill">Follows you</span>`;
+  return '';
+}
+
 function _renderUserCard(u) {
-  const isCurrent  = u.username === currentUser;
-  const isInactive = u.tracking_enabled === 0;
-  const isBanned   = u.account_status === 'banned';
+  const isCurrent        = u.username === currentUser;
+  const isInactive       = u.tracking_enabled === 0;
+  const isBanned         = u.account_status === 'banned';
+  const isBlocked        = u.privacy_status === 'blocked';
+  const isPrivateBlocked = u.privacy_status === 'private_blocked';
+  const isPrivateAccount = ['private_accessible', 'private_blocked', 'blocked'].includes(u.privacy_status);
 
   const { cls: trackingCls, label: trackingLabel } = _trackingBadge(u.tracking_enabled);
-  const accountBadge = u.account_status === 'banned'
-    ? `<span class="privacy-status banned">Banned</span>`
-    : (PRIVACY_MAP[u.privacy_status]
-        ? `<span class="privacy-status ${PRIVACY_MAP[u.privacy_status][0]}">${PRIVACY_MAP[u.privacy_status][1]}</span>`
-        : '');
+  const accountBadge = _relationPill(u);
   const oldNames   = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
   const oldNameTag = oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
   const idLine     = `id:${esc(u.tiktok_id)}`;
@@ -833,7 +844,7 @@ function _renderUserCard(u) {
     : '';
 
   return `
-    <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned ? ' user-card-inactive' : ''}${isBanned ? ' user-card-banned' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
+    <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned || isBlocked || isPrivateBlocked ? ' user-card-inactive' : ''}${isBanned || isBlocked ? ' user-card-banned' : ''}${isPrivateBlocked ? ' user-card-private' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
       <div class="user-card-top">
         <div class="avatar-wrap">
           <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
@@ -842,7 +853,7 @@ function _renderUserCard(u) {
                onclick="event.stopPropagation();openImgModalUrl('/api/tiktok/users/${esc(u.tiktok_id)}/avatar')">` : ''}
         </div>
         <div class="user-identity">
-          <div class="user-display-name">${esc(u.display_name || u.username)}</div>
+          <div class="user-display-name">${isPrivateAccount ? LOCK_SVG : ''}${esc(u.display_name || u.username)}</div>
           <div class="user-handle">@${esc(u.username)}${oldNameTag}</div>
           <div class="user-id-line">${idLine}</div>
         </div>
@@ -2181,13 +2192,10 @@ async function removeUserModal(id, label) {
 function _renderModalHeader(u) {
   const oldNames = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
 
-  const isInactive = u.tracking_enabled === 0;
+  const isInactive       = u.tracking_enabled === 0;
+  const isPrivateAccount = ['private_accessible', 'private_blocked', 'blocked'].includes(u.privacy_status);
   const { cls: trackingCls, label: trackingLbl } = _trackingBadge(u.tracking_enabled);
-  const accountBadge = u.account_status === 'banned'
-    ? `<span class="privacy-status banned">Banned</span>`
-    : (PRIVACY_MAP[u.privacy_status]
-        ? `<span class="privacy-status ${PRIVACY_MAP[u.privacy_status][0]}">${PRIVACY_MAP[u.privacy_status][1]}</span>`
-        : '');
+  const accountBadge = _relationPill(u);
 
   const joinStr = u.join_date
     ? ' · Joined ' + _dtFmtMonthYear.format(new Date(u.join_date * 1000))
@@ -2213,7 +2221,7 @@ function _renderModalHeader(u) {
            onclick="openImgModalUrl('/api/tiktok/users/${esc(u.tiktok_id)}/avatar')">` : ''}
     </div>
     <div class="modal-name-row">
-      <span class="modal-name">${esc(u.display_name || u.username)}</span>
+      <span class="modal-name">${isPrivateAccount ? LOCK_SVG : ''}${esc(u.display_name || u.username)}</span>
       ${u.verified ? '<span class="modal-verified">✓ Verified</span>' : ''}
       <span class="account-status ${trackingCls}">${trackingLbl}</span>
       ${accountBadge}
@@ -2288,6 +2296,7 @@ const _STATUS_LABELS = {
   public:              'Public',
   private_accessible:  'Private (accessible)',
   private_blocked:     'Private',
+  blocked:             'Blocked',
 };
 
 async function openProfileHistory(field) {

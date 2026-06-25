@@ -173,6 +173,7 @@ def _migrate_db(conn) -> bool:
         "ALTER TABLE users  ADD COLUMN last_quick_video_ids   TEXT",
         "ALTER TABLE videos ADD COLUMN deletion_confirmed   INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN false_positive_count INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users  ADD COLUMN relation             INTEGER NOT NULL DEFAULT 0",
     ]
     for sql in migrations:
         try:
@@ -776,7 +777,8 @@ def touch_user_last_checked(tiktok_id: str) -> None:
 
 def update_user_info(tiktok_id, username, display_name, bio,
                      follower_count, following_count, video_count,
-                     sec_uid=None, verified=None, avatar_url=None, raw_user_data=None):
+                     sec_uid=None, verified=None, avatar_url=None, raw_user_data=None,
+                     relation=None):
     with get_db() as conn:
         conn.execute("""
             UPDATE users SET
@@ -790,10 +792,12 @@ def update_user_info(tiktok_id, username, display_name, bio,
                 verified        = COALESCE(?, verified),
                 avatar_url      = COALESCE(?, avatar_url),
                 raw_user_data   = COALESCE(?, raw_user_data),
+                relation        = COALESCE(?, relation),
                 last_checked    = ?
             WHERE tiktok_id = ?
         """, (sec_uid, username, display_name, bio, follower_count, following_count,
-              video_count, verified, avatar_url, raw_user_data, int(time.time()), tiktok_id))
+              video_count, verified, avatar_url, raw_user_data, relation,
+              int(time.time()), tiktok_id))
 
 
 # Video operations
@@ -951,7 +955,7 @@ def get_all_video_stats() -> dict:
 
 
 def update_user_privacy_status(tiktok_id: str, status: str):
-    """status: 'public' | 'private_accessible' | 'private_blocked'"""
+    """status: 'public' | 'private_accessible' | 'private_blocked' | 'blocked'"""
     with get_db() as conn:
         row = conn.execute(
             "SELECT privacy_status FROM users WHERE tiktok_id = ?", (tiktok_id,)

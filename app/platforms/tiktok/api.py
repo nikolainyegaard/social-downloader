@@ -27,6 +27,15 @@ class UserPrivateException(Exception):
     """
 
 
+class UserBlockedException(Exception):
+    """Raised when TikTok returns statusCode 10222 and relation & 4 is set.
+
+    The account has blocked the cookies account. Distinct from a genuinely private
+    account: the block bit (relation & 4) is present in the 10222 response when the
+    authenticated session is the blocked party.
+    """
+
+
 async def get_user_info(api, username: str | None = None,
                         sec_uid: str | None = None) -> dict:
     """Fetch user profile data. Returns a normalised dict.
@@ -64,6 +73,12 @@ async def get_user_info(api, username: str | None = None,
                     f"-- account is banned, removed, restricted, or FTC-restricted"
                 )
             if _sc == 10222:
+                _rel = int(data.get("userInfo", {}).get("user", {}).get("relation") or 0)
+                if _rel & 4:
+                    raise UserBlockedException(
+                        f"TikTok returned statusCode 10222 for sec_uid={sec_uid} "
+                        f"-- cookies account is blocked by this user (relation={_rel})"
+                    )
                 raise UserPrivateException(
                     f"TikTok returned statusCode 10222 for sec_uid={sec_uid} "
                     f"-- account is private"

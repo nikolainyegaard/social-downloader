@@ -374,9 +374,10 @@ const PRIVACY_MAP = {
   'public':             ['public',             'Public'],
   'private_accessible': ['private-accessible', 'Private'],
   'private_blocked':    ['private-blocked',    'Private'],
+  'blocked':            ['blocked',            'Blocked'],
 };
 
-const USER_PRIV_IDS  = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', banned: 'ufPrivBanned' };
+const USER_PRIV_IDS  = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', blocked: 'ufPrivBlocked', banned: 'ufPrivBanned' };
 const USER_STAT_IDS  = { all: 'ufStatAll', active: 'ufStatActive', inactive: 'ufStatInactive' };
 const USER_STAR_IDS  = { all: 'ufStarAll', starred: 'ufStarStarred' };
 const SOUND_STAT_IDS = { all: 'sfStatAll', active: 'sfStatActive', inactive: 'sfStatInactive' };
@@ -394,9 +395,11 @@ function _videoStatus(v) {
 
 function _trackingBadge(tracking_enabled) {
   return tracking_enabled === 0
-    ? { cls: 'inactive', label: 'Inactive' }
-    : { cls: 'active',   label: 'Active' };
+    ? { cls: 'inactive', label: 'Untracked' }
+    : { cls: 'active',   label: 'Tracked' };
 }
+
+const LOCK_SVG = `<svg class="lock-icon" viewBox="0 0 48 48" fill="currentColor" aria-hidden="true"><path d="M24 8.5a5.5 5.5 0 0 1 5.5 5.5v4.5h-11V14A5.5 5.5 0 0 1 24 8.5Zm8.5 10V14a8.5 8.5 0 0 0-17 0v4.5H11A2.5 2.5 0 0 0 8.5 21v19a2.5 2.5 0 0 0 2.5 2.5h26a2.5 2.5 0 0 0 2.5-2.5V21a2.5 2.5 0 0 0-2.5-2.5h-4.5Zm-21 3h25v18h-25v-18Z"/></svg>`;
 
 function _fmtLastChecked(ts) {
   return ts

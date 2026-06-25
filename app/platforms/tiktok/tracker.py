@@ -16,7 +16,8 @@ from platforms.tiktok.config import (
 )
 from platforms.tiktok.api import (
     get_user_info, get_user_videos, get_user_videos_with_stats,
-    fetch_sound_video_ids, get_video_details, UserBannedException, UserPrivateException,
+    fetch_sound_video_ids, get_video_details,
+    UserBannedException, UserPrivateException, UserBlockedException,
 )
 from downloader import download_video, download_photos, rename_creator_folder
 from thumbnailer import cache_avatar, generate_thumbnail
@@ -132,6 +133,7 @@ async def process_single_user(
                     verified=int(info.get("verified", False)),
                     avatar_url=info.get("avatar_url"),
                     raw_user_data=info.get("_raw_user_data"),
+                    relation=info.get("relation"),
                 )
                 db.reset_profile_fail_count(tiktok_id)
                 _profile_ok  = True
@@ -167,6 +169,13 @@ async def process_single_user(
                     n = db.ban_user_videos(tiktok_id)
                     if n:
                         log(f"  {_npost(n)} marked deleted (user_banned)")
+                db.touch_user_last_checked(tiktok_id)
+                return _profile_ok, _deletion_detected
+            except UserBlockedException:
+                _profile_ok = True
+                db.reset_profile_fail_count(tiktok_id)
+                log(f"  Cookies account blocked by this user -- skipping")
+                db.update_user_privacy_status(tiktok_id, "blocked")
                 db.touch_user_last_checked(tiktok_id)
                 return _profile_ok, _deletion_detected
             except UserPrivateException:
