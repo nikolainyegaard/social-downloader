@@ -58,7 +58,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
         fmt          = "bestvideo[height<=1080]+bestaudio/best"
         merge_fmt    = {}
     else:
-        fmt          = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]"
+        fmt          = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
         merge_fmt    = {"merge_output_format": "mp4"}
 
     ydl_opts: dict[str, Any] = {
@@ -116,14 +116,11 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
         os.remove(actual_path)
         return None
 
-    # Reject audio-only downloads -- yt-dlp's final /best fallback was removed, but
-    # some edge cases (very old posts, inaccessible video streams) can still produce
-    # audio files.  Storing them as videos would pollute the library.
     _audio_exts = (".mp3", ".m4a", ".m4b", ".aac", ".ogg", ".wav", ".flac", ".opus")
     if actual_path.lower().endswith(_audio_exts):
-        print(f"[{_ts()}] Rejected audio-only file for {video_id} ({os.path.basename(actual_path)}), removing.")
+        print(f"[{_ts()}] Audio-only post {video_id} ({os.path.basename(actual_path)}), skipping.")
         os.remove(actual_path)
-        return None
+        return {"audio_only": True}
 
     print(f"[{_ts()}] Saved {video_id} ({file_size:,} bytes) -> {actual_path}")
     if upload_date:

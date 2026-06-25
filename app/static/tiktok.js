@@ -94,7 +94,7 @@ async function loadStats() {
 // ── Recent panel ──────────────────────────────────────────────────────────────
 
 const _FIELD_LABELS = {
-  username: 'Handle', display_name: 'Name', bio: 'Bio', avatar: 'Avatar',
+  username: 'Handle', display_name: 'Name', bio: 'Bio', bio_link: 'Bio link', avatar: 'Avatar',
   account_status: 'Status', privacy_status: 'Privacy',
 };
 
@@ -2313,7 +2313,7 @@ const _PHIST_FIELD_LABELS = {
   username:       'Username',
   display_name:   'Display name',
   bio:            'Bio',
-  bio_link:       'Profile link',
+  bio_link:       'Bio link',
   avatar:         'Avatar',
   account_status: 'Account status',
   privacy_status: 'Privacy',

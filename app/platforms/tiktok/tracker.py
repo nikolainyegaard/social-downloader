@@ -107,7 +107,7 @@ async def process_single_user(
                 # private_accessible accounts (yellow pill) have accessible bios -- track normally.
                 _bio_blocked    = user.get("privacy_status") == "private_blocked"
                 _is_private_now = info.get("is_private", False)
-                _field_labels   = {"username": "Username", "display_name": "Display name", "bio": "Bio", "bio_link": "Profile link"}
+                _field_labels   = {"username": "Username", "display_name": "Display name", "bio": "Bio", "bio_link": "Bio link"}
                 _profile_fields = {
                     "username":     (user.get("username"),     info.get("username")),
                     "display_name": (user.get("display_name"), info.get("display_name")),
@@ -419,7 +419,8 @@ async def process_single_user(
                     platform="tiktok",
                     cookies_path=COOKIES_PATH,
                 )
-            if dl_result:
+            _audio_only = isinstance(dl_result, dict) and dl_result.get("audio_only")
+            if dl_result and not _audio_only:
                 db.add_video(
                     vid_id, tiktok_id, details["type"],
                     details["description"], details["upload_date"],
@@ -438,6 +439,22 @@ async def process_single_user(
                 )
                 log(f"  Saved {vid_id} -> {dl_result['file_path']}")
                 db.update_video_downloaded(vid_id, dl_result["file_path"], dl_result.get("ytdlp_data"))
+            elif _audio_only:
+                db.add_video(
+                    vid_id, tiktok_id, "audio",
+                    details["description"], details["upload_date"],
+                    view_count=details.get("view_count"),
+                    like_count=details.get("like_count"),
+                    comment_count=details.get("comment_count"),
+                    share_count=details.get("share_count"),
+                    save_count=details.get("save_count"),
+                    repost_count=details.get("repost_count"),
+                    duration=details.get("duration"),
+                    music_title=details.get("music_title"),
+                    music_artist=details.get("music_artist"),
+                    music_id=details.get("music_id"),
+                )
+                log(f"  Skipped {vid_id}: audio-only post")
             else:
                 log(f"  Failed to download {vid_id}")
 
@@ -871,7 +888,8 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
                 cookies_path=COOKIES_PATH,
             )
 
-        if dl_result:
+        _audio_only = isinstance(dl_result, dict) and dl_result.get("audio_only")
+        if dl_result and not _audio_only:
             db.add_video(
                 vid_id, author_id, details["type"],
                 details["description"], details["upload_date"],
@@ -892,6 +910,23 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
             db.add_sound_video(sound_id, vid_id)
             log(f"Saved {vid_id} from @{author_username} -> {dl_result['file_path']}")
             new_count += 1
+        elif _audio_only:
+            db.add_video(
+                vid_id, author_id, "audio",
+                details["description"], details["upload_date"],
+                view_count=details.get("view_count"),
+                like_count=details.get("like_count"),
+                comment_count=details.get("comment_count"),
+                share_count=details.get("share_count"),
+                save_count=details.get("save_count"),
+                repost_count=details.get("repost_count"),
+                duration=details.get("duration"),
+                music_title=details.get("music_title"),
+                music_artist=details.get("music_artist"),
+                music_id=details.get("music_id"),
+            )
+            db.add_sound_video(sound_id, vid_id)
+            log(f"Skipped {vid_id}: audio-only post")
         else:
             log(f"Failed to download {vid_id}")
 
