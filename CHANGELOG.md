@@ -6,8 +6,31 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Added
+- `bio_link` storage and change tracking: new `bio_link` column on `users` table; extracted from `bioLink.link` in the TikTok API response; tracked as a profile change field alongside username, display name, and bio; displayed as a clickable link in the user modal below the bio
+- `relation` column on `users` table: stored from the profile fetch; drives relationship pills on user cards and modals ("Friends" for mutual follow, "Following", "Follows you")
+- `UserBlockedException`: raised when TikTok returns `statusCode 10222` with `relation` 4 or 5 (this user has blocked the cookies account); sets `privacy_status='blocked'`, shows an orange "Blocked" pill, dims and red-borders the card; filterable via a new "Blocked" filter pill on the Users view
+- Padlock icon next to display name on user cards and in the user modal for all private account states (`private_accessible`, `private_blocked`, `blocked`)
+- `resolve_username` diagnostics action (TikTok API source): resolves a TikTok username to `tiktok_id` and `sec_uid` via raw API; result includes a quick-link to chain directly into "User profile by ID"
+- Audio-only post handling: TikTok posts with no video or photo stream are detected when yt-dlp resolves to an audio file extension; recorded in the database with `type='audio'` and no file path so the loop does not retry them; applies to both the user tracker and the sound tracker
+
 ### Changed
-- Docker image no longer installs Google Chrome on amd64; Playwright Chromium covers the same role; reduces image size by ~200 MB on amd64 builds
+- Docker image: `playwright install --with-deps` now cleans apt package lists within the same layer, reducing committed layer size; Google Chrome amd64 installation also removed (was a separate step)
+- User card and modal account badge replaced by `_relationPill()`: banned and blocked show coloured pills; `private_blocked` shows a grey "Private" pill; mutual/following/follows-you show a grey relationship pill; public accounts with no relationship show nothing
+- Tracking enabled/disabled badge labels changed from "Active"/"Inactive" to "Tracked"/"Untracked"
+- User modal: "Run Profile" and "Add note" moved into a `•••` overflow menu alongside "Remove"; note textarea is hidden by default and toggled via "Add note"
+- Diagnostics panel output area uses flex layout to fill available panel height instead of a fixed `max-height: 420px`
+- Diagnostics "User profile by username" action now returns raw API JSON via `make_request` instead of calling `get_user_info`; matches the behaviour of "User profile by ID" and never throws on private accounts
+- `private_blocked` user cards now show a muted yellow border; `blocked` cards share the red border treatment with `banned`
+- yt-dlp format string for TikTok downloads: added `/best` as a final fallback so audio-only posts resolve to an audio file instead of erroring with "Requested format is not available"
+- item_list page progress log simplified to `Page N: M items` (was `[item_list] page N fetched (M videos)`) and now appears in the UI console (was log-file only)
+- `statusCode 10222` handling in `get_user_info`: falls through and returns profile data normally when `userInfo.user.id` is populated; TikTok provides full profile data for private accounts when a follow relationship exists; raises `UserPrivateException` only when no user data is present
+- Private account accessibility check changed from `relation & 1` bitmask to `relation not in (1, 2)` enum; `relation=2` (mutual follow) previously evaluated to `2 & 1 = 0`, incorrectly treating mutual-follow private accounts as inaccessible
+
+### Fixed
+- Private accounts where the cookies account follows them (relation=1) or has mutual follow (relation=2) were not having profile data fetched or stored; both the sec_uid path and the username fallback path in `get_user_info` unconditionally raised `UserPrivateException` on `statusCode 10222` regardless of whether `userInfo` was populated; affected accounts showed no relationship pill and profile data was never updated despite the cookies account having follow access
+- Bio and bio_link overwritten to empty on every run for private accounts; TikTok returns `signature=""` in `statusCode 10222` responses regardless of follow relationship; tracker now preserves the stored DB value when the API returns empty for a private account, and skips recording a profile change for those fields
+- Audio-only posts were retried on every loop run; `download_video` returned `None` for audio files so the tracker never called `db.add_video`; the post never entered `known_ids` and appeared as new on each cycle; fixed by returning `{"audio_only": True}` from `download_video` and recording the post in the database with `type='audio'`
 
 ## [0.3.0] - 2026-06-22
 

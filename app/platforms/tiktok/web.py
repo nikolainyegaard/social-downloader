@@ -1284,11 +1284,10 @@ def debug_fetch():
 
         elif source == "tiktokapi" and action == "user_info":
             from TikTokApi import TikTokApi as _TikTokApi
-            from platforms.tiktok.api import get_user_info as _get_user_info
             username = inp.lstrip("@").strip()
+            ms_token = get_ms_token()
 
             async def _fetch_user_info_adhoc():
-                ms_token     = get_ms_token()
                 cookies_flat = get_cookies_flat()
                 async with _TikTokApi() as _api:
                     await _api.create_sessions(
@@ -1298,10 +1297,15 @@ def debug_fetch():
                         executable_path=CHROME_EXECUTABLE,
                         cookies=[cookies_flat] if cookies_flat else None,
                     )
-                    return await _get_user_info(_api, username=username)
+                    return await _api.make_request(
+                        url="https://www.tiktok.com/api/user/detail/",
+                        params={"uniqueId": username, "secUid": ""},
+                    )
 
-            result = asyncio.run(_fetch_user_info_adhoc())
-            return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
+            data = asyncio.run(_fetch_user_info_adhoc())
+            if data is None:
+                data = {"error": "TikTok returned no data (None)"}
+            return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
 
         # Uses TikTokApi's make_request() (Playwright + X-Bogus signing) but
         # bypasses the username guard in user.info(). Tests whether TikTok

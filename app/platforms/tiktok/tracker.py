@@ -102,11 +102,12 @@ async def process_single_user(
                     log(f"  Account restored: ban cleared, {_npost(restored)} re-activated")
 
                 # Record profile field changes before overwriting stored values.
-                # Skip bio detection if the account was private_blocked last run: the bio
-                # is hidden from us, so a missing bio just means no access, not a real change.
-                # private_accessible accounts (yellow pill) have accessible bios -- track normally.
-                _bio_blocked    = user.get("privacy_status") == "private_blocked"
+                # Skip bio/bio_link when the account was private_blocked last run OR is
+                # currently private: TikTok returns signature="" in statusCode 10222
+                # responses regardless of follow relationship, so an empty bio from the
+                # API is not a real change and must not overwrite the stored value.
                 _is_private_now = info.get("is_private", False)
+                _bio_blocked    = user.get("privacy_status") == "private_blocked" or _is_private_now
                 _field_labels   = {"username": "Username", "display_name": "Display name", "bio": "Bio", "bio_link": "Bio link"}
                 _profile_fields = {
                     "username":     (user.get("username"),     info.get("username")),
@@ -115,18 +116,22 @@ async def process_single_user(
                     "bio_link":     (user.get("bio_link"),     info.get("bio_link")),
                 }
                 for _field, (_old, _new) in _profile_fields.items():
-                    if _field == "bio" and _bio_blocked:
+                    if _field in ("bio", "bio_link") and _bio_blocked:
                         continue
                     if _new is not None and _new != _old:
                         db.record_profile_change(tiktok_id, _field, _old)
                         if _field != "username":  # username gets its own log line below
                             log(f"  Profile change: {_field_labels[_field]} updated")
 
+                # Preserve stored bio/bio_link for private accounts: TikTok omits them
+                # from the API response so the API values are always empty.
+                _bio_for_db      = info["bio"] if not _is_private_now else (info["bio"] or user.get("bio"))
+                _bio_link_for_db = info.get("bio_link") if not _is_private_now else (info.get("bio_link") or user.get("bio_link"))
                 db.update_user_info(
                     tiktok_id,
                     info["username"],
                     info["display_name"],
-                    info["bio"],
+                    _bio_for_db,
                     info["follower_count"],
                     info["following_count"],
                     info["video_count"],
@@ -135,7 +140,7 @@ async def process_single_user(
                     avatar_url=info.get("avatar_url"),
                     raw_user_data=info.get("_raw_user_data"),
                     relation=info.get("relation"),
-                    bio_link=info.get("bio_link"),
+                    bio_link=_bio_link_for_db,
                 )
                 db.reset_profile_fail_count(tiktok_id)
                 _profile_ok  = True

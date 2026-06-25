@@ -124,10 +124,19 @@ async def get_user_info(api, username: str | None = None,
                 f"-- account is banned, removed, restricted, or FTC-restricted"
             )
         if _sc == 10222:
-            raise UserPrivateException(
-                f"TikTok returned statusCode 10222 for @{username} "
-                f"-- account is private"
-            )
+            _rel = int(data.get("userInfo", {}).get("user", {}).get("relation") or 0)
+            if _rel in (4, 5):
+                raise UserBlockedException(
+                    f"TikTok returned statusCode 10222 for @{username} "
+                    f"-- cookies account is blocked by this user (relation={_rel})"
+                )
+            if data.get("userInfo", {}).get("user", {}).get("id"):
+                pass  # fall through; TikTok provides full data when a relationship exists
+            else:
+                raise UserPrivateException(
+                    f"TikTok returned statusCode 10222 for @{username} "
+                    f"-- account is private"
+                )
         if _sc == 10102:
             raise ValueError(
                 f"TikTok returned statusCode 10102 for @{username} "
