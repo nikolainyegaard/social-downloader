@@ -238,7 +238,7 @@ async def get_user_videos_with_stats(api, sec_uid: str,
         results.append(_normalise_item_list_entry(video.as_dict))
         n = len(results)
         if n % 30 == 0 and logd:
-            logd(f"  [item_list] page {n // 30} fetched ({n} videos)")
+            logd(f"  Page {n // 30}: {n} items")
         if n % 10 == 0:
             await asyncio.sleep(round(random.uniform(0.5, 1.5), 2))
     return results
