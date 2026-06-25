@@ -2239,6 +2239,7 @@ function _renderModalHeader(u) {
       <div class="modal-id-line">id:${esc(u.tiktok_id)}${joinStr}</div>
       ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
       ${u.bio ? `<div class="modal-bio" onclick="this.classList.toggle('expanded')">${esc(u.bio)}</div>` : ''}
+      ${u.bio_link ? `<div class="modal-bio-link"><a href="${esc(u.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(u.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
       <div class="modal-stats-row">
         <span><strong>${(u.follower_count || 0).toLocaleString()}</strong> followers</span>
         ${u.following_count != null ? `<span><strong>${u.following_count.toLocaleString()}</strong> following</span>` : ''}

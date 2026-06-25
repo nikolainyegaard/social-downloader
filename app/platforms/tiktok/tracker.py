@@ -107,11 +107,12 @@ async def process_single_user(
                 # private_accessible accounts (yellow pill) have accessible bios -- track normally.
                 _bio_blocked    = user.get("privacy_status") == "private_blocked"
                 _is_private_now = info.get("is_private", False)
-                _field_labels   = {"username": "Username", "display_name": "Display name", "bio": "Bio"}
+                _field_labels   = {"username": "Username", "display_name": "Display name", "bio": "Bio", "bio_link": "Profile link"}
                 _profile_fields = {
                     "username":     (user.get("username"),     info.get("username")),
                     "display_name": (user.get("display_name"), info.get("display_name")),
                     "bio":          (user.get("bio"),          info.get("bio")),
+                    "bio_link":     (user.get("bio_link"),     info.get("bio_link")),
                 }
                 for _field, (_old, _new) in _profile_fields.items():
                     if _field == "bio" and _bio_blocked:
@@ -134,6 +135,7 @@ async def process_single_user(
                     avatar_url=info.get("avatar_url"),
                     raw_user_data=info.get("_raw_user_data"),
                     relation=info.get("relation"),
+                    bio_link=info.get("bio_link"),
                 )
                 db.reset_profile_fail_count(tiktok_id)
                 _profile_ok  = True
