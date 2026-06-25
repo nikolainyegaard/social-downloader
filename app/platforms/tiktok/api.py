@@ -28,11 +28,10 @@ class UserPrivateException(Exception):
 
 
 class UserBlockedException(Exception):
-    """Raised when TikTok returns statusCode 10222 and relation & 4 is set.
+    """Raised when TikTok returns statusCode 10222 and relation is 4 or 5.
 
-    The account has blocked the cookies account. Distinct from a genuinely private
-    account: the block bit (relation & 4) is present in the 10222 response when the
-    authenticated session is the blocked party.
+    relation=4 means the account has blocked the cookies account (no follow).
+    relation=5 means the account has blocked the cookies account (cookies was following them).
     """
 
 
@@ -74,7 +73,7 @@ async def get_user_info(api, username: str | None = None,
                 )
             if _sc == 10222:
                 _rel = int(data.get("userInfo", {}).get("user", {}).get("relation") or 0)
-                if _rel & 4:
+                if _rel in (4, 5):
                     raise UserBlockedException(
                         f"TikTok returned statusCode 10222 for sec_uid={sec_uid} "
                         f"-- cookies account is blocked by this user (relation={_rel})"
@@ -148,11 +147,9 @@ async def get_user_info(api, username: str | None = None,
         "video_count":     s.get("videoCount", 0),
         # 'secret' flag means the account is private (not necessarily banned)
         "is_private":      bool(u.get("secret")),
-        # relation is a bitmask describing the follow relationship between the cookies
-        # account and this account: 0=none, 1=you follow them, 2=they follow you, 3=mutual.
-        # relation & 1 == 1 is the reliable signal that private content is accessible.
-        # Note: relation is absent when TikTok returns statusCode 10222 (USER_PRIVATE),
-        # which is why the tracker falls back to attempting the video fetch directly.
+        # relation encodes the relationship between the cookies account and this account:
+        # 0=none, 1=cookies follows them, 2=mutual/friends, 4=cookies blocked them,
+        # 5=they blocked cookies (cookies was following), 6=they follow cookies only.
         "relation":        int(u.get("relation") or 0),
         "verified":        bool(u.get("verified")),
         "avatar_url":      u.get("avatarLarger") or u.get("avatarMedium") or u.get("avatarThumb"),

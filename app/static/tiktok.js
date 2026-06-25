@@ -814,9 +814,9 @@ function _relationPill(u) {
   if (u.privacy_status === 'blocked') return `<span class="privacy-status banned">Blocked</span>`;
   if (u.privacy_status === 'private_blocked') return `<span class="relation-pill">Private</span>`;
   const rel = u.relation || 0;
-  if ((rel & 3) === 3) return `<span class="relation-pill">Friends</span>`;
-  if (rel & 1)         return `<span class="relation-pill">Following</span>`;
-  if (rel & 2)         return `<span class="relation-pill">Follows you</span>`;
+  if (rel === 2) return `<span class="relation-pill">Friends</span>`;
+  if (rel === 1) return `<span class="relation-pill">Following</span>`;
+  if (rel === 6) return `<span class="relation-pill">Follows you</span>`;
   return '';
 }
 
