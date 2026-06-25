@@ -6,6 +6,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Changed
+- Docker image no longer installs Google Chrome on amd64; Playwright Chromium covers the same role; reduces image size by ~200 MB on amd64 builds
+
 ## [0.3.0] - 2026-06-22
 
 ### Added
