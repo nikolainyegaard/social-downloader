@@ -223,7 +223,7 @@ async def process_single_user(
             try:
                 _max_count = 30 if mode == "quick" else 2000
                 item_list_videos = await get_user_videos_with_stats(
-                    api, sec_uid=sec_uid, max_count=_max_count, stop_event=stop_event, logd=logd
+                    api, sec_uid=sec_uid, max_count=_max_count, stop_event=stop_event, logd=log
                 )
                 curr_ordered  = [v["video_id"] for v in item_list_videos]
                 item_list_map = {v["video_id"]: v for v in item_list_videos}

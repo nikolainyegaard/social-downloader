@@ -1336,8 +1336,14 @@ def debug_fetch():
             return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
 
         elif source == "tiktokapi" and action == "resolve_username":
-            from TikTokApi import TikTokApi as _TikTokApi
+            from platforms.tiktok.database import get_user_by_username as _get_user_by_username
             username = inp.lstrip("@").strip()
+            db_user  = _get_user_by_username(username)
+            if db_user:
+                data = {"source": "database", "tiktok_id": db_user["tiktok_id"], "sec_uid": db_user["sec_uid"]}
+                return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
+
+            from TikTokApi import TikTokApi as _TikTokApi
             ms_token = get_ms_token()
 
             async def _resolve_username():
