@@ -173,7 +173,7 @@ def _migrate_db(conn) -> bool:
         "ALTER TABLE users  ADD COLUMN last_quick_video_ids   TEXT",
         "ALTER TABLE videos ADD COLUMN deletion_confirmed   INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN false_positive_count INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE users  ADD COLUMN relation             INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users  ADD COLUMN relation             INTEGER",
         "ALTER TABLE users  ADD COLUMN bio_link            TEXT",
     ]
     for sql in migrations:
