@@ -270,14 +270,12 @@ async def process_single_user(
             # Still stamp last_checked so the card reflects when this account was last visited.
             db.touch_user_last_checked(tiktok_id)
 
-        # Inaccessible private account: relation & 1 == 0 means we don't follow them.
-        # (relation bitmask: 0=none, 1=we follow them, 2=they follow us, 3=mutual)
+        # Inaccessible private account: relation not in (1, 2) means we don't follow them.
+        # relation enum: 0=none, 1=we follow them, 2=mutual/friends, 6=they follow us only.
         # Accessible private accounts with 0 videos fall through to the diff so
         # deletion tracking of any previously-downloaded videos still runs.
-        # info is empty for 10222 accounts (no relation data available); those skip
-        # this check and rely on item_list / yt-dlp success to determine accessibility.
         if not item_list_map and is_private is True and info:
-            if not (info.get("relation") or 0) & 1:
+            if (info.get("relation") or 0) not in (1, 2):
                 log(f"  Private account, cannot be accessed")
                 db.update_user_privacy_status(tiktok_id, "private_blocked")
                 return _profile_ok, _deletion_detected
@@ -293,7 +291,7 @@ async def process_single_user(
         # Only runs when item_list returned nothing (failed or no sec_uid).
         # Skipped for accessible private accounts with 0 videos -- yt-dlp cannot
         # access private content and would incorrectly trigger private_blocked.
-        if not item_list_map and not (is_private and info and (info.get("relation") or 0) & 1):
+        if not item_list_map and not (is_private and info and (info.get("relation") or 0) in (1, 2)):
             try:
                 ydlp_videos = get_user_videos(tiktok_id, sec_uid=sec_uid,
                                               cookies_path=COOKIES_PATH)

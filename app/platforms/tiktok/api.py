@@ -78,6 +78,12 @@ async def get_user_info(api, username: str | None = None,
                         f"TikTok returned statusCode 10222 for sec_uid={sec_uid} "
                         f"-- cookies account is blocked by this user (relation={_rel})"
                     )
+                # TikTok returns 10222 for private accounts but still provides full
+                # profile data when a relationship exists (e.g. mutual follow).
+                # If the user object is populated, fall through and return it normally;
+                # is_private will be set from secret=True in the response.
+                if data.get("userInfo", {}).get("user", {}).get("id"):
+                    break
                 raise UserPrivateException(
                     f"TikTok returned statusCode 10222 for sec_uid={sec_uid} "
                     f"-- account is private"
