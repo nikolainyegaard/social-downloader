@@ -2313,6 +2313,7 @@ const _PHIST_FIELD_LABELS = {
   username:       'Username',
   display_name:   'Display name',
   bio:            'Bio',
+  bio_link:       'Profile link',
   avatar:         'Avatar',
   account_status: 'Account status',
   privacy_status: 'Privacy',
@@ -2378,7 +2379,7 @@ function setHistoryField(field) {
 }
 
 function _renderHistoryToolbar() {
-  const fields = ['all', 'username', 'display_name', 'bio', 'avatar', 'account_status', 'privacy_status'];
+  const fields = ['all', 'username', 'display_name', 'bio', 'bio_link', 'avatar', 'account_status', 'privacy_status'];
   const pills  = fields.map(f => {
     const active = _phistField === f ? ' active' : '';
     return `<button class="filter-pill${active}" data-hist-key="${f}" onclick="setHistoryField('${f}')">${_PHIST_FIELD_LABELS[f]}</button>`;
@@ -2409,12 +2410,13 @@ function _renderHistoryEntries() {
     username:       u?.username       || null,
     display_name:   u?.display_name   || null,
     bio:            u?.bio            || null,
+    bio_link:       u?.bio_link       || null,
     avatar:         '__current__',
     account_status: u?.account_status || null,
     privacy_status: u?.privacy_status || null,
   };
   const newValMap = new Map();
-  ['username', 'display_name', 'bio', 'avatar', 'account_status', 'privacy_status'].forEach(field => {
+  ['username', 'display_name', 'bio', 'bio_link', 'avatar', 'account_status', 'privacy_status'].forEach(field => {
     const fe = _phistData.filter(e => e.field === field); // newest-first
     fe.forEach((e, fi) => {
       newValMap.set(e, fi === 0 ? _currentVal[field] : fe[fi - 1].old_value);
