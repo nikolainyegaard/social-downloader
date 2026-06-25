@@ -597,16 +597,16 @@ def clear_full_refresh_pending(tiktok_id: str) -> None:
 
 
 def prime_starred_for_manual_run() -> int:
-    """Reset next_check_at and set full_refresh_pending for all enabled starred users.
+    """Reset next_check_at for all enabled starred users.
 
-    Full refresh is intentional: starred users are tier 1 and warrant a complete fetch.
-    Non-starred users are untouched -- their schedule continues as normal.
+    Quick vs full mode is determined by the normal schedule (full_refresh_pending is
+    not altered). Non-starred users are untouched.
 
     Returns the number of users affected.
     """
     with get_db() as conn:
         result = conn.execute(
-            "UPDATE users SET next_check_at = NULL, full_refresh_pending = 1"
+            "UPDATE users SET next_check_at = NULL"
             " WHERE enabled = 1 AND starred = 1"
         )
         return result.rowcount
