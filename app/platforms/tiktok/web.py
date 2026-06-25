@@ -1271,7 +1271,7 @@ def debug_fetch():
 
         elif source == "ytdlp" and action == "user_videos":
             from platforms.tiktok.api import get_user_videos
-            result = get_user_videos(inp, COOKIES_PATH if os.path.exists(COOKIES_PATH) else None)
+            result = get_user_videos(inp, cookies_path=COOKIES_PATH if os.path.exists(COOKIES_PATH) else None)
             return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
 
         elif source == "ytdlp" and action == "video_info":
