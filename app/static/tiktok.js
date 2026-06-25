@@ -811,7 +811,7 @@ let _userSortedCache   = [];
 
 function _relationPill(u) {
   if (u.account_status === 'banned') return `<span class="privacy-status banned">Banned</span>`;
-  if (u.privacy_status === 'blocked') return `<span class="relation-pill">Blocked</span>`;
+  if (u.privacy_status === 'blocked') return `<span class="privacy-status banned">Blocked</span>`;
   if (u.privacy_status === 'private_blocked') return `<span class="relation-pill">Private</span>`;
   const rel = u.relation || 0;
   if ((rel & 3) === 3) return `<span class="relation-pill">Friends</span>`;
