@@ -840,11 +840,12 @@ function _relationPill(u) {
   if (u.account_status === 'banned') return `<span class="privacy-status banned">Banned</span>`;
   if (u.privacy_status === 'blocked') return `<span class="privacy-status banned">Blocked</span>`;
   if (u.privacy_status === 'private_blocked') return `<span class="relation-pill">Private</span>`;
-  const rel = u.relation || 0;
+  const rel = u.relation;
   if (rel === 2) return `<span class="relation-pill">Friends</span>`;
   if (rel === 1) return `<span class="relation-pill">Following</span>`;
   if (rel === 6) return `<span class="relation-pill">Follows you</span>`;
-  return '';
+  if (rel === 0) return `<span class="relation-pill">No relation</span>`;
+  return `<span class="relation-pill">-</span>`;
 }
 
 function _renderUserCard(u) {

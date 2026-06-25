@@ -16,7 +16,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Changed
 - Docker image: `playwright install --with-deps` now cleans apt package lists within the same layer, reducing committed layer size; Google Chrome amd64 installation also removed (was a separate step)
-- User card and modal account badge replaced by `_relationPill()`: banned and blocked show coloured pills; `private_blocked` shows a grey "Private" pill; mutual/following/follows-you show a grey relationship pill; public accounts with no relationship show nothing
+- User card and modal account badge replaced by `_relationPill()`: banned and blocked show coloured pills; `private_blocked` shows a grey "Private" pill; mutual/following/follows-you show a grey relationship pill; `relation=0` shows "No relation"; accounts with no relation value in the DB show "-"
 - Tracking enabled/disabled badge labels changed from "Active"/"Inactive" to "Tracked"/"Untracked"
 - User modal: "Run Profile" and "Add note" moved into a `•••` overflow menu alongside "Remove"; note textarea is hidden by default and toggled via "Add note"
 - Diagnostics panel output area uses flex layout to fill available panel height instead of a fixed `max-height: 420px`
