@@ -31,6 +31,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Private accounts where the cookies account follows them (relation=1) or has mutual follow (relation=2) were not having profile data fetched or stored; both the sec_uid path and the username fallback path in `get_user_info` unconditionally raised `UserPrivateException` on `statusCode 10222` regardless of whether `userInfo` was populated; affected accounts showed no relationship pill and profile data was never updated despite the cookies account having follow access
 - Bio and bio_link overwritten to empty on every run for private accounts; TikTok returns `signature=""` in `statusCode 10222` responses regardless of follow relationship; tracker now preserves the stored DB value when the API returns empty for a private account, and skips recording a profile change for those fields
 - Audio-only posts were retried on every loop run; `download_video` returned `None` for audio files so the tracker never called `db.add_video`; the post never entered `known_ids` and appeared as new on each cycle; fixed by returning `{"audio_only": True}` from `download_video` and recording the post in the database with `type='audio'`
+- `relation` column migration used `NOT NULL DEFAULT 0`, causing all pre-existing users to show "No relation" instead of "-" until the loop checked them; default is now `NULL`
 
 ## [0.3.0] - 2026-06-22
 
