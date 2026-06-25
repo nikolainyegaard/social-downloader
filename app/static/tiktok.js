@@ -319,6 +319,7 @@ function switchSettingsSection(name) {
     document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
     document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
   });
+  document.querySelector('.settings-content').classList.toggle('diag-fill', name === 'diag');
   if (name === 'tiktok') { loadSettings(); }
   if (name === 'jobs')   { _avifLoadStatus(); _startJobsPoll(); }
   else                   { _stopJobsPoll(); }
@@ -607,6 +608,7 @@ const _DIAG_ACTIONS = {
   ytdlp:            [{ value: "user_videos",       label: "List user videos (paste tiktok_id)" },
                      { value: "video_info",        label: "Raw video info (paste TikTok URL)" }],
   tiktokapi:        [{ value: "user_info",            label: "User profile by username (paste @username)" },
+                     { value: "resolve_username",    label: "Resolve username to tiktok_id + sec_uid (raw)" },
                      { value: "user_info_by_id",     label: "User profile by ID (paste tiktok_id:sec_uid)" },
                      { value: "item_list_username",  label: "item_list by username (library resolves sec_uid)" },
                      { value: "item_list_by_id",     label: "item_list by tiktok_id:sec_uid" },
@@ -630,6 +632,7 @@ function diagActionChanged() {
     'ytdlp:user_videos':           'tiktok_id (numeric)',
     'ytdlp:video_info':            'https://www.tiktok.com/@user/video/123…',
     'tiktokapi:user_info':              '@username or username',
+    'tiktokapi:resolve_username':       '@username or username',
     'tiktokapi:user_info_by_id':        'tiktok_id:sec_uid',
     'tiktokapi:item_list_username':     '@username or username',
     'tiktokapi:item_list_by_id':        'tiktok_id:sec_uid',
@@ -646,9 +649,11 @@ async function diagRun() {
   const inp     = document.getElementById('diagInput').value.trim();
   const outEl   = document.getElementById('diagOutput');
   const btn     = document.getElementById('diagRunBtn');
+  const hint    = document.getElementById('diagResolveHint');
 
   if (!inp) { outEl.textContent = 'Error: enter a URL or ID first.'; return; }
 
+  hint.style.display = 'none';
   btn.disabled  = true;
   const isSlowAction = action.startsWith('item_list') || action === 'sound_raw';
   outEl.textContent = isSlowAction
@@ -663,6 +668,28 @@ async function diagRun() {
   btn.disabled = false;
   outEl.textContent = ok ? (data.output ?? JSON.stringify(data, null, 2))
                          : (data?.output || data?.error || 'Request failed');
+
+  if (ok && action === 'resolve_username') {
+    try {
+      const parsed  = JSON.parse(data.output);
+      const user    = parsed?.userInfo?.user;
+      const id      = user?.id;
+      const secUid  = user?.secUid;
+      if (id && secUid) {
+        hint.innerHTML = `<a href="#" onclick="diagSendToProfileById('${esc(id)}','${esc(secUid)}');return false">→ fetch full profile via User profile by ID</a>`;
+        hint.style.display = '';
+      }
+    } catch (_) {}
+  }
+}
+
+function diagSendToProfileById(tiktokId, secUid) {
+  document.getElementById('diagSource').value = 'tiktokapi';
+  diagSourceChanged();
+  document.getElementById('diagAction').value = 'user_info_by_id';
+  diagActionChanged();
+  document.getElementById('diagInput').value = `${tiktokId}:${secUid}`;
+  diagRun();
 }
 
 function diagCopy() {

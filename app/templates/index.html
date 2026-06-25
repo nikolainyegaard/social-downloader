@@ -792,13 +792,14 @@
             <button class="btn-primary" id="diagRunBtn" onclick="diagRun()" style="flex-shrink:0">Run</button>
           </div>
 
-          <div style="position:relative">
+          <div id="diagOutputWrap" style="position:relative">
             <pre id="diagOutput" class="diag-output">No output yet.</pre>
             <button onclick="diagCopy()" title="Copy output" style="
               position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
               border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
             ">Copy</button>
           </div>
+          <div id="diagResolveHint" style="display:none;margin-top:8px;font-size:12px;color:var(--muted)"></div>
         </div>
 
         <div id="diag-youtube" style="display:none">

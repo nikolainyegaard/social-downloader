@@ -1335,6 +1335,31 @@ def debug_fetch():
                 data = {"error": "TikTok returned no data (None)"}
             return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
 
+        elif source == "tiktokapi" and action == "resolve_username":
+            from TikTokApi import TikTokApi as _TikTokApi
+            username = inp.lstrip("@").strip()
+            ms_token = get_ms_token()
+
+            async def _resolve_username():
+                cookies_flat = get_cookies_flat()
+                async with _TikTokApi() as _api:
+                    await _api.create_sessions(
+                        ms_tokens=[ms_token] if ms_token else [],
+                        num_sessions=1,
+                        sleep_after=3,
+                        executable_path=CHROME_EXECUTABLE,
+                        cookies=[cookies_flat] if cookies_flat else None,
+                    )
+                    return await _api.make_request(
+                        url="https://www.tiktok.com/api/user/detail/",
+                        params={"uniqueId": username, "secUid": ""},
+                    )
+
+            data = asyncio.run(_resolve_username())
+            if data is None:
+                data = {"error": "TikTok returned no data (None)"}
+            return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
+
         elif source == "tiktokapi" and action == "item_list_username":
             from TikTokApi import TikTokApi as _TikTokApi
             from platforms.tiktok.api import get_user_videos_with_stats as _get_vws
