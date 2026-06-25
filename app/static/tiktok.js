@@ -1771,7 +1771,7 @@ async function setSoundTracking(soundId, enabled) {
 function _triggerUserToast(d) {
   const n = d.queued ?? 0;
   if (n === 0) return;
-  const labels = { next: 'scheduled check', starred: 'full refresh', half: 'quick check', all: 'quick check' };
+  const labels = { next: 'scheduled check', starred: 'quick check', half: 'quick check', all: 'quick check' };
   const mode   = labels[d.mode] || 'check';
   showToast(`${n} user${n === 1 ? '' : 's'} queued for ${mode}`);
 }
