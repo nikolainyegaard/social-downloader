@@ -9,6 +9,26 @@ from datetime import datetime
 
 APP_VERSION = os.environ.get("APP_VERSION", "dev")  # v1.19.0
 
+# OAuth / OIDC authentication (disabled by default)
+OAUTH_ENABLED       = os.environ.get("OAUTH_ENABLED", "").lower() in ("1", "true", "yes")
+SECRET_KEY          = os.environ.get("SECRET_KEY", "")
+OAUTH_CLIENT_ID     = os.environ.get("OAUTH_CLIENT_ID", "")
+OAUTH_CLIENT_SECRET = os.environ.get("OAUTH_CLIENT_SECRET", "")
+OAUTH_DISCOVERY_URL = os.environ.get("OAUTH_DISCOVERY_URL", "")
+SESSION_LIFETIME_DAYS = int(os.environ.get("SESSION_LIFETIME_DAYS", "7"))
+
+if OAUTH_ENABLED:
+    _missing = [k for k, v in {
+        "SECRET_KEY":          SECRET_KEY,
+        "OAUTH_CLIENT_ID":     OAUTH_CLIENT_ID,
+        "OAUTH_CLIENT_SECRET": OAUTH_CLIENT_SECRET,
+        "OAUTH_DISCOVERY_URL": OAUTH_DISCOVERY_URL,
+    }.items() if not v]
+    if _missing:
+        raise RuntimeError(
+            f"OAUTH_ENABLED=true but these env vars are not set: {', '.join(_missing)}"
+        )
+
 DATA_DIR  = os.path.abspath(os.environ.get("DATA_DIR",  "./data"))
 MEDIA_DIR = os.path.abspath(os.environ.get("MEDIA_DIR", "./media"))
 

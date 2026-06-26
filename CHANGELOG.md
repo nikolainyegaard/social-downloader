@@ -7,6 +7,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Added
+- OAuth2/OIDC authentication: set `OAUTH_ENABLED=true` and configure any OIDC provider (tested with Authentik) to require login before accessing the app; disabled by default so existing deployments are unaffected
+- Security response headers on all responses: `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`; `Strict-Transport-Security` added when OAuth is enabled
 - `bio_link` storage and change tracking: new `bio_link` column on `users` table; extracted from `bioLink.link` in the TikTok API response; tracked as a profile change field alongside username, display name, and bio; displayed as a clickable link in the user modal below the bio
 - `relation` column on `users` table: stored from the profile fetch; drives relationship pills on user cards and modals ("Friends" for mutual follow, "Following", "Follows you")
 - `UserBlockedException`: raised when TikTok returns `statusCode 10222` with `relation` 4 or 5 (this user has blocked the cookies account); sets `privacy_status='blocked'`, shows an orange "Blocked" pill, dims and red-borders the card; filterable via a new "Blocked" filter pill on the Users view
