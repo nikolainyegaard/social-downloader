@@ -9,19 +9,25 @@ from flask import Blueprint, jsonify, redirect, request, session, url_for
 bp = Blueprint("auth", __name__)
 _oauth = OAuth()
 
+# Captured at init_oauth() time so every request uses the startup-time config.
+# A restart is required for changes to oauth.json to take effect.
+_oauth_enabled = False
+
 
 def init_oauth(app):
     """Bind the OAuth client to the app and register the OIDC provider if enabled."""
+    global _oauth_enabled
     _oauth.init_app(app)
-    from config import OAUTH_ENABLED
-    if not OAUTH_ENABLED:
+    from config import get_oauth_config
+    cfg = get_oauth_config()
+    _oauth_enabled = cfg["enabled"]
+    if not _oauth_enabled:
         return
-    from config import OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_DISCOVERY_URL
     _oauth.register(
         name="oidc",
-        client_id=OAUTH_CLIENT_ID,
-        client_secret=OAUTH_CLIENT_SECRET,
-        server_metadata_url=OAUTH_DISCOVERY_URL,
+        client_id=cfg["client_id"],
+        client_secret=cfg["client_secret"],
+        server_metadata_url=cfg["discovery_url"],
         client_kwargs={
             "scope": "openid profile email",
             "code_challenge_method": "S256",  # PKCE
@@ -29,7 +35,11 @@ def init_oauth(app):
     )
 
 
-def _safe_next(url):
+def is_oauth_enabled() -> bool:
+    return _oauth_enabled
+
+
+def _safe_next(url: str | None) -> str:
     """Return url only if it is a safe internal relative path; otherwise return '/'."""
     if not url:
         return "/"
@@ -48,8 +58,7 @@ def _safe_next(url):
 
 @bp.route("/login")
 def login():
-    from config import OAUTH_ENABLED
-    if not OAUTH_ENABLED:
+    if not _oauth_enabled:
         return redirect("/")
     if session.get("user"):
         return redirect(_safe_next(request.args.get("next", "/")))
@@ -62,8 +71,7 @@ def login():
 
 @bp.route("/auth/callback")
 def callback():
-    from config import OAUTH_ENABLED
-    if not OAUTH_ENABLED:
+    if not _oauth_enabled:
         return redirect("/")
 
     token = _oauth.oidc.authorize_access_token()
@@ -90,8 +98,7 @@ def callback():
 
 @bp.route("/logout")
 def logout():
-    from config import OAUTH_ENABLED
-    if not OAUTH_ENABLED:
+    if not _oauth_enabled:
         return redirect("/")
 
     id_token = session.get("_id_token", "")

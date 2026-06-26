@@ -3,31 +3,13 @@ Central configuration.
 Global paths and settings live here; platform-specific config lives in platforms/<platform>/config.py.
 """
 
+import json
 import os
+import secrets
 import shutil
 from datetime import datetime
 
 APP_VERSION = os.environ.get("APP_VERSION", "dev")  # v1.19.0
-
-# OAuth / OIDC authentication (disabled by default)
-OAUTH_ENABLED       = os.environ.get("OAUTH_ENABLED", "").lower() in ("1", "true", "yes")
-SECRET_KEY          = os.environ.get("SECRET_KEY", "")
-OAUTH_CLIENT_ID     = os.environ.get("OAUTH_CLIENT_ID", "")
-OAUTH_CLIENT_SECRET = os.environ.get("OAUTH_CLIENT_SECRET", "")
-OAUTH_DISCOVERY_URL = os.environ.get("OAUTH_DISCOVERY_URL", "")
-SESSION_LIFETIME_DAYS = int(os.environ.get("SESSION_LIFETIME_DAYS", "7"))
-
-if OAUTH_ENABLED:
-    _missing = [k for k, v in {
-        "SECRET_KEY":          SECRET_KEY,
-        "OAUTH_CLIENT_ID":     OAUTH_CLIENT_ID,
-        "OAUTH_CLIENT_SECRET": OAUTH_CLIENT_SECRET,
-        "OAUTH_DISCOVERY_URL": OAUTH_DISCOVERY_URL,
-    }.items() if not v]
-    if _missing:
-        raise RuntimeError(
-            f"OAUTH_ENABLED=true but these env vars are not set: {', '.join(_missing)}"
-        )
 
 DATA_DIR  = os.path.abspath(os.environ.get("DATA_DIR",  "./data"))
 MEDIA_DIR = os.path.abspath(os.environ.get("MEDIA_DIR", "./media"))
@@ -43,8 +25,69 @@ CHROME_EXECUTABLE: str | None = (
     shutil.which("google-chrome") or shutil.which("google-chrome-stable") or None
 )
 
-
 _IN_DOCKER = os.path.exists("/.dockerenv")
+
+# Secret key for Flask session signing. Auto-generated on first startup and
+# persisted to DATA_DIR/.secret_key so it survives container restarts without
+# any user configuration.
+_SECRET_KEY_PATH = os.path.join(DATA_DIR, ".secret_key")
+
+
+def _load_secret_key() -> str:
+    try:
+        with open(_SECRET_KEY_PATH) as f:
+            key = f.read().strip()
+            if len(key) >= 32:
+                return key
+    except FileNotFoundError:
+        pass
+    key = secrets.token_hex(32)
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(_SECRET_KEY_PATH, "w") as f:
+            f.write(key)
+    except OSError:
+        pass
+    return key
+
+
+SECRET_KEY = _load_secret_key()
+
+# Emergency escape hatch: set OAUTH_FORCE_DISABLE=true in docker-compose.yml to
+# bypass auth enforcement without modifying oauth.json. Use this if the OIDC
+# provider goes down and you are locked out of the Settings UI.
+OAUTH_FORCE_DISABLE = os.environ.get("OAUTH_FORCE_DISABLE", "").lower() in ("1", "true", "yes")
+
+# OAuth / OIDC configuration -- managed via Settings > Authentication in the UI.
+# Persisted to DATA_DIR/oauth.json; not set via env vars.
+_OAUTH_CONFIG_PATH = os.path.join(DATA_DIR, "oauth.json")
+
+_OAUTH_DEFAULTS: dict = {
+    "enabled":               False,
+    "client_id":             "",
+    "client_secret":         "",
+    "discovery_url":         "",
+    "session_lifetime_days": 7,
+}
+
+
+def get_oauth_config() -> dict:
+    """Read oauth.json and merge with defaults. Safe to call frequently."""
+    try:
+        with open(_OAUTH_CONFIG_PATH) as f:
+            data = json.load(f)
+        return {**_OAUTH_DEFAULTS, **data}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return dict(_OAUTH_DEFAULTS)
+
+
+def save_oauth_config(config: dict) -> None:
+    """Persist oauth.json atomically."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = _OAUTH_CONFIG_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(config, f, indent=2)
+    os.replace(tmp, _OAUTH_CONFIG_PATH)
 
 
 def get_path_issues() -> list[dict]:

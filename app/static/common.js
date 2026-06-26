@@ -293,6 +293,77 @@ async function apiJSON(path, opts = {}) {
   return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
 }
 
+// ── Authentication settings ───────────────────────────────────────────────────
+
+async function loadAuthSettings() {
+  const { ok, data } = await apiJSON('/api/auth/config');
+  if (!ok) return;
+
+  document.getElementById('authEnabled').checked          = data.enabled;
+  document.getElementById('authDiscoveryUrl').value       = data.discovery_url || '';
+  document.getElementById('authClientId').value           = data.client_id || '';
+  document.getElementById('authClientSecret').value       = '';
+  document.getElementById('authSessionDays').value        = data.session_lifetime_days || 7;
+  document.getElementById('authSecretStatus').textContent = data.client_secret_set
+    ? 'A client secret is saved.'
+    : 'No client secret saved.';
+  document.getElementById('authSaveStatus').textContent   = '';
+
+  // Warn when the saved config differs from what is currently running
+  const pendingChange = data.enabled !== data.enabled_runtime;
+  document.getElementById('authRestartBanner').style.display = pendingChange ? '' : 'none';
+
+  // Warn when the force-disable override is active
+  document.getElementById('authForceDisabledBanner').style.display = data.force_disabled ? '' : 'none';
+}
+
+function toggleAuthSecretVisibility() {
+  const input = document.getElementById('authClientSecret');
+  const btn   = document.getElementById('authSecretToggle');
+  if (input.type === 'password') {
+    input.type      = 'text';
+    btn.textContent = 'Hide';
+  } else {
+    input.type      = 'password';
+    btn.textContent = 'Show';
+  }
+}
+
+async function saveAuthSettings() {
+  const enabled      = document.getElementById('authEnabled').checked;
+  const discoveryUrl = document.getElementById('authDiscoveryUrl').value.trim();
+  const clientId     = document.getElementById('authClientId').value.trim();
+  const clientSecret = document.getElementById('authClientSecret').value;
+  const sessionDays  = parseInt(document.getElementById('authSessionDays').value, 10) || 7;
+
+  const statusEl = document.getElementById('authSaveStatus');
+
+  if (enabled && (!discoveryUrl || !clientId)) {
+    statusEl.textContent = 'Discovery URL and Client ID are required to enable OAuth.';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+
+  const body = { enabled, discovery_url: discoveryUrl, client_id: clientId, session_lifetime_days: sessionDays };
+  if (clientSecret) body.client_secret = clientSecret;
+
+  const { ok, data } = await apiJSON('/api/auth/config', { method: 'PATCH', body: JSON.stringify(body) });
+
+  if (ok) {
+    statusEl.textContent = 'Saved.';
+    statusEl.style.color = 'var(--muted)';
+    document.getElementById('authClientSecret').value       = '';
+    document.getElementById('authClientSecret').type        = 'password';
+    document.getElementById('authSecretToggle').textContent = 'Show';
+    if (clientSecret) document.getElementById('authSecretStatus').textContent = 'A client secret is saved.';
+    // Show restart banner any time settings are saved, since all changes require a restart
+    document.getElementById('authRestartBanner').style.display = '';
+  } else {
+    statusEl.textContent = (data && data.error) || 'Save failed.';
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
 // ── Relative-time formatters ──────────────────────────────────────────────────
 
 const fmt = {

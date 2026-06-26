@@ -16,13 +16,10 @@ services:
       # WEB_PORT: "5000"         # change if needed (also update the ports below)
       # MEDIA_DIR: /app/media  # override media storage path inside the container
 
-      # OAuth / OIDC authentication (disabled by default; remove the leading # to enable)
-      # OAUTH_ENABLED: "true"
-      # SECRET_KEY: ""           # generate with: python -c "import secrets; print(secrets.token_hex(32))"
-      # OAUTH_CLIENT_ID: ""      # from your Authentik application provider settings
-      # OAUTH_CLIENT_SECRET: ""  # from your Authentik application provider settings
-      # OAUTH_DISCOVERY_URL: "https://auth.yourdomain.com/application/o/social-downloader/.well-known/openid-configuration"
-      # SESSION_LIFETIME_DAYS: "7"
+      # OAuth is configured via Settings > Authentication in the UI, not here.
+      # Emergency escape hatch: uncomment the line below if you are locked out because
+      # the OIDC provider is unreachable. This bypasses auth so you can fix the config.
+      # OAUTH_FORCE_DISABLE: "true"
 
     # Bind only to localhost so Caddy (running on the host) can reach the service
     # but it is not directly exposed to the internet.

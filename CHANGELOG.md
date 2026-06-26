@@ -7,7 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Added
-- OAuth2/OIDC authentication: set `OAUTH_ENABLED=true` and configure any OIDC provider (tested with Authentik) to require login before accessing the app; disabled by default so existing deployments are unaffected
+- OAuth2/OIDC authentication: configure and enable via Settings > Authentication; works with Authentik and any standard OIDC provider; disabled by default so existing deployments are unaffected
 - Security response headers on all responses: `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`; `Strict-Transport-Security` added when OAuth is enabled
 - `bio_link` storage and change tracking: new `bio_link` column on `users` table; extracted from `bioLink.link` in the TikTok API response; tracked as a profile change field alongside username, display name, and bio; displayed as a clickable link in the user modal below the bio
 - `relation` column on `users` table: stored from the profile fetch; drives relationship pills on user cards and modals ("Friends" for mutual follow, "Following", "Follows you")

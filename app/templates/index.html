@@ -429,6 +429,7 @@
       <div class="settings-nav-item"        id="snav-jobs"     onclick="switchSettingsSection('jobs')">Jobs</div>
       <div class="settings-nav-item"        id="snav-diag"     onclick="switchSettingsSection('diag')">Diagnostics</div>
       <div class="settings-nav-item"        id="snav-database" onclick="switchSettingsSection('database')">Database</div>
+      <div class="settings-nav-item"        id="snav-auth"     onclick="switchSettingsSection('auth');loadAuthSettings()">Authentication</div>
     </nav>
     <div class="settings-content">
 
@@ -826,6 +827,73 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- Authentication section -->
+      <div id="ssec-auth" style="display:none">
+        <div class="settings-section-title">OAuth Authentication</div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:4px">
+          Require login before accessing the app via any OIDC provider (Authentik, Keycloak, etc.).
+        </p>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:20px">
+          <strong>Changes take effect after restarting the container.</strong>
+          The secret key and session files are managed automatically.
+        </p>
+
+        <div id="authForceDisabledBanner" style="display:none;background:var(--surface2);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--red)">
+          <strong>OAUTH_FORCE_DISABLE=true</strong> is set in your environment. Auth enforcement is bypassed regardless of the toggle below. Remove it to re-enable enforcement after fixing your configuration.
+        </div>
+
+        <div id="authRestartBanner" style="display:none;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--accent)">
+          Saved settings differ from the running configuration. Restart the container to apply.
+        </div>
+
+        <label style="display:flex;align-items:center;gap:10px;margin-bottom:20px;cursor:pointer">
+          <input type="checkbox" id="authEnabled" style="accent-color:var(--accent);width:16px;height:16px">
+          <span style="font-size:13px">Enable OAuth login</span>
+        </label>
+
+        <div style="display:flex;flex-direction:column;gap:14px;max-width:500px;margin-bottom:20px">
+          <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+            <span>Discovery URL <span style="color:var(--red)">*</span></span>
+            <input type="text" id="authDiscoveryUrl" class="text-input" placeholder="https://auth.example.com/application/o/my-app/.well-known/openid-configuration" spellcheck="false">
+            <span style="font-size:11px;color:var(--muted)">Authentik: application provider settings &gt; OpenID Configuration URL</span>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+            <span>Client ID <span style="color:var(--red)">*</span></span>
+            <input type="text" id="authClientId" class="text-input" placeholder="your-client-id" autocomplete="off" spellcheck="false">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+            <span>Client secret <span style="color:var(--red)">*</span></span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="password" id="authClientSecret" class="text-input" style="flex:1" placeholder="leave blank to keep existing" autocomplete="new-password" spellcheck="false">
+              <button id="authSecretToggle" onclick="toggleAuthSecretVisibility()" style="flex-shrink:0;font-size:12px;padding:5px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text-dim);cursor:pointer">Show</button>
+            </div>
+            <span id="authSecretStatus" style="font-size:11px;color:var(--muted)"></span>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Session lifetime</span>
+            <div class="loop-interval-field">
+              <input type="number" id="authSessionDays" min="1" max="365" class="loop-interval-input" value="7">
+              <span>days</span>
+            </div>
+          </label>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:24px">
+          <button class="btn-primary" onclick="saveAuthSettings()" style="font-size:12px;padding:5px 14px">Save</button>
+          <span id="authSaveStatus" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin-bottom:16px">
+
+        <div class="settings-section-title" style="font-size:12px;color:var(--muted);margin-bottom:6px">Locked out?</div>
+        <p style="font-size:12px;color:var(--text-dim);line-height:1.6;margin:0">
+          If the OIDC provider is unreachable and you cannot log in, add
+          <code>OAUTH_FORCE_DISABLE: "true"</code> to your docker-compose.yml environment
+          block and restart. This bypasses auth enforcement so you can access Settings and
+          fix the configuration, then remove the override and restart again.
+        </p>
       </div>
 
       <!-- Database section -->
