@@ -315,7 +315,7 @@ function closeSettings() {
 
 function switchSettingsSection(name) {
   _settingsSection = name;
-  ['tiktok', 'youtube', 'jobs', 'diag', 'database'].forEach(s => {
+  ['tiktok', 'youtube', 'jobs', 'diag', 'database', 'auth'].forEach(s => {
     document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
     document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
   });
