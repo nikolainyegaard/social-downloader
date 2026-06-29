@@ -113,11 +113,13 @@ def create_app() -> Flask:
         "font-src 'self'; "
         "object-src 'none'; "
         "base-uri 'self'; "
+        "form-action 'self'; "
         "frame-ancestors 'none';"
     )
 
     @app.after_request
     def _security_headers(response):
+        response.headers.pop("X-Powered-By", None)
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -125,6 +127,9 @@ def create_app() -> Flask:
         if oauth_enabled:
             # Preload-safe: 2 years. Only sent when running behind TLS (OAuth requires it).
             response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        # Don't cache HTML or API responses. Hashed static assets set their own long TTL.
+        if "Cache-Control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     # Expose auth state to all Jinja2 templates.

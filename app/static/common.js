@@ -283,11 +283,16 @@ function _dbqView(platform) {
 
 // ── API helper ────────────────────────────────────────────────────────────────
 
+let _loginRedirectPending = false;
+
 async function apiJSON(path, opts = {}) {
   const headers = opts.body ? { 'Content-Type': 'application/json', ...opts.headers } : { ...opts.headers };
   const r = await fetch(path, { ...opts, headers });
   if (r.status === 401) {
-    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.search);
+    if (!_loginRedirectPending) {
+      _loginRedirectPending = true;
+      window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.search);
+    }
     return { ok: false, status: 401, data: {} };
   }
   return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
