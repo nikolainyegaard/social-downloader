@@ -9,6 +9,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ### Added
 - OAuth2/OIDC authentication: configure and enable via Settings > Authentication; works with Authentik and any standard OIDC provider; disabled by default so existing deployments are unaffected
 - Security response headers on all responses: `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`; `Strict-Transport-Security` added when OAuth is enabled
+- `form-action 'self'` directive added to the CSP: restricts form submissions to the same origin; `form-action` does not fall back to `default-src` so it must be declared explicitly
+- `Cache-Control: no-store` on all HTML and API responses that do not already set a cache header; hashed static assets keep their existing `public, max-age=31536000, immutable` header
+- `X-Powered-By` header stripped from all responses in `_security_headers`
 - `bio_link` storage and change tracking: new `bio_link` column on `users` table; extracted from `bioLink.link` in the TikTok API response; tracked as a profile change field alongside username, display name, and bio; displayed as a clickable link in the user modal below the bio
 - `relation` column on `users` table: stored from the profile fetch; drives relationship pills on user cards and modals ("Friends" for mutual follow, "Following", "Follows you")
 - `UserBlockedException`: raised when TikTok returns `statusCode 10222` with `relation` 4 or 5 (this user has blocked the cookies account); sets `privacy_status='blocked'`, shows an orange "Blocked" pill, dims and red-borders the card; filterable via a new "Blocked" filter pill on the Users view
@@ -30,6 +33,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Private account accessibility check changed from `relation & 1` bitmask to `relation not in (1, 2)` enum; `relation=2` (mutual follow) previously evaluated to `2 & 1 = 0`, incorrectly treating mutual-follow private accounts as inaccessible
 
 ### Fixed
+- OAuth login redirect race: multiple concurrent API polling calls all receiving 401 on page load each triggered `window.location.href = '/login'`, overwriting the OAuth state in the session each time; `_loginRedirectPending` flag in `apiJSON` ensures only the first 401 triggers the redirect
 - Private accounts where the cookies account follows them (relation=1) or has mutual follow (relation=2) were not having profile data fetched or stored; both the sec_uid path and the username fallback path in `get_user_info` unconditionally raised `UserPrivateException` on `statusCode 10222` regardless of whether `userInfo` was populated; affected accounts showed no relationship pill and profile data was never updated despite the cookies account having follow access
 - Bio and bio_link overwritten to empty on every run for private accounts; TikTok returns `signature=""` in `statusCode 10222` responses regardless of follow relationship; tracker now preserves the stored DB value when the API returns empty for a private account, and skips recording a profile change for those fields
 - Audio-only posts were retried on every loop run; `download_video` returned `None` for audio files so the tracker never called `db.add_video`; the post never entered `known_ids` and appeared as new on each cycle; fixed by returning `{"audio_only": True}` from `download_video` and recording the post in the database with `type='audio'`
