@@ -1,9 +1,14 @@
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 
 # ffmpeg: yt-dlp stream merging, metadata embedding, AVIF encoding
-# libaom-av1 is included in the standard Debian Bookworm ffmpeg package
+# Playwright Chromium runtime deps installed here so this layer is cached by Docker
+# and playwright install chromium can run without --with-deps (no internal apt-get).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
+      libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+      libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+      libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
+      fonts-liberation xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -11,10 +16,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright Chromium and all OS-level runtime dependencies.
-# playwright install --with-deps runs apt-get internally without cleaning up; the
-# explicit rm clears /var/lib/apt/lists/ within the same layer so it is never committed.
-RUN playwright install chromium --with-deps && rm -rf /var/lib/apt/lists/*
+RUN playwright install chromium
 
 COPY . .
 
