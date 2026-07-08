@@ -27,6 +27,12 @@ from platforms.tiktok.loop import (
 )
 from platforms.youtube import loop as youtube_loop
 from platforms.youtube.loop import LOOP_INTERVAL_MINUTES as YOUTUBE_LOOP_INTERVAL_MINUTES
+from platforms.instagram import database as instagram_db
+from platforms.instagram import loop as instagram_loop
+from platforms.instagram.loop import LOOP_INTERVAL_MINUTES as INSTAGRAM_LOOP_INTERVAL_MINUTES
+from platforms.twitter import database as twitter_db
+from platforms.twitter import loop as twitter_loop
+from platforms.twitter.loop import LOOP_INTERVAL_MINUTES as TWITTER_LOOP_INTERVAL_MINUTES
 from web import create_app
 from backup import start_backup_thread
 
@@ -346,6 +352,60 @@ def _sound_loop_thread():
         run_sound_loop()
 
 
+# ── Instagram loop scheduler ─────────────────────────────────────────────────
+
+def _instagram_loop_thread():
+    while True:
+        interval_minutes = int(instagram_db.get_setting("loop_interval_minutes", INSTAGRAM_LOOP_INTERVAL_MINUTES))
+        next_at_ts = time.time() + interval_minutes * 60
+        instagram_loop.set_next_run(datetime.fromtimestamp(next_at_ts, tz=timezone.utc).isoformat())
+        print(
+            f"{_ts()} Instagram loop sleeping {interval_minutes} min"
+            f" until {datetime.fromtimestamp(next_at_ts).strftime('%H:%M:%S')}."
+        )
+
+        remaining = next_at_ts - time.time()
+        triggered = instagram_loop.trigger_event.wait(timeout=max(remaining, 0))
+        instagram_loop.trigger_event.clear()
+
+        if instagram_loop.check_and_clear_reschedule():
+            print(f"{_ts()} Instagram loop: interval changed, rescheduling.")
+            continue
+
+        if triggered:
+            print(f"{_ts()} Instagram loop: manual trigger received.")
+
+        instagram_loop.set_next_run(None)
+        instagram_loop.run_loop()
+
+
+# ── Twitter loop scheduler ────────────────────────────────────────────────────
+
+def _twitter_loop_thread():
+    while True:
+        interval_minutes = int(twitter_db.get_setting("loop_interval_minutes", TWITTER_LOOP_INTERVAL_MINUTES))
+        next_at_ts = time.time() + interval_minutes * 60
+        twitter_loop.set_next_run(datetime.fromtimestamp(next_at_ts, tz=timezone.utc).isoformat())
+        print(
+            f"{_ts()} Twitter loop sleeping {interval_minutes} min"
+            f" until {datetime.fromtimestamp(next_at_ts).strftime('%H:%M:%S')}."
+        )
+
+        remaining = next_at_ts - time.time()
+        triggered = twitter_loop.trigger_event.wait(timeout=max(remaining, 0))
+        twitter_loop.trigger_event.clear()
+
+        if twitter_loop.check_and_clear_reschedule():
+            print(f"{_ts()} Twitter loop: interval changed, rescheduling.")
+            continue
+
+        if triggered:
+            print(f"{_ts()} Twitter loop: manual trigger received.")
+
+        twitter_loop.set_next_run(None)
+        twitter_loop.run_loop()
+
+
 # ── YouTube loop scheduler ────────────────────────────────────────────────────
 
 def _youtube_loop_thread():
@@ -497,6 +557,8 @@ if __name__ == "__main__":
     print(f"{_ts()} Initialising databases...")
     db.init_db()
     youtube_db.init_db()
+    instagram_db.init_db()
+    twitter_db.init_db()
     recover_loop_state_from_db()
 
     n = db.migrate_video_file_paths_to_platform(MEDIA_DIR)
@@ -524,10 +586,12 @@ if __name__ == "__main__":
     app = create_app()
 
     print(f"{_ts()} Starting loop threads...")
-    threading.Thread(target=_user_loop_thread,    daemon=True, name="user-loop-thread").start()
-    threading.Thread(target=_sound_loop_thread,   daemon=True, name="sound-loop-thread").start()
-    threading.Thread(target=_youtube_loop_thread, daemon=True, name="yt-loop-thread").start()
-    threading.Thread(target=_file_check_thread,   daemon=True, name="file-check-thread").start()
+    threading.Thread(target=_user_loop_thread,      daemon=True, name="user-loop-thread").start()
+    threading.Thread(target=_sound_loop_thread,     daemon=True, name="sound-loop-thread").start()
+    threading.Thread(target=_youtube_loop_thread,   daemon=True, name="yt-loop-thread").start()
+    threading.Thread(target=_instagram_loop_thread, daemon=True, name="ig-loop-thread").start()
+    threading.Thread(target=_twitter_loop_thread,   daemon=True, name="tw-loop-thread").start()
+    threading.Thread(target=_file_check_thread,     daemon=True, name="file-check-thread").start()
     start_backup_thread()
 
     print(f"{_ts()} Web UI available at http://0.0.0.0:{WEB_PORT}")

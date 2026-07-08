@@ -1762,3 +1762,17 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   --accent-bg:   rgba(255,60,60,.15);
   --accent-bg-h: rgba(255,60,60,.28);
 }
+
+.app.theme-instagram {
+  --accent:      #c13584;
+  --accent-h:    #a62d6f;
+  --accent-bg:   rgba(193,53,132,.15);
+  --accent-bg-h: rgba(193,53,132,.28);
+}
+
+.app.theme-twitter {
+  --accent:      #1da1f2;
+  --accent-h:    #1591d8;
+  --accent-bg:   rgba(29,161,242,.15);
+  --accent-bg-h: rgba(29,161,242,.28);
+}

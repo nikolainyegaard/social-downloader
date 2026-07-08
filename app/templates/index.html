@@ -35,8 +35,10 @@
   </header>
 
   <nav class="platform-tabs">
-    <button class="platform-tab active" data-platform="tiktok" onclick="switchPlatform('tiktok')">TikTok</button>
-    <button class="platform-tab" data-platform="youtube" onclick="switchPlatform('youtube')">YouTube</button>
+    <button class="platform-tab active" data-platform="tiktok"     onclick="switchPlatform('tiktok')">TikTok</button>
+    <button class="platform-tab"        data-platform="youtube"    onclick="switchPlatform('youtube')">YouTube</button>
+    <button class="platform-tab"        data-platform="instagram"  onclick="switchPlatform('instagram')">Instagram</button>
+    <button class="platform-tab"        data-platform="twitter"    onclick="switchPlatform('twitter')">Twitter</button>
   </nav>
 
   <div id="platform-tiktok" class="platform-section">
@@ -418,18 +420,290 @@
 
   </div>
 
+  <div id="platform-instagram" class="platform-section" style="display:none">
+
+  <!-- Top panels: Stats (1/3) + Recent (2/3) -->
+  <div class="top-panels">
+    <div class="panel-card">
+      <div class="panel-header">
+        <span class="section-title">Statistics</span>
+      </div>
+      <div class="panel-body" style="padding:8px">
+        <div class="stat-grid" id="igStatsGrid"></div>
+      </div>
+    </div>
+    <div class="panel-card">
+      <div class="panel-header">
+        <span class="section-title">Recent</span>
+      </div>
+      <div class="panel-body" style="padding:12px 16px">
+        <div class="recent-split">
+          <div class="recent-col" id="igRecentLeft"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
+          <div class="recent-col" id="igRecentRight"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Track profile + Loop card -->
+  <div class="track-panels">
+    <section>
+      <div class="section-title">Track a profile</div>
+      <div class="add-form">
+        <div
+          class="handle-input"
+          id="igHandleInput"
+          contenteditable="true"
+          role="textbox"
+          aria-label="Instagram username"
+          data-placeholder="@username or profile URL"
+          spellcheck="false"
+        ></div>
+        <button class="btn-primary" onclick="igAddProfile()">Add</button>
+      </div>
+      <div class="add-status" id="igAddStatus"></div>
+      <div class="pending-list" id="igPendingList"></div>
+    </section>
+
+    <div class="panel-card loops-card">
+      <div class="panel-header">
+        <span class="section-title">Loop</span>
+      </div>
+      <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:16px">
+        <div>
+          <div class="loop-section-label">Profile Loop</div>
+          <div class="loop-grid">
+            <div id="igLoopLast"      class="loop-cell-main">Never run</div>
+            <div id="igLoopDuration"  class="loop-cell-sub"></div>
+            <div style="grid-column:3;grid-row:1/3;align-self:center;display:flex;gap:8px">
+              <button class="btn-run"    id="igTriggerBtn" onclick="igTriggerLoop()">Run Now</button>
+              <button class="btn-danger" id="igStopBtn"    onclick="igStopLoop()" disabled>Stop</button>
+            </div>
+            <div id="igLoopNext"      class="loop-cell-sub"></div>
+            <div id="igLoopNewVideos" class="loop-cell-sub"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Tracking list (profiles / log) -->
+  <section>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="filter-pills">
+          <button class="filter-pill active" id="igTvProfiles" onclick="igSetTrackingView('profiles')">Profiles</button>
+          <button class="filter-pill"        id="igTvLog"      onclick="igSetTrackingView('log')">Log</button>
+        </div>
+        <span id="igProfileCount" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
+        <input id="igSearch" type="search" placeholder="Search…"
+               oninput="onIgSearch(this.value)"
+               style="width:160px;font-size:12px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
+      </div>
+      <div id="igControls" class="filter-control-group">
+        <div class="filter-row">
+          <span class="filter-row-label">Tracking</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="igfStatAll"      onclick="setIgFilter('stat','all')">All</button>
+            <button class="filter-pill"        id="igfStatActive"   onclick="setIgFilter('stat','active')">Active</button>
+            <button class="filter-pill"        id="igfStatInactive" onclick="setIgFilter('stat','inactive')">Inactive</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <span class="filter-row-label">Starred</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="igfStarAll"     onclick="setIgFilter('star','all')">All</button>
+            <button class="filter-pill"        id="igfStarStarred" onclick="setIgFilter('star','starred')">Starred</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <span class="filter-row-label">Sort</span>
+          <div class="sort-controls">
+            <select class="sort-select" id="igSortField" onchange="setIgSortField(this.value)">
+              <option value="handle">Handle</option>
+              <option value="display_name">Display name</option>
+              <option value="subscriber_count">Followers</option>
+              <option value="video_total">Saved posts</option>
+              <option value="video_deleted">Deleted posts</option>
+              <option value="added_at">Date added</option>
+            </select>
+            <button class="sort-dir-btn" id="igSortDirBtn" onclick="toggleIgSortDir()">A → Z</button>
+            <button class="sort-dir-btn" onclick="resetIgFilters()" title="Reset filters and sort">Reset</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="users-grid" id="igChannelsGrid">
+      <div class="empty-state">No profiles tracked yet.</div>
+    </div>
+    <div id="igLogPanel" style="display:none">
+      <div class="log-panel">
+        <div class="log-header">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+              <input type="checkbox" id="igAutoScroll" checked style="accent-color:var(--accent)">
+              Auto-scroll
+            </label>
+            <button class="btn-ghost" onclick="igClearLog()" style="font-size:11px;padding:3px 8px;">Clear</button>
+          </div>
+        </div>
+        <div class="log-body" id="igLogBody"></div>
+      </div>
+    </div>
+  </section>
+
+  </div>
+
+  <div id="platform-twitter" class="platform-section" style="display:none">
+
+  <!-- Top panels: Stats (1/3) + Recent (2/3) -->
+  <div class="top-panels">
+    <div class="panel-card">
+      <div class="panel-header">
+        <span class="section-title">Statistics</span>
+      </div>
+      <div class="panel-body" style="padding:8px">
+        <div class="stat-grid" id="twStatsGrid"></div>
+      </div>
+    </div>
+    <div class="panel-card">
+      <div class="panel-header">
+        <span class="section-title">Recent</span>
+      </div>
+      <div class="panel-body" style="padding:12px 16px">
+        <div class="recent-split">
+          <div class="recent-col" id="twRecentLeft"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
+          <div class="recent-col" id="twRecentRight"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Track account + Loop card -->
+  <div class="track-panels">
+    <section>
+      <div class="section-title">Track an account</div>
+      <div class="add-form">
+        <div
+          class="handle-input"
+          id="twHandleInput"
+          contenteditable="true"
+          role="textbox"
+          aria-label="Twitter username"
+          data-placeholder="@username or profile URL"
+          spellcheck="false"
+        ></div>
+        <button class="btn-primary" onclick="twAddAccount()">Add</button>
+      </div>
+      <div class="add-status" id="twAddStatus"></div>
+      <div class="pending-list" id="twPendingList"></div>
+    </section>
+
+    <div class="panel-card loops-card">
+      <div class="panel-header">
+        <span class="section-title">Loop</span>
+      </div>
+      <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:16px">
+        <div>
+          <div class="loop-section-label">Account Loop</div>
+          <div class="loop-grid">
+            <div id="twLoopLast"      class="loop-cell-main">Never run</div>
+            <div id="twLoopDuration"  class="loop-cell-sub"></div>
+            <div style="grid-column:3;grid-row:1/3;align-self:center;display:flex;gap:8px">
+              <button class="btn-run"    id="twTriggerBtn" onclick="twTriggerLoop()">Run Now</button>
+              <button class="btn-danger" id="twStopBtn"    onclick="twStopLoop()" disabled>Stop</button>
+            </div>
+            <div id="twLoopNext"      class="loop-cell-sub"></div>
+            <div id="twLoopNewVideos" class="loop-cell-sub"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Tracking list (accounts / log) -->
+  <section>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="filter-pills">
+          <button class="filter-pill active" id="twTvAccounts" onclick="twSetTrackingView('accounts')">Accounts</button>
+          <button class="filter-pill"        id="twTvLog"      onclick="twSetTrackingView('log')">Log</button>
+        </div>
+        <span id="twAccountCount" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
+        <input id="twSearch" type="search" placeholder="Search…"
+               oninput="onTwSearch(this.value)"
+               style="width:160px;font-size:12px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
+      </div>
+      <div id="twControls" class="filter-control-group">
+        <div class="filter-row">
+          <span class="filter-row-label">Tracking</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="twfStatAll"      onclick="setTwFilter('stat','all')">All</button>
+            <button class="filter-pill"        id="twfStatActive"   onclick="setTwFilter('stat','active')">Active</button>
+            <button class="filter-pill"        id="twfStatInactive" onclick="setTwFilter('stat','inactive')">Inactive</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <span class="filter-row-label">Starred</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="twfStarAll"     onclick="setTwFilter('star','all')">All</button>
+            <button class="filter-pill"        id="twfStarStarred" onclick="setTwFilter('star','starred')">Starred</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <span class="filter-row-label">Sort</span>
+          <div class="sort-controls">
+            <select class="sort-select" id="twSortField" onchange="setTwSortField(this.value)">
+              <option value="handle">Handle</option>
+              <option value="display_name">Display name</option>
+              <option value="subscriber_count">Followers</option>
+              <option value="video_total">Saved tweets</option>
+              <option value="video_deleted">Deleted tweets</option>
+              <option value="added_at">Date added</option>
+            </select>
+            <button class="sort-dir-btn" id="twSortDirBtn" onclick="toggleTwSortDir()">A → Z</button>
+            <button class="sort-dir-btn" onclick="resetTwFilters()" title="Reset filters and sort">Reset</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="users-grid" id="twChannelsGrid">
+      <div class="empty-state">No accounts tracked yet.</div>
+    </div>
+    <div id="twLogPanel" style="display:none">
+      <div class="log-panel">
+        <div class="log-header">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+              <input type="checkbox" id="twAutoScroll" checked style="accent-color:var(--accent)">
+              Auto-scroll
+            </label>
+            <button class="btn-ghost" onclick="twClearLog()" style="font-size:11px;padding:3px 8px;">Clear</button>
+          </div>
+        </div>
+        <div class="log-body" id="twLogBody"></div>
+      </div>
+    </div>
+  </section>
+
+  </div>
+
 </div>
 <!-- Settings modal -->
 <div id="settingsBackdrop" class="modal-backdrop" style="display:none;z-index:200" onclick="if(event.target===this)closeSettings()">
   <div class="modal-base settings-modal">
     <button class="modal-close" onclick="closeSettings()"></button>
     <nav class="settings-nav">
-      <div class="settings-nav-item active" id="snav-tiktok"   onclick="switchSettingsSection('tiktok')">TikTok</div>
-      <div class="settings-nav-item"        id="snav-youtube"  onclick="switchSettingsSection('youtube');loadYtSettings()">YouTube</div>
-      <div class="settings-nav-item"        id="snav-jobs"     onclick="switchSettingsSection('jobs')">Jobs</div>
-      <div class="settings-nav-item"        id="snav-diag"     onclick="switchSettingsSection('diag')">Diagnostics</div>
-      <div class="settings-nav-item"        id="snav-database" onclick="switchSettingsSection('database')">Database</div>
-      <div class="settings-nav-item"        id="snav-auth"     onclick="switchSettingsSection('auth');loadAuthSettings()">Authentication</div>
+      <div class="settings-nav-item active" id="snav-tiktok"    onclick="switchSettingsSection('tiktok')">TikTok</div>
+      <div class="settings-nav-item"        id="snav-youtube"   onclick="switchSettingsSection('youtube');loadYtSettings()">YouTube</div>
+      <div class="settings-nav-item"        id="snav-instagram" onclick="switchSettingsSection('instagram');loadIgSettings()">Instagram</div>
+      <div class="settings-nav-item"        id="snav-twitter"   onclick="switchSettingsSection('twitter');loadTwSettings()">Twitter</div>
+      <div class="settings-nav-item"        id="snav-jobs"      onclick="switchSettingsSection('jobs')">Jobs</div>
+      <div class="settings-nav-item"        id="snav-diag"      onclick="switchSettingsSection('diag')">Diagnostics</div>
+      <div class="settings-nav-item"        id="snav-database"  onclick="switchSettingsSection('database')">Database</div>
+      <div class="settings-nav-item"        id="snav-auth"      onclick="switchSettingsSection('auth');loadAuthSettings()">Authentication</div>
     </nav>
     <div class="settings-content">
 
@@ -671,6 +945,46 @@
         </div>
       </div>
 
+      <!-- Instagram section -->
+      <div id="ssec-instagram" style="display:none">
+        <div class="settings-section-title">Loop Interval</div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+          Changes take effect at the next scheduled run.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:340px">
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Profile loop every</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="igLoopIntervalInput" min="1" max="9999" class="loop-interval-input" style="width:70px">
+              <span style="color:var(--muted)">min</span>
+            </div>
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+          <button class="btn-primary" onclick="igSaveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
+        </div>
+      </div>
+
+      <!-- Twitter section -->
+      <div id="ssec-twitter" style="display:none">
+        <div class="settings-section-title">Loop Interval</div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+          Changes take effect at the next scheduled run.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:340px">
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Account loop every</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="twLoopIntervalInput" min="1" max="9999" class="loop-interval-input" style="width:70px">
+              <span style="color:var(--muted)">min</span>
+            </div>
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+          <button class="btn-primary" onclick="twSaveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
+        </div>
+      </div>
+
       <!-- Jobs section -->
       <div id="ssec-jobs" style="display:none">
         <div class="settings-section-title">Jobs</div>
@@ -765,6 +1079,46 @@
           </div>
         </div>
 
+        <div id="jobs-instagram" style="display:none">
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Database cleanup</div>
+                <div class="job-card-desc">
+                  Removes orphaned thumbnails left behind when profiles are removed.
+                  Also runs VACUUM on the Instagram SQLite database to compact freed space.
+                </div>
+              </div>
+              <button class="btn-primary" id="job-ig-cleanup-btn" onclick="igTriggerCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+            </div>
+            <div class="job-status" id="job-ig-cleanup-status" style="display:none">
+              <div id="job-ig-cleanup-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-ig-cleanup-bar"></div></div></div>
+              <div class="job-status-text" id="job-ig-cleanup-text"></div>
+              <div class="job-steps" id="job-ig-cleanup-steps"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="jobs-twitter" style="display:none">
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Database cleanup</div>
+                <div class="job-card-desc">
+                  Removes orphaned thumbnails left behind when accounts are removed.
+                  Also runs VACUUM on the Twitter SQLite database to compact freed space.
+                </div>
+              </div>
+              <button class="btn-primary" id="job-tw-cleanup-btn" onclick="twTriggerCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+            </div>
+            <div class="job-status" id="job-tw-cleanup-status" style="display:none">
+              <div id="job-tw-cleanup-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-tw-cleanup-bar"></div></div></div>
+              <div class="job-status-text" id="job-tw-cleanup-text"></div>
+              <div class="job-steps" id="job-tw-cleanup-steps"></div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Diagnostics section -->
@@ -805,6 +1159,16 @@
             ">Copy</button>
           </div>
           <div id="diagResolveHint" style="display:none;margin-top:8px;font-size:12px;color:var(--muted)"></div>
+        </div>
+
+        <div id="diag-instagram" style="display:none">
+          <div class="settings-section-title">Instagram Diagnostics</div>
+          <div style="font-size:12px;color:var(--muted)">Not yet implemented.</div>
+        </div>
+
+        <div id="diag-twitter" style="display:none">
+          <div class="settings-section-title">Twitter Diagnostics</div>
+          <div style="font-size:12px;color:var(--muted)">Not yet implemented.</div>
         </div>
 
         <div id="diag-youtube" style="display:none">
@@ -902,6 +1266,8 @@
         <div id="database-tabs" class="settings-sub-tabs"></div>
         <div id="database-tiktok"></div>
         <div id="database-youtube"></div>
+        <div id="database-instagram"></div>
+        <div id="database-twitter"></div>
       </div>
 
     </div>
@@ -990,8 +1356,32 @@
   </div>
 </div>
 
+<!-- Instagram profile detail modal -->
+<div id="igModalBackdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)igCloseModal()">
+  <div class="modal modal-base">
+    <button class="modal-close" onclick="igCloseModal()"></button>
+    <div class="modal-header"     id="igModalHeader"></div>
+    <div class="modal-toolbar"    id="igModalToolbar"></div>
+    <div class="phist-panel"      id="igPhistPanel" style="display:none"></div>
+    <div class="modal-video-list" id="igModalVideoList"></div>
+  </div>
+</div>
+
+<!-- Twitter account detail modal -->
+<div id="twModalBackdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)twCloseModal()">
+  <div class="modal modal-base">
+    <button class="modal-close" onclick="twCloseModal()"></button>
+    <div class="modal-header"     id="twModalHeader"></div>
+    <div class="modal-toolbar"    id="twModalToolbar"></div>
+    <div class="phist-panel"      id="twPhistPanel" style="display:none"></div>
+    <div class="modal-video-list" id="twModalVideoList"></div>
+  </div>
+</div>
+
 <script src="{{ asset_url('common.js') }}"></script>
 <script src="{{ asset_url('tiktok.js') }}"></script>
 <script src="{{ asset_url('youtube.js') }}"></script>
+<script src="{{ asset_url('instagram.js') }}"></script>
+<script src="{{ asset_url('twitter.js') }}"></script>
 </body>
 </html>

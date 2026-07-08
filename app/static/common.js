@@ -1,6 +1,8 @@
 const PLATFORMS = [
-  { id: 'tiktok',  label: 'TikTok'  },
-  { id: 'youtube', label: 'YouTube' },
+  { id: 'tiktok',    label: 'TikTok'    },
+  { id: 'youtube',   label: 'YouTube'   },
+  { id: 'instagram', label: 'Instagram' },
+  { id: 'twitter',   label: 'Twitter'   },
 ];
 
 function switchPlatform(name) {

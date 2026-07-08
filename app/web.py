@@ -8,7 +8,7 @@ from flask import Flask, jsonify, redirect, render_template, request, send_from_
 from config import APP_VERSION
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-_HASHED_FILES = ["style.css", "common.js", "tiktok.js", "youtube.js"]
+_HASHED_FILES = ["style.css", "common.js", "tiktok.js", "youtube.js", "instagram.js", "twitter.js"]
 
 _hash_to_original: dict[str, str] = {}  # "style-ab12cd34.css" -> "style.css"
 _original_to_url:  dict[str, str] = {}  # "style.css"          -> "/assets/style-ab12cd34.css"
@@ -145,6 +145,12 @@ def create_app() -> Flask:
 
     from platforms.youtube.web import youtube_bp
     app.register_blueprint(youtube_bp)
+
+    from platforms.instagram.web import instagram_bp
+    app.register_blueprint(instagram_bp)
+
+    from platforms.twitter.web import twitter_bp
+    app.register_blueprint(twitter_bp)
 
     @app.route("/")
     def index():
