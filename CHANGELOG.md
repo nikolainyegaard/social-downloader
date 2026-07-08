@@ -6,6 +6,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-29
+
 ### Added
 - OAuth2/OIDC authentication: configure and enable via Settings > Authentication; works with Authentik and any standard OIDC provider; disabled by default so existing deployments are unaffected
 - Security response headers on all responses: `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`; `Strict-Transport-Security` added when OAuth is enabled
@@ -203,4 +205,5 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 [0.2.0]: https://github.com/nikolainyegaard/social-downloader/compare/v0.1.0...v0.2.0
 [0.2.1]: https://github.com/nikolainyegaard/social-downloader/compare/v0.2.0...v0.2.1
 [0.3.0]: https://github.com/nikolainyegaard/social-downloader/compare/v0.2.1...v0.3.0
-[Unreleased]: https://github.com/nikolainyegaard/social-downloader/compare/v0.3.0...HEAD
+[0.4.0]: https://github.com/nikolainyegaard/social-downloader/compare/v0.3.0...v0.4.0
+[Unreleased]: https://github.com/nikolainyegaard/social-downloader/compare/v0.4.0...HEAD

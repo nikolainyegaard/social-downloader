@@ -35,8 +35,25 @@ Key environment variables (set in `docker-compose.yml`):
 | `YOUTUBE_LOOP_INTERVAL_MINUTES` | `180` | How often to check tracked YouTube channels |
 | `TZ` | system | Timezone for log timestamps (e.g. `Europe/Oslo`) |
 | `WEB_PORT` | `5000` | Flask listen port |
+| `OAUTH_FORCE_DISABLE` | `false` | Set `true` to bypass OAuth enforcement without changing the saved config; use when locked out due to OIDC provider failure |
 
 All loop settings can also be changed from the UI without restarting.
+
+---
+
+## Authentication
+
+Optional. Disabled by default; existing deployments need no changes.
+
+To enable OAuth2/OIDC (tested with Authentik, works with any standard OIDC provider):
+
+1. Create an OAuth2 provider in your OIDC provider with redirect URI `https://your-domain/auth/callback`
+2. Open **Settings > Authentication** in the UI
+3. Paste the Discovery URL from your provider (e.g. `https://authentik.example.com/application/o/app-name/.well-known/openid-configuration`)
+4. Enter your Client ID and Client Secret
+5. Enable authentication and save; the app must restart for the change to take effect
+
+If you are locked out because the OIDC provider is unreachable, set `OAUTH_FORCE_DISABLE=true` in your environment and restart. Auth enforcement is bypassed without touching the saved config. Remove the variable and restart again to re-enable.
 
 ---
 
