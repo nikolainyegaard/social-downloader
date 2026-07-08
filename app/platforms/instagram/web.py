@@ -48,8 +48,39 @@ _cleanup_state: dict = {"running": False, "current": "", "steps": [], "removed":
 
 
 def _process_add(handle: str) -> None:
+    from platforms.instagram.api import fetch_profile_info
+
+    try:
+        info = fetch_profile_info(handle)
+    except Exception as e:
+        with _pending_lock:
+            _pending[handle] = {"status": "error", "message": f"Lookup error: {e}"}
+        return
+
+    channel_id = info.get("channel_id")
+    if not channel_id:
+        with _pending_lock:
+            _pending[handle] = {"status": "error", "message": "Profile not found"}
+        return
+
+    if db.get_channel(channel_id):
+        with _pending_lock:
+            _pending[handle] = {"status": "error", "message": "Channel is already being tracked"}
+        return
+
+    db.add_channel(
+        channel_id=channel_id,
+        handle=info.get("handle") or handle,
+        display_name=info.get("display_name"),
+        description=info.get("description"),
+        subscriber_count=info.get("subscriber_count"),
+        video_count=info.get("video_count"),
+        avatar_url=info.get("avatar_url"),
+        banner_url=info.get("banner_url"),
+        raw_channel_data=info.get("raw_channel_data"),
+    )
     with _pending_lock:
-        _pending[handle] = {"status": "error", "message": "Instagram not yet implemented"}
+        del _pending[handle]
 
 
 def _add_worker() -> None:
@@ -349,6 +380,32 @@ def db_query():
     filename = _write_report("ig-db-query", f"SQL: {sql}", lines)
     preview  = lines[:12]
     return jsonify({"ok": True, "report_file": filename, "preview": preview, "total": total, "summary": summary})
+
+
+@instagram_bp.route("/diagnostics", methods=["POST"])
+def run_diagnostics():
+    body   = request.get_json(silent=True) or {}
+    handle = normalize_handle(body.get("handle", "").strip())
+    action = body.get("action", "profile")
+    if not handle:
+        return jsonify({"error": "handle is required"}), 400
+    try:
+        from platforms.instagram.api import fetch_profile_info, iter_profile_posts
+        if action == "profile":
+            info = fetch_profile_info(handle)
+            return jsonify({"ok": True, "result": info})
+        elif action == "posts":
+            info  = fetch_profile_info(handle)
+            posts = []
+            for post_dict, _ in iter_profile_posts(info["channel_id"]):
+                posts.append(post_dict)
+                if len(posts) >= 5:
+                    break
+            return jsonify({"ok": True, "result": {"profile": info, "posts": posts}})
+        else:
+            return jsonify({"error": "unknown action"}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @instagram_bp.route("/reports/<path:filename>", methods=["GET"])

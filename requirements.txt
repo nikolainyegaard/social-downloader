@@ -5,3 +5,4 @@ flask
 requests
 authlib
 flask-session
+instaloader
