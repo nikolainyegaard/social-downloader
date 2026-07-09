@@ -36,6 +36,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - YouTube profile fetches now work for channels without a videos tab (e.g. shorts-only channels): those returned no metadata at all from the plain channel URL, which was the source of the empty handle and channel-ID display name bugs; the fetch now uses the /featured tab with a fallback
 - Twitter, Instagram, and YouTube log consoles now colorize lines (session separators, processing, errors, warnings, downloads, profile changes) like the TikTok log console
 - YouTube Diagnostics now also returns the parsed channel profile and its raw metadata alongside the video entries
+- Twitter photo posts are no longer treated as videos in the web UI: photo thumbnails open the image viewer instead of the video player, the Download button saves the file under its real extension instead of a broken .mp4, and photos are served with an image mimetype
 
 ## [0.4.0] - 2026-06-29
 

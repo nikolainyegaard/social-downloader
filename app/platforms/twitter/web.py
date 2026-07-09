@@ -343,6 +343,11 @@ _VIDEO_MIME = {
     ".webm": "video/webm",
     ".mkv":  "video/x-matroska",
     ".mov":  "video/quicktime",
+    ".avif": "image/avif",
+    ".jpg":  "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png":  "image/png",
+    ".gif":  "image/gif",
 }
 
 

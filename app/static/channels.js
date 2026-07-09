@@ -199,21 +199,36 @@ function initChannelApp(cfg) {
 
   const thumbBadge = cfg.thumbBadge || (() => _playBadge);
 
+  // Photo posts (e.g. Twitter images) are stored as .avif/.jpg; open them in the
+  // image modal and download them under their real extension, not as .mp4.
+  const _IMG_EXTS = ['avif', 'jpg', 'jpeg', 'png', 'webp', 'gif'];
+  const _mediaExt = v => ((v.file_path || '').split('.').pop() || '').toLowerCase();
+  const _isImage  = v => _IMG_EXTS.includes(_mediaExt(v));
+
+  function _openMediaFor(v) {
+    const id = esc(v.video_id);
+    return _isImage(v)
+      ? `openImgModalUrl('${API}/videos/${id}/file')`
+      : `${P}OpenVidModal('${id}')`;
+  }
+
   function _thumbCell(v) {
     const id = esc(v.video_id);
+    const isImg = _isImage(v);
     return `<div style="position:relative;line-height:0;width:90px;flex-shrink:0">
       <img class="video-thumb" src="${API}/videos/${id}/thumbnail" alt="" loading="lazy"
            onerror="this.style.opacity='.15'"
-           onclick="event.stopPropagation();${P}OpenVidModal('${id}')" title="Play video" style="cursor:pointer">
-      ${thumbBadge(v)}
+           onclick="event.stopPropagation();${_openMediaFor(v)}" title="${isImg ? 'View photo' : 'Play video'}" style="cursor:pointer">
+      ${isImg ? '' : thumbBadge(v)}
     </div>`;
   }
 
   function _videoActionBtns(v) {
     const id = esc(v.video_id);
     if (v.file_path) {
-      return `<a class="play-btn" href="${API}/videos/${id}/file" download="${id}.mp4"
-               onclick="event.stopPropagation()" title="Download video">${_dlIcon}</a>`;
+      const ext = _mediaExt(v) || 'mp4';
+      return `<a class="play-btn" href="${API}/videos/${id}/file" download="${id}.${ext}"
+               onclick="event.stopPropagation()" title="Download">${_dlIcon}</a>`;
     }
     return '';
   }
@@ -272,7 +287,7 @@ function initChannelApp(cfg) {
     ],
     viewVideoFilter: cfg.viewVideoFilter || ((view, vids) => vids),
     gridClassFn:     cfg.gridClassFn || (() => ''),
-    typeIconFn:      cfg.typeIconFn || (() => _playBadge),
+    typeIconFn:      cfg.typeIconFn || (v => _isImage(v) ? '' : _playBadge),
     gridId:       `${P}VideoGrid`,
     hasPhistBtn:  true,
     phistBtnFn:   `${P}OpenProfileHistory`,
@@ -280,7 +295,9 @@ function initChannelApp(cfg) {
     actionBtnsFn: _videoActionBtns,
     previewFn:    `${P}OpenImgModal`,
     gridThumbSrc: v => `${API}/videos/${esc(v.video_id)}/thumbnail`,
-    gridCellOnclick: v => window[`${P}OpenVidModal`](v.video_id),
+    gridCellOnclick: v => _isImage(v)
+      ? openImgModalUrl(`${API}/videos/${encodeURIComponent(v.video_id)}/file`)
+      : window[`${P}OpenVidModal`](v.video_id),
   };
 
   // ── Stats panel ───────────────────────────────────────────────────────────
