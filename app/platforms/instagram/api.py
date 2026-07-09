@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 from typing import Generator
 
@@ -20,6 +21,63 @@ _L = instaloader.Instaloader(
     filename_pattern="{shortcode}",
     request_timeout=30,
 )
+
+
+def _session_file() -> str:
+    from config import DATA_DIR
+    return os.path.join(DATA_DIR, "instagram", "session")
+
+
+def _session_user_file() -> str:
+    from config import DATA_DIR
+    return os.path.join(DATA_DIR, "instagram", "session_user")
+
+
+def get_session_status() -> dict:
+    username = _L.context.username
+    if username:
+        return {"logged_in": True, "username": username}
+    saved_user = None
+    uf = _session_user_file()
+    if os.path.exists(uf):
+        with open(uf) as f:
+            saved_user = f.read().strip() or None
+    return {"logged_in": False, "username": None, "saved_username": saved_user}
+
+
+def login(username: str, password: str) -> None:
+    _L.login(username, password)
+    sf = _session_file()
+    os.makedirs(os.path.dirname(sf), exist_ok=True)
+    _L.save_session_to_file(sf)
+    with open(_session_user_file(), "w") as f:
+        f.write(username)
+
+
+def logout() -> None:
+    _L.logout()
+    for path in (_session_file(), _session_user_file()):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
+def _load_saved_session() -> None:
+    uf = _session_user_file()
+    sf = _session_file()
+    if not (os.path.exists(uf) and os.path.exists(sf)):
+        return
+    try:
+        with open(uf) as f:
+            username = f.read().strip()
+        if username:
+            _L.load_session_from_file(username, sf)
+    except Exception:
+        pass
+
+
+_load_saved_session()
 
 
 def normalize_handle(handle: str) -> str:

@@ -8,6 +8,7 @@ import queue as _queue_module
 import re
 import threading
 import time
+import instaloader
 from flask import Blueprint, jsonify, request, send_file
 
 from platforms.instagram import database as db
@@ -493,6 +494,38 @@ def stop_loop():
     if not is_running():
         return jsonify({"error": "Loop is not running"}), 409
     request_stop()
+    return jsonify({"ok": True})
+
+
+@instagram_bp.route("/session", methods=["GET"])
+def get_session():
+    from platforms.instagram.api import get_session_status
+    return jsonify(get_session_status())
+
+
+@instagram_bp.route("/session", methods=["POST"])
+def session_login():
+    body     = request.get_json(silent=True) or {}
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    if not username or not password:
+        return jsonify({"error": "username and password are required"}), 400
+    try:
+        from platforms.instagram.api import login
+        login(username, password)
+        return jsonify({"ok": True, "username": username})
+    except instaloader.TwoFactorAuthRequiredException:
+        return jsonify({"ok": False, "error": "Two-factor authentication is required; disable 2FA or use an app password"}), 400
+    except instaloader.BadCredentialsException:
+        return jsonify({"ok": False, "error": "Incorrect username or password"}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
+@instagram_bp.route("/session", methods=["DELETE"])
+def session_logout():
+    from platforms.instagram.api import logout
+    logout()
     return jsonify({"ok": True})
 
 
