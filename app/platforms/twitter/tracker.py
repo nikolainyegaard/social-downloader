@@ -218,7 +218,7 @@ def _update_profile(channel: dict, info: dict, log: Callable[[str], None]) -> No
         "description":  (channel.get("description"),  info.get("description")),
     }
     for field, (old, new) in field_map.items():
-        if new is not None and new != old and old is not None:
+        if new and new != old and old is not None:  # falsy new = field missing from a sparse fetch, not a change
             db.record_profile_change(channel_id, field, old)
             if field == "handle":
                 log(f"  Handle changed: @{old} -> @{new}")

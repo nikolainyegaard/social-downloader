@@ -29,6 +29,11 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Channel sessions abort after 3 consecutive creator failures instead of hammering a rate limit or auth wall; failed creators stay due and retry next session
 - Channel list APIs now return `last_saved` (most recent download) per creator
 
+### Fixed
+- Twitter and Instagram avatars are now cached and shown on creator cards; the avatar cache only supported TikTok and YouTube, so Twitter profile fetches silently dropped the profile picture
+- YouTube no longer reports a false handle change to an empty value on every loop: the channel profile fetch could return an unresolved result with no metadata, and an empty field is now treated as missing instead of a change
+- YouTube channel display names no longer fall back to the channel ID; a sparse profile fetch also no longer wipes a stored display name or description on any channel platform
+
 ## [0.4.0] - 2026-06-29
 
 ### Added

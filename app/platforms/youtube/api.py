@@ -43,11 +43,18 @@ def _to_url(raw: str) -> str:
 
 
 def fetch_channel_info(url_or_handle: str) -> dict:
-    """Fetch channel metadata. Returns a dict with channel_id, handle, display_name, raw_channel_data, etc."""
+    """Fetch channel metadata. Returns a dict with channel_id, handle, display_name, raw_channel_data, etc.
+
+    Uses a processed flat extraction limited to one playlist item: process=False
+    can return an unresolved url reference with no channel metadata, which
+    caused empty handles and missing display names. Processing resolves it;
+    lazy_playlist + playlist_items keeps it to a single page fetch.
+    """
     url = _to_url(url_or_handle)
-    ydl_opts = {"quiet": True, "no_warnings": True}
+    ydl_opts = {"quiet": True, "no_warnings": True, "extract_flat": True,
+                "playlist_items": "1", "lazy_playlist": True}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False, process=False)
+        info = ydl.extract_info(url, download=False)
     if not info:
         raise ValueError(f"No channel info returned for: {url_or_handle}")
     return _parse_channel(info)
@@ -55,12 +62,18 @@ def fetch_channel_info(url_or_handle: str) -> dict:
 
 def _parse_channel(info: dict) -> dict:
     avatar_url, banner_url = _split_thumbs(info.get("thumbnails") or [])
+    channel_id = info.get("channel_id") or info.get("id")
     handle = (info.get("uploader_id") or "").lstrip("@")
+    if not handle:
+        m = re.search(r"youtube\.com/@([\w.-]+)",
+                      info.get("uploader_url") or info.get("channel_url") or "")
+        handle = m.group(1) if m else ""
+    display_name = info.get("channel") or info.get("uploader") or info.get("title")
     cleaned = {k: v for k, v in info.items() if k not in _CHANNEL_STRIP_KEYS}
     return {
-        "channel_id":       info.get("channel_id") or info.get("id"),
-        "handle":           handle,
-        "display_name":     info.get("channel") or info.get("uploader") or info.get("title"),
+        "channel_id":       channel_id,
+        "handle":           handle or None,
+        "display_name":     None if display_name == channel_id else display_name,
         "description":      info.get("description"),
         "subscriber_count": info.get("channel_follower_count"),
         "video_count":      info.get("playlist_count"),

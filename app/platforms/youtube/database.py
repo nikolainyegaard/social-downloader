@@ -214,8 +214,8 @@ def update_channel_info(channel_id: str, handle: str, display_name: str | None,
         conn.execute("""
             UPDATE channels SET
                 handle           = ?,
-                display_name     = ?,
-                description      = ?,
+                display_name     = COALESCE(?, display_name),
+                description      = COALESCE(?, description),
                 subscriber_count = COALESCE(?, subscriber_count),
                 video_count      = COALESCE(?, video_count),
                 avatar_url       = COALESCE(?, avatar_url),

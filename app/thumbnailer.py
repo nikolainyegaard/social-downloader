@@ -66,12 +66,11 @@ def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok") -> 
     if platform == "tiktok":
         _avatars_dir = AVATARS_DIR
         _db = db
-    elif platform == "youtube":
-        from config import DATA_DIR as _DATA_DIR
-        _avatars_dir = os.path.join(_DATA_DIR, "youtube", "avatars")
-        from platforms.youtube import database as _db
     else:
-        return False
+        import importlib
+        from config import DATA_DIR as _DATA_DIR
+        _avatars_dir = os.path.join(_DATA_DIR, platform, "avatars")
+        _db = importlib.import_module(f"platforms.{platform}.database")
 
     os.makedirs(_avatars_dir, exist_ok=True)
 
