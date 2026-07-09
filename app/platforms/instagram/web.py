@@ -17,7 +17,6 @@ from platforms.instagram.api import normalize_handle
 from platforms.instagram.loop import (
     is_running, get_state_snapshot, trigger_event, request_stop,
     enqueue_channel_run, enqueue_channel_profile_run, reschedule_loop,
-    LOOP_INTERVAL_MINUTES,
 )
 from thumbnailer import thumb_path_for
 
@@ -529,20 +528,34 @@ def session_logout():
     return jsonify({"ok": True})
 
 
+_SCHEDULE_KEYS = (
+    "sessions_per_day",
+    "high_priority_check_hours",
+    "active_check_hours",
+    "inactive_check_hours",
+)
+
+
 @instagram_bp.route("/settings", methods=["GET"])
 def get_settings():
+    from scheduling import platform_defaults
+    defaults = platform_defaults("instagram")
     return jsonify({
-        "loop_interval_minutes": int(db.get_setting("loop_interval_minutes", LOOP_INTERVAL_MINUTES)),
+        key: int(db.get_setting(key, defaults[key])) for key in _SCHEDULE_KEYS
     })
 
 
 @instagram_bp.route("/settings", methods=["PATCH"])
 def update_settings():
-    body = request.get_json(silent=True) or {}
-    if "loop_interval_minutes" in body:
-        val = body["loop_interval_minutes"]
-        if not isinstance(val, int) or val < 1:
-            return jsonify({"error": "loop_interval_minutes must be a positive integer"}), 400
-        db.set_setting("loop_interval_minutes", val)
+    body    = request.get_json(silent=True) or {}
+    changed = False
+    for key in _SCHEDULE_KEYS:
+        if key in body:
+            val = body[key]
+            if not isinstance(val, int) or val < 1:
+                return jsonify({"error": f"{key} must be a positive integer"}), 400
+            db.set_setting(key, val)
+            changed = True
+    if changed:
         reschedule_loop()
     return jsonify({"ok": True})

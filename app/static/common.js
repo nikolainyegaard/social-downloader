@@ -124,6 +124,40 @@ async function _cookiesDelete(platform, idPrefix) {
   if (ok) _cookiesLoad(platform, idPrefix);
 }
 
+// ── Loop schedule settings (shared by session-scheduled platforms) ────────────
+// Elements: {idPrefix}SessionsPerDay, {idPrefix}HighPriorityHours,
+// {idPrefix}ActiveHours, {idPrefix}InactiveHours.
+
+const _SCHEDULE_FIELDS = [
+  ['sessions_per_day',          'SessionsPerDay'],
+  ['high_priority_check_hours', 'HighPriorityHours'],
+  ['active_check_hours',        'ActiveHours'],
+  ['inactive_check_hours',      'InactiveHours'],
+];
+
+async function _scheduleSettingsLoad(platform, idPrefix) {
+  const { ok, data } = await apiJSON(`/api/${platform}/settings`);
+  if (!ok) return;
+  for (const [key, suffix] of _SCHEDULE_FIELDS) {
+    const el = document.getElementById(idPrefix + suffix);
+    if (el && data[key] !== undefined) el.value = data[key];
+  }
+}
+
+async function _scheduleSettingsSave(platform, idPrefix) {
+  const body = {};
+  for (const [key, suffix] of _SCHEDULE_FIELDS) {
+    const el = document.getElementById(idPrefix + suffix);
+    if (!el) continue;
+    const val = parseInt(el.value, 10);
+    if (!val || val < 1) { showToast('All schedule values must be positive integers.', { type: 'warning', duration: 4000 }); return; }
+    body[key] = val;
+  }
+  const { ok, data } = await apiJSON(`/api/${platform}/settings`, { method: 'PATCH', body: JSON.stringify(body) });
+  if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
+  showToast('Settings saved.', { type: 'success', duration: 2500 });
+}
+
 // ── API diagnostics pane (shared) ─────────────────────────────────────────────
 // Elements: {idPrefix}Input, {idPrefix}Action, {idPrefix}RunBtn, {idPrefix}Output.
 

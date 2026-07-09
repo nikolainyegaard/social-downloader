@@ -398,22 +398,10 @@ async function igSessionLogout() {
 
 async function loadIgSettings() {
   loadIgSessionStatus();
-  const { ok, data } = await apiJSON('/api/instagram/settings');
-  if (!ok) return;
-  const el = document.getElementById('igLoopIntervalInput');
-  if (el) el.value = data.loop_interval_minutes;
+  return _scheduleSettingsLoad('instagram', 'igSettings');
 }
 
-async function igSaveLoopSettings() {
-  const val = parseInt(document.getElementById('igLoopIntervalInput')?.value, 10);
-  if (!val || val < 1) { showToast('Interval must be a positive integer.', { type: 'warning', duration: 4000 }); return; }
-  const { ok, data } = await apiJSON('/api/instagram/settings', {
-    method: 'PATCH',
-    body: JSON.stringify({ loop_interval_minutes: val }),
-  });
-  if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
-  showToast('Settings saved.', { type: 'success', duration: 2500 });
-}
+async function igSaveLoopSettings() { return _scheduleSettingsSave('instagram', 'igSettings'); }
 
 function igTriggerLoop() { return _triggerLoop('igTriggerBtn', '/api/instagram/trigger', 'Could not trigger loop'); }
 

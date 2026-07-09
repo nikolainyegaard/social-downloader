@@ -11,8 +11,7 @@ from datetime import datetime, timezone
 from platforms.instagram import database as db
 from platforms.instagram.database import INSTAGRAM_DATA_DIR
 
-LOOP_STATE_PATH       = os.path.join(INSTAGRAM_DATA_DIR, "loop_state.json")
-LOOP_INTERVAL_MINUTES = int(os.environ.get("INSTAGRAM_LOOP_INTERVAL_MINUTES", 180))
+LOOP_STATE_PATH = os.path.join(INSTAGRAM_DATA_DIR, "loop_state.json")
 
 
 def _load_state() -> dict:
@@ -46,6 +45,7 @@ loop_state = {
     "last_new_videos":        _persisted.get("last_new_videos"),
     "next_run":               None,
     "current_channel":        None,
+    "sessions_today":         [],
     "logs":                   deque(maxlen=1000),
 }
 _state_lock = threading.Lock()
@@ -70,6 +70,15 @@ def set_next_run(iso: str | None) -> None:
         loop_state["next_run"] = iso
 
 
+def set_sessions_today(session_times: list) -> None:
+    """Update the list of planned session timestamps for the current 24h window."""
+    with _state_lock:
+        loop_state["sessions_today"] = [
+            datetime.fromtimestamp(t, tz=timezone.utc).isoformat()
+            for t in session_times
+        ]
+
+
 def get_state_snapshot() -> dict:
     with _state_lock:
         state = {
@@ -79,6 +88,7 @@ def get_state_snapshot() -> dict:
             "loop_last_new_videos":    loop_state["last_new_videos"],
             "loop_next":               loop_state["next_run"],
             "loop_current_channel":    loop_state["current_channel"],
+            "loop_sessions_today":     list(loop_state["sessions_today"]),
             "logs":                    list(loop_state["logs"]),
         }
     with _run_state_lock:
@@ -152,6 +162,11 @@ def _run_worker() -> None:
                 from platforms.instagram.tracker import process_single_channel
                 process_single_channel(channel, _log, _set_current_channel, profile_only=profile_only)
                 _log(f"=== Manual {kind} run complete: {label} ===")
+                # Schedule the next check based on the channel's computed interval
+                from scheduling import get_check_intervals, set_channel_next_check
+                _high, _active, _ = get_check_intervals(db, "instagram")
+                _interval = channel.get("check_interval_secs") or (_high if channel.get("starred") else _active)
+                set_channel_next_check(db, channel_id, int(time.time()) + _interval)
             else:
                 _log(f"Manual run: channel {channel_id} not found in DB")
         except Exception as e:
@@ -166,8 +181,12 @@ def _run_worker() -> None:
 threading.Thread(target=_run_worker, daemon=True, name="ig-run-worker").start()
 
 
-def run_loop() -> None:
-    """Process all enabled tracked Instagram channels. Called by the scheduler thread."""
+def run_loop(channels_due: list[dict] | None = None) -> None:
+    """Process channels due for checking. Called by the session scheduler thread.
+
+    Pass the pre-assembled due list from the scheduler; None falls back to all
+    enabled channels (used by nothing in normal operation, kept as a safety net).
+    """
     from config import get_path_issues
     issues = get_path_issues()
     if issues:
@@ -180,12 +199,12 @@ def run_loop() -> None:
     _videos_before = db.count_downloaded_videos()
 
     _stop_event.clear()
-    _log("=== Instagram loop started ===")
-    channels   = db.get_all_channels()
+    channels   = channels_due if channels_due is not None else db.get_all_channels()
+    _log(f"=== Instagram session started: {len(channels)} channel(s) due ===")
     _completed = 0
 
     if not channels:
-        _log("No channels configured -- nothing to do.")
+        _log("No channels due -- nothing to do.")
     else:
         try:
             _completed = process_all_channels(channels, _log, _set_current_channel, _stop_event) or 0
@@ -195,7 +214,7 @@ def run_loop() -> None:
     last_run_end  = datetime.now(timezone.utc).isoformat()
     duration_secs = round(time.monotonic() - _loop_start)
     new_videos    = db.count_downloaded_videos() - _videos_before
-    _log(f"=== Instagram loop complete: {_completed}/{len(channels)} channel(s), {new_videos} new video(s) ===")
+    _log(f"=== Instagram session complete: {_completed}/{len(channels)} channel(s), {new_videos} new video(s) ===")
     with _state_lock:
         loop_state["running"]                = False
         loop_state["last_run_end"]           = last_run_end

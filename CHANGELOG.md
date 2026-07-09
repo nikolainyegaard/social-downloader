@@ -14,6 +14,11 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Changed
 - Header cookies pill is now platform-aware: it reflects the authentication state of the active platform tab (TikTok cookies, Instagram session, Twitter cookies), hides on YouTube, and opens the matching Settings section when clicked
+- Instagram and Twitter loops now use the TikTok-style session scheduler: check sessions are spread randomly across each 24-hour window, and each session only processes creators whose per-creator interval has come due (starred 6h, active 24h, inactive 72h by default; configurable per platform in Settings)
+- Instagram and Twitter sessions shuffle the due list and add random gaps between creators instead of hammering profiles back to back
+- Settings > Instagram and Settings > Twitter: the single loop interval field is replaced by the Loop Schedule panel (sessions per day plus starred/active/inactive check intervals); the `INSTAGRAM_LOOP_INTERVAL_MINUTES` and `TWITTER_LOOP_INTERVAL_MINUTES` env vars are replaced by `*_SESSIONS_PER_DAY` and `*_CHECK_HOURS` variables
+
+## [0.4.0] - 2026-06-29
 
 ### Added
 - OAuth2/OIDC authentication: configure and enable via Settings > Authentication; works with Authentik and any standard OIDC provider; disabled by default so existing deployments are unaffected

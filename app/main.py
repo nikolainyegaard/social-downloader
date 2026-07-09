@@ -29,10 +29,9 @@ from platforms.youtube import loop as youtube_loop
 from platforms.youtube.loop import LOOP_INTERVAL_MINUTES as YOUTUBE_LOOP_INTERVAL_MINUTES
 from platforms.instagram import database as instagram_db
 from platforms.instagram import loop as instagram_loop
-from platforms.instagram.loop import LOOP_INTERVAL_MINUTES as INSTAGRAM_LOOP_INTERVAL_MINUTES
 from platforms.twitter import database as twitter_db
 from platforms.twitter import loop as twitter_loop
-from platforms.twitter.loop import LOOP_INTERVAL_MINUTES as TWITTER_LOOP_INTERVAL_MINUTES
+import scheduling
 from web import create_app
 from backup import start_backup_thread
 
@@ -161,6 +160,12 @@ _POLLING_ENDPOINTS = (
     '"GET /api/youtube/status HTTP',
     '"GET /api/youtube/queue HTTP',
     '"GET /api/youtube/channels HTTP',
+    '"GET /api/instagram/status HTTP',
+    '"GET /api/instagram/queue HTTP',
+    '"GET /api/instagram/channels HTTP',
+    '"GET /api/twitter/status HTTP',
+    '"GET /api/twitter/queue HTTP',
+    '"GET /api/twitter/channels HTTP',
 )
 
 class _SuppressPolling(logging.Filter):
@@ -352,58 +357,16 @@ def _sound_loop_thread():
         run_sound_loop()
 
 
-# ── Instagram loop scheduler ─────────────────────────────────────────────────
+# ── Instagram and Twitter loop schedulers ─────────────────────────────────────
+# Both use the shared session-based scheduler in scheduling.py (same model as
+# the TikTok user loop: N sessions per 24h window, per-channel due times).
 
 def _instagram_loop_thread():
-    while True:
-        interval_minutes = int(instagram_db.get_setting("loop_interval_minutes", INSTAGRAM_LOOP_INTERVAL_MINUTES))
-        next_at_ts = time.time() + interval_minutes * 60
-        instagram_loop.set_next_run(datetime.fromtimestamp(next_at_ts, tz=timezone.utc).isoformat())
-        print(
-            f"{_ts()} Instagram loop sleeping {interval_minutes} min"
-            f" until {datetime.fromtimestamp(next_at_ts).strftime('%H:%M:%S')}."
-        )
+    scheduling.run_session_scheduler("instagram", instagram_db, instagram_loop)
 
-        remaining = next_at_ts - time.time()
-        triggered = instagram_loop.trigger_event.wait(timeout=max(remaining, 0))
-        instagram_loop.trigger_event.clear()
-
-        if instagram_loop.check_and_clear_reschedule():
-            print(f"{_ts()} Instagram loop: interval changed, rescheduling.")
-            continue
-
-        if triggered:
-            print(f"{_ts()} Instagram loop: manual trigger received.")
-
-        instagram_loop.set_next_run(None)
-        instagram_loop.run_loop()
-
-
-# ── Twitter loop scheduler ────────────────────────────────────────────────────
 
 def _twitter_loop_thread():
-    while True:
-        interval_minutes = int(twitter_db.get_setting("loop_interval_minutes", TWITTER_LOOP_INTERVAL_MINUTES))
-        next_at_ts = time.time() + interval_minutes * 60
-        twitter_loop.set_next_run(datetime.fromtimestamp(next_at_ts, tz=timezone.utc).isoformat())
-        print(
-            f"{_ts()} Twitter loop sleeping {interval_minutes} min"
-            f" until {datetime.fromtimestamp(next_at_ts).strftime('%H:%M:%S')}."
-        )
-
-        remaining = next_at_ts - time.time()
-        triggered = twitter_loop.trigger_event.wait(timeout=max(remaining, 0))
-        twitter_loop.trigger_event.clear()
-
-        if twitter_loop.check_and_clear_reschedule():
-            print(f"{_ts()} Twitter loop: interval changed, rescheduling.")
-            continue
-
-        if triggered:
-            print(f"{_ts()} Twitter loop: manual trigger received.")
-
-        twitter_loop.set_next_run(None)
-        twitter_loop.run_loop()
+    scheduling.run_session_scheduler("twitter", twitter_db, twitter_loop)
 
 
 # ── YouTube loop scheduler ────────────────────────────────────────────────────
@@ -581,7 +544,9 @@ if __name__ == "__main__":
         active_secs=ACTIVE_CHECK_HOURS * 3600,
         inactive_secs=INACTIVE_CHECK_HOURS * 3600,
     )
-    print(f"{_ts()} Startup: activity scores computed for all users.")
+    for _platform, _pdb in (("instagram", instagram_db), ("twitter", twitter_db)):
+        scheduling.recompute_activity_scores(_pdb, *scheduling.get_check_intervals(_pdb, _platform))
+    print(f"{_ts()} Startup: activity scores computed for all creators.")
 
     app = create_app()
 

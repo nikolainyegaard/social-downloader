@@ -349,10 +349,7 @@ async function twDeleteCookies()        { return _cookiesDelete('twitter', 'twCo
 
 async function loadTwSettings() {
   twLoadCookies();
-  const { ok, data } = await apiJSON('/api/twitter/settings');
-  if (!ok) return;
-  const el = document.getElementById('twLoopIntervalInput');
-  if (el) el.value = data.loop_interval_minutes;
+  return _scheduleSettingsLoad('twitter', 'twSettings');
 }
 
 // ── Diagnostics ───────────────────────────────────────────────────────────────
@@ -360,16 +357,7 @@ async function loadTwSettings() {
 function twDiagRun()  { _platformDiagRun('twitter', 'twDiag'); }
 function twDiagCopy() { _platformDiagCopy('twDiag'); }
 
-async function twSaveLoopSettings() {
-  const val = parseInt(document.getElementById('twLoopIntervalInput')?.value, 10);
-  if (!val || val < 1) { showToast('Interval must be a positive integer.', { type: 'warning', duration: 4000 }); return; }
-  const { ok, data } = await apiJSON('/api/twitter/settings', {
-    method: 'PATCH',
-    body: JSON.stringify({ loop_interval_minutes: val }),
-  });
-  if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
-  showToast('Settings saved.', { type: 'success', duration: 2500 });
-}
+async function twSaveLoopSettings() { return _scheduleSettingsSave('twitter', 'twSettings'); }
 
 function twTriggerLoop() { return _triggerLoop('twTriggerBtn', '/api/twitter/trigger', 'Could not trigger loop'); }
 

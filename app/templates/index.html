@@ -971,16 +971,39 @@
 
         <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
 
-        <div class="settings-section-title">Loop Interval</div>
+        <div class="settings-section-title">Loop Schedule</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
-          Changes take effect at the next scheduled run.
+          Check sessions are spread randomly across each 24 hour window. Each session
+          processes only the profiles whose check interval has come due.
+          Changes take effect at the next scheduled session.
         </p>
-        <div style="display:flex;flex-direction:column;gap:12px;max-width:340px">
+        <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
           <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
-            <span>Profile loop every</span>
-            <div style="display:flex;align-items:center;gap:6px">
-              <input type="number" id="igLoopIntervalInput" min="1" max="9999" class="loop-interval-input" style="width:70px">
-              <span style="color:var(--muted)">min</span>
+            <span>Sessions per day</span>
+            <div class="loop-interval-field">
+              <input type="number" id="igSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
+              <span></span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Starred check interval</span>
+            <div class="loop-interval-field">
+              <input type="number" id="igSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
+              <span>h</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Active check interval</span>
+            <div class="loop-interval-field">
+              <input type="number" id="igSettingsActiveHours" min="1" max="168" class="loop-interval-input">
+              <span>h</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Inactive check interval</span>
+            <div class="loop-interval-field">
+              <input type="number" id="igSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
+              <span>h</span>
             </div>
           </label>
         </div>
@@ -1032,16 +1055,39 @@
 
         <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
 
-        <div class="settings-section-title">Loop Interval</div>
+        <div class="settings-section-title">Loop Schedule</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
-          Changes take effect at the next scheduled run.
+          Check sessions are spread randomly across each 24 hour window. Each session
+          processes only the accounts whose check interval has come due.
+          Changes take effect at the next scheduled session.
         </p>
-        <div style="display:flex;flex-direction:column;gap:12px;max-width:340px">
+        <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
           <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
-            <span>Account loop every</span>
-            <div style="display:flex;align-items:center;gap:6px">
-              <input type="number" id="twLoopIntervalInput" min="1" max="9999" class="loop-interval-input" style="width:70px">
-              <span style="color:var(--muted)">min</span>
+            <span>Sessions per day</span>
+            <div class="loop-interval-field">
+              <input type="number" id="twSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
+              <span></span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Starred check interval</span>
+            <div class="loop-interval-field">
+              <input type="number" id="twSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
+              <span>h</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Active check interval</span>
+            <div class="loop-interval-field">
+              <input type="number" id="twSettingsActiveHours" min="1" max="168" class="loop-interval-input">
+              <span>h</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+            <span>Inactive check interval</span>
+            <div class="loop-interval-field">
+              <input type="number" id="twSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
+              <span>h</span>
             </div>
           </label>
         </div>

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
+import random
 import threading
+import time
 from typing import Callable
 
 from platforms.instagram import database as db
 from platforms.instagram import api
+from scheduling import channel_gap_secs, get_check_intervals, set_channel_next_check
 from thumbnailer import cache_avatar
 from config import MEDIA_DIR
 
@@ -20,18 +23,31 @@ def process_all_channels(
     set_current: Callable[[str | None], None] | None = None,
     stop_event: threading.Event | None = None,
 ) -> int:
-    """Process all tracked Instagram profiles. Returns count of successful runs."""
+    """Process one session of due Instagram profiles. Returns count of successful runs."""
     n = db.backfill_upload_dates()
     if n:
         log(f"  Backfilled upload_date for {n} post(s) from stored metadata")
+
+    high_secs, active_secs, _ = get_check_intervals(db, "instagram")
+    random.shuffle(channels)
     completed = 0
-    for channel in channels:
+    for i, channel in enumerate(channels):
         if stop_event and stop_event.is_set():
             log("=== Instagram loop stopped by request ===")
             break
+        if i > 0:
+            gap = channel_gap_secs("instagram")
+            if stop_event:
+                stop_event.wait(gap)
+            else:
+                time.sleep(gap)
         try:
             process_single_channel(channel, log, set_current)
             completed += 1
+            interval = channel.get("check_interval_secs") or (
+                high_secs if channel.get("starred") else active_secs
+            )
+            set_channel_next_check(db, channel["channel_id"], int(time.time()) + interval)
         except Exception as e:
             log(f"Unhandled error for @{channel.get('handle', '?')}: {e}")
     return completed
