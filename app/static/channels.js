@@ -475,7 +475,7 @@ function initChannelApp(cfg) {
       if (newLines.length !== logLines.length || (logLines.length && logLines[logLines.length - 1] !== newLines[newLines.length - 1])) {
         logLines = newLines;
         const auto = _el('AutoScroll')?.checked !== false;
-        logBody.innerHTML = logLines.map(l => `<div class="log-line">${esc(l)}</div>`).join('');
+        logBody.innerHTML = logLines.map(l => `<div class="log-line ${_logLineClass(l)}">${esc(l)}</div>`).join('');
         if (auto) logBody.scrollTop = logBody.scrollHeight;
       }
     }

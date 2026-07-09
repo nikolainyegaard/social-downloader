@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import glob as _glob
+import json
 import os
 import queue as _queue_module
 import re
@@ -363,9 +364,15 @@ def debug_channel_videos():
     if not channel_id:
         return jsonify({"error": "channel_id is required"}), 400
     try:
-        from platforms.youtube.api import _raw_fetch_entries
+        from platforms.youtube.api import _raw_fetch_entries, fetch_channel_info
+        try:
+            profile = fetch_channel_info(f"https://www.youtube.com/channel/{channel_id}")
+            if profile.get("raw_channel_data"):
+                profile["raw_channel_data"] = json.loads(profile["raw_channel_data"])
+        except Exception as pe:
+            profile = {"error": str(pe)}
         entries = _raw_fetch_entries(channel_id, limit=5)
-        return jsonify({"ok": True, "entries": entries})
+        return jsonify({"ok": True, "profile": profile, "entries": entries})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

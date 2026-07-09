@@ -656,6 +656,17 @@ function _trackingBadge(tracking_enabled) {
     : { cls: 'active',   label: 'Tracked' };
 }
 
+// Log console line colorization, shared by the TikTok and channel platform log viewers.
+function _logLineClass(line) {
+  if (/=== .+ (started|complete|aborted|stopped)/i.test(line))                            return 'log-sep';
+  if (/\]\s+Processing @/.test(line) || /\[sound\] Processing sound/i.test(line))         return 'log-user';
+  if (/error|failed|unexpected/i.test(line))                                              return 'log-err';
+  if (/warn|deleted|corrupt/i.test(line))                                                 return 'log-warn';
+  if (/download|saved/i.test(line))                                                       return 'log-dl';
+  if (/Profile change:|Username changed:|Handle changed:|avatar changed|Account (banned|restored|recovered)|Private account|\[sound\] Discovered/i.test(line)) return 'log-profile';
+  return '';
+}
+
 const LOCK_SVG = `<svg class="lock-icon" viewBox="0 0 48 48" fill="currentColor" aria-hidden="true"><path d="M24 8.5a5.5 5.5 0 0 1 5.5 5.5v4.5h-11V14A5.5 5.5 0 0 1 24 8.5Zm8.5 10V14a8.5 8.5 0 0 0-17 0v4.5H11A2.5 2.5 0 0 0 8.5 21v19a2.5 2.5 0 0 0 2.5 2.5h26a2.5 2.5 0 0 0 2.5-2.5V21a2.5 2.5 0 0 0-2.5-2.5h-4.5Zm-21 3h25v18h-25v-18Z"/></svg>`;
 
 function _fmtLastChecked(ts) {

@@ -33,6 +33,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Twitter and Instagram avatars are now cached and shown on creator cards; the avatar cache only supported TikTok and YouTube, so Twitter profile fetches silently dropped the profile picture
 - YouTube no longer reports a false handle change to an empty value on every loop: the channel profile fetch could return an unresolved result with no metadata, and an empty field is now treated as missing instead of a change
 - YouTube channel display names no longer fall back to the channel ID; a sparse profile fetch also no longer wipes a stored display name or description on any channel platform
+- YouTube profile fetches now work for channels without a videos tab (e.g. shorts-only channels): those returned no metadata at all from the plain channel URL, which was the source of the empty handle and channel-ID display name bugs; the fetch now uses the /featured tab with a fallback
+- Twitter, Instagram, and YouTube log consoles now colorize lines (session separators, processing, errors, warnings, downloads, profile changes) like the TikTok log console
+- YouTube Diagnostics now also returns the parsed channel profile and its raw metadata alongside the video entries
 
 ## [0.4.0] - 2026-06-29
 

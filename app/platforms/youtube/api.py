@@ -45,19 +45,40 @@ def _to_url(raw: str) -> str:
 def fetch_channel_info(url_or_handle: str) -> dict:
     """Fetch channel metadata. Returns a dict with channel_id, handle, display_name, raw_channel_data, etc.
 
-    Uses a processed flat extraction limited to one playlist item: process=False
-    can return an unresolved url reference with no channel metadata, which
-    caused empty handles and missing display names. Processing resolves it;
-    lazy_playlist + playlist_items keeps it to a single page fetch.
+    Uses a processed flat extraction limited to one playlist item; lazy_playlist
+    + playlist_items keeps it to a single page fetch. The explicit /featured tab
+    is tried first: a tabless channel or @handle URL resolves to a metadata-less
+    husk (title = channel ID, everything else null) when the channel has no
+    videos tab (e.g. shorts-only channels), while /featured always carries the
+    channel metadata.
     """
     url = _to_url(url_or_handle)
     ydl_opts = {"quiet": True, "no_warnings": True, "extract_flat": True,
                 "playlist_items": "1", "lazy_playlist": True}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-    if not info:
-        raise ValueError(f"No channel info returned for: {url_or_handle}")
-    return _parse_channel(info)
+
+    urls = [url]
+    if not re.search(r"/(featured|videos|shorts|streams|live|playlists|community|about)/?$", url):
+        urls.insert(0, url.rstrip("/") + "/featured")
+
+    parsed:   dict | None      = None
+    last_exc: Exception | None = None
+    for u in urls:
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(u, download=False)
+        except Exception as e:
+            last_exc = e
+            continue
+        if not info:
+            continue
+        parsed = _parse_channel(info)
+        if parsed.get("handle") or parsed.get("display_name"):
+            return parsed
+    if parsed is not None:
+        return parsed
+    if last_exc is not None:
+        raise last_exc
+    raise ValueError(f"No channel info returned for: {url_or_handle}")
 
 
 def _parse_channel(info: dict) -> dict:
