@@ -5,8 +5,34 @@ const PLATFORMS = [
   { id: 'twitter',   label: 'Twitter'   },
 ];
 
+// ── Header auth pill ──────────────────────────────────────────────────────────
+// Each platform app reports its auth state via setHdrAuth(); the header pill
+// shows the state for the active platform tab. Platforms that never call
+// setHdrAuth (YouTube needs no authentication) get no pill.
+
+const _hdrAuth = {};  // platform -> {present, label}
+let _activePlatform = 'tiktok';
+
+function setHdrAuth(platform, present, label) {
+  _hdrAuth[platform] = { present, label };
+  _updateHdrAuthPill();
+}
+
+function _updateHdrAuthPill() {
+  const pill = document.getElementById('hdrCookiePill');
+  const txt  = document.getElementById('hdrCookiePillText');
+  if (!pill) return;
+  const state = _hdrAuth[_activePlatform];
+  if (!state) { pill.style.display = 'none'; return; }
+  pill.style.display = '';
+  pill.className     = `cookie-pill ${state.present ? 'present' : 'absent'}`;
+  if (txt) txt.textContent = state.label;
+}
+
 function switchPlatform(name) {
   if (!PLATFORMS.some(p => p.id === name)) name = 'tiktok';
+  _activePlatform = name;
+  _updateHdrAuthPill();
   history.replaceState(null, '', '#' + name);
   document.querySelectorAll('.platform-tab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.platform === name);
@@ -46,6 +72,84 @@ function switchSettingsPlatformTab(sectionId, platformId) {
     if (btn)  btn.classList.toggle('active', active);
     if (pane) pane.style.display = active ? '' : 'none';
   });
+}
+
+// ── Cookies panel (shared by cookies-based platforms) ─────────────────────────
+// Renders into elements named {idPrefix}Pill, {idPrefix}PillText, {idPrefix}Meta,
+// {idPrefix}DeleteBtn. Also feeds the header auth pill.
+
+function _cookiesRender(platform, idPrefix, info) {
+  const timeStr = (info.present && info.updated_at)
+    ? `Uploaded ${(() => { const h = Math.round((Date.now() - info.updated_at * 1000) / 3600000); return h < 24 ? `${h}h ago` : `${Math.round(h/24)}d ago`; })()}`
+    : '';
+  const metaStr = info.present
+    ? [timeStr, `${(info.size_bytes / 1024).toFixed(1)} KB`].filter(Boolean).join('  ·  ')
+    : '';
+
+  const pill    = document.getElementById(idPrefix + 'Pill');
+  const pillTxt = document.getElementById(idPrefix + 'PillText');
+  const meta    = document.getElementById(idPrefix + 'Meta');
+  const delBtn  = document.getElementById(idPrefix + 'DeleteBtn');
+  if (pill)    { pill.className = info.present ? 'cookie-pill present' : 'cookie-pill absent'; }
+  if (pillTxt) { pillTxt.textContent = info.present ? 'Cookies loaded' : 'No cookies file'; }
+  if (meta)    { meta.textContent = metaStr; }
+  if (delBtn)  { delBtn.style.display = info.present ? '' : 'none'; }
+
+  setHdrAuth(platform, !!info.present, info.present ? 'Cookies' : 'No cookies');
+}
+
+async function _cookiesLoad(platform, idPrefix) {
+  const { ok, data } = await apiJSON(`/api/${platform}/cookies`);
+  if (ok) _cookiesRender(platform, idPrefix, data);
+}
+
+async function _cookiesUpload(platform, idPrefix, input) {
+  if (!input.files.length) return;
+  const form = new FormData();
+  form.append('file', input.files[0]);
+  input.value = '';
+
+  const r    = await fetch(`/api/${platform}/cookies`, { method: 'POST', body: form });
+  const data = await r.json().catch(() => ({}));
+  if (r.ok) {
+    _cookiesRender(platform, idPrefix, data);
+  } else {
+    showToast(data.error || 'Upload failed', { type: 'error' });
+  }
+}
+
+async function _cookiesDelete(platform, idPrefix) {
+  if (!confirm('Remove the stored cookies file?')) return;
+  const { ok } = await apiJSON(`/api/${platform}/cookies`, { method: 'DELETE' });
+  if (ok) _cookiesLoad(platform, idPrefix);
+}
+
+// ── API diagnostics pane (shared) ─────────────────────────────────────────────
+// Elements: {idPrefix}Input, {idPrefix}Action, {idPrefix}RunBtn, {idPrefix}Output.
+
+function _platformDiagRun(platform, idPrefix) {
+  const handle = (document.getElementById(idPrefix + 'Input').value || '').trim();
+  const action = document.getElementById(idPrefix + 'Action').value;
+  const btn    = document.getElementById(idPrefix + 'RunBtn');
+  const out    = document.getElementById(idPrefix + 'Output');
+  if (!handle) { out.textContent = 'Enter a handle first.'; return; }
+  btn.disabled    = true;
+  btn.textContent = 'Running...';
+  out.textContent = 'Fetching...';
+  fetch(`/api/${platform}/diagnostics`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ handle, action }),
+  })
+    .then(r    => r.json())
+    .then(data => { out.textContent = JSON.stringify(data, null, 2); })
+    .catch(e   => { out.textContent = 'Error: ' + e; })
+    .finally(() => { btn.disabled = false; btn.textContent = 'Run'; });
+}
+
+function _platformDiagCopy(idPrefix) {
+  const text = document.getElementById(idPrefix + 'Output').textContent;
+  navigator.clipboard.writeText(text).catch(() => {});
 }
 
 window.addEventListener('hashchange', () => {

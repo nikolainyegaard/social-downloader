@@ -345,6 +345,7 @@ function igClearLog() {
 async function loadIgSessionStatus() {
   const { ok, data } = await apiJSON('/api/instagram/session');
   if (!ok) return;
+  setHdrAuth('instagram', !!data.logged_in, data.logged_in ? 'Logged in' : 'Not logged in');
   const pill      = document.getElementById('igSessionPill');
   const pillTxt   = document.getElementById('igSessionPillText');
   const logoutBtn = document.getElementById('igSessionLogoutBtn');
@@ -1068,30 +1069,8 @@ document.addEventListener('keydown', e => {
 
 // ── Diagnostics ───────────────────────────────────────────────────────────────
 
-function igDiagRun() {
-  const handle = (document.getElementById('igDiagInput').value || '').trim();
-  const action = document.getElementById('igDiagAction').value;
-  const btn    = document.getElementById('igDiagRunBtn');
-  const out    = document.getElementById('igDiagOutput');
-  if (!handle) { out.textContent = 'Enter a handle first.'; return; }
-  btn.disabled    = true;
-  btn.textContent = 'Running...';
-  out.textContent = 'Fetching...';
-  fetch('/api/instagram/diagnostics', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ handle, action }),
-  })
-    .then(r    => r.json())
-    .then(data => { out.textContent = JSON.stringify(data, null, 2); })
-    .catch(e   => { out.textContent = 'Error: ' + e; })
-    .finally(() => { btn.disabled = false; btn.textContent = 'Run'; });
-}
-
-function igDiagCopy() {
-  const text = document.getElementById('igDiagOutput').textContent;
-  navigator.clipboard.writeText(text).catch(() => {});
-}
+function igDiagRun()  { _platformDiagRun('instagram', 'igDiag'); }
+function igDiagCopy() { _platformDiagCopy('igDiag'); }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

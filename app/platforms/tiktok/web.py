@@ -18,8 +18,8 @@ from flask import Blueprint, jsonify, request, send_file
 from platforms.tiktok import database as db
 from config import DATA_DIR, MEDIA_DIR, CHROME_EXECUTABLE
 from platforms.tiktok.config import (
-    get_ms_token, get_cookies_flat, cookies_info,
-    COOKIES_PATH, COOKIES_TIMESTAMP_PATH, AVATARS_DIR,
+    get_ms_token, get_cookies_flat,
+    COOKIES_PATH, AVATARS_DIR,
     USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES,
     SESSIONS_PER_DAY, HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
     INACTIVE_CHECK_HOURS, STATS_REFRESH_DAYS,
@@ -448,36 +448,8 @@ def _run_cleanup() -> None:
 
 # Cookie API
 
-@tiktok_bp.route("/cookies", methods=["GET"])
-def get_cookies():
-    return jsonify(cookies_info())
-
-
-@tiktok_bp.route("/cookies", methods=["POST"])
-def upload_cookies():
-    if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-    f = request.files["file"]
-    if not f.filename:
-        return jsonify({"error": "Empty filename"}), 400
-
-    from platforms.tiktok.config import TIKTOK_DATA_DIR
-    os.makedirs(TIKTOK_DATA_DIR, exist_ok=True)
-    if os.path.exists(COOKIES_PATH):
-        os.remove(COOKIES_PATH)
-    f.save(COOKIES_PATH)
-    with open(COOKIES_TIMESTAMP_PATH, "w", encoding="utf-8") as ts_f:
-        ts_f.write(str(int(time.time())))
-    return jsonify({"ok": True, **cookies_info()})
-
-
-@tiktok_bp.route("/cookies", methods=["DELETE"])
-def delete_cookies():
-    if os.path.exists(COOKIES_PATH):
-        os.remove(COOKIES_PATH)
-    if os.path.exists(COOKIES_TIMESTAMP_PATH):
-        os.remove(COOKIES_TIMESTAMP_PATH)
-    return jsonify({"ok": True})
+from cookies import register_cookie_routes
+register_cookie_routes(tiktok_bp, "tiktok")
 
 
 # User API

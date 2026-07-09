@@ -6,7 +6,14 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-06-29
+### Added
+- Twitter account tracking backend: profile info, media timeline fetching, and media downloads via gallery-dl; accounts tracked by stable numeric user ID so handle changes are survived; retweets and quoted tweets are excluded
+- Twitter cookies management in Settings > Twitter: upload a cookies.txt from a logged-in x.com session; required for timeline access and sensitive media
+- Twitter pane in Settings > Diagnostics: fetch raw profile info or the first 5 media posts for any handle
+- Deletion tracking, undeletion, profile change history, and avatar archiving for Twitter accounts, matching the TikTok behaviour
+
+### Changed
+- Header cookies pill is now platform-aware: it reflects the authentication state of the active platform tab (TikTok cookies, Instagram session, Twitter cookies), hides on YouTube, and opens the matching Settings section when clicked
 
 ### Added
 - OAuth2/OIDC authentication: configure and enable via Settings > Authentication; works with Authentik and any standard OIDC provider; disabled by default so existing deployments are unaffected

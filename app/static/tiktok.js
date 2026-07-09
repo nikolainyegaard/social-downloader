@@ -20,56 +20,12 @@ let userFilter    = { priv: 'all', stat: 'all', star: 'all' };
 
 // ── Cookie management ─────────────────────────────────────────────────────────
 
-function renderCookies(info) {
-  const timeStr = (info.present && info.updated_at)
-    ? `Uploaded ${(() => { const h = Math.round((Date.now() - info.updated_at * 1000) / 3600000); return h < 24 ? `${h}h ago` : `${Math.round(h/24)}d ago`; })()}`
-    : '';
-  const metaStr = info.present
-    ? [timeStr, `${(info.size_bytes / 1024).toFixed(1)} KB`].filter(Boolean).join('  ·  ')
-    : '';
+// Shared panel logic lives in common.js (_cookiesRender and friends).
 
-  // Settings modal elements
-  const pill    = document.getElementById('cookiePill');
-  const pillTxt = document.getElementById('cookiePillText');
-  const meta    = document.getElementById('cookieMeta');
-  const delBtn  = document.getElementById('cookieDeleteBtn');
-  if (pill)    { pill.className = info.present ? 'cookie-pill present' : 'cookie-pill absent'; }
-  if (pillTxt) { pillTxt.textContent = info.present ? 'Cookies loaded' : 'No cookies file'; }
-  if (meta)    { meta.textContent = metaStr; }
-  if (delBtn)  { delBtn.style.display = info.present ? '' : 'none'; }
-
-  // Header pill
-  const hdrPill    = document.getElementById('hdrCookiePill');
-  const hdrPillTxt = document.getElementById('hdrCookiePillText');
-  if (hdrPill)    { hdrPill.className = `cookie-pill ${info.present ? 'present' : 'absent'}`; }
-  if (hdrPillTxt) { hdrPillTxt.textContent = info.present ? 'Cookies' : 'No cookies'; }
-}
-
-async function uploadCookies(input) {
-  if (!input.files.length) return;
-  const form = new FormData();
-  form.append('file', input.files[0]);
-  input.value = '';
-
-  const r    = await fetch('/api/tiktok/cookies', { method: 'POST', body: form });
-  const data = await r.json().catch(() => ({}));
-  if (r.ok) {
-    renderCookies(data);
-  } else {
-    showToast(data.error || 'Upload failed', { type: 'error' });
-  }
-}
-
-async function deleteCookies() {
-  if (!confirm('Remove the stored cookies file?')) return;
-  const { ok } = await apiJSON('/api/tiktok/cookies', { method: 'DELETE' });
-  if (ok) loadCookies();
-}
-
-async function loadCookies() {
-  const { ok, data } = await apiJSON('/api/tiktok/cookies');
-  if (ok) renderCookies(data);
-}
+function renderCookies(info)        { _cookiesRender('tiktok', 'cookie', info); }
+async function uploadCookies(input) { return _cookiesUpload('tiktok', 'cookie', input); }
+async function deleteCookies()      { return _cookiesDelete('tiktok', 'cookie'); }
+async function loadCookies()        { return _cookiesLoad('tiktok', 'cookie'); }
 
 // ── Statistics panel ─────────────────────────────────────────────────────────
 

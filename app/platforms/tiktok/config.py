@@ -52,41 +52,11 @@ def get_ms_token() -> str | None:
 
 def get_cookies_flat() -> dict:
     """Return cookies.txt as a flat {name: value} dict."""
-    result = {}
-    try:
-        with open(COOKIES_PATH, encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                if stripped.startswith("#HttpOnly_"):
-                    stripped = stripped[len("#HttpOnly_"):]
-                elif stripped.startswith("#"):
-                    continue
-                parts = stripped.split("\t")
-                if len(parts) != 7:
-                    continue
-                _domain, _flag, _path, _secure, _expiry, name, value = parts
-                result[str(name)] = str(value)
-    except FileNotFoundError:
-        pass
-    return result
+    from cookies import get_cookies_flat as _shared
+    return _shared("tiktok")
 
 
 def cookies_info() -> dict:
     """Return metadata about the current cookies file."""
-    if not os.path.exists(COOKIES_PATH):
-        return {"present": False}
-    stat = os.stat(COOKIES_PATH)
-    # Use explicit upload timestamp; never fall back to st_mtime which is
-    # unreliable on Docker volume mounts and resets on container restart.
-    try:
-        with open(COOKIES_TIMESTAMP_PATH, encoding="utf-8") as f:
-            uploaded_at = int(f.read().strip())
-    except (FileNotFoundError, ValueError):
-        uploaded_at = None
-    return {
-        "present":    True,
-        "updated_at": uploaded_at,
-        "size_bytes": stat.st_size,
-    }
+    from cookies import cookies_info as _shared
+    return _shared("tiktok")

@@ -6,3 +6,4 @@ requests
 authlib
 flask-session
 instaloader
+gallery-dl

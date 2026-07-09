@@ -20,7 +20,7 @@
       <span id="statusText">Idle</span>
     </span>
     <div class="header-meta">
-      <span class="cookie-pill absent" id="hdrCookiePill" style="cursor:pointer" onclick="openSettings('cookies')" title="Manage cookies in Settings">
+      <span class="cookie-pill absent" id="hdrCookiePill" style="cursor:pointer" onclick="openSettings(_activePlatform)" title="Manage authentication in Settings">
         <span class="dot"></span><span id="hdrCookiePillText">No cookies</span>
       </span>
       <span class="backfill-pill" id="hdrBackfillPill" style="display:none" onclick="openSettings('backfill')" title="Videos with missing stats">
@@ -991,6 +991,47 @@
 
       <!-- Twitter section -->
       <div id="ssec-twitter" style="display:none">
+        <div class="settings-section-title">Authentication</div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+          <span class="cookie-pill absent" id="twCookiePill">
+            <span class="dot"></span>
+            <span id="twCookiePillText">No cookies file</span>
+          </span>
+          <span class="cookie-meta" id="twCookieMeta"></span>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <label class="cookie-upload-label">
+              <input type="file" id="twCookieFileInput" accept=".txt,text/plain" style="display:none" onchange="twUploadCookies(this)">
+              Upload cookies.txt
+            </label>
+            <button class="btn-danger" id="twCookieDeleteBtn" onclick="twDeleteCookies()" style="display:none">Remove</button>
+          </div>
+        </div>
+        <div class="cookie-note">
+          Export cookies from a logged-in x.com session using the <strong>Get cookies.txt LOCALLY</strong> extension:
+          <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
+            <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
+               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+              <img src="/static/icons/chrome.svg" width="16" height="16" alt="">
+              Chrome
+            </a>
+            <a href="https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp"
+               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+              <img src="/static/icons/edge.svg" width="16" height="16" alt="">
+              Edge
+            </a>
+            <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/"
+               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+              <img src="/static/icons/firefox.svg" width="16" height="16" alt="">
+              Firefox
+            </a>
+          </div>
+          The file must be in Netscape format and include the <code>auth_token</code> and <code>ct0</code> cookies.
+          Twitter requires a logged-in session for timeline access; to fetch sensitive media the account
+          must have "Display media that may contain sensitive content" enabled in its settings.
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
+
         <div class="settings-section-title">Loop Interval</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
           Changes take effect at the next scheduled run.
@@ -1212,8 +1253,29 @@
         </div>
 
         <div id="diag-twitter" style="display:none">
-          <div class="settings-section-title">Twitter Diagnostics</div>
-          <div style="font-size:12px;color:var(--muted)">Not yet implemented.</div>
+          <div class="settings-section-title">API Diagnostics</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+            Run raw gallery-dl API calls and inspect the response. Requires uploaded Twitter cookies.
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+            <select id="twDiagAction" style="flex:1;min-width:160px">
+              <option value="profile">Profile info</option>
+              <option value="posts">First 5 posts</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:12px">
+            <input id="twDiagInput" class="text-input" type="text"
+                   placeholder="Twitter handle or profile URL"
+                   style="flex:1">
+            <button class="btn-primary" id="twDiagRunBtn" onclick="twDiagRun()" style="flex-shrink:0">Run</button>
+          </div>
+          <div id="twDiagOutputWrap" style="position:relative">
+            <pre id="twDiagOutput" class="diag-output">No output yet.</pre>
+            <button onclick="twDiagCopy()" title="Copy output" style="
+              position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
+              border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
+            ">Copy</button>
+          </div>
         </div>
 
         <div id="diag-youtube" style="display:none">

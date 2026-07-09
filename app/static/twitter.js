@@ -342,12 +342,23 @@ function twClearLog() {
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
+// Cookie panel logic is shared with TikTok via common.js.
+async function twLoadCookies()          { return _cookiesLoad('twitter', 'twCookie'); }
+async function twUploadCookies(input)   { return _cookiesUpload('twitter', 'twCookie', input); }
+async function twDeleteCookies()        { return _cookiesDelete('twitter', 'twCookie'); }
+
 async function loadTwSettings() {
+  twLoadCookies();
   const { ok, data } = await apiJSON('/api/twitter/settings');
   if (!ok) return;
   const el = document.getElementById('twLoopIntervalInput');
   if (el) el.value = data.loop_interval_minutes;
 }
+
+// ── Diagnostics ───────────────────────────────────────────────────────────────
+
+function twDiagRun()  { _platformDiagRun('twitter', 'twDiag'); }
+function twDiagCopy() { _platformDiagCopy('twDiag'); }
 
 async function twSaveLoopSettings() {
   const val = parseInt(document.getElementById('twLoopIntervalInput')?.value, 10);
