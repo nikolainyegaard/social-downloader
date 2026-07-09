@@ -133,6 +133,7 @@ const _SCHEDULE_FIELDS = [
   ['high_priority_check_hours', 'HighPriorityHours'],
   ['active_check_hours',        'ActiveHours'],
   ['inactive_check_hours',      'InactiveHours'],
+  ['full_refresh_days',         'FullRefreshDays'],
 ];
 
 async function _scheduleSettingsLoad(platform, idPrefix) {

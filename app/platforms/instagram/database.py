@@ -148,6 +148,7 @@ def _migrate_db(conn) -> bool:
         "ALTER TABLE channels ADD COLUMN last_video_at          INTEGER",
         "ALTER TABLE channels ADD COLUMN next_check_at          INTEGER",
         "ALTER TABLE channels ADD COLUMN check_interval_secs    INTEGER",
+        "ALTER TABLE channels ADD COLUMN last_full_refresh_at   INTEGER",
     ]
     for sql in migrations:
         try:

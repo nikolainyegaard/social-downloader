@@ -558,6 +558,13 @@
               <span>h</span>
             </div>
           </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
+            <span>Full check interval</span>
+            <div class="loop-interval-field">
+              <input type="number" id="ytSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
+              <span>d</span>
+            </div>
+          </label>
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
           <button class="btn-primary" onclick="ytSaveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
@@ -623,6 +630,13 @@
             <div class="loop-interval-field">
               <input type="number" id="igSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
+            <span>Full check interval</span>
+            <div class="loop-interval-field">
+              <input type="number" id="igSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
+              <span>d</span>
             </div>
           </label>
         </div>
@@ -707,6 +721,13 @@
             <div class="loop-interval-field">
               <input type="number" id="twSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
+            <span>Full check interval</span>
+            <div class="loop-interval-field">
+              <input type="number" id="twSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
+              <span>d</span>
             </div>
           </label>
         </div>

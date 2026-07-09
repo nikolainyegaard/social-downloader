@@ -10,10 +10,14 @@ from typing import Callable
 from platforms.youtube import database as db
 from platforms.youtube.api import fetch_channel_info, fetch_channel_videos
 from downloader import download_video, rename_creator_folder
-from scheduling import channel_gap_secs, get_check_intervals, set_channel_next_check
+from scheduling import (
+    channel_gap_secs, get_check_intervals, get_full_refresh_secs,
+    set_channel_last_full, set_channel_next_check,
+)
 from thumbnailer import cache_avatar, cache_banner
 
 _CONFIRM_THRESHOLD = 2
+_ABORT_AFTER_FAILURES = 3  # consecutive channel failures that abort the session (rate limit or auth wall)
 
 
 def _npost(n: int) -> str:
@@ -26,14 +30,22 @@ def process_all_channels(
     set_current: Callable[[str | None], None] | None = None,
     stop_event: threading.Event | None = None,
 ) -> int:
-    """Process one session of due YouTube channels. Returns the count of successful runs."""
+    """Process one session of due YouTube channels. Returns the count of successful runs.
+
+    Per-channel mode follows the TikTok cadence: quick check by default, full
+    (deletion-detecting) check once the channel's last full run is older than
+    full_refresh_days. Failed channels stay due; the session aborts after
+    consecutive failures so a rate limit or auth wall is not hammered.
+    """
     n = db.backfill_upload_dates()
     if n:
         log(f"  Backfilled upload_date for {n} video(s) from stored metadata")
 
     high_secs, active_secs, _ = get_check_intervals(db, "youtube")
+    full_secs = get_full_refresh_secs(db, "youtube")
     random.shuffle(channels)
     completed = 0
+    consecutive_failures = 0
     for i, channel in enumerate(channels):
         if stop_event and stop_event.is_set():
             log("=== YouTube loop stopped by request ===")
@@ -44,15 +56,33 @@ def process_all_channels(
                 stop_event.wait(gap)
             else:
                 time.sleep(gap)
+        now       = int(time.time())
+        last_full = channel.get("last_full_refresh_at")
+        mode      = "quick" if (last_full and now - last_full < full_secs) else "full"
         try:
-            process_single_channel(channel, log, set_current)
-            completed += 1
+            result = process_single_channel(channel, log, set_current, mode=mode)
+        except Exception as e:
+            log(f"Unhandled error for @{channel.get('handle', '?')}: {e}")
+            result = "failed"
+        if result == "failed":
+            # No next_check advance: the channel stays due and is retried next session
+            consecutive_failures += 1
+            if consecutive_failures >= _ABORT_AFTER_FAILURES:
+                log(f"=== YouTube session aborted: {consecutive_failures} consecutive failures (rate limit or auth issue?) ===")
+                break
+            continue
+        consecutive_failures = 0
+        completed += 1
+        if mode == "full":
+            set_channel_last_full(db, channel["channel_id"], int(time.time()))
+        if result == "deletions":
+            set_channel_next_check(db, channel["channel_id"], None)
+            log("  Deletion candidates found; scheduling ASAP re-check")
+        else:
             interval = channel.get("check_interval_secs") or (
                 high_secs if channel.get("starred") else active_secs
             )
             set_channel_next_check(db, channel["channel_id"], int(time.time()) + interval)
-        except Exception as e:
-            log(f"Unhandled error for @{channel.get('handle', '?')}: {e}")
     return completed
 
 
@@ -62,12 +92,16 @@ def process_single_channel(
     set_current: Callable[[str | None], None] | None = None,
     profile_only: bool = False,
     mode: str = "full",
-) -> None:
+) -> str:
     """Update profile, fetch video list, download new videos, track deletions.
 
     mode="quick" skips deletion detection and only picks up new videos; the
     yt-dlp flat extraction fetches the full list either way, so quick saves
     no API calls here, but the semantics match the other platforms.
+
+    Returns "ok", "deletions" (unconfirmed deletion candidates found; caller
+    schedules an ASAP re-check), or "failed" (video fetch failed; caller leaves
+    the channel due and counts it toward the session abort threshold).
     """
     channel_id = channel["channel_id"]
     handle     = channel["handle"]
@@ -91,17 +125,17 @@ def process_single_channel(
             log(f"  Profile fetch failed: {e}")
 
         if profile_only:
-            return
+            return "ok"
 
         if not channel.get("tracking_enabled", 1):
             log(f"  Video fetch skipped (tracking disabled for @{handle})")
-            return
+            return "ok"
 
         try:
             remote_videos = fetch_channel_videos(channel_id)
         except Exception as e:
             log(f"  Video fetch failed: {e}")
-            return
+            return "failed"
 
         remote_map = {v["video_id"]: v for v in remote_videos}
         remote_ids = set(remote_map)
@@ -111,6 +145,13 @@ def process_single_channel(
         new_ids       = remote_ids - known_ids
         deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
         undeleted_ids = (known_ids - active_ids) & remote_ids
+
+        # Deletion spike guard: a truncated listing looks like a mass deletion.
+        # Skip the increments this run and let the ASAP re-check verify.
+        deletion_spike = bool(deleted_ids) and len(deleted_ids) >= max(10, len(active_ids) // 4)
+        if deletion_spike:
+            log(f"  Deletion spike: {len(deleted_ids)} of {len(active_ids)} missing; skipping deletion marks this run (possible truncated listing)")
+            deleted_ids = set()
 
         pending_ids = db.get_pending_deletion_video_ids(channel_id)
         recovered   = pending_ids & remote_ids
@@ -153,17 +194,21 @@ def process_single_channel(
             else:
                 log(f"  Failed to download {vid_id}")
 
+        deletion_candidates = False
         for vid_id in deleted_ids:
             count = db.increment_video_pending_deletion(vid_id)
             if count >= _CONFIRM_THRESHOLD:
                 db.mark_video_deleted(vid_id)
                 log(f"  Marked deleted (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD}): {vid_id}")
             else:
+                deletion_candidates = True
                 log(f"  Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
 
         for vid_id in undeleted_ids:
             db.mark_video_undeleted(vid_id)
             log(f"  Marked undeleted: {vid_id}")
+
+        return "deletions" if (deletion_candidates or deletion_spike) else "ok"
 
     finally:
         if set_current:

@@ -31,6 +31,7 @@ def platform_defaults(platform: str) -> dict:
         "high_priority_check_hours": int(os.environ.get(f"{p}_HIGH_PRIORITY_CHECK_HOURS", 6)),
         "active_check_hours":        int(os.environ.get(f"{p}_ACTIVE_CHECK_HOURS", 24)),
         "inactive_check_hours":      int(os.environ.get(f"{p}_INACTIVE_CHECK_HOURS", 72)),
+        "full_refresh_days":         int(os.environ.get(f"{p}_FULL_REFRESH_DAYS", 7)),
         "session_gap_mean_secs":     int(os.environ.get(f"{p}_SESSION_GAP_MEAN_SECS", 90)),
     }
 
@@ -124,6 +125,21 @@ def set_channel_next_check(db, channel_id: str, next_check_at: int | None) -> No
         conn.execute(
             "UPDATE channels SET next_check_at = ? WHERE channel_id = ?",
             (next_check_at, channel_id),
+        )
+
+
+def get_full_refresh_secs(db, platform: str) -> int:
+    """Seconds between full (deletion-detecting) checks per channel; sessions run quick in between."""
+    d = platform_defaults(platform)
+    return int(db.get_setting("full_refresh_days", d["full_refresh_days"])) * 86400
+
+
+def set_channel_last_full(db, channel_id: str, ts: int) -> None:
+    """Stamp completion of a full check for a channel."""
+    with db.get_db() as conn:
+        conn.execute(
+            "UPDATE channels SET last_full_refresh_at = ? WHERE channel_id = ?",
+            (ts, channel_id),
         )
 
 

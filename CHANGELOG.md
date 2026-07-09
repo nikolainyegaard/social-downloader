@@ -23,7 +23,10 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - YouTube moved to the session scheduler: sessions spread across each 24 hour window, per-channel starred/active/inactive intervals, Next/Starred/Half/All trigger buttons, and the Loop Schedule settings panel; the `YOUTUBE_LOOP_INTERVAL_MINUTES` env var is replaced by `YOUTUBE_SESSIONS_PER_DAY` and `YOUTUBE_*_CHECK_HOURS` variables
 - YouTube sessions shuffle the due list and add random gaps between channels, matching the other platforms
 - Channel platform cards now match TikTok's users exactly: creator ID line, Quick and Full refresh buttons, and the Added / Last checked / Last saved meta footer; the detail modal gains the star, Quick, Full, and overflow menu buttons with the note field hidden behind "Add note"
-- Quick and Full run modes for Twitter, Instagram, and YouTube: Quick fetches only the newest posts and skips deletion detection; Full (the default, used by scheduled sessions) fetches the whole list and runs the complete diff
+- Quick and Full run modes for Twitter, Instagram, and YouTube: Quick fetches only the newest posts and skips deletion detection; Full fetches the whole list and runs the complete diff
+- Scheduled sessions on the channel platforms now use the TikTok quick/full cadence: quick checks by default, with a full deletion-detecting check per creator every N days (new "Full check interval" setting, default 7 days, env `*_FULL_REFRESH_DAYS`)
+- Full runs that find unconfirmed deletion candidates schedule an ASAP re-check; a deletion spike (25% or more of a creator's videos suddenly missing) skips deletion marks for that run to guard against truncated listings
+- Channel sessions abort after 3 consecutive creator failures instead of hammering a rate limit or auth wall; failed creators stay due and retry next session
 - Channel list APIs now return `last_saved` (most recent download) per creator
 
 ## [0.4.0] - 2026-06-29

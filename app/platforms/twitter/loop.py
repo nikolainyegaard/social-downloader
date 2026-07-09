@@ -186,10 +186,12 @@ def _run_worker() -> None:
                 process_single_channel(channel, _log, _set_current_channel, profile_only=profile_only, mode=mode)
                 _log(f"=== Manual {kind} run complete: {label} ===")
                 # Schedule the next check based on the channel's computed interval
-                from scheduling import get_check_intervals, set_channel_next_check
+                from scheduling import get_check_intervals, set_channel_last_full, set_channel_next_check
                 _high, _active, _ = get_check_intervals(db, "twitter")
                 _interval = channel.get("check_interval_secs") or (_high if channel.get("starred") else _active)
                 set_channel_next_check(db, channel_id, int(time.time()) + _interval)
+                if not profile_only and mode == "full":
+                    set_channel_last_full(db, channel_id, int(time.time()))
             else:
                 _log(f"Manual run: channel {channel_id} not found in DB")
         except Exception as e:

@@ -588,6 +588,7 @@ _SCHEDULE_KEYS = (
     "high_priority_check_hours",
     "active_check_hours",
     "inactive_check_hours",
+    "full_refresh_days",
 )
 
 
