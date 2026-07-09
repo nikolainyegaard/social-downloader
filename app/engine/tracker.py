@@ -1,55 +1,61 @@
-"""Instagram profile tracking."""
+"""Channel platform tracking: session processing, diffing, deletion detection.
+
+One tracker for all channel platforms. Everything platform-specific goes
+through the engine's adapter: profile fetch, post iteration, and the
+download-and-record sequence. The diff logic, quick/full cadence, deletion
+spike guard, and consecutive-failure abort are identical everywhere.
+"""
 
 from __future__ import annotations
 
-import os
 import random
 import threading
 import time
 from typing import Callable
 
-from platforms.instagram import database as db
-from platforms.instagram import api
 from scheduling import (
     channel_gap_secs, get_check_intervals, get_full_refresh_secs,
     set_channel_last_full, set_channel_next_check,
 )
-from thumbnailer import cache_avatar
-from config import MEDIA_DIR
+from thumbnailer import cache_avatar, cache_banner
 
-_CONFIRM_THRESHOLD = 2
-_QUICK_LIMIT       = 30  # posts fetched by a quick check; deletion detection needs a full run
+_CONFIRM_THRESHOLD    = 2
 _ABORT_AFTER_FAILURES = 3  # consecutive channel failures that abort the session (rate limit or auth wall)
 
 
 def process_all_channels(
+    engine,
     channels: list[dict],
     log: Callable[[str], None],
     set_current: Callable[[str | None], None] | None = None,
     stop_event: threading.Event | None = None,
 ) -> int:
-    """Process one session of due Instagram profiles. Returns count of successful runs.
+    """Process one session of due channels. Returns the count of successful runs.
 
-    Per-profile mode follows the TikTok cadence: quick check by default, full
-    (deletion-detecting) check once the profile's last full run is older than
-    full_refresh_days. Failed profiles stay due; the session aborts after
+    Per-channel mode follows the TikTok cadence: quick check by default, full
+    (deletion-detecting) check once the channel's last full run is older than
+    full_refresh_days. Failed channels stay due; the session aborts after
     consecutive failures so a rate limit or auth wall is not hammered.
     """
+    db       = engine.db
+    platform = engine.platform
+    noun     = engine.adapter.item_noun
+
     n = db.backfill_upload_dates()
     if n:
-        log(f"  Backfilled upload_date for {n} post(s) from stored metadata")
+        log(f"  Backfilled upload_date for {n} {noun}(s) from stored metadata")
 
-    high_secs, active_secs, _ = get_check_intervals(db, "instagram")
-    full_secs = get_full_refresh_secs(db, "instagram")
+    high_secs, active_secs, _ = get_check_intervals(db, platform)
+    full_secs = get_full_refresh_secs(db, platform)
     random.shuffle(channels)
     completed = 0
     consecutive_failures = 0
     for i, channel in enumerate(channels):
         if stop_event and stop_event.is_set():
-            log("=== Instagram loop stopped by request ===")
+            log(f"=== {engine.label} loop stopped by request ===")
             break
         if i > 0:
-            gap = channel_gap_secs("instagram")
+            gap = channel_gap_secs(platform)
             if stop_event:
                 stop_event.wait(gap)
             else:
@@ -58,15 +64,15 @@ def process_all_channels(
         last_full = channel.get("last_full_refresh_at")
         mode      = "quick" if (last_full and now - last_full < full_secs) else "full"
         try:
-            result = process_single_channel(channel, log, set_current, mode=mode)
+            result = process_single_channel(engine, channel, log, set_current, mode=mode)
         except Exception as e:
             log(f"Unhandled error for @{channel.get('handle', '?')}: {e}")
             result = "failed"
         if result == "failed":
-            # No next_check advance: the profile stays due and is retried next session
+            # No next_check advance: the channel stays due and is retried next session
             consecutive_failures += 1
             if consecutive_failures >= _ABORT_AFTER_FAILURES:
-                log(f"=== Instagram session aborted: {consecutive_failures} consecutive failures (rate limit or auth issue?) ===")
+                log(f"=== {engine.label} session aborted: {consecutive_failures} consecutive failures (rate limit or auth issue?) ===")
                 break
             continue
         consecutive_failures = 0
@@ -85,22 +91,27 @@ def process_all_channels(
 
 
 def process_single_channel(
+    engine,
     channel: dict,
     log: Callable[[str], None],
     set_current: Callable[[str | None], None] | None = None,
     profile_only: bool = False,
     mode: str = "full",
 ) -> str:
-    """Update profile, fetch post list, download new posts, track deletions.
+    """Update profile, fetch the post list, download new posts, track deletions.
 
-    mode="quick" fetches only the newest posts and skips deletion detection
-    (absence from a partial listing proves nothing); mode="full" fetches the
-    whole post list and runs the full diff.
+    mode="quick" fetches only the newest posts (adapter.quick_limit) and skips
+    deletion detection (absence from a partial listing proves nothing);
+    mode="full" fetches the whole list and runs the full diff.
 
     Returns "ok", "deletions" (unconfirmed deletion candidates found; caller
     schedules an ASAP re-check), or "failed" (post fetch failed; caller leaves
-    the profile due and counts it toward the session abort threshold).
+    the channel due and counts it toward the session abort threshold).
     """
+    db      = engine.db
+    adapter = engine.adapter
+    noun    = adapter.item_noun
+
     channel_id = channel["channel_id"]
     handle     = channel["handle"]
 
@@ -114,8 +125,8 @@ def process_single_channel(
         display_name = channel.get("display_name") or handle
 
         try:
-            info = api.fetch_profile_info(handle)
-            _update_profile(channel, info, log)
+            info = adapter.fetch_profile(channel)
+            _update_profile(engine, channel, info, log)
             handle       = info.get("handle") or handle
             display_name = info.get("display_name") or display_name
         except Exception as e:
@@ -125,20 +136,20 @@ def process_single_channel(
             return "ok"
 
         if not channel.get("tracking_enabled", 1):
-            log(f"  Post fetch skipped (tracking disabled for @{handle})")
+            log(f"  {noun.capitalize()} fetch skipped (tracking disabled for @{handle})")
             return "ok"
 
         try:
-            remote_posts: dict[str, dict] = {}
+            remote_posts: dict[str, dict]   = {}
             raw_posts:    dict[str, object] = {}
-            for post_dict, raw_post in api.iter_profile_posts(channel_id):
-                vid_id                = post_dict["video_id"]
-                remote_posts[vid_id]  = post_dict
-                raw_posts[vid_id]     = raw_post
-                if mode == "quick" and len(remote_posts) >= _QUICK_LIMIT:
+            for post_dict, raw_post in adapter.iter_posts(channel_id):
+                vid_id               = post_dict["video_id"]
+                remote_posts[vid_id] = post_dict
+                raw_posts[vid_id]    = raw_post
+                if mode == "quick" and adapter.quick_limit and len(remote_posts) >= adapter.quick_limit:
                     break
         except Exception as e:
-            log(f"  Post fetch failed: {e}")
+            log(f"  {noun.capitalize()} fetch failed: {e}")
             return "failed"
 
         remote_ids = set(remote_posts)
@@ -159,7 +170,7 @@ def process_single_channel(
         recovered   = pending_ids & remote_ids
         for vid_id in recovered:
             db.clear_video_pending_deletion(vid_id)
-            log(f"  Deletion check cleared: {vid_id} (back on Instagram)")
+            log(f"  Deletion check cleared: {vid_id} (back on {engine.label})")
 
         if new_ids:
             log(f"  New: {len(new_ids)}")
@@ -170,25 +181,12 @@ def process_single_channel(
         if not (new_ids or deleted_ids or undeleted_ids or recovered):
             log("  No changes.")
 
-        dest_dir = os.path.join(MEDIA_DIR, "instagram", f"@{handle}")
-
         for vid_id in sorted(new_ids):
-            v        = remote_posts[vid_id]
-            raw_post = raw_posts[vid_id]
             log(f"  Downloading {vid_id}...")
-            db.add_video(
-                vid_id, channel_id, v.get("title"),
-                v.get("upload_date"),
-                view_count=v.get("view_count"),
-                duration=v.get("duration"),
-                content_type=v.get("content_type", "video"),
+            adapter.download_item(
+                engine, channel_id, handle, display_name,
+                vid_id, remote_posts[vid_id], raw_posts[vid_id], log,
             )
-            file_path = api.download_post_media(raw_post, dest_dir)
-            if file_path:
-                db.update_video_downloaded(vid_id, file_path)
-                log(f"  Saved {vid_id} -> {file_path}")
-            else:
-                log(f"  Failed to download {vid_id} (recorded in DB)")
 
         deletion_candidates = False
         for vid_id in deleted_ids:
@@ -211,7 +209,9 @@ def process_single_channel(
             set_current(None)
 
 
-def _update_profile(channel: dict, info: dict, log: Callable[[str], None]) -> None:
+def _update_profile(engine, channel: dict, info: dict, log: Callable[[str], None]) -> None:
+    """Detect profile field changes, record them, and update the DB."""
+    db         = engine.db
     channel_id = channel["channel_id"]
 
     field_map = {
@@ -225,7 +225,7 @@ def _update_profile(channel: dict, info: dict, log: Callable[[str], None]) -> No
             if field == "handle":
                 log(f"  Handle changed: @{old} -> @{new}")
                 from downloader import rename_creator_folder
-                if rename_creator_folder("instagram", old, new):
+                if rename_creator_folder(engine.platform, old, new):
                     db.rename_channel_video_paths(channel_id, old, new)
                     log("  Folder renamed and DB paths updated")
             else:
@@ -246,8 +246,14 @@ def _update_profile(channel: dict, info: dict, log: Callable[[str], None]) -> No
 
     if info.get("avatar_url"):
         try:
-            result = cache_avatar(channel_id, info["avatar_url"], "instagram")
+            result = cache_avatar(channel_id, info["avatar_url"], engine.platform, db_obj=db)
             if result == "changed":
                 log("  Profile change: avatar changed")
         except Exception as e:
             log(f"  Avatar cache failed: {e}")
+
+    if engine.adapter.has_banner and info.get("banner_url"):
+        try:
+            cache_banner(channel_id, info["banner_url"], engine.platform, db_obj=db)
+        except Exception as e:
+            log(f"  Banner cache failed: {e}")

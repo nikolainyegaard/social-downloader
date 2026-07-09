@@ -219,7 +219,7 @@ function initChannelApp(cfg) {
       <img class="video-thumb" src="${API}/videos/${id}/thumbnail" alt="" loading="lazy"
            onerror="this.style.opacity='.15'"
            onclick="event.stopPropagation();${_openMediaFor(v)}" title="${isImg ? 'View photo' : 'Play video'}" style="cursor:pointer">
-      ${isImg ? '' : thumbBadge(v)}
+      ${isImg ? _photoBadge : thumbBadge(v)}
     </div>`;
   }
 
@@ -287,7 +287,7 @@ function initChannelApp(cfg) {
     ],
     viewVideoFilter: cfg.viewVideoFilter || ((view, vids) => vids),
     gridClassFn:     cfg.gridClassFn || (() => ''),
-    typeIconFn:      cfg.typeIconFn || (v => _isImage(v) ? '' : _playBadge),
+    typeIconFn:      cfg.typeIconFn || (v => (v.type === 'photo' || _isImage(v)) ? _vgridPhotoIcon : _vgridPlayIcon),
     gridId:       `${P}VideoGrid`,
     hasPhistBtn:  true,
     phistBtnFn:   `${P}OpenProfileHistory`,
@@ -971,7 +971,8 @@ function initChannelApp(cfg) {
   async function _loadModalVideos(channelId) {
     const { ok, data } = await apiJSON(`${API}/channels/${channelId}/videos`);
     if (!ok || modalCreatorId !== channelId) return;
-    _creatorState.videos = data.map(v => ({ ...v, description: v.title || v.description }));
+    _creatorState.videos = data.map(v => ({ ...v, description: v.title || v.description,
+      type: (v.content_type === 'image' || _isImage(v)) ? 'photo' : 'video' }));
 
     if (modalPendingHighlight) {
       const { videoId, filter: mFilter, sortField, sortDir } = modalPendingHighlight;

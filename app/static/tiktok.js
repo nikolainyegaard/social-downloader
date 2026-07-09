@@ -2402,8 +2402,6 @@ function _renderHistoryEntries() {
 }
 
 
-const _vgridPhotoIcon = `<svg width="12" height="12" viewBox="0 0 13 13" fill="none" stroke="rgba(255,255,255,.9)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg>`;
-const _photoBadge = `<span style="${_badgeStyle}"><svg width="18" height="18" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg></span>`;
 
 function _thumbCell(v) {
   const id    = esc(v.video_id);
