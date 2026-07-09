@@ -315,7 +315,9 @@ function closeSettings() {
 
 function switchSettingsSection(name) {
   _settingsSection = name;
-  ['tiktok', 'youtube', 'jobs', 'diag', 'database', 'auth'].forEach(s => {
+  // Every settings section needs an entry here or its ssec-* div will never be shown.
+  // When adding a new section: add the id to this list AND add ssec-*/snav-* elements in index.html.
+  ['tiktok', 'youtube', 'instagram', 'twitter', 'jobs', 'diag', 'database', 'auth'].forEach(s => {
     document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
     document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
   });
