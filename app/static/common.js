@@ -1,8 +1,8 @@
 const PLATFORMS = [
   { id: 'tiktok',    label: 'TikTok'    },
-  { id: 'youtube',   label: 'YouTube'   },
-  { id: 'instagram', label: 'Instagram' },
   { id: 'twitter',   label: 'Twitter'   },
+  { id: 'instagram', label: 'Instagram' },
+  { id: 'youtube',   label: 'YouTube'   },
 ];
 
 // ── Header auth pill ──────────────────────────────────────────────────────────
@@ -156,6 +156,40 @@ async function _scheduleSettingsSave(platform, idPrefix) {
   const { ok, data } = await apiJSON(`/api/${platform}/settings`, { method: 'PATCH', body: JSON.stringify(body) });
   if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
   showToast('Settings saved.', { type: 'success', duration: 2500 });
+}
+
+// ── Loop panel helpers (shared) ───────────────────────────────────────────────
+
+// Render session-time pills into el: done (past), running (current), next (upcoming).
+function _renderSessionPills(el, sessions, running, manualRun) {
+  if (!el) return;
+  if (!sessions || !sessions.length) { el.innerHTML = ''; return; }
+  const nowMs = Date.now();
+  let foundNext = false;
+  el.innerHTML = sessions.map(isoStr => {
+    const ts   = new Date(isoStr).getTime();
+    const time = new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    let cls = 'loop-session-pill';
+    if (running && !manualRun && !foundNext && ts >= nowMs) {
+      foundNext = true;
+      cls += ' running';
+    } else if (ts < nowMs) {
+      cls += ' done';
+    } else if (!foundNext) {
+      foundNext = true;
+      cls += ' next';
+    }
+    return `<span class="${cls}">${time}</span>`;
+  }).join('');
+}
+
+// Toast factory for the Next/Starred/Half/All trigger buttons.
+function _makeTriggerToast(noun) {
+  return d => {
+    const n = d.queued ?? 0;
+    if (n === 0) return;
+    showToast(`${n} ${noun}${n === 1 ? '' : 's'} queued for check`);
+  };
 }
 
 // ── API diagnostics pane (shared) ─────────────────────────────────────────────

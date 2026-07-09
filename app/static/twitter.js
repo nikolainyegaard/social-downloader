@@ -253,12 +253,14 @@ async function loadTwRecent() {
 // ── Loop status ───────────────────────────────────────────────────────────────
 
 const _twEl = {
-  last:     () => document.getElementById('twLoopLast'),
-  duration: () => document.getElementById('twLoopDuration'),
-  next:     () => document.getElementById('twLoopNext'),
-  newVids:  () => document.getElementById('twLoopNewVideos'),
-  btn:      () => document.getElementById('twTriggerBtn'),
-  stopBtn:  () => document.getElementById('twStopBtn'),
+  meta:       () => document.getElementById('twLoopMeta'),
+  next:       () => document.getElementById('twLoopNext'),
+  sessions:   () => document.getElementById('twLoopSessions'),
+  btnNext:    () => document.getElementById('twTriggerNextBtn'),
+  btnStarred: () => document.getElementById('twTriggerStarredBtn'),
+  btnHalf:    () => document.getElementById('twTriggerHalfBtn'),
+  btnAll:     () => document.getElementById('twTriggerAllBtn'),
+  stopBtn:    () => document.getElementById('twStopBtn'),
 };
 
 function renderTwStatus(state) {
@@ -268,12 +270,23 @@ function renderTwStatus(state) {
   twRunCurrent    = state.run_current || null;
 
   const el = _twEl;
-  if (el.last())     el.last().textContent     = state.loop_last_end ? `Last: ${fmt.rel(state.loop_last_end)}` : 'Never run';
-  if (el.duration()) el.duration().textContent = state.loop_last_duration_secs != null ? fmt.dur(state.loop_last_duration_secs) : '';
-  if (el.next())     el.next().textContent     = state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '';
-  if (el.newVids())  el.newVids().textContent  = state.loop_last_new_videos != null ? `${state.loop_last_new_videos} new` : '';
-  if (el.btn())     el.btn().disabled     = twLoopRunning;
-  if (el.stopBtn()) el.stopBtn().disabled = !twLoopRunning;
+  if (el.meta()) {
+    const parts = [];
+    if (state.loop_last_end) parts.push(`Last: ${fmt.rel(state.loop_last_end)}`);
+    else parts.push('Never run');
+    if (state.loop_last_new_videos != null) parts.push(`${state.loop_last_new_videos} new`);
+    if (state.loop_last_duration_secs != null) parts.push(fmt.dur(state.loop_last_duration_secs));
+    el.meta().textContent = parts.join(' · ');
+  }
+  if (el.next()) el.next().textContent = twLoopRunning
+    ? 'Running…'
+    : (state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '');
+  _renderSessionPills(el.sessions(), state.loop_sessions_today || [], twLoopRunning, state.loop_manual_run);
+  if (el.btnNext())    el.btnNext().disabled    = twLoopRunning;
+  if (el.btnStarred()) el.btnStarred().disabled = twLoopRunning;
+  if (el.btnHalf())    el.btnHalf().disabled    = twLoopRunning;
+  if (el.btnAll())     el.btnAll().disabled     = twLoopRunning;
+  if (el.stopBtn())    el.stopBtn().disabled    = !twLoopRunning;
 
   const badge = document.getElementById('statusBadge');
   const text  = document.getElementById('statusText');
@@ -359,7 +372,11 @@ function twDiagCopy() { _platformDiagCopy('twDiag'); }
 
 async function twSaveLoopSettings() { return _scheduleSettingsSave('twitter', 'twSettings'); }
 
-function twTriggerLoop() { return _triggerLoop('twTriggerBtn', '/api/twitter/trigger', 'Could not trigger loop'); }
+const _twTriggerToast = _makeTriggerToast('account');
+function twTriggerNext()    { return _triggerLoop('twTriggerNextBtn',    '/api/twitter/trigger/next', 'Could not trigger loop', _twTriggerToast); }
+function twTriggerStarred() { return _triggerLoop('twTriggerStarredBtn', '/api/twitter/trigger',      'Could not trigger loop', _twTriggerToast); }
+function twTriggerHalf()    { return _triggerLoop('twTriggerHalfBtn',    '/api/twitter/trigger/half', 'Could not trigger loop', _twTriggerToast); }
+function twTriggerAll()     { return _triggerLoop('twTriggerAllBtn',     '/api/twitter/trigger/all',  'Could not trigger loop', _twTriggerToast); }
 
 async function twStopLoop() {
   const btn = document.getElementById('twStopBtn');

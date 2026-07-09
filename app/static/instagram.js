@@ -253,12 +253,14 @@ async function loadIgRecent() {
 // ── Loop status ───────────────────────────────────────────────────────────────
 
 const _igEl = {
-  last:     () => document.getElementById('igLoopLast'),
-  duration: () => document.getElementById('igLoopDuration'),
-  next:     () => document.getElementById('igLoopNext'),
-  newVids:  () => document.getElementById('igLoopNewVideos'),
-  btn:      () => document.getElementById('igTriggerBtn'),
-  stopBtn:  () => document.getElementById('igStopBtn'),
+  meta:       () => document.getElementById('igLoopMeta'),
+  next:       () => document.getElementById('igLoopNext'),
+  sessions:   () => document.getElementById('igLoopSessions'),
+  btnNext:    () => document.getElementById('igTriggerNextBtn'),
+  btnStarred: () => document.getElementById('igTriggerStarredBtn'),
+  btnHalf:    () => document.getElementById('igTriggerHalfBtn'),
+  btnAll:     () => document.getElementById('igTriggerAllBtn'),
+  stopBtn:    () => document.getElementById('igStopBtn'),
 };
 
 function renderIgStatus(state) {
@@ -268,12 +270,23 @@ function renderIgStatus(state) {
   igRunCurrent    = state.run_current || null;
 
   const el = _igEl;
-  if (el.last())     el.last().textContent     = state.loop_last_end ? `Last: ${fmt.rel(state.loop_last_end)}` : 'Never run';
-  if (el.duration()) el.duration().textContent = state.loop_last_duration_secs != null ? fmt.dur(state.loop_last_duration_secs) : '';
-  if (el.next())     el.next().textContent     = state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '';
-  if (el.newVids())  el.newVids().textContent  = state.loop_last_new_videos != null ? `${state.loop_last_new_videos} new` : '';
-  if (el.btn())     el.btn().disabled     = igLoopRunning;
-  if (el.stopBtn()) el.stopBtn().disabled = !igLoopRunning;
+  if (el.meta()) {
+    const parts = [];
+    if (state.loop_last_end) parts.push(`Last: ${fmt.rel(state.loop_last_end)}`);
+    else parts.push('Never run');
+    if (state.loop_last_new_videos != null) parts.push(`${state.loop_last_new_videos} new`);
+    if (state.loop_last_duration_secs != null) parts.push(fmt.dur(state.loop_last_duration_secs));
+    el.meta().textContent = parts.join(' · ');
+  }
+  if (el.next()) el.next().textContent = igLoopRunning
+    ? 'Running…'
+    : (state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '');
+  _renderSessionPills(el.sessions(), state.loop_sessions_today || [], igLoopRunning, state.loop_manual_run);
+  if (el.btnNext())    el.btnNext().disabled    = igLoopRunning;
+  if (el.btnStarred()) el.btnStarred().disabled = igLoopRunning;
+  if (el.btnHalf())    el.btnHalf().disabled    = igLoopRunning;
+  if (el.btnAll())     el.btnAll().disabled     = igLoopRunning;
+  if (el.stopBtn())    el.stopBtn().disabled    = !igLoopRunning;
 
   const badge = document.getElementById('statusBadge');
   const text  = document.getElementById('statusText');
@@ -403,7 +416,11 @@ async function loadIgSettings() {
 
 async function igSaveLoopSettings() { return _scheduleSettingsSave('instagram', 'igSettings'); }
 
-function igTriggerLoop() { return _triggerLoop('igTriggerBtn', '/api/instagram/trigger', 'Could not trigger loop'); }
+const _igTriggerToast = _makeTriggerToast('profile');
+function igTriggerNext()    { return _triggerLoop('igTriggerNextBtn',    '/api/instagram/trigger/next', 'Could not trigger loop', _igTriggerToast); }
+function igTriggerStarred() { return _triggerLoop('igTriggerStarredBtn', '/api/instagram/trigger',      'Could not trigger loop', _igTriggerToast); }
+function igTriggerHalf()    { return _triggerLoop('igTriggerHalfBtn',    '/api/instagram/trigger/half', 'Could not trigger loop', _igTriggerToast); }
+function igTriggerAll()     { return _triggerLoop('igTriggerAllBtn',     '/api/instagram/trigger/all',  'Could not trigger loop', _igTriggerToast); }
 
 async function igStopLoop() {
   const btn = document.getElementById('igStopBtn');

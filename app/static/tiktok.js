@@ -1550,30 +1550,8 @@ function renderStatus(state) {
   if (_sEl.uNext) _sEl.uNext.textContent = state.user_loop_running
     ? 'Running…'
     : (state.user_loop_next ? `Next: ${fmt.relFuture(state.user_loop_next)}` : '');
-  if (_sEl.uSessions) {
-    const sessions = state.user_loop_sessions_today || [];
-    if (sessions.length) {
-      const nowMs = Date.now();
-      let foundNext = false;
-      _sEl.uSessions.innerHTML = sessions.map(isoStr => {
-        const ts   = new Date(isoStr).getTime();
-        const time = new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        let cls = 'loop-session-pill';
-        if (state.user_loop_running && !state.user_loop_manual_run && !foundNext && ts >= nowMs) {
-          foundNext = true;
-          cls += ' running';
-        } else if (ts < nowMs) {
-          cls += ' done';
-        } else if (!foundNext) {
-          foundNext = true;
-          cls += ' next';
-        }
-        return `<span class="${cls}">${time}</span>`;
-      }).join('');
-    } else {
-      _sEl.uSessions.innerHTML = '';
-    }
-  }
+  _renderSessionPills(_sEl.uSessions, state.user_loop_sessions_today || [],
+                      state.user_loop_running, state.user_loop_manual_run);
   const _uRunning = state.user_loop_running;
   if (_sEl.uBtnNext)    _sEl.uBtnNext.disabled     = _uRunning;
   if (_sEl.uBtnStarred) _sEl.uBtnStarred.disabled = _uRunning;

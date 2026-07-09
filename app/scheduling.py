@@ -105,6 +105,19 @@ def get_channels_due_for_check(db, now: int) -> list[dict]:
         ).fetchall()]
 
 
+def get_starred_channels_due(db, now: int) -> list[dict]:
+    """Return enabled starred channels that are due for a check.
+    Used by the Starred trigger to ensure only starred channels are processed."""
+    with db.get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT * FROM channels
+               WHERE enabled = 1 AND starred = 1
+                 AND (next_check_at IS NULL OR next_check_at <= ?)
+               ORDER BY COALESCE(next_check_at, 0) ASC""",
+            (now,)
+        ).fetchall()]
+
+
 def set_channel_next_check(db, channel_id: str, next_check_at: int | None) -> None:
     """Write the next scheduled check timestamp. Pass None to reset (due ASAP)."""
     with db.get_db() as conn:
@@ -112,6 +125,46 @@ def set_channel_next_check(db, channel_id: str, next_check_at: int | None) -> No
             "UPDATE channels SET next_check_at = ? WHERE channel_id = ?",
             (next_check_at, channel_id),
         )
+
+
+# Manual trigger priming: reset next_check_at so the selected channels become due.
+# Same pattern as the TikTok prime_*_for_manual_run functions.
+
+def prime_starred_channels(db) -> int:
+    """Reset next_check_at for all enabled starred channels. Returns count affected."""
+    with db.get_db() as conn:
+        result = conn.execute(
+            "UPDATE channels SET next_check_at = NULL WHERE enabled = 1 AND starred = 1"
+        )
+        return result.rowcount
+
+
+def prime_half_channels(db) -> int:
+    """Reset next_check_at for the 50% of enabled channels longest since their last check.
+    Never-checked channels sort first. Returns count affected."""
+    with db.get_db() as conn:
+        rows = conn.execute(
+            "SELECT channel_id FROM channels WHERE enabled = 1"
+            " ORDER BY COALESCE(last_checked, 0) ASC"
+        ).fetchall()
+        if not rows:
+            return 0
+        half = rows[: max(1, len(rows) // 2)]
+        ids  = [r["channel_id"] for r in half]
+        conn.execute(
+            f"UPDATE channels SET next_check_at = NULL WHERE channel_id IN ({','.join('?' * len(ids))})",
+            ids,
+        )
+        return len(ids)
+
+
+def prime_all_channels(db) -> int:
+    """Reset next_check_at for all enabled channels. Returns count affected."""
+    with db.get_db() as conn:
+        result = conn.execute(
+            "UPDATE channels SET next_check_at = NULL WHERE enabled = 1"
+        )
+        return result.rowcount
 
 
 def channel_gap_secs(platform: str) -> float:
@@ -124,7 +177,8 @@ def run_session_scheduler(platform: str, db, loop_mod) -> None:
     """Scheduler thread body: distributes N sessions across each 24-hour window.
 
     loop_mod must expose: trigger_event, check_and_clear_reschedule(),
-    set_next_run(iso), set_sessions_today(times), run_loop(channels_due).
+    get_and_clear_trigger_scope(), set_next_run(iso), set_sessions_today(times),
+    run_loop(channels_due, manual).
     """
     label = platform.capitalize()
     defaults = platform_defaults(platform)
@@ -182,12 +236,19 @@ def run_session_scheduler(platform: str, db, loop_mod) -> None:
 
         loop_mod.set_next_run(None)
 
-        channels_due = get_channels_due_for_check(db, int(time.time()))
+        now_ts = int(time.time())
+        scope  = loop_mod.get_and_clear_trigger_scope() if triggered else None
+
+        if scope == "starred":
+            channels_due = get_starred_channels_due(db, now_ts)
+        else:
+            channels_due = get_channels_due_for_check(db, now_ts)
+
         if not channels_due:
             print(f"{_ts()} {label} loop: no channels due at this session, skipping.")
             continue
 
-        loop_mod.run_loop(channels_due)
+        loop_mod.run_loop(channels_due, manual=triggered)
 
         # Recompute activity scores after each session so intervals stay current
         high, active, inactive = get_check_intervals(db, platform)

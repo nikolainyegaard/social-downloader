@@ -17,6 +17,7 @@ from platforms.instagram.api import normalize_handle
 from platforms.instagram.loop import (
     is_running, get_state_snapshot, trigger_event, request_stop,
     enqueue_channel_run, enqueue_channel_profile_run, reschedule_loop,
+    set_trigger_scope,
 )
 from thumbnailer import thumb_path_for
 
@@ -476,16 +477,66 @@ def get_status():
     return jsonify(get_state_snapshot())
 
 
-@instagram_bp.route("/trigger", methods=["POST"])
-def trigger_now():
+def _check_trigger_preconditions():
+    """Return (issues, is_running) for the loop trigger endpoints."""
     from config import get_path_issues
-    issues = get_path_issues()
+    return get_path_issues(), is_running()
+
+
+@instagram_bp.route("/trigger/next", methods=["POST"])
+def trigger_next_now():
+    issues, running = _check_trigger_preconditions()
     if issues:
         return jsonify({"error": issues[0]["message"]}), 503
-    if is_running():
+    if running:
         return jsonify({"error": "Loop is already running"}), 409
+    from scheduling import get_channels_due_for_check
+    due = get_channels_due_for_check(db, int(time.time()))
+    set_trigger_scope("next")
     trigger_event.set()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "queued": len(due), "mode": "next"})
+
+
+@instagram_bp.route("/trigger", methods=["POST"])
+def trigger_now():
+    issues, running = _check_trigger_preconditions()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
+    if running:
+        return jsonify({"error": "Loop is already running"}), 409
+    from scheduling import prime_starred_channels
+    n = prime_starred_channels(db)
+    set_trigger_scope("starred")
+    trigger_event.set()
+    return jsonify({"ok": True, "queued": n, "mode": "starred"})
+
+
+@instagram_bp.route("/trigger/half", methods=["POST"])
+def trigger_half_now():
+    issues, running = _check_trigger_preconditions()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
+    if running:
+        return jsonify({"error": "Loop is already running"}), 409
+    from scheduling import prime_half_channels
+    n = prime_half_channels(db)
+    set_trigger_scope("half")
+    trigger_event.set()
+    return jsonify({"ok": True, "queued": n, "mode": "half"})
+
+
+@instagram_bp.route("/trigger/all", methods=["POST"])
+def trigger_all_now():
+    issues, running = _check_trigger_preconditions()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
+    if running:
+        return jsonify({"error": "Loop is already running"}), 409
+    from scheduling import prime_all_channels
+    n = prime_all_channels(db)
+    set_trigger_scope("all")
+    trigger_event.set()
+    return jsonify({"ok": True, "queued": n, "mode": "all"})
 
 
 @instagram_bp.route("/stop", methods=["POST"])
