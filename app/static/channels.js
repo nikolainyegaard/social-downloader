@@ -484,15 +484,21 @@ function initChannelApp(cfg) {
   }
 
   function updateRunStates() {
+    // Patch only the dynamic run-state parts of existing cards without rebuilding DOM.
     document.querySelectorAll(`.${P}-creator-card[data-channelid]`).forEach(card => {
-      const id      = card.dataset.channelid;
-      const inQueue = runQueue.includes(id);
-      const isCur   = runCurrent === id;
-      const btn     = card.querySelector('.btn-run');
-      if (!btn) return;
-      btn.textContent = isCur ? 'Running…' : inQueue ? 'Queued' : 'Run';
-      btn.disabled    = inQueue || isCur;
+      const id   = card.dataset.channelid;
+      const busy = runQueue.includes(id) || runCurrent === id;
+      const ch   = creators.find(c => c.channel_id === id);
+      card.classList.toggle('user-card-current', !!(ch && ch.handle === currentCreator));
+      card.querySelectorAll('.btn-run').forEach(b => { b.disabled = busy; });
     });
+    if (modalCreator) {
+      const busy = runQueue.includes(modalCreator.channel_id) || runCurrent === modalCreator.channel_id;
+      const qBtn = _el('ModalRunQuickBtn');
+      const fBtn = _el('ModalRunFullBtn');
+      if (qBtn) qBtn.disabled = busy;
+      if (fBtn) fBtn.disabled = busy;
+    }
   }
 
   const loadStatus = X('LoadStatus', async () => {
@@ -743,12 +749,9 @@ function initChannelApp(cfg) {
     const isCurrent  = !!currentCreator && ch.handle === currentCreator;
     const isInactive = ch.tracking_enabled === 0;
     const { cls: trackingCls, label: trackingLabel } = _trackingBadge(ch.tracking_enabled);
-    const checked    = _fmtLastChecked(ch.last_checked);
     const inQueue    = runQueue.includes(ch.channel_id);
     const isRunCur   = runCurrent === ch.channel_id;
-    const runLabel   = isRunCur ? 'Running…' : inQueue ? 'Queued' : 'Run';
     const runDis     = (inQueue || isRunCur) ? 'disabled' : '';
-    const follStr    = ch.subscriber_count != null ? `${_fmtLarge(ch.subscriber_count)} ${cfg.subLabelCard}` : '';
 
     return `
       <div class="user-card ${P}-creator-card${isCurrent ? ' user-card-current' : ''}${isInactive ? ' user-card-inactive' : ''}"
@@ -765,7 +768,7 @@ function initChannelApp(cfg) {
           <div class="user-identity">
             <div class="user-display-name">${esc(ch.display_name || ch.handle)}</div>
             <div class="user-handle">@${esc(ch.handle)}</div>
-            ${follStr ? `<div class="user-id-line">${esc(follStr)}</div>` : `<div class="user-id-line">${esc(ch.channel_id)}</div>`}
+            <div class="user-id-line">${esc(ch.channel_id)}</div>
           </div>
           <div class="user-badges">
             <span class="account-status ${trackingCls}">${trackingLabel}</span>
@@ -777,19 +780,33 @@ function initChannelApp(cfg) {
         </div>
 
         <div class="user-stats">
-          ${follStr ? `<span class="stat-item"><span class="stat-item-label">${cfg.subLabelCard}</span><span class="stat-item-value">${_fmtLarge(ch.subscriber_count)}</span></span>` : ''}
+          ${ch.subscriber_count != null ? `<span class="stat-item"><span class="stat-item-label">${cfg.subLabelCard}</span><span class="stat-item-value">${(ch.subscriber_count || 0).toLocaleString()}</span></span>` : ''}
           <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${ch.video_total || 0}</span></span>
-          ${ch.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${ch.video_deleted}</span></span>` : ''}
+          ${(ch.video_deleted || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${ch.video_deleted}</span></span>` : ''}
           ${ch.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:#ff9800">${ch.video_missing}</span></span>` : ''}
           ${ch.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${ch.video_undeleted}</span></span>` : ''}
         </div>
 
         <div class="user-card-footer">
-          <span class="user-checked">${checked}</span>
-          <div style="display:flex;gap:6px">
+          <div style="display:flex;gap:6px;">
             <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="event.stopPropagation();${P}ToggleStar('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
-            <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreator('${esc(ch.channel_id)}')">${runLabel}</button>
+            <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
+            <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
             <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">&#x2022;&#x2022;&#x2022;</button>
+          </div>
+        </div>
+        <div class="user-card-meta-footer">
+          <div class="user-card-meta-item">
+            <span class="meta-label">Added</span>
+            <span class="meta-value">${fmtDateOnly(ch.added_at)}</span>
+          </div>
+          <div class="user-card-meta-item">
+            <span class="meta-label">Last checked</span>
+            <span class="meta-value">${ch.last_checked ? fmt.rel(new Date(ch.last_checked * 1000).toISOString()) : 'never'}</span>
+          </div>
+          <div class="user-card-meta-item">
+            <span class="meta-label">Last saved</span>
+            <span class="meta-value">${ch.last_saved ? fmt.rel(new Date(ch.last_saved * 1000).toISOString()) : 'never'}</span>
           </div>
         </div>
       </div>
@@ -848,7 +865,8 @@ function initChannelApp(cfg) {
 
   X('GetCreators', () => creators);
 
-  X('RunCreator',        id => _creatorRun(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, renderCreators));
+  X('RunCreator',        id => _creatorRun(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, () => { renderCreators(); updateRunStates(); }, 'full'));
+  X('RunCreatorQuick',   id => _creatorRun(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, () => { renderCreators(); updateRunStates(); }, 'quick'));
   X('RunCreatorProfile', id => _creatorRunProfile(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, renderCreators));
   X('RemoveCreator',     (id, label) => _creatorRemove(`${API}/channels`, id, label, loadCreators));
   X('ToggleStar',        id => _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators));
@@ -963,11 +981,13 @@ function initChannelApp(cfg) {
   }
 
   function _renderModalHeader(ch) {
-    const isInactive = ch.tracking_enabled === 0;
+    const isInactive  = ch.tracking_enabled === 0;
     const { cls: trackingCls, label: trackingLbl } = _trackingBadge(ch.tracking_enabled);
-    const checked    = _fmtLastChecked(ch.last_checked);
-    const follStr    = ch.subscriber_count != null ? `${_fmtLarge(ch.subscriber_count)} ${cfg.subLabelModal}` : '';
-    const extUrl     = cfg.profileUrl(esc(ch.handle));
+    const checked     = _fmtLastChecked(ch.last_checked);
+    const extUrl      = cfg.profileUrl(esc(ch.handle));
+    const busy        = runQueue.includes(ch.channel_id) || runCurrent === ch.channel_id;
+    const runDisabled = busy ? 'disabled' : '';
+    const platformLabel = (PLATFORMS.find(p => p.id === cfg.id) || {}).label || cfg.id;
 
     _el('ModalHeader').innerHTML = `
       <div class="modal-avatar-wrap">
@@ -991,17 +1011,25 @@ function initChannelApp(cfg) {
           <span style="color:var(--muted);font-size:12px;margin-left:6px">${esc(ch.channel_id)}</span>
         </div>
         <div class="modal-stats-row">
-          ${follStr ? `<span><strong>${esc(follStr)}</strong></span>` : ''}
+          ${ch.subscriber_count != null ? `<span><strong>${(ch.subscriber_count || 0).toLocaleString()}</strong> ${cfg.subLabelModal}</span>` : ''}
+          ${ch.video_count != null ? `<span><strong>${(ch.video_count || 0).toLocaleString()}</strong> on ${esc(platformLabel)}</span>` : ''}
           <span><strong>${ch.video_total || 0}</strong> saved locally</span>
-          ${ch.video_deleted   ? `<span style="color:var(--red)"><strong>${ch.video_deleted}</strong> deleted</span>` : ''}
+          ${(ch.video_deleted || 0) > 0 ? `<span style="color:var(--red)"><strong>${ch.video_deleted}</strong> deleted</span>` : ''}
           ${ch.video_undeleted ? `<span style="color:var(--yellow)"><strong>${ch.video_undeleted}</strong> restored</span>` : ''}
+          ${ch.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="${P}OpenProfileHistory()" title="Open profile change history"><strong>${ch.profile_history_count}</strong> profile ${ch.profile_history_count === 1 ? 'update' : 'updates'}</span>` : ''}
           <span style="color:var(--muted)">${esc(checked)}</span>
         </div>
         ${ch.description ? `<div class="modal-bio" onclick="this.classList.toggle('expanded')">${esc(ch.description)}</div>` : ''}
-        <div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
+          <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
+          <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">&#x2022;&#x2022;&#x2022;</button>
+        </div>
+        <div id="${P}ModalNoteArea" style="display:${ch.comment ? '' : 'none'};margin-top:8px">
           <textarea placeholder="Add a note about this ${CREATOR}…"
             onblur="${P}SaveComment('${esc(ch.channel_id)}', this.value)"
-            style="flex:1;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
+            style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
                    background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
                    color:var(--text);font-family:inherit;line-height:1.5"
           >${esc(ch.comment || '')}</textarea>
@@ -1030,6 +1058,19 @@ function initChannelApp(cfg) {
   X('SaveComment', async (id, value) => {
     const ok = await _saveCreatorComment(`${API}/channels`, id, value, creators, 'channel_id');
     if (ok && modalCreator && modalCreator.channel_id === id) modalCreator.comment = value.trim() || null;
+  });
+
+  X('ToggleStarModal', async id => {
+    await _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators);
+    if (modalCreator && modalCreator.channel_id === id) _renderModalHeader(modalCreator);
+  });
+
+  X('ToggleModalNote', () => {
+    const area = _el('ModalNoteArea');
+    if (!area) return;
+    const show = area.style.display === 'none';
+    area.style.display = show ? '' : 'none';
+    if (show) area.querySelector('textarea')?.focus();
   });
 
   // Modal engine delegates

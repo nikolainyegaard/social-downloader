@@ -15,6 +15,7 @@ from thumbnailer import cache_avatar
 from config import MEDIA_DIR
 
 _CONFIRM_THRESHOLD = 2
+_QUICK_LIMIT       = 30  # posts fetched by a quick check; deletion detection needs a full run
 
 
 def process_all_channels(
@@ -58,8 +59,14 @@ def process_single_channel(
     log: Callable[[str], None],
     set_current: Callable[[str | None], None] | None = None,
     profile_only: bool = False,
+    mode: str = "full",
 ) -> None:
-    """Update profile, fetch post list, download new posts, track deletions."""
+    """Update profile, fetch post list, download new posts, track deletions.
+
+    mode="quick" fetches only the newest posts and skips deletion detection
+    (absence from a partial listing proves nothing); mode="full" fetches the
+    whole post list and runs the full diff.
+    """
     channel_id = channel["channel_id"]
     handle     = channel["handle"]
 
@@ -67,7 +74,8 @@ def process_single_channel(
         set_current(handle)
 
     try:
-        log(f"Processing @{handle}" + (" (profile only)" if profile_only else ""))
+        suffix = " (profile only)" if profile_only else (" (quick)" if mode == "quick" else "")
+        log(f"Processing @{handle}{suffix}")
 
         display_name = channel.get("display_name") or handle
 
@@ -93,6 +101,8 @@ def process_single_channel(
                 vid_id                = post_dict["video_id"]
                 remote_posts[vid_id]  = post_dict
                 raw_posts[vid_id]     = raw_post
+                if mode == "quick" and len(remote_posts) >= _QUICK_LIMIT:
+                    break
         except Exception as e:
             log(f"  Post fetch failed: {e}")
             return
@@ -101,7 +111,7 @@ def process_single_channel(
         known_ids, active_ids = db.get_video_id_sets(channel_id)
 
         new_ids       = remote_ids - known_ids
-        deleted_ids   = active_ids - remote_ids
+        deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
         undeleted_ids = (known_ids - active_ids) & remote_ids
 
         pending_ids = db.get_pending_deletion_video_ids(channel_id)

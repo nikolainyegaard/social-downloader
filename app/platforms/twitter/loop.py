@@ -141,13 +141,13 @@ def check_and_clear_reschedule() -> bool:
     return val
 
 
-def enqueue_channel_run(channel_id: str, profile_only: bool = False) -> bool:
+def enqueue_channel_run(channel_id: str, profile_only: bool = False, mode: str = "full") -> bool:
     """Queue a single-channel manual run. Returns False if already queued/running."""
     with _run_state_lock:
         if channel_id in _run_state["queue"] or _run_state["current"] == channel_id:
             return False
         _run_state["queue"].append(channel_id)
-    _run_queue.put((channel_id, profile_only))
+    _run_queue.put((channel_id, profile_only, mode))
     return True
 
 
@@ -171,7 +171,7 @@ def _set_current_channel(handle: str | None) -> None:
 
 def _run_worker() -> None:
     while True:
-        channel_id, profile_only = _run_queue.get()
+        channel_id, profile_only, mode = _run_queue.get()
         with _run_state_lock:
             if channel_id in _run_state["queue"]:
                 _run_state["queue"].remove(channel_id)
@@ -180,10 +180,10 @@ def _run_worker() -> None:
             channel = db.get_channel(channel_id)
             if channel:
                 label = f"@{channel['handle']}"
-                kind  = "profile" if profile_only else "channel"
+                kind  = "profile" if profile_only else mode
                 _log(f"=== Manual {kind} run started: {label} ===")
                 from platforms.twitter.tracker import process_single_channel
-                process_single_channel(channel, _log, _set_current_channel, profile_only=profile_only)
+                process_single_channel(channel, _log, _set_current_channel, profile_only=profile_only, mode=mode)
                 _log(f"=== Manual {kind} run complete: {label} ===")
                 # Schedule the next check based on the channel's computed interval
                 from scheduling import get_check_intervals, set_channel_next_check

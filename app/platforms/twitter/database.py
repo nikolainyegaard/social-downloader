@@ -508,6 +508,7 @@ def get_all_video_stats() -> dict:
                 channel_id,
                 COUNT(*)                                                                          AS video_total,
                 COUNT(download_date)                                                              AS video_downloaded,
+                MAX(download_date)                                                                AS last_saved,
                 SUM(CASE WHEN status = 'deleted'                              THEN 1 ELSE 0 END) AS video_deleted,
                 SUM(CASE WHEN status = 'undeleted'                            THEN 1 ELSE 0 END) AS video_undeleted,
                 SUM(CASE WHEN status = 'up' AND pending_deletion_count > 0    THEN 1 ELSE 0 END) AS video_missing

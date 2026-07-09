@@ -22,6 +22,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Twitter, Instagram, and YouTube now render from a single shared frontend engine: identical creator cards, detail modals, filter bars, add forms, recent panels, and loop panels generated per platform from a config; changing the engine changes all three apps at once
 - YouTube moved to the session scheduler: sessions spread across each 24 hour window, per-channel starred/active/inactive intervals, Next/Starred/Half/All trigger buttons, and the Loop Schedule settings panel; the `YOUTUBE_LOOP_INTERVAL_MINUTES` env var is replaced by `YOUTUBE_SESSIONS_PER_DAY` and `YOUTUBE_*_CHECK_HOURS` variables
 - YouTube sessions shuffle the due list and add random gaps between channels, matching the other platforms
+- Channel platform cards now match TikTok's users exactly: creator ID line, Quick and Full refresh buttons, and the Added / Last checked / Last saved meta footer; the detail modal gains the star, Quick, Full, and overflow menu buttons with the note field hidden behind "Add note"
+- Quick and Full run modes for Twitter, Instagram, and YouTube: Quick fetches only the newest posts and skips deletion detection; Full (the default, used by scheduled sessions) fetches the whole list and runs the complete diff
+- Channel list APIs now return `last_saved` (most recent download) per creator
 
 ## [0.4.0] - 2026-06-29
 

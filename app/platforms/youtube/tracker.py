@@ -61,8 +61,14 @@ def process_single_channel(
     log: Callable[[str], None],
     set_current: Callable[[str | None], None] | None = None,
     profile_only: bool = False,
+    mode: str = "full",
 ) -> None:
-    """Update profile, fetch video list, download new videos, track deletions."""
+    """Update profile, fetch video list, download new videos, track deletions.
+
+    mode="quick" skips deletion detection and only picks up new videos; the
+    yt-dlp flat extraction fetches the full list either way, so quick saves
+    no API calls here, but the semantics match the other platforms.
+    """
     channel_id = channel["channel_id"]
     handle     = channel["handle"]
 
@@ -70,7 +76,8 @@ def process_single_channel(
         set_current(handle)
 
     try:
-        log(f"Processing @{handle}" + (" (profile only)" if profile_only else ""))
+        suffix = " (profile only)" if profile_only else (" (quick)" if mode == "quick" else "")
+        log(f"Processing @{handle}{suffix}")
 
         info:         dict = {}
         display_name: str  = channel.get("display_name") or handle
@@ -102,7 +109,7 @@ def process_single_channel(
         known_ids, active_ids = db.get_video_id_sets(channel_id)
 
         new_ids       = remote_ids - known_ids
-        deleted_ids   = active_ids - remote_ids
+        deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
         undeleted_ids = (known_ids - active_ids) & remote_ids
 
         pending_ids = db.get_pending_deletion_video_ids(channel_id)

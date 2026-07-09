@@ -182,6 +182,7 @@ def list_channels():
         ch["video_deleted"]         = stats.get("video_deleted",     0)
         ch["video_undeleted"]       = stats.get("video_undeleted",   0)
         ch["video_missing"]         = stats.get("video_missing",     0)
+        ch["last_saved"]            = stats.get("last_saved")
         ch["profile_history_count"] = all_ph_counts.get(cid, 0)
     return jsonify(channels)
 
@@ -243,7 +244,10 @@ def run_channel(channel_id: str):
         return jsonify({"error": issues[0]["message"]}), 503
     if not db.get_channel(channel_id):
         return jsonify({"error": "Channel not found"}), 404
-    if not enqueue_channel_run(channel_id):
+    mode = request.args.get("mode", "full")
+    if mode not in ("quick", "full"):
+        return jsonify({"error": "mode must be quick or full"}), 400
+    if not enqueue_channel_run(channel_id, mode=mode):
         return jsonify({"error": "Already queued or running"}), 409
     return jsonify({"ok": True})
 
