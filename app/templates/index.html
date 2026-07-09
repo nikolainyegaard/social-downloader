@@ -947,6 +947,30 @@
 
       <!-- Instagram section -->
       <div id="ssec-instagram" style="display:none">
+        <div class="settings-section-title">Authentication</div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+          <span class="cookie-pill absent" id="igSessionPill">
+            <span class="dot"></span>
+            <span id="igSessionPillText">Not logged in</span>
+          </span>
+          <button class="btn-danger" id="igSessionLogoutBtn" onclick="igSessionLogout()" style="display:none">Log out</button>
+        </div>
+        <div id="igLoginForm">
+          <div style="display:flex;flex-direction:column;gap:10px;max-width:340px">
+            <input type="text" id="igLoginUser" class="text-input" placeholder="Instagram username" autocomplete="off" spellcheck="false">
+            <input type="password" id="igLoginPass" class="text-input" placeholder="Password">
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+            <button class="btn-primary" id="igLoginBtn" onclick="igSessionLogin()" style="font-size:12px;padding:5px 14px">Log in</button>
+            <span id="igLoginStatus" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+          <p class="cookie-note" style="margin-top:12px">
+            Credentials are sent to the container once to create an instaloader session. The password is not stored on disk; only the session cookie is saved.
+          </p>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
+
         <div class="settings-section-title">Loop Interval</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
           Changes take effect at the next scheduled run.
