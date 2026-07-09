@@ -9,7 +9,6 @@ import random as _random
 import glob as _glob
 import shutil as _shutil
 from platforms.tiktok import database as db
-from platforms.youtube import database as youtube_db
 from config import DATA_DIR, MEDIA_DIR, WEB_PORT
 from platforms.tiktok.config import (
     USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, TIKTOK_DATA_DIR,
@@ -25,11 +24,7 @@ from platforms.tiktok.loop import (
     get_and_clear_trigger_scope,
     recover_loop_state_from_db,
 )
-from platforms.youtube import loop as youtube_loop
-from platforms.instagram import database as instagram_db
-from platforms.instagram import loop as instagram_loop
-from platforms.twitter import database as twitter_db
-from platforms.twitter import loop as twitter_loop
+from platforms.registry import ENGINES
 import scheduling
 from web import create_app
 from backup import start_backup_thread
@@ -356,22 +351,13 @@ def _sound_loop_thread():
         run_sound_loop()
 
 
-# ── Instagram and Twitter loop schedulers ─────────────────────────────────────
-# Both use the shared session-based scheduler in scheduling.py (same model as
-# the TikTok user loop: N sessions per 24h window, per-channel due times).
+# ── Channel platform loop schedulers ──────────────────────────────────────────
+# Every engine in the registry gets its own scheduler thread running the shared
+# session model (N sessions per 24h window, per-channel due times). Engines are
+# fully isolated: separate DBs, run queues, and log buffers.
 
-def _instagram_loop_thread():
-    scheduling.run_session_scheduler("instagram", instagram_db, instagram_loop)
-
-
-def _twitter_loop_thread():
-    scheduling.run_session_scheduler("twitter", twitter_db, twitter_loop)
-
-
-# ── YouTube loop scheduler ────────────────────────────────────────────────────
-
-def _youtube_loop_thread():
-    scheduling.run_session_scheduler("youtube", youtube_db, youtube_loop)
+def _channel_loop_thread(engine):
+    scheduling.run_session_scheduler(engine.platform, engine.db, engine.loop)
 
 
 # ── File integrity check (twice daily: 00:00 and 12:00) ──────────────────────
@@ -497,9 +483,8 @@ if __name__ == "__main__":
     _migrate_data_to_platform_dirs()
     print(f"{_ts()} Initialising databases...")
     db.init_db()
-    youtube_db.init_db()
-    instagram_db.init_db()
-    twitter_db.init_db()
+    for _engine in ENGINES.values():
+        _engine.db.init_db()
     recover_loop_state_from_db()
 
     n = db.migrate_video_file_paths_to_platform(MEDIA_DIR)
@@ -522,19 +507,19 @@ if __name__ == "__main__":
         active_secs=ACTIVE_CHECK_HOURS * 3600,
         inactive_secs=INACTIVE_CHECK_HOURS * 3600,
     )
-    for _platform, _pdb in (("youtube", youtube_db), ("instagram", instagram_db), ("twitter", twitter_db)):
-        scheduling.recompute_activity_scores(_pdb, *scheduling.get_check_intervals(_pdb, _platform))
+    for _engine in ENGINES.values():
+        scheduling.recompute_activity_scores(_engine.db, *scheduling.get_check_intervals(_engine.db, _engine.platform))
     print(f"{_ts()} Startup: activity scores computed for all creators.")
 
     app = create_app()
 
     print(f"{_ts()} Starting loop threads...")
-    threading.Thread(target=_user_loop_thread,      daemon=True, name="user-loop-thread").start()
-    threading.Thread(target=_sound_loop_thread,     daemon=True, name="sound-loop-thread").start()
-    threading.Thread(target=_youtube_loop_thread,   daemon=True, name="yt-loop-thread").start()
-    threading.Thread(target=_instagram_loop_thread, daemon=True, name="ig-loop-thread").start()
-    threading.Thread(target=_twitter_loop_thread,   daemon=True, name="tw-loop-thread").start()
-    threading.Thread(target=_file_check_thread,     daemon=True, name="file-check-thread").start()
+    threading.Thread(target=_user_loop_thread,  daemon=True, name="user-loop-thread").start()
+    threading.Thread(target=_sound_loop_thread, daemon=True, name="sound-loop-thread").start()
+    for _engine in ENGINES.values():
+        threading.Thread(target=_channel_loop_thread, args=(_engine,), daemon=True,
+                         name=f"{_engine.adapter.prefix}-loop-thread").start()
+    threading.Thread(target=_file_check_thread,  daemon=True, name="file-check-thread").start()
     start_backup_thread()
 
     print(f"{_ts()} Web UI available at http://0.0.0.0:{WEB_PORT}")

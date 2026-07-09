@@ -143,14 +143,9 @@ def create_app() -> Flask:
     from platforms.tiktok.web import tiktok_bp
     app.register_blueprint(tiktok_bp)
 
-    from platforms.youtube.web import youtube_bp
-    app.register_blueprint(youtube_bp)
-
-    from platforms.instagram.web import instagram_bp
-    app.register_blueprint(instagram_bp)
-
-    from platforms.twitter.web import twitter_bp
-    app.register_blueprint(twitter_bp)
+    from platforms.registry import ENGINES
+    for _engine in ENGINES.values():
+        app.register_blueprint(_engine.create_blueprint())
 
     @app.route("/")
     def index():

@@ -8,14 +8,13 @@ from datetime import datetime, timedelta
 
 from config import DATA_DIR
 from platforms.tiktok.database import DB_PATH as _TIKTOK_DB
-from platforms.youtube.database import DB_PATH as _YOUTUBE_DB
+from platforms.registry import ENGINES
 
 BACKUP_DIR     = os.path.join(DATA_DIR, "backups")
 RETENTION_DAYS = 14
 
-_DB_SOURCES = [
-    ("tiktok",  _TIKTOK_DB),
-    ("youtube", _YOUTUBE_DB),
+_DB_SOURCES = [("tiktok", _TIKTOK_DB)] + [
+    (platform, engine.db.DB_PATH) for platform, engine in ENGINES.items()
 ]
 
 

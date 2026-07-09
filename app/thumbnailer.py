@@ -53,11 +53,13 @@ def _thumb_exists(video_id: str, file_path: str) -> bool:
 
 # ── Avatar caching ────────────────────────────────────────────────────────────
 
-def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok") -> str | bool:
+def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok",
+                 db_obj=None) -> str | bool:
     """
     Download avatar_url, convert to AVIF, and save to the platform's avatars cache.
     If the image differs from the cached version, the old file is archived and the
     change is recorded in profile_history.
+    Channel platforms must pass their engine's ChannelDB as db_obj.
     Returns "changed", "unchanged", or False on failure.
     """
     if not avatar_url:
@@ -67,10 +69,11 @@ def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok") -> 
         _avatars_dir = AVATARS_DIR
         _db = db
     else:
-        import importlib
+        if db_obj is None:
+            return False
         from config import DATA_DIR as _DATA_DIR
         _avatars_dir = os.path.join(_DATA_DIR, platform, "avatars")
-        _db = importlib.import_module(f"platforms.{platform}.database")
+        _db = db_obj
 
     os.makedirs(_avatars_dir, exist_ok=True)
 
@@ -115,13 +118,17 @@ def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok") -> 
         return False
 
 
-def cache_banner(channel_id: str, banner_url: str) -> bool:
-    """Download and cache the YouTube channel banner as AVIF. Returns True on success."""
-    if not banner_url:
+def cache_banner(channel_id: str, banner_url: str, platform: str = "youtube",
+                 db_obj=None) -> bool:
+    """Download and cache a channel banner as AVIF. Returns True on success.
+
+    Channel platforms must pass their engine's ChannelDB as db_obj.
+    """
+    if not banner_url or db_obj is None:
         return False
 
     from config import DATA_DIR as _DATA_DIR
-    banners_dir = os.path.join(_DATA_DIR, "youtube", "banners")
+    banners_dir = os.path.join(_DATA_DIR, platform, "banners")
     os.makedirs(banners_dir, exist_ok=True)
 
     path     = os.path.join(banners_dir, f"{channel_id}.avif")
@@ -142,8 +149,7 @@ def cache_banner(channel_id: str, banner_url: str) -> bool:
 
     try:
         os.replace(avif_tmp, path)
-        from platforms.youtube import database as _db
-        _db.set_banner_cached(channel_id, True)
+        db_obj.set_banner_cached(channel_id, True)
         return True
     except Exception:
         _try_remove(avif_tmp)
@@ -293,8 +299,9 @@ def backfill_thumbnails() -> None:
 
     all_videos = list(db.get_all_videos())
     try:
-        from platforms.youtube import database as _yt_db
-        all_videos.extend(_yt_db.get_all_videos())
+        from platforms.registry import ENGINES
+        for _eng in ENGINES.values():
+            all_videos.extend(_eng.db.get_all_videos())
     except Exception:
         pass
     total = len(all_videos)

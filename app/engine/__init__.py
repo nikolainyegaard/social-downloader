@@ -1,0 +1,49 @@
+"""The channel platform engine.
+
+One engine instance per platform, each fully isolated: its own SQLite file,
+loop state, run queue, worker threads, and log buffer. Everything
+platform-specific is declared in a ChannelAdapter; the engine provides the
+database, scheduler loop, tracker, and Flask blueprint.
+
+Adding a platform = one adapter (plus its api module) + a registry entry.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Callable
+
+from engine.database import ChannelDB
+from engine.loop import ChannelLoop
+
+
+@dataclass
+class ChannelAdapter:
+    platform: str                   # "twitter"; URL prefix, DB dir, media dir
+    label: str                      # "Twitter"; log lines and UI messages
+    prefix: str                     # "tw"; thread names and report slugs
+    creator_noun: str               # "account"; API error messages
+    item_noun: str                  # "post"; log messages
+    quick_limit: int | None         # posts fetched by a quick check; None = fetch everything
+    has_banner: bool                # cache and serve channel banners
+
+    normalize_handle: Callable      # (raw: str) -> str
+    lookup_profile: Callable        # (handle: str) -> info dict; the add flow
+    fetch_profile: Callable         # (channel: dict) -> info dict; the loop flow
+    iter_posts: Callable            # (channel_id: str) -> iterator of (post_dict, raw_post)
+    download_item: Callable         # (engine, channel_id, handle, display_name, vid_id, post, raw, log) -> None
+
+    register_extra_routes: Callable | None = None   # (bp, engine) -> None
+
+
+class ChannelEngine:
+    def __init__(self, adapter: ChannelAdapter):
+        self.adapter  = adapter
+        self.platform = adapter.platform
+        self.label    = adapter.label
+        self.db       = ChannelDB(adapter.platform)
+        self.loop     = ChannelLoop(self)
+
+    def create_blueprint(self):
+        from engine.web import create_channel_blueprint
+        return create_channel_blueprint(self)

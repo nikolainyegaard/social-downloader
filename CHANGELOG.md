@@ -7,6 +7,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Added
+- Channel databases gain account availability, privacy status, and viewer relations columns: groundwork for tracking bans, private accounts, and follow relations on every cookie-authenticated platform
+- Twitter and Instagram creator modals get the Videos/Photos type filter and per-type thumbnail markers (photo grid glyph vs play glyph) in both list and grid view, matching TikTok
 - Twitter account tracking backend: profile info, media timeline fetching, and media downloads via gallery-dl; accounts tracked by stable numeric user ID so handle changes are survived; retweets and quoted tweets are excluded
 - Twitter cookies management in Settings > Twitter: upload a cookies.txt from a logged-in x.com session; required for timeline access and sensitive media
 - Twitter pane in Settings > Diagnostics: fetch raw profile info or the first 5 media posts for any handle
@@ -28,8 +30,11 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Full runs that find unconfirmed deletion candidates schedule an ASAP re-check; a deletion spike (25% or more of a creator's videos suddenly missing) skips deletion marks for that run to guard against truncated listings
 - Channel sessions abort after 3 consecutive creator failures instead of hammering a rate limit or auth wall; failed creators stay due and retry next session
 - Channel list APIs now return `last_saved` (most recent download) per creator
+- One backend engine now runs all channel platforms: the twelve per-platform database, loop, tracker, and web clone files collapsed into shared engine modules plus one small adapter per platform; behaviour is unchanged and every future fix lands once for all platforms
+- Each platform's loops, run queues, and log consoles are isolated engine instances; nothing is shared between platforms at runtime
 
 ### Fixed
+- Instagram and Twitter databases are now included in the nightly backup rotation; previously only TikTok and YouTube were backed up
 - Twitter and Instagram avatars are now cached and shown on creator cards; the avatar cache only supported TikTok and YouTube, so Twitter profile fetches silently dropped the profile picture
 - YouTube no longer reports a false handle change to an empty value on every loop: the channel profile fetch could return an unresolved result with no metadata, and an empty field is now treated as missing instead of a change
 - YouTube channel display names no longer fall back to the channel ID; a sparse profile fetch also no longer wipes a stored display name or description on any channel platform
