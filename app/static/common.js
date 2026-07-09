@@ -158,6 +158,8 @@ async function _scheduleSettingsSave(platform, idPrefix) {
   showToast('Settings saved.', { type: 'success', duration: 2500 });
 }
 
+const _vgridPlayIcon = `<svg width="12" height="12" viewBox="0 0 9 9" fill="rgba(255,255,255,.9)"><polygon points="1.5,0.5 8.5,4.5 1.5,8.5"/></svg>`;
+
 // ── Loop panel helpers (shared) ───────────────────────────────────────────────
 
 // Render session-time pills into el: done (past), running (current), next (upcoming).

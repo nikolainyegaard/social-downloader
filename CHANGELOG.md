@@ -19,6 +19,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Settings > Instagram and Settings > Twitter: the single loop interval field is replaced by the Loop Schedule panel (sessions per day plus starred/active/inactive check intervals); the `INSTAGRAM_LOOP_INTERVAL_MINUTES` and `TWITTER_LOOP_INTERVAL_MINUTES` env vars are replaced by `*_SESSIONS_PER_DAY` and `*_CHECK_HOURS` variables
 - Instagram and Twitter loop panels now match TikTok's: Next, Starred, Half, and All trigger buttons with the same semantics (Starred primes and runs only starred creators; Half primes the 50% longest since last check; All primes everyone), plus the last-run meta line and session time pills
 - Top platform tabs reordered to TikTok, Twitter, Instagram, YouTube; the Settings navigation matches
+- Twitter, Instagram, and YouTube now render from a single shared frontend engine: identical creator cards, detail modals, filter bars, add forms, recent panels, and loop panels generated per platform from a config; changing the engine changes all three apps at once
+- YouTube moved to the session scheduler: sessions spread across each 24 hour window, per-channel starred/active/inactive intervals, Next/Starred/Half/All trigger buttons, and the Loop Schedule settings panel; the `YOUTUBE_LOOP_INTERVAL_MINUTES` env var is replaced by `YOUTUBE_SESSIONS_PER_DAY` and `YOUTUBE_*_CHECK_HOURS` variables
+- YouTube sessions shuffle the due list and add random gaps between channels, matching the other platforms
 
 ## [0.4.0] - 2026-06-29
 

@@ -180,7 +180,7 @@ def run_session_scheduler(platform: str, db, loop_mod) -> None:
     get_and_clear_trigger_scope(), set_next_run(iso), set_sessions_today(times),
     run_loop(channels_due, manual).
     """
-    label = platform.capitalize()
+    label = {"youtube": "YouTube", "tiktok": "TikTok"}.get(platform, platform.capitalize())
     defaults = platform_defaults(platform)
     session_times: list[float] = []
     window_end = 0.0

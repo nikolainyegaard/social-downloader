@@ -26,7 +26,6 @@ from platforms.tiktok.loop import (
     recover_loop_state_from_db,
 )
 from platforms.youtube import loop as youtube_loop
-from platforms.youtube.loop import LOOP_INTERVAL_MINUTES as YOUTUBE_LOOP_INTERVAL_MINUTES
 from platforms.instagram import database as instagram_db
 from platforms.instagram import loop as instagram_loop
 from platforms.twitter import database as twitter_db
@@ -372,28 +371,7 @@ def _twitter_loop_thread():
 # ── YouTube loop scheduler ────────────────────────────────────────────────────
 
 def _youtube_loop_thread():
-    while True:
-        interval_minutes = int(youtube_db.get_setting("loop_interval_minutes", YOUTUBE_LOOP_INTERVAL_MINUTES))
-        next_at_ts = time.time() + interval_minutes * 60
-        youtube_loop.set_next_run(datetime.fromtimestamp(next_at_ts, tz=timezone.utc).isoformat())
-        print(
-            f"{_ts()} YouTube loop sleeping {interval_minutes} min"
-            f" until {datetime.fromtimestamp(next_at_ts).strftime('%H:%M:%S')}."
-        )
-
-        remaining = next_at_ts - time.time()
-        triggered = youtube_loop.trigger_event.wait(timeout=max(remaining, 0))
-        youtube_loop.trigger_event.clear()
-
-        if youtube_loop.check_and_clear_reschedule():
-            print(f"{_ts()} YouTube loop: interval changed, rescheduling.")
-            continue
-
-        if triggered:
-            print(f"{_ts()} YouTube loop: manual trigger received.")
-
-        youtube_loop.set_next_run(None)
-        youtube_loop.run_loop()
+    scheduling.run_session_scheduler("youtube", youtube_db, youtube_loop)
 
 
 # ── File integrity check (twice daily: 00:00 and 12:00) ──────────────────────
@@ -544,7 +522,7 @@ if __name__ == "__main__":
         active_secs=ACTIVE_CHECK_HOURS * 3600,
         inactive_secs=INACTIVE_CHECK_HOURS * 3600,
     )
-    for _platform, _pdb in (("instagram", instagram_db), ("twitter", twitter_db)):
+    for _platform, _pdb in (("youtube", youtube_db), ("instagram", instagram_db), ("twitter", twitter_db)):
         scheduling.recompute_activity_scores(_pdb, *scheduling.get_check_intervals(_pdb, _platform))
     print(f"{_ts()} Startup: activity scores computed for all creators.")
 

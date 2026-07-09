@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import threading
 import time
 from typing import Callable
@@ -9,6 +10,7 @@ from typing import Callable
 from platforms.youtube import database as db
 from platforms.youtube.api import fetch_channel_info, fetch_channel_videos
 from downloader import download_video, rename_creator_folder
+from scheduling import channel_gap_secs, get_check_intervals, set_channel_next_check
 from thumbnailer import cache_avatar, cache_banner
 
 _CONFIRM_THRESHOLD = 2
@@ -24,18 +26,31 @@ def process_all_channels(
     set_current: Callable[[str | None], None] | None = None,
     stop_event: threading.Event | None = None,
 ) -> int:
-    """Process all tracked YouTube channels. Returns the count of successful channel runs."""
+    """Process one session of due YouTube channels. Returns the count of successful runs."""
     n = db.backfill_upload_dates()
     if n:
         log(f"  Backfilled upload_date for {n} video(s) from stored metadata")
+
+    high_secs, active_secs, _ = get_check_intervals(db, "youtube")
+    random.shuffle(channels)
     completed = 0
-    for channel in channels:
+    for i, channel in enumerate(channels):
         if stop_event and stop_event.is_set():
             log("=== YouTube loop stopped by request ===")
             break
+        if i > 0:
+            gap = channel_gap_secs("youtube")
+            if stop_event:
+                stop_event.wait(gap)
+            else:
+                time.sleep(gap)
         try:
             process_single_channel(channel, log, set_current)
             completed += 1
+            interval = channel.get("check_interval_secs") or (
+                high_secs if channel.get("starred") else active_secs
+            )
+            set_channel_next_check(db, channel["channel_id"], int(time.time()) + interval)
         except Exception as e:
             log(f"Unhandled error for @{channel.get('handle', '?')}: {e}")
     return completed

@@ -146,6 +146,9 @@ def _migrate_db(conn) -> bool:
         "ALTER TABLE videos   ADD COLUMN uploader               TEXT",
         "ALTER TABLE videos   ADD COLUMN uploader_id            TEXT",
         "ALTER TABLE videos   ADD COLUMN channel_is_verified    INTEGER DEFAULT 0",
+        "ALTER TABLE channels ADD COLUMN last_video_at          INTEGER",
+        "ALTER TABLE channels ADD COLUMN next_check_at          INTEGER",
+        "ALTER TABLE channels ADD COLUMN check_interval_secs    INTEGER",
     ]
     for sql in migrations:
         try:

@@ -16,7 +16,7 @@ from platforms.youtube.api import fetch_channel_info, normalize_handle
 from platforms.youtube.loop import (
     is_running, get_state_snapshot, trigger_event, request_stop,
     enqueue_channel_run, enqueue_channel_profile_run, reschedule_loop,
-    LOOP_INTERVAL_MINUTES,
+    set_trigger_scope,
 )
 from thumbnailer import thumb_path_for
 
@@ -462,16 +462,66 @@ def get_status():
     return jsonify(get_state_snapshot())
 
 
-@youtube_bp.route("/trigger", methods=["POST"])
-def trigger_now():
+def _check_trigger_preconditions():
+    """Return (issues, is_running) for the loop trigger endpoints."""
     from config import get_path_issues
-    issues = get_path_issues()
+    return get_path_issues(), is_running()
+
+
+@youtube_bp.route("/trigger/next", methods=["POST"])
+def trigger_next_now():
+    issues, running = _check_trigger_preconditions()
     if issues:
         return jsonify({"error": issues[0]["message"]}), 503
-    if is_running():
+    if running:
         return jsonify({"error": "Loop is already running"}), 409
+    from scheduling import get_channels_due_for_check
+    due = get_channels_due_for_check(db, int(time.time()))
+    set_trigger_scope("next")
     trigger_event.set()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "queued": len(due), "mode": "next"})
+
+
+@youtube_bp.route("/trigger", methods=["POST"])
+def trigger_now():
+    issues, running = _check_trigger_preconditions()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
+    if running:
+        return jsonify({"error": "Loop is already running"}), 409
+    from scheduling import prime_starred_channels
+    n = prime_starred_channels(db)
+    set_trigger_scope("starred")
+    trigger_event.set()
+    return jsonify({"ok": True, "queued": n, "mode": "starred"})
+
+
+@youtube_bp.route("/trigger/half", methods=["POST"])
+def trigger_half_now():
+    issues, running = _check_trigger_preconditions()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
+    if running:
+        return jsonify({"error": "Loop is already running"}), 409
+    from scheduling import prime_half_channels
+    n = prime_half_channels(db)
+    set_trigger_scope("half")
+    trigger_event.set()
+    return jsonify({"ok": True, "queued": n, "mode": "half"})
+
+
+@youtube_bp.route("/trigger/all", methods=["POST"])
+def trigger_all_now():
+    issues, running = _check_trigger_preconditions()
+    if issues:
+        return jsonify({"error": issues[0]["message"]}), 503
+    if running:
+        return jsonify({"error": "Loop is already running"}), 409
+    from scheduling import prime_all_channels
+    n = prime_all_channels(db)
+    set_trigger_scope("all")
+    trigger_event.set()
+    return jsonify({"ok": True, "queued": n, "mode": "all"})
 
 
 @youtube_bp.route("/stop", methods=["POST"])
@@ -482,20 +532,34 @@ def stop_loop():
     return jsonify({"ok": True})
 
 
+_SCHEDULE_KEYS = (
+    "sessions_per_day",
+    "high_priority_check_hours",
+    "active_check_hours",
+    "inactive_check_hours",
+)
+
+
 @youtube_bp.route("/settings", methods=["GET"])
 def get_settings():
+    from scheduling import platform_defaults
+    defaults = platform_defaults("youtube")
     return jsonify({
-        "loop_interval_minutes": int(db.get_setting("loop_interval_minutes", LOOP_INTERVAL_MINUTES)),
+        key: int(db.get_setting(key, defaults[key])) for key in _SCHEDULE_KEYS
     })
 
 
 @youtube_bp.route("/settings", methods=["PATCH"])
 def update_settings():
-    body = request.get_json(silent=True) or {}
-    if "loop_interval_minutes" in body:
-        val = body["loop_interval_minutes"]
-        if not isinstance(val, int) or val < 1:
-            return jsonify({"error": "loop_interval_minutes must be a positive integer"}), 400
-        db.set_setting("loop_interval_minutes", val)
+    body    = request.get_json(silent=True) or {}
+    changed = False
+    for key in _SCHEDULE_KEYS:
+        if key in body:
+            val = body[key]
+            if not isinstance(val, int) or val < 1:
+                return jsonify({"error": f"{key} must be a positive integer"}), 400
+            db.set_setting(key, val)
+            changed = True
+    if changed:
         reschedule_loop()
     return jsonify({"ok": True})
