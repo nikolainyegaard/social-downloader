@@ -15,7 +15,10 @@ let runQueue      = [];   // channel_ids queued for manual run
 let runCurrent    = null; // channel_id currently being run manually
 let pendingRescans = {};  // {channel_id: fires_at_unix_secs} for large-spike midpoint re-scans
 let userSort      = { field: 'username', dir: 'asc' };
-let userFilter    = { priv: new Set(), stat: new Set(), star: new Set() };
+// Default filters: hide banned, blocked, and inactive; leave Starred off
+const _defaultUserFilter  = () => ({ priv: new Set(['public', 'private']), stat: new Set(['active']), star: new Set() });
+const _defaultSoundFilter = () => ({ stat: new Set(['active']), star: new Set() });
+let userFilter    = _defaultUserFilter();
 
 // ── Cookie management ─────────────────────────────────────────────────────────
 
@@ -729,16 +732,16 @@ function setUserSortField(field) {
 
 function resetUserFilters() {
   userSort   = { field: 'username', dir: 'asc' };
-  userFilter = { priv: new Set(), stat: new Set(), star: new Set() };
+  userFilter = _defaultUserFilter();
   _trackingSearch = '';
   const searchEl = document.getElementById('trackingSearch');
   if (searchEl) searchEl.value = '';
   const sel = document.getElementById('userSortField');
   if (sel) sel.value = 'username';
   _updateSortBtn('userSortDirBtn', userSort);
-  Object.values(USER_PRIV_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
-  Object.values(USER_STAT_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
-  Object.values(USER_STAR_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
+  Object.entries(USER_PRIV_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', userFilter.priv.has(v)));
+  Object.entries(USER_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', userFilter.stat.has(v)));
+  Object.entries(USER_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', userFilter.star.has(v)));
   renderUsers();
 }
 
@@ -758,10 +761,9 @@ function _filteredUsers() {
   return users.filter(u => {
     if (userFilter.priv.size) {
       const privKey = u.account_status === 'banned' ? 'banned'
-        : u.privacy_status === 'public' ? 'public'
         : u.privacy_status === 'blocked' ? 'blocked'
         : ['private_accessible', 'private_blocked'].includes(u.privacy_status) ? 'private'
-        : null;
+        : 'public';   // includes not-yet-checked users so new adds show under the default filter
       if (!userFilter.priv.has(privKey)) return false;
     }
     if (userFilter.stat.size && !userFilter.stat.has(u.tracking_enabled === 0 ? 'inactive' : 'active')) return false;
@@ -1037,7 +1039,7 @@ async function loadUsers() {
 let sounds        = [];
 let soundRunCurrent = null;
 let soundRunQueue   = [];
-let soundFilter   = { stat: new Set(), star: new Set() };
+let soundFilter   = _defaultSoundFilter();
 let soundSort     = { field: 'label', dir: 'asc' };
 
 function setSoundFilter(group, value) {
@@ -1065,7 +1067,7 @@ function toggleSoundSortDir() {
 
 
 function resetSoundFilters() {
-  soundFilter = { stat: new Set(), star: new Set() };
+  soundFilter = _defaultSoundFilter();
   soundSort   = { field: 'label', dir: 'asc' };
   _trackingSearch = '';
   const searchEl = document.getElementById('trackingSearch');
@@ -1073,8 +1075,8 @@ function resetSoundFilters() {
   const sel = document.getElementById('soundSortField');
   if (sel) sel.value = 'label';
   _updateSortBtn('soundSortDirBtn', soundSort);
-  Object.values(SOUND_STAT_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
-  Object.values(SOUND_STAR_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
+  Object.entries(SOUND_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', soundFilter.stat.has(v)));
+  Object.entries(SOUND_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', soundFilter.star.has(v)));
   renderSounds();
 }
 

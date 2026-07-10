@@ -107,7 +107,7 @@ function initChannelApp(cfg) {
         <div class="filter-row">
           <span class="filter-row-label">Tracking</span>
           <div class="filter-pills multi">
-            <button class="filter-pill" id="${P}fStatActive"   onclick="${P}SetFilter('stat','active')">Active</button>
+            <button class="filter-pill active" id="${P}fStatActive" onclick="${P}SetFilter('stat','active')">Active</button>
             <button class="filter-pill" id="${P}fStatInactive" onclick="${P}SetFilter('stat','inactive')">Inactive</button>
           </div>
         </div>
@@ -175,7 +175,9 @@ function initChannelApp(cfg) {
 
   let creators       = [];
   let sort           = { field: 'handle', dir: 'asc' };
-  let filter         = { stat: new Set(), star: new Set() };
+  // Default filter: hide inactive creators; Starred stays off
+  const _defaultFilter = () => ({ stat: new Set(['active']), star: new Set() });
+  let filter         = _defaultFilter();
   let search         = '';
   const addToasts    = _makeAddToasts(API, () => loadCreators());
   let runQueue       = [];
@@ -686,15 +688,15 @@ function initChannelApp(cfg) {
 
   X('ResetFilters', () => {
     sort   = { field: 'handle', dir: 'asc' };
-    filter = { stat: new Set(), star: new Set() };
+    filter = _defaultFilter();
     search = '';
     const searchEl = _el('Search');
     if (searchEl) searchEl.value = '';
     const sel = _el('SortField');
     if (sel) sel.value = 'handle';
     _updateSortBtn();
-    Object.values(STAT_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
-    Object.values(STAR_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
+    Object.entries(STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', filter.stat.has(v)));
+    Object.entries(STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', filter.star.has(v)));
     renderCreators();
   });
 
