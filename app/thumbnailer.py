@@ -24,9 +24,9 @@ import shutil
 import subprocess
 import time
 import urllib.request
-from platforms.tiktok import database as db
-from config import MEDIA_DIR, THUMBNAIL_WORKERS, THUMBNAIL_USE_GPU, _ts
-from platforms.tiktok.config import AVATARS_DIR
+from config import DATA_DIR, MEDIA_DIR, THUMBNAIL_WORKERS, THUMBNAIL_USE_GPU, _ts
+
+AVATARS_DIR = os.path.join(DATA_DIR, "tiktok", "avatars")
 from photo_converter import encode_avif, CRF_THUMB, CRF_AVATAR
 
 THUMB_WIDTH = 360   # px
@@ -65,15 +65,10 @@ def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok",
     if not avatar_url:
         return False
 
-    if platform == "tiktok":
-        _avatars_dir = AVATARS_DIR
-        _db = db
-    else:
-        if db_obj is None:
-            return False
-        from config import DATA_DIR as _DATA_DIR
-        _avatars_dir = os.path.join(_DATA_DIR, platform, "avatars")
-        _db = db_obj
+    if db_obj is None:
+        return False
+    _avatars_dir = os.path.join(DATA_DIR, platform, "avatars")
+    _db = db_obj
 
     os.makedirs(_avatars_dir, exist_ok=True)
 
@@ -297,13 +292,10 @@ def backfill_thumbnails() -> None:
     print(f"[{_ts()}] Thumbnail backfill: scanning database...")
     t0 = time.monotonic()
 
-    all_videos = list(db.get_all_videos())
-    try:
-        from platforms.registry import ENGINES
-        for _eng in ENGINES.values():
-            all_videos.extend(_eng.db.get_all_videos())
-    except Exception:
-        pass
+    all_videos = []
+    from platforms.registry import ENGINES
+    for _eng in ENGINES.values():
+        all_videos.extend(_eng.db.get_all_videos())
     total = len(all_videos)
 
     missing = [

@@ -189,12 +189,19 @@ def channel_gap_secs(platform: str) -> float:
     return max(random.expovariate(1.0 / mean), SESSION_GAP_MIN_SECS)
 
 
-def run_session_scheduler(platform: str, db, loop_mod) -> None:
+def run_session_scheduler(platform: str, db, loop_mod,
+                          on_window_start=None, pre_session=None) -> None:
     """Scheduler thread body: distributes N sessions across each 24-hour window.
 
     loop_mod must expose: trigger_event, check_and_clear_reschedule(),
     get_and_clear_trigger_scope(), set_next_run(iso), set_sessions_today(times),
     run_loop(channels_due, manual).
+
+    Optional hooks:
+    on_window_start(now): called when a new 24h window is scheduled (TikTok
+    advances its full-refresh batch cycle here).
+    pre_session(triggered): called right before a session runs (TikTok waits
+    for the sound loop to finish plus a buffer).
     """
     label = {"youtube": "YouTube", "tiktok": "TikTok"}.get(platform, platform.capitalize())
     defaults = platform_defaults(platform)
@@ -224,6 +231,11 @@ def run_session_scheduler(platform: str, db, loop_mod) -> None:
             session_times[0] = max(session_times[0], now + 60)
             loop_mod.set_sessions_today(session_times)
             print(f"{_ts()} {label} loop: {n_sessions} session(s) scheduled for the next 24 h.")
+            if on_window_start:
+                try:
+                    on_window_start(now)
+                except Exception as e:
+                    print(f"{_ts()} {label} loop: window-start hook error: {e}")
 
         next_ts   = session_times[0]
         remaining = next_ts - time.time()
@@ -251,6 +263,12 @@ def run_session_scheduler(platform: str, db, loop_mod) -> None:
             session_times = session_times[1:]
 
         loop_mod.set_next_run(None)
+
+        if pre_session:
+            try:
+                pre_session(triggered)
+            except Exception as e:
+                print(f"{_ts()} {label} loop: pre-session hook error: {e}")
 
         now_ts = int(time.time())
         scope  = loop_mod.get_and_clear_trigger_scope() if triggered else None

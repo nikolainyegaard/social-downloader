@@ -140,9 +140,6 @@ def create_app() -> Flask:
             "oauth_enabled": oauth_enabled,
         }
 
-    from platforms.tiktok.web import tiktok_bp
-    app.register_blueprint(tiktok_bp)
-
     from platforms.registry import ENGINES
     for _engine in ENGINES.values():
         app.register_blueprint(_engine.create_blueprint())
@@ -159,12 +156,19 @@ def create_app() -> Flask:
 
     @app.route("/api/migrate/preview")
     def migrate_preview():
-        from platforms.tiktok.database import get_legacy_path_prefixes
-        return jsonify(get_legacy_path_prefixes())
+        # Aggregate legacy path prefixes across every platform DB
+        merged: dict = {}
+        media_dir = None
+        for _engine in ENGINES.values():
+            info      = _engine.db.get_legacy_path_prefixes()
+            media_dir = info["media_dir"]
+            for prefix, count in info["prefixes"].items():
+                merged[prefix] = merged.get(prefix, 0) + count
+        return jsonify({"prefixes": merged, "media_dir": media_dir,
+                        "total_legacy": sum(merged.values())})
 
     @app.route("/api/migrate", methods=["POST"])
     def migrate_paths():
-        from platforms.tiktok.database import rewrite_file_paths
         body = request.get_json(silent=True) or {}
         old_prefix = (body.get("old_prefix") or "").strip().rstrip("/")
         new_prefix = (body.get("new_prefix") or "").strip().rstrip("/")
@@ -172,7 +176,8 @@ def create_app() -> Flask:
             return jsonify({"error": "old_prefix and new_prefix are required"}), 400
         if old_prefix == new_prefix:
             return jsonify({"error": "old_prefix and new_prefix must differ"}), 400
-        count = rewrite_file_paths(old_prefix, new_prefix)
+        count = sum(_engine.db.rewrite_file_paths(old_prefix, new_prefix)
+                    for _engine in ENGINES.values())
         return jsonify({"ok": True, "updated": count})
 
     # OAuth configuration API. GET is always unauthenticated (needed before OAuth is

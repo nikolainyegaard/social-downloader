@@ -153,7 +153,7 @@ def process_single_channel(
             return "failed"
 
         remote_ids = set(remote_posts)
-        known_ids, active_ids = db.get_video_id_sets(channel_id)
+        known_ids, active_ids, _confirm_pending = db.get_video_id_sets(channel_id)
 
         new_ids       = remote_ids - known_ids
         deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()

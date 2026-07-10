@@ -8,12 +8,13 @@ import threading
 import time
 from typing import Callable
 
-from platforms.tiktok import database as db
 from platforms.tiktok.config import (
     get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE,
     SESSION_GAP_MEAN_SECS,
     HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
 )
+from platforms.tiktok.store import TikTokStore
+from scheduling import set_channel_next_check, set_channel_last_full
 from platforms.tiktok.api import (
     get_user_info, get_user_videos, get_user_videos_with_stats,
     fetch_sound_video_ids, get_video_details,
@@ -21,6 +22,19 @@ from platforms.tiktok.api import (
 )
 from downloader import download_video, download_photos, rename_creator_folder
 from thumbnailer import cache_avatar, generate_thumbnail
+
+# Bound from the engine instance by the entry points below; module-level so the
+# deep helper functions keep their original call shape. All entry points bind
+# the same singletons, so concurrent loops are safe.
+db = None
+store = None
+
+
+def _bind(engine) -> None:
+    global db, store
+    if db is None:
+        db    = engine.db
+        store = TikTokStore(engine.db)
 
 _BOT_SLEEP_1                  = 300  # seconds after first bot detection (5 min)
 _BOT_SLEEP_2                  = 600  # seconds after second bot detection (10 min)
@@ -64,14 +78,14 @@ async def process_single_user(
     stop_event: threading.Event | None = None,
 ) -> bool:
     """Process a single user. Returns True if the profile fetch succeeded, False if it failed."""
-    tiktok_id = user["tiktok_id"]
+    channel_id = user["channel_id"]
 
     if set_current_user:
-        set_current_user(user["username"])
+        set_current_user(user["handle"])
 
     try:
         _mode_tag = "[Quick]" if mode == "quick" else "[Full] "
-        log(f"{_mode_tag} Processing @{user['username']} ({progress or f'ID: {tiktok_id}'})")
+        log(f"{_mode_tag} Processing @{user['handle']} ({progress or f'ID: {channel_id}'})")
 
         is_private: bool | None = None
 
@@ -90,15 +104,15 @@ async def process_single_user(
                 # For new users (no sec_uid yet), fall back to username lookup.
                 info = await get_user_info(
                     api,
-                    username=None if sec_uid else user["username"],
+                    username=None if sec_uid else user["handle"],
                     sec_uid=sec_uid,
                 )
 
                 # Account recovered from a ban: restore all ban-deleted videos.
                 if _was_banned:
-                    restored = db.restore_banned_videos(tiktok_id)
-                    db.set_user_account_status(tiktok_id, "active")
-                    db.set_user_tracking_enabled(tiktok_id, True)
+                    restored = store.restore_banned_videos(channel_id)
+                    store.set_account_status(channel_id, "active")
+                    db.set_channel_tracking_enabled(channel_id, True)
                     log(f"  Account restored: ban cleared, {_npost(restored)} re-activated")
 
                 # Record profile field changes before overwriting stored values.
@@ -110,25 +124,25 @@ async def process_single_user(
                 _bio_blocked    = user.get("privacy_status") == "private_blocked" or _is_private_now
                 _field_labels   = {"username": "Username", "display_name": "Display name", "bio": "Bio", "bio_link": "Bio link"}
                 _profile_fields = {
-                    "username":     (user.get("username"),     info.get("username")),
+                    "username":     (user.get("handle"),     info.get("username")),
                     "display_name": (user.get("display_name"), info.get("display_name")),
-                    "bio":          (user.get("bio"),          info.get("bio")),
+                    "bio":          (user.get("description"),          info.get("bio")),
                     "bio_link":     (user.get("bio_link"),     info.get("bio_link")),
                 }
                 for _field, (_old, _new) in _profile_fields.items():
                     if _field in ("bio", "bio_link") and _bio_blocked:
                         continue
                     if _new is not None and _new != _old:
-                        db.record_profile_change(tiktok_id, _field, _old)
+                        db.record_profile_change(channel_id, _field, _old)
                         if _field != "username":  # username gets its own log line below
                             log(f"  Profile change: {_field_labels[_field]} updated")
 
                 # Preserve stored bio/bio_link for private accounts: TikTok omits them
                 # from the API response so the API values are always empty.
-                _bio_for_db      = info["bio"] if not _is_private_now else (info["bio"] or user.get("bio"))
+                _bio_for_db      = info["bio"] if not _is_private_now else (info["bio"] or user.get("description"))
                 _bio_link_for_db = info.get("bio_link") if not _is_private_now else (info.get("bio_link") or user.get("bio_link"))
-                db.update_user_info(
-                    tiktok_id,
+                store.update_channel_profile(
+                    channel_id,
                     info["username"],
                     info["display_name"],
                     _bio_for_db,
@@ -138,52 +152,52 @@ async def process_single_user(
                     sec_uid=info.get("sec_uid"),
                     verified=int(info.get("verified", False)),
                     avatar_url=info.get("avatar_url"),
-                    raw_user_data=info.get("_raw_user_data"),
+                    raw_channel_data=info.get("_raw_user_data"),
                     relation=info.get("relation"),
                     bio_link=_bio_link_for_db,
                 )
-                db.reset_profile_fail_count(tiktok_id)
+                store.reset_profile_fail_count(channel_id)
                 _profile_ok  = True
                 username     = info["username"]
                 display_name = info["display_name"] or username
                 if info.get("sec_uid"):
                     sec_uid = info["sec_uid"]
-                if username != user["username"]:
-                    old_username = user["username"]
+                if username != user["handle"]:
+                    old_username = user["handle"]
                     log(f"  Username changed: @{old_username} -> @{username}")
                     if rename_creator_folder("tiktok", old_username, username):
-                        db.rename_user_video_paths(tiktok_id, old_username, username)
+                        db.rename_channel_video_paths(channel_id, old_username, username)
                         log(f"  Folder renamed and DB paths updated")
                 is_private = _is_private_now
                 if info.get("avatar_url"):
-                    if cache_avatar(tiktok_id, info["avatar_url"]) == "changed":
+                    if cache_avatar(channel_id, info["avatar_url"], db_obj=db) == "changed":
                         log(f"  Profile change: avatar changed")
                 break  # profile fetch succeeded; exit retry loop
             except UserBannedException:
                 _profile_ok = True  # TikTok responded with valid data; not a rate limit failure
-                db.reset_profile_fail_count(tiktok_id)
+                store.reset_profile_fail_count(channel_id)
                 if _was_banned:
                     log(f"  No changes (still banned)")
                     banned_at = user.get("banned_at")
                     if (banned_at
                             and time.time() - banned_at >= 14 * 86400
                             and user.get("tracking_enabled", 1)):
-                        db.set_user_tracking_enabled(tiktok_id, False)
+                        db.set_channel_tracking_enabled(channel_id, False)
                         log(f"  Banned for 14+ consecutive days -- tracking disabled")
                 else:
                     log(f"  Account banned/removed (TikTok ban code), marking as banned")
-                    db.set_user_account_status(tiktok_id, "banned")
-                    n = db.ban_user_videos(tiktok_id)
+                    store.set_account_status(channel_id, "banned")
+                    n = store.ban_channel_videos(channel_id)
                     if n:
                         log(f"  {_npost(n)} marked deleted (user_banned)")
-                db.touch_user_last_checked(tiktok_id)
+                store.touch_last_checked(channel_id)
                 return _profile_ok, _deletion_detected
             except UserBlockedException:
                 _profile_ok = True
-                db.reset_profile_fail_count(tiktok_id)
+                store.reset_profile_fail_count(channel_id)
                 log(f"  Cookies account blocked by this user -- skipping")
-                db.update_user_privacy_status(tiktok_id, "blocked")
-                db.touch_user_last_checked(tiktok_id)
+                store.update_privacy_status(channel_id, "blocked")
+                store.touch_last_checked(channel_id)
                 return _profile_ok, _deletion_detected
             except UserPrivateException:
                 # Profile data unavailable (TikTok 10222 -- account is fully private at API level).
@@ -192,12 +206,12 @@ async def process_single_user(
                 # still be accessible if we follow the account and have valid cookies.
                 # Fall through to the video fetch rather than assuming blocked.
                 _profile_ok = True
-                db.reset_profile_fail_count(tiktok_id)
+                store.reset_profile_fail_count(channel_id)
                 log(f"  Profile data unavailable (private account, TikTok 10222), attempting video fetch")
                 is_private = True
                 info = {}
-                username     = user["username"]
-                display_name = user.get("display_name") or user["username"]
+                username     = user["handle"]
+                display_name = user.get("display_name") or user["handle"]
                 break
             except Exception as e:
                 if _is_bot_error(e):
@@ -206,12 +220,12 @@ async def process_single_user(
                     log(f"  Profile fetch failed, retrying in {_PROFILE_FAIL_SLEEP}s")
                     await asyncio.sleep(_PROFILE_FAIL_SLEEP)
                 else:
-                    _fail_count = db.increment_profile_fail_count(tiktok_id)
+                    _fail_count = store.increment_profile_fail_count(channel_id)
                     if _fail_count < _PROFILE_FAIL_QUIET_THRESHOLD:
                         log(f"  Profile fetch failed after retry: {e}")
                     else:
-                        logd(f"  [{tiktok_id}] profile still failing (#{_fail_count}): {e}")
-                    username     = user["username"]
+                        logd(f"  [{channel_id}] profile still failing (#{_fail_count}): {e}")
+                    username     = user["handle"]
                     display_name = user.get("display_name") or username
 
         if not fetch_videos:
@@ -232,12 +246,12 @@ async def process_single_user(
                 )
                 curr_ordered  = [v["video_id"] for v in item_list_videos]
                 item_list_map = {v["video_id"]: v for v in item_list_videos}
-                logd(f"  [{tiktok_id}] {len(item_list_map)} videos via item_list (sec_uid={sec_uid})")
+                logd(f"  [{channel_id}] {len(item_list_map)} videos via item_list (sec_uid={sec_uid})")
             except Exception as e:
                 if _is_bot_error(e):
                     raise _BotDetectedError(str(e)) from e
                 log(f"  Video fetch failed, trying fallback...")
-                logd(f"  [{tiktok_id}] item_list error: {e}")
+                logd(f"  [{channel_id}] item_list error: {e}")
 
         # For 10222 accounts: recover username, display name, bio, and avatar from
         # item_list author data. Follower/video counts remain unavailable.
@@ -254,26 +268,26 @@ async def process_single_user(
                 old_username = username
                 log(f"  Username changed: @{old_username} -> @{_a_username}")
                 if rename_creator_folder("tiktok", old_username, _a_username):
-                    db.rename_user_video_paths(tiktok_id, old_username, _a_username)
+                    db.rename_channel_video_paths(channel_id, old_username, _a_username)
                     log(f"  Folder renamed and DB paths updated")
-                db.record_profile_change(tiktok_id, "username", old_username)
+                db.record_profile_change(channel_id, "username", old_username)
                 username = _a_username
             if _a_display and _a_display != user.get("display_name"):
-                db.record_profile_change(tiktok_id, "display_name", user.get("display_name"))
+                db.record_profile_change(channel_id, "display_name", user.get("display_name"))
                 log(f"  Profile change: Display name updated")
             if _a_display:
                 display_name = _a_display
             if _a_avatar:
-                if cache_avatar(tiktok_id, _a_avatar) == "changed":
+                if cache_avatar(channel_id, _a_avatar, db_obj=db) == "changed":
                     log(f"  Profile change: avatar changed")
-            db.update_user_info_from_item_list(
-                tiktok_id, username, display_name, _a_bio,
+            store.update_channel_from_item_list(
+                channel_id, username, display_name, _a_bio,
                 sec_uid=sec_uid, avatar_url=_a_avatar,
             )
         elif is_private and not info:
             # 10222 account, item_list returned no data (access lost or transient failure).
             # Still stamp last_checked so the card reflects when this account was last visited.
-            db.touch_user_last_checked(tiktok_id)
+            store.touch_last_checked(channel_id)
 
         # Inaccessible private account: relation not in (1, 2) means we don't follow them.
         # relation enum: 0=none, 1=we follow them, 2=mutual/friends, 6=they follow us only.
@@ -282,7 +296,7 @@ async def process_single_user(
         if not item_list_map and is_private is True and info:
             if (info.get("relation") or 0) not in (1, 2):
                 log(f"  Private account, cannot be accessed")
-                db.update_user_privacy_status(tiktok_id, "private_blocked")
+                store.update_privacy_status(channel_id, "private_blocked")
                 return _profile_ok, _deletion_detected
 
         if item_list_map:
@@ -302,22 +316,22 @@ async def process_single_user(
             # list: nothing has changed, don't burn a yt-dlp attempt every cycle.
             if user.get("privacy_status") == "blocked" and (_profile_video_count or 0) > 0:
                 log(f"  Cookies account still blocked by this user, skipping")
-                db.touch_user_last_checked(tiktok_id)
+                store.touch_last_checked(channel_id)
                 return _profile_ok, _deletion_detected
             try:
-                ydlp_videos = get_user_videos(tiktok_id, sec_uid=sec_uid,
+                ydlp_videos = get_user_videos(channel_id, sec_uid=sec_uid,
                                               cookies_path=COOKIES_PATH)
                 ydlp_map = {v["video_id"]: v for v in ydlp_videos}
                 log(f"  {_npost(len(ydlp_map))} found")
-                logd(f"  [{tiktok_id}] {len(ydlp_map)} videos via yt-dlp fallback")
+                logd(f"  [{channel_id}] {len(ydlp_map)} videos via yt-dlp fallback")
             except Exception as e:
-                logd(f"  [{tiktok_id}] yt-dlp fallback error: {e}")
+                logd(f"  [{channel_id}] yt-dlp fallback error: {e}")
                 if "does not have any videos" in str(e) and (_profile_video_count or 0) > 0:
                     # Profile reports videos but neither source can list any: the
                     # account has most likely blocked the cookies account.
                     log(f"  Profile reports {_profile_video_count} videos but none are listable; cookies account is likely blocked by this user")
-                    db.update_user_privacy_status(tiktok_id, "blocked")
-                    db.touch_user_last_checked(tiktok_id)
+                    store.update_privacy_status(channel_id, "blocked")
+                    store.touch_last_checked(channel_id)
                     return _profile_ok, _deletion_detected
                 if "does not have any videos" in str(e) and _profile_video_count == 0:
                     # Genuinely empty account (profile confirms 0 videos): continue to
@@ -326,7 +340,7 @@ async def process_single_user(
                 else:
                     log(f"  Video fetch failed -- skipping user")
                     if "private" in str(e).lower():
-                        db.update_user_privacy_status(tiktok_id, "private_blocked")
+                        store.update_privacy_status(channel_id, "private_blocked")
                     return _profile_ok, _deletion_detected  # both sources failed; propagate profile result
 
         # If stop was requested during the item_list fetch, the result is partial.
@@ -337,9 +351,9 @@ async def process_single_user(
         remote_ids = set(item_list_map) | set(ydlp_map)
 
         if is_private is True:
-            db.update_user_privacy_status(tiktok_id, "private_accessible")
+            store.update_privacy_status(channel_id, "private_accessible")
         elif is_private is False:
-            db.update_user_privacy_status(tiktok_id, "public")
+            store.update_privacy_status(channel_id, "public")
         # if is_private is None (profile fetch failed), leave privacy_status unchanged
 
         # If the account was previously marked banned but videos are now accessible,
@@ -347,12 +361,12 @@ async def process_single_user(
         # UserPrivateException so the profile-level recovery block never runs.
         # Public accounts that recover go through the profile-level block above; skip here.
         if _was_banned and is_private is True and remote_ids:
-            db.restore_banned_videos(tiktok_id)
-            db.set_user_account_status(tiktok_id, "active")
-            db.set_user_tracking_enabled(tiktok_id, True)
+            store.restore_banned_videos(channel_id)
+            store.set_account_status(channel_id, "active")
+            db.set_channel_tracking_enabled(channel_id, True)
             log(f"  Account recovered (videos accessible): ban cleared")
 
-        known_ids, active_ids, pending_ids = db.get_video_id_sets(tiktok_id)
+        known_ids, active_ids, pending_ids = db.get_video_id_sets(channel_id)
 
         new_ids = remote_ids - known_ids
 
@@ -369,7 +383,7 @@ async def process_single_user(
         # Position-aware deletion detection for quick mode.
         quick_deleted_ids: set = set()
         if mode == "quick" and curr_ordered:
-            prev_ordered = db.get_user_last_quick_video_ids(tiktok_id)
+            prev_ordered = store.get_last_quick_video_ids(channel_id)
             if prev_ordered:
                 prev_set = set(prev_ordered)
                 curr_set = set(curr_ordered)
@@ -433,7 +447,7 @@ async def process_single_user(
                 dl_result = download_video(
                     video_id=vid_id,
                     username=username,
-                    tiktok_id=tiktok_id,
+                    tiktok_id=channel_id,
                     display_name=display_name,
                     description=details["description"],
                     upload_date=details["upload_date"],
@@ -443,8 +457,8 @@ async def process_single_user(
                 )
             _audio_only = isinstance(dl_result, dict) and dl_result.get("audio_only")
             if dl_result and not _audio_only:
-                db.add_video(
-                    vid_id, tiktok_id, details["type"],
+                store.add_video_full(
+                    vid_id, channel_id, details["type"],
                     details["description"], details["upload_date"],
                     view_count=details.get("view_count"),
                     like_count=details.get("like_count"),
@@ -460,10 +474,10 @@ async def process_single_user(
                     music_id=details.get("music_id"),
                 )
                 log(f"  Saved {vid_id} -> {dl_result['file_path']}")
-                db.update_video_downloaded(vid_id, dl_result["file_path"], dl_result.get("ytdlp_data"))
+                db.update_video_downloaded(vid_id, dl_result["file_path"], None)
             elif _audio_only:
-                db.add_video(
-                    vid_id, tiktok_id, "audio",
+                store.add_video_full(
+                    vid_id, channel_id, "audio",
                     details["description"], details["upload_date"],
                     view_count=details.get("view_count"),
                     like_count=details.get("like_count"),
@@ -481,11 +495,11 @@ async def process_single_user(
                 log(f"  Failed to download {vid_id}")
 
         for vid_id in deleted_ids:
-            db.mark_video_possibly_deleted(vid_id)
+            store.mark_video_possibly_deleted(vid_id)
             log(f"  Possibly deleted: {vid_id}")
 
         for vid_id in confirm_ids:
-            db.confirm_video_deletion(vid_id)
+            store.confirm_video_deletion(vid_id)
             log(f"  Confirmed deleted: {vid_id}")
 
         if deleted_ids or confirm_ids:
@@ -495,14 +509,14 @@ async def process_single_user(
 
         for vid_id in quick_deleted_ids:
             if vid_id in pending_ids:
-                db.confirm_video_deletion(vid_id)
+                store.confirm_video_deletion(vid_id)
                 log(f"  Confirmed deleted: {vid_id}")
             else:
-                db.mark_video_possibly_deleted(vid_id)
+                store.mark_video_possibly_deleted(vid_id)
                 log(f"  Possibly deleted: {vid_id}")
 
         for vid_id in undeleted_ids:
-            result = db.revert_or_undelete_video(vid_id)
+            result = store.revert_or_undelete_video(vid_id)
             if result == "undeleted":
                 log(f"  Undeleted: {vid_id}")
 
@@ -512,7 +526,7 @@ async def process_single_user(
         if mode == "full":
             for vid_id, details in item_list_map.items():
                 if vid_id in known_ids and vid_id not in new_ids:
-                    db.update_video_stats_loop(
+                    store.update_video_stats_loop(
                         vid_id,
                         details.get("view_count"),
                         details.get("like_count"),
@@ -526,9 +540,9 @@ async def process_single_user(
         # Skip if the fetch was interrupted: a partial list would corrupt the detection baseline.
         if not _fetch_interrupted:
             if mode == "quick" and curr_ordered:
-                db.set_user_last_quick_video_ids(tiktok_id, curr_ordered)
+                store.set_last_quick_video_ids(channel_id, curr_ordered)
             elif mode == "full" and curr_ordered:
-                db.set_user_last_quick_video_ids(tiktok_id, curr_ordered[:30])
+                store.set_last_quick_video_ids(channel_id, curr_ordered[:30])
 
         return _profile_ok, _deletion_detected, _large_deletion_spike
 
@@ -538,6 +552,7 @@ async def process_single_user(
 
 
 async def process_user_session(
+    engine,
     users: list[dict],
     log: Callable[[str], None],
     logd: Callable[[str], None],
@@ -547,6 +562,7 @@ async def process_user_session(
     on_large_deletion: Callable[[str], None] | None = None,
 ) -> int:
     """Process a set of users in one session. Returns the count of users successfully processed."""
+    _bind(engine)
     from TikTokApi import TikTokApi
 
     random.shuffle(users)
@@ -618,7 +634,7 @@ async def process_user_session(
         if cooldown_pending:
             log(f"Cooling down {cooldown_sleep // 60} min before restarting session...")
             if set_sleep:
-                _resume = f"resuming @{users[start_idx]['username']}" if start_idx < total else "restarting session"
+                _resume = f"resuming @{users[start_idx]['handle']}" if start_idx < total else "restarting session"
                 set_sleep(time.time() + cooldown_sleep, _resume)
             await asyncio.sleep(cooldown_sleep)
             cooldown_pending = False
@@ -654,7 +670,7 @@ async def process_user_session(
                     _gap       = max(random.expovariate(1.0 / SESSION_GAP_MEAN_SECS), _SESSION_GAP_MIN_SECS)
                     _next_mode = "full refresh" if user.get("full_refresh_pending") else "quick check"
                     if set_sleep:
-                        set_sleep(time.time() + _gap, f"{_next_mode} for @{user['username']}")
+                        set_sleep(time.time() + _gap, f"{_next_mode} for @{user['handle']}")
                     await asyncio.sleep(_gap)
                     if set_sleep:
                         set_sleep(None, None)
@@ -679,7 +695,7 @@ async def process_user_session(
                     _large_deletion    = _result[2] if isinstance(_result, tuple) and len(_result) > 2 else False
                     _user_processed = True
                 except _BotDetectedError as exc:
-                    logd(f"  [{user['tiktok_id']}] bot detection: {exc}")
+                    logd(f"  [{user['channel_id']}] bot detection: {exc}")
                     _retry_count = bot_retry_counts.get(idx, 0)
                     if _retry_count < 2:
                         _sleep = _BOT_SLEEP_1 if _retry_count == 0 else _BOT_SLEEP_2
@@ -692,7 +708,7 @@ async def process_user_session(
                         log(
                             f"  Bot detected -- closing session,"
                             f" sleeping {_sleep // 60} min, then restarting"
-                            f" @{user['username']}..."
+                            f" @{user['handle']}..."
                         )
                         break
                     else:
@@ -703,21 +719,21 @@ async def process_user_session(
                         total_completed += completed
                         return total_completed
                 except Exception as e:
-                    log(f"Unhandled error for @{user['username']}: {e}")
+                    log(f"Unhandled error for @{user['handle']}: {e}")
                 if _user_processed:
                     completed += 1
                     _interval = user.get("check_interval_secs") or (
                         _high_secs if user.get("starred") else _active_secs
                     )
-                    db.set_user_next_check(user["tiktok_id"], int(time.time()) + _interval)
+                    set_channel_next_check(db, user["channel_id"], int(time.time()) + _interval)
                     if _mode == "full":
-                        db.set_user_last_full_refresh_at(user["tiktok_id"], _now_ts)
-                        db.clear_full_refresh_pending(user["tiktok_id"])
+                        set_channel_last_full(db, user["channel_id"], _now_ts)
+                        store.clear_full_refresh_pending(user["channel_id"])
                         if _deletion_detected:
                             if _large_deletion and on_large_deletion:
-                                on_large_deletion(user["tiktok_id"])
+                                on_large_deletion(user["channel_id"])
                             else:
-                                db.set_user_next_check(user["tiktok_id"], None)
+                                set_channel_next_check(db, user["channel_id"], None)
                                 log(f"  Deletion candidates found; scheduling ASAP re-check")
 
             if not break_for_restart:
@@ -728,6 +744,7 @@ async def process_user_session(
 
 
 async def run_single_user_with_session(
+    engine,
     user: dict,
     log: Callable[[str], None],
     logd: Callable[[str], None],
@@ -735,6 +752,7 @@ async def run_single_user_with_session(
     mode: str = "full",
 ) -> None:
     """Create a dedicated session and process a single user. Used by the manual run worker."""
+    _bind(engine)
     from TikTokApi import TikTokApi
 
     cookies  = get_cookies_flat()
@@ -752,12 +770,12 @@ async def run_single_user_with_session(
                 )
                 break
             except Exception as e:
-                logd(f"  [{user['tiktok_id']}] create_sessions attempt {_attempt + 1} error: {e}")
+                logd(f"  [{user['channel_id']}] create_sessions attempt {_attempt + 1} error: {e}")
                 if _attempt == 0:
-                    log(f"Processing @{user['username']} -- session failed, retrying in 5s...")
+                    log(f"Processing @{user['handle']} -- session failed, retrying in 5s...")
                     await asyncio.sleep(5)
                 else:
-                    log(f"Processing @{user['username']} -- session failed after retry ({e}), skipping")
+                    log(f"Processing @{user['handle']} -- session failed after retry ({e}), skipping")
                     return
         await asyncio.sleep(3)
         await process_single_user(user, api, cookies, log=log, logd=logd, fetch_videos=not profile_only, mode=mode)
@@ -766,6 +784,7 @@ async def run_single_user_with_session(
 # ── Sound tracking ────────────────────────────────────────────────────────────
 
 async def process_all_sounds(
+    engine,
     log: Callable[[str], None],
     stop_event: threading.Event | None = None,
 ) -> dict:
@@ -773,7 +792,8 @@ async def process_all_sounds(
     Called once per main loop run, after user processing.
     Returns {"sounds_checked": int, "new_videos": int}.
     """
-    sounds = db.get_all_sounds()
+    _bind(engine)
+    sounds = store.get_all_sounds()
     if not sounds:
         return {"sounds_checked": 0, "new_videos": 0}
     random.shuffle(sounds)
@@ -787,14 +807,15 @@ async def process_all_sounds(
         if not sound.get("tracking_enabled", 1):
             log(f"Skipping '{sound.get('label') or sound['sound_id']}' (tracking disabled)")
             continue
-        total_new += await process_single_sound(sound, log)
+        total_new += await process_single_sound(engine, sound, log)
         sounds_checked += 1
 
     return {"sounds_checked": sounds_checked, "new_videos": total_new}
 
 
-async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
+async def process_single_sound(engine, sound: dict, log: Callable[[str], None]) -> int:
     """Process one sound. Returns the count of new video associations added."""
+    _bind(engine)
     sound_id = sound["sound_id"]
     label    = sound.get("label") or sound_id
 
@@ -813,38 +834,38 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
                 await asyncio.sleep(15)
             else:
                 log(f"Failed to fetch posts for sound {sound_id}: {e}")
-                db.update_sound_last_checked(sound_id)
+                store.update_sound_last_checked(sound_id)
                 return 0
 
     log(f"{_npost(len(remote_ids))} found for sound '{label}'")
 
     remote_id_set = set(remote_ids)
-    known_ids     = db.get_sound_video_ids(sound_id)
+    known_ids     = store.get_sound_video_ids(sound_id)
     new_ids       = [vid_id for vid_id in remote_ids if vid_id not in known_ids]
 
     # Deletion tracking: active videos no longer in the remote listing
-    active_ids  = db.get_sound_active_video_ids(sound_id)
-    pending_ids = db.get_sound_pending_deletion_video_ids(sound_id)
+    active_ids  = store.get_sound_active_video_ids(sound_id)
+    pending_ids = store.get_sound_pending_deletion_video_ids(sound_id)
 
     missing_ids  = active_ids - remote_id_set   # first absence: mark possibly deleted
     confirm_ids  = pending_ids - remote_id_set   # still absent: confirm deletion
     returned_ids = pending_ids & remote_id_set   # came back: revert silently
 
     for vid_id in returned_ids:
-        db.revert_or_undelete_video(vid_id)
+        store.revert_or_undelete_video(vid_id)
 
     for vid_id in missing_ids:
-        db.mark_video_possibly_deleted(vid_id)
+        store.mark_video_possibly_deleted(vid_id)
         log(f"Possibly deleted: {vid_id}")
 
     for vid_id in confirm_ids:
-        db.confirm_video_deletion(vid_id)
+        store.confirm_video_deletion(vid_id)
         log(f"Confirmed deleted: {vid_id}")
 
     if not new_ids:
         if not missing_ids:
             log(f"No changes for sound '{label}'")
-        db.update_sound_last_checked(sound_id)
+        store.update_sound_last_checked(sound_id)
         return 0
 
     log(f"New: {_npost(len(new_ids))} for sound '{label}'")
@@ -854,7 +875,7 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
     for vid_id in new_ids:
         # Already in DB (downloaded via user tracking) -- just add the junction row
         if db.get_video(vid_id):
-            db.add_sound_video(sound_id, vid_id)
+            store.add_sound_video(sound_id, vid_id)
             log(f"Linked existing video {vid_id} to sound '{label}'")
             new_count += 1
             continue
@@ -876,7 +897,7 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
             continue
 
         # Ensure user row exists; add as enabled=0 if this is a new author
-        if db.ensure_sound_user(author_id, author_username, author_sec_uid):
+        if store.ensure_sound_channel(author_id, author_username, author_sec_uid):
             log(f"Discovered untracked author @{author_username} ({author_id})")
 
         # Download
@@ -912,7 +933,7 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
 
         _audio_only = isinstance(dl_result, dict) and dl_result.get("audio_only")
         if dl_result and not _audio_only:
-            db.add_video(
+            store.add_video_full(
                 vid_id, author_id, details["type"],
                 details["description"], details["upload_date"],
                 view_count=details.get("view_count"),
@@ -928,12 +949,12 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
                 music_artist=details.get("music_artist"),
                 music_id=details.get("music_id"),
             )
-            db.update_video_downloaded(vid_id, dl_result["file_path"], dl_result.get("ytdlp_data"))
-            db.add_sound_video(sound_id, vid_id)
+            db.update_video_downloaded(vid_id, dl_result["file_path"], None)
+            store.add_sound_video(sound_id, vid_id)
             log(f"Saved {vid_id} from @{author_username} -> {dl_result['file_path']}")
             new_count += 1
         elif _audio_only:
-            db.add_video(
+            store.add_video_full(
                 vid_id, author_id, "audio",
                 details["description"], details["upload_date"],
                 view_count=details.get("view_count"),
@@ -947,10 +968,10 @@ async def process_single_sound(sound: dict, log: Callable[[str], None]) -> int:
                 music_artist=details.get("music_artist"),
                 music_id=details.get("music_id"),
             )
-            db.add_sound_video(sound_id, vid_id)
+            store.add_sound_video(sound_id, vid_id)
             log(f"Skipped {vid_id}: audio-only post")
         else:
             log(f"Failed to download {vid_id}")
 
-    db.update_sound_last_checked(sound_id)
+    store.update_sound_last_checked(sound_id)
     return new_count

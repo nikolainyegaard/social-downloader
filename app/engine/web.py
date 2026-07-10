@@ -84,7 +84,23 @@ def create_channel_blueprint(engine) -> Blueprint:
                 _pending[handle] = {"status": "error", "message": f"{noun} not found"}
             return
 
-        if db.get_channel(channel_id):
+        existing = db.get_channel(channel_id)
+        if existing:
+            if not existing.get("enabled"):
+                # Soft-disabled stub (e.g. a sound-discovered TikTok author):
+                # promote to a fully tracked creator and refresh its profile.
+                with db.get_db() as conn:
+                    conn.execute("UPDATE channels SET enabled = 1 WHERE channel_id = ?", (channel_id,))
+                db.update_channel_info(
+                    channel_id, info.get("handle") or handle,
+                    info.get("display_name"), info.get("description"),
+                    info.get("subscriber_count"), info.get("video_count"),
+                    avatar_url=info.get("avatar_url"),
+                    raw_channel_data=info.get("raw_channel_data"),
+                )
+                with _pending_lock:
+                    del _pending[handle]
+                return
             with _pending_lock:
                 _pending[handle] = {"status": "error", "message": f"{noun} is already being tracked"}
             return
@@ -99,6 +115,11 @@ def create_channel_blueprint(engine) -> Blueprint:
             avatar_url=info.get("avatar_url"),
             banner_url=info.get("banner_url"),
             raw_channel_data=info.get("raw_channel_data"),
+            following_count=info.get("following_count"),
+            join_date=info.get("join_date"),
+            sec_uid=info.get("sec_uid"),
+            verified=info.get("verified"),
+            bio_link=info.get("bio_link"),
         )
         with _pending_lock:
             del _pending[handle]
@@ -115,6 +136,19 @@ def create_channel_blueprint(engine) -> Blueprint:
                 _add_queue.task_done()
 
     threading.Thread(target=_add_worker, daemon=True, name=f"{adapter.prefix}-add-worker").start()
+
+    def _enqueue_add(handle: str) -> bool:
+        """Queue a handle for background lookup + add. Returns False if already pending.
+        Exposed on the engine so platform extras (e.g. TikTok's track-author flow)
+        can feed the same queue the frontend polls via /queue."""
+        with _pending_lock:
+            if _pending.get(handle, {}).get("status") == "pending":
+                return False
+            _pending[handle] = {"status": "pending"}
+        _add_queue.put(handle)
+        return True
+
+    engine.enqueue_add = _enqueue_add
 
     def _run_cleanup() -> None:
         with _cleanup_lock:
@@ -188,6 +222,7 @@ def create_channel_blueprint(engine) -> Blueprint:
         channels      = db.get_all_channels()
         all_stats     = db.get_all_video_stats()
         all_ph_counts = db.get_all_profile_history_counts()
+        all_ph        = db.get_all_profile_history_for_search()
         for ch in channels:
             cid   = ch["channel_id"]
             stats = all_stats.get(cid, {})
@@ -198,6 +233,16 @@ def create_channel_blueprint(engine) -> Blueprint:
             ch["video_missing"]         = stats.get("video_missing",     0)
             ch["last_saved"]            = stats.get("last_saved")
             ch["profile_history_count"] = all_ph_counts.get(cid, 0)
+            ph = all_ph.get(cid, {})
+            ch["old_handles"] = list(dict.fromkeys(
+                v for v in ph.get("handle", []) if v and v != ch["handle"]
+            ))
+            ch["old_display_names"] = list(dict.fromkeys(
+                v for v in ph.get("display_name", []) if v and v != ch.get("display_name")
+            ))
+            ch["old_descriptions"] = list(dict.fromkeys(
+                v for v in ph.get("description", []) if v and v != ch.get("description")
+            ))
         return jsonify(channels)
 
     @bp.route("/channels", methods=["POST"])
@@ -242,7 +287,19 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     @bp.route("/channels/<channel_id>/videos", methods=["GET"])
     def channel_videos(channel_id: str):
-        return jsonify(db.get_videos_for_channel(channel_id))
+        videos = db.get_videos_for_channel(channel_id)
+        # Photo posts stored with numbered siblings ({id}_01.avif) can't reveal
+        # single vs carousel from file_path alone; annotate from disk.
+        for v in videos:
+            if v.get("content_type") in ("photo", "image") and v.get("file_path") \
+                    and os.path.basename(v["file_path"]).startswith(f"{v['video_id']}_"):
+                folder = os.path.dirname(v["file_path"])
+                v["multi"] = any(
+                    os.path.exists(os.path.join(folder, f"{v['video_id']}_02.{ext}"))
+                    or os.path.exists(os.path.join(folder, f"{v['video_id']}_2.{ext}"))
+                    for ext in ("avif", "jpg", "jpeg", "png", "webp", "mp4")
+                )
+        return jsonify(videos)
 
     @bp.route("/channels/<channel_id>/run", methods=["POST"])
     def run_channel(channel_id: str):
@@ -310,7 +367,10 @@ def create_channel_blueprint(engine) -> Blueprint:
     def channel_avatar(channel_id: str):
         path = os.path.join(DATA_DIR, platform, "avatars", f"{channel_id}.avif")
         if os.path.exists(path):
-            return send_file(path, mimetype="image/avif")
+            return send_file(path, mimetype="image/avif", max_age=300)
+        jpg = os.path.join(DATA_DIR, platform, "avatars", f"{channel_id}.jpg")
+        if os.path.exists(jpg):
+            return send_file(jpg, mimetype="image/jpeg", max_age=300)
         return ("", 404)
 
     @bp.route("/channels/<channel_id>/banner", methods=["GET"])
@@ -447,7 +507,7 @@ def create_channel_blueprint(engine) -> Blueprint:
     def get_recent_deletions():
         offset = int(request.args.get("offset", 0))
         limit  = int(request.args.get("limit",  50))
-        return jsonify(db.get_deletion_history(offset=offset, limit=limit))
+        return jsonify(db.get_deletion_history_grouped(offset=offset, limit=limit))
 
     @bp.route("/recent/profile-changes", methods=["GET"])
     def get_recent_profile_changes():
@@ -480,7 +540,10 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     @bp.route("/status", methods=["GET"])
     def get_status():
-        return jsonify(loop.get_state_snapshot())
+        state = loop.get_state_snapshot()
+        if adapter.extend_status:
+            adapter.extend_status(engine, state)
+        return jsonify(state)
 
     def _check_trigger_preconditions():
         """Return (issues, is_running) for the loop trigger endpoints."""
@@ -552,23 +615,30 @@ def create_channel_blueprint(engine) -> Blueprint:
     def get_settings():
         from scheduling import platform_defaults
         defaults = platform_defaults(platform)
-        return jsonify({
-            key: int(db.get_setting(key, defaults[key])) for key in _SCHEDULE_KEYS
-        })
+        out = {key: int(db.get_setting(key, defaults[key])) for key in _SCHEDULE_KEYS}
+        for key, default in (adapter.extra_settings or {}).items():
+            out[key] = int(db.get_setting(key, default))
+        return jsonify(out)
 
     @bp.route("/settings", methods=["PATCH"])
     def update_settings():
         body    = request.get_json(silent=True) or {}
         changed = False
-        for key in _SCHEDULE_KEYS:
+        extra_changed: list[str] = []
+        for key in list(_SCHEDULE_KEYS) + list(adapter.extra_settings or {}):
             if key in body:
                 val = body[key]
                 if not isinstance(val, int) or val < 1:
                     return jsonify({"error": f"{key} must be a positive integer"}), 400
                 db.set_setting(key, val)
-                changed = True
+                if key in _SCHEDULE_KEYS:
+                    changed = True
+                else:
+                    extra_changed.append(key)
         if changed:
             loop.reschedule_loop()
+        if extra_changed and adapter.on_settings_changed:
+            adapter.on_settings_changed(engine, extra_changed)
         return jsonify({"ok": True})
 
     # ── Platform-specific extras (cookies, session login, debug routes) ──────

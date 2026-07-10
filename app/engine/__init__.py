@@ -35,6 +35,25 @@ class ChannelAdapter:
 
     register_extra_routes: Callable | None = None   # (bp, engine) -> None
 
+    # Full-session override for platforms whose fetching needs session-scoped
+    # resources (TikTok holds one browser session across a whole run). When set,
+    # the engine's generic tracker is bypassed:
+    #   process_session(engine, channels, log, set_current, stop_event) -> completed count
+    #   process_single(engine, channel, log, set_current, profile_only, mode) -> None
+    process_session: Callable | None = None
+    process_single: Callable | None = None
+
+    # Extra DB setup after ChannelDB.init_db (platform-only tables, e.g. TikTok sounds).
+    init_db_extra: Callable | None = None           # (engine) -> None
+
+    # Merge platform-only keys into the /status payload (e.g. TikTok sound loop state).
+    extend_status: Callable | None = None           # (engine, state: dict) -> None
+
+    # Platform-only integer settings served/accepted by /settings alongside the
+    # schedule keys: {key: default}. on_settings_changed fires when one changes.
+    extra_settings: dict | None = None
+    on_settings_changed: Callable | None = None     # (engine, changed_keys: list[str]) -> None
+
 
 class ChannelEngine:
     def __init__(self, adapter: ChannelAdapter):

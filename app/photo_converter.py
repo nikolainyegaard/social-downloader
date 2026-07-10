@@ -163,7 +163,17 @@ def _convert_photo_posts() -> None:
                     )
 
     # Lazy import to avoid circular dependency at module load time
-    from platforms.tiktok import database as _tiktok_db
+    from platforms.registry import ENGINES
+
+    def _update_first_path(video_id: str, new_first: str) -> None:
+        """Point the owning platform's video row at the converted first image."""
+        for _eng in ENGINES.values():
+            video = _eng.db.get_video(video_id)
+            if video and (video.get("file_path") or "").lower().endswith((".jpg", ".jpeg")):
+                with _eng.db.get_db() as conn:
+                    conn.execute("UPDATE videos SET file_path = ? WHERE video_id = ?",
+                                 (new_first, video_id))
+                return
 
     for video_id, jpg_paths in by_video.items():
         new_first: str | None = None
@@ -190,9 +200,7 @@ def _convert_photo_posts() -> None:
 
         # Update DB if first image path needs updating
         if new_first:
-            video = _tiktok_db.get_video(video_id)
-            if video and video.get("file_path", "").lower().endswith((".jpg", ".jpeg")):
-                _tiktok_db.update_video_file_path(video_id, new_first)
+            _update_first_path(video_id, new_first)
 
 
 def _convert_thumbnails() -> None:

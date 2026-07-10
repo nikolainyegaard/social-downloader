@@ -3,27 +3,15 @@ import sys
 import logging
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
-import random as _random
 import glob as _glob
 import shutil as _shutil
-from platforms.tiktok import database as db
 from config import DATA_DIR, MEDIA_DIR, WEB_PORT
-from platforms.tiktok.config import (
-    USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, TIKTOK_DATA_DIR,
-    SESSIONS_PER_DAY, HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
-    INACTIVE_CHECK_HOURS, STATS_REFRESH_DAYS,
-)
-from platforms.tiktok.loop import (
-    run_user_session, run_sound_loop,
-    is_user_loop_running, is_sound_loop_running,
-    set_user_loop_next_run, set_user_loop_sessions_today, set_sound_loop_next_run,
-    trigger_user_event, trigger_sound_event,
-    check_and_clear_user_reschedule, check_and_clear_sound_reschedule,
-    get_and_clear_trigger_scope,
-    recover_loop_state_from_db,
-)
+from platforms.tiktok.config import TIKTOK_DATA_DIR, STATS_REFRESH_DAYS
+from platforms.tiktok.migrate import migrate_legacy_tiktok_schema
+from platforms.tiktok.sounds import get_sound_loop
+from platforms.tiktok.store import TikTokStore
 from platforms.registry import ENGINES
 import scheduling
 from web import create_app
@@ -149,7 +137,7 @@ sys.stderr = _Tee(sys.__stderr__)
 _POLLING_ENDPOINTS = (
     '"GET /api/tiktok/status HTTP',
     '"GET /api/tiktok/queue HTTP',
-    '"GET /api/tiktok/users HTTP',
+    '"GET /api/tiktok/channels HTTP',
     '"GET /api/tiktok/sounds HTTP',
     '"GET /api/youtube/status HTTP',
     '"GET /api/youtube/queue HTTP',
@@ -197,160 +185,6 @@ def _ts() -> str:
     return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
 
 
-# ── User loop scheduler ───────────────────────────────────────────────────────
-
-def _user_loop_thread():
-    """Session-based scheduler: distributes N sessions across each 24-hour window."""
-    _24h          = 24 * 3600
-    session_times: list[float] = []
-    window_end    = 0.0
-
-    while True:
-        now = time.time()
-
-        # Regenerate session schedule when the window has expired or the list is empty
-        if not session_times or now >= window_end:
-            n_sessions   = max(1, int(db.get_setting("sessions_per_day", SESSIONS_PER_DAY)))
-            window_end   = now + _24h
-            segment_size = _24h / n_sessions
-            # Pick one random time within each equal segment of the 24-hour window
-            session_times = sorted(
-                now + i * segment_size + _random.uniform(
-                    max(60.0, segment_size * 0.05),
-                    segment_size * 0.95,
-                )
-                for i in range(n_sessions)
-            )
-            # Guarantee the first session is at least 60 s from now
-            session_times[0] = max(session_times[0], now + 60)
-            set_user_loop_sessions_today(session_times)
-            print(
-                f"{_ts()} User loop: {n_sessions} session(s) scheduled for the next 24 h."
-            )
-
-            # Advance the full-refresh cycle once per 24-hour window.
-            # A new cycle starts when no cycle exists yet, or when the current one has
-            # run its full length. Otherwise, activate the next day's batch if the day
-            # has changed since the last activation.
-            _n_days          = max(1, int(db.get_setting("stats_refresh_days", STATS_REFRESH_DAYS)))
-            _cycle_start     = int(db.get_setting("refresh_cycle_start", 0) or 0)
-            _activated_batch = int(db.get_setting("refresh_cycle_activated_batch", 0) or 0)
-            if _cycle_start == 0 or (now - _cycle_start) >= _n_days * 86400:
-                _n_assigned = db.assign_refresh_batches(_n_days)
-                print(
-                    f"{_ts()} Refresh cycle: new {_n_days}-day cycle started,"
-                    f" {_n_assigned} users distributed across {_n_days} batches."
-                )
-            else:
-                _day_in_cycle = int((now - _cycle_start) / 86400) + 1
-                if _day_in_cycle > _activated_batch:
-                    _n_flagged = db.activate_refresh_batch(_day_in_cycle)
-                    print(
-                        f"{_ts()} Refresh cycle: day {_day_in_cycle}/{_n_days},"
-                        f" {_n_flagged} users flagged for full refresh."
-                    )
-
-        next_ts   = session_times[0]
-        remaining = next_ts - time.time()
-        set_user_loop_next_run(datetime.fromtimestamp(next_ts, tz=timezone.utc).isoformat())
-        print(
-            f"{_ts()} User loop: next session at"
-            f" {datetime.fromtimestamp(next_ts).strftime('%H:%M:%S')}"
-            f" ({remaining / 60:.0f} min)."
-        )
-
-        triggered = trigger_user_event.wait(timeout=max(remaining, 0))
-        trigger_user_event.clear()
-
-        if check_and_clear_user_reschedule():
-            print(f"{_ts()} User loop: settings changed, rescheduling sessions.")
-            session_times = []
-            window_end    = 0.0
-            continue
-
-        if triggered:
-            print(f"{_ts()} User loop: manual trigger received.")
-        else:
-            # Scheduled wake-up: consume this session slot.
-            # Manual triggers do not consume a slot so the next
-            # scheduled session still fires at its planned time.
-            session_times = session_times[1:]
-
-        set_user_loop_next_run(None)
-
-        # Smart avoidance: wait for sound loop to finish, then add 5 min buffer
-        was_waiting = False
-        while is_sound_loop_running():
-            was_waiting = True
-            time.sleep(30)
-        if was_waiting:
-            print(f"{_ts()} User loop: sound loop finished, waiting 5 min buffer.")
-            trigger_user_event.wait(timeout=5 * 60)
-            trigger_user_event.clear()
-
-        now_ts = int(time.time())
-        scope  = get_and_clear_trigger_scope() if triggered else None
-
-        if scope == "starred":
-            users_due = db.get_starred_users_due(now_ts)
-        else:
-            users_due = db.get_users_due_for_check(now_ts)
-
-        if not users_due:
-            print(f"{_ts()} User loop: no users due at this session, skipping.")
-            continue
-
-        run_user_session(users_due, manual=triggered, session_kind=scope or "scheduled")
-
-        # Recompute activity scores after each session so intervals stay current
-        _high  = int(db.get_setting("high_priority_check_hours", HIGH_PRIORITY_CHECK_HOURS)) * 3600
-        _act   = int(db.get_setting("active_check_hours",        ACTIVE_CHECK_HOURS))        * 3600
-        _inact = int(db.get_setting("inactive_check_hours",      INACTIVE_CHECK_HOURS))      * 3600
-        db.recompute_activity_scores(
-            high_priority_secs=_high,
-            active_secs=_act,
-            inactive_secs=_inact,
-        )
-
-
-# ── Sound loop scheduler ──────────────────────────────────────────────────────
-
-def _sound_loop_thread():
-    while True:
-        interval_minutes = int(db.get_setting("sound_loop_interval_minutes", SOUND_LOOP_INTERVAL_MINUTES))
-        next_at_ts = time.time() + interval_minutes * 60
-        set_sound_loop_next_run(datetime.fromtimestamp(next_at_ts, tz=timezone.utc).isoformat())
-        print(
-            f"{_ts()} Sound loop sleeping {interval_minutes} min"
-            f" until {datetime.fromtimestamp(next_at_ts).strftime('%H:%M:%S')}."
-        )
-
-        remaining = next_at_ts - time.time()
-        triggered = trigger_sound_event.wait(timeout=max(remaining, 0))
-        trigger_sound_event.clear()
-
-        if check_and_clear_sound_reschedule():
-            print(f"{_ts()} Sound loop: interval changed, rescheduling.")
-            continue
-
-        if triggered:
-            print(f"{_ts()} Sound loop: manual trigger received.")
-
-        set_sound_loop_next_run(None)
-
-        # Smart avoidance: wait for user loop to finish, then add 5 min buffer
-        was_waiting = False
-        while is_user_loop_running():
-            was_waiting = True
-            time.sleep(30)
-        if was_waiting:
-            print(f"{_ts()} Sound loop: user loop finished, waiting 5 min buffer.")
-            trigger_sound_event.wait(timeout=5 * 60)
-            trigger_sound_event.clear()
-
-        run_sound_loop()
-
-
 # ── Channel platform loop schedulers ──────────────────────────────────────────
 # Every engine in the registry gets its own scheduler thread running the shared
 # session model (N sessions per 24h window, per-channel due times). Engines are
@@ -358,6 +192,50 @@ def _sound_loop_thread():
 
 def _channel_loop_thread(engine):
     scheduling.run_session_scheduler(engine.platform, engine.db, engine.loop)
+
+
+def _tiktok_loop_thread(engine):
+    """TikTok runs the shared session scheduler with two platform hooks:
+    the full-refresh batch cycle advances once per 24h window, and sessions
+    wait for the sound loop to finish (plus a 5 min buffer) before starting."""
+    store  = TikTokStore(engine.db)
+    sounds = get_sound_loop(engine)
+
+    def _advance_refresh_cycle(now: float) -> None:
+        # A new cycle starts when no cycle exists yet, or when the current one
+        # has run its full length. Otherwise, activate the next day's batch if
+        # the day has changed since the last activation.
+        _n_days          = max(1, int(engine.db.get_setting("stats_refresh_days", STATS_REFRESH_DAYS)))
+        _cycle_start     = int(engine.db.get_setting("refresh_cycle_start", 0) or 0)
+        _activated_batch = int(engine.db.get_setting("refresh_cycle_activated_batch", 0) or 0)
+        if _cycle_start == 0 or (now - _cycle_start) >= _n_days * 86400:
+            _n_assigned = store.assign_refresh_batches(_n_days)
+            print(
+                f"{_ts()} Refresh cycle: new {_n_days}-day cycle started,"
+                f" {_n_assigned} users distributed across {_n_days} batches."
+            )
+        else:
+            _day_in_cycle = int((now - _cycle_start) / 86400) + 1
+            if _day_in_cycle > _activated_batch:
+                _n_flagged = store.activate_refresh_batch(_day_in_cycle)
+                print(
+                    f"{_ts()} Refresh cycle: day {_day_in_cycle}/{_n_days},"
+                    f" {_n_flagged} users flagged for full refresh."
+                )
+
+    def _wait_for_sound_loop(_triggered: bool) -> None:
+        was_waiting = False
+        while sounds.is_running():
+            was_waiting = True
+            time.sleep(30)
+        if was_waiting:
+            print(f"{_ts()} TikTok loop: sound loop finished, waiting 5 min buffer.")
+            engine.loop.trigger_event.wait(timeout=5 * 60)
+            engine.loop.trigger_event.clear()
+
+    scheduling.run_session_scheduler("tiktok", engine.db, engine.loop,
+                                     on_window_start=_advance_refresh_cycle,
+                                     pre_session=_wait_for_sound_loop)
 
 
 # ── File integrity check (twice daily: 00:00 and 12:00) ──────────────────────
@@ -372,17 +250,19 @@ def _next_check_time() -> float:
 
 
 def _file_check_thread():
+    _engine = ENGINES["tiktok"]
+    _sounds = get_sound_loop(_engine)
     while True:
         wait = _next_check_time() - time.time()
         time.sleep(max(wait, 0))
 
-        # Back off 10 min at a time while either loop is active
-        while is_user_loop_running() or is_sound_loop_running():
+        # Back off 10 min at a time while either TikTok loop is active
+        while _engine.loop.is_running() or _sounds.is_running():
             time.sleep(10 * 60)
 
         print(f"{_ts()} File integrity check: scanning for missing video files...")
         try:
-            removed = db.delete_missing_video_files()
+            removed = _engine.db.delete_missing_video_files()
             if removed:
                 print(f"{_ts()} File integrity check: removed {removed} DB record(s) with no file on disk.")
             else:
@@ -482,31 +362,15 @@ if __name__ == "__main__":
     _check_config()
     _migrate_data_to_platform_dirs()
     print(f"{_ts()} Initialising databases...")
-    db.init_db()
+    # Fold-in migration must run before init_db creates the engine schema,
+    # otherwise the users -> channels rename would collide with a fresh table.
+    migrate_legacy_tiktok_schema(ENGINES["tiktok"].db.DB_PATH)
     for _engine in ENGINES.values():
         _engine.db.init_db()
-    recover_loop_state_from_db()
+        if _engine.adapter.init_db_extra:
+            _engine.adapter.init_db_extra(_engine)
+        _engine.loop.recover_state_from_db()
 
-    n = db.migrate_video_file_paths_to_platform(MEDIA_DIR)
-    if n:
-        print(f"{_ts()} Migration: updated {n} video file path(s) to include platform subdirectory.")
-
-    n = db.migrate_del_prefix()
-    if n:
-        print(f"{_ts()} Migration: renamed {n} del_-prefixed video file(s) and updated DB paths.")
-
-    n = db.migrate_username_history_to_profile_history()
-    print(f"{_ts()} Migration: {n} username history record(s) in profile_history.")
-
-    n = db.backfill_avatar_cached()
-    if n:
-        print(f"{_ts()} Startup: found {n} avatar file(s) on disk, avatar_cached flags updated.")
-
-    db.recompute_activity_scores(
-        high_priority_secs=HIGH_PRIORITY_CHECK_HOURS * 3600,
-        active_secs=ACTIVE_CHECK_HOURS * 3600,
-        inactive_secs=INACTIVE_CHECK_HOURS * 3600,
-    )
     for _engine in ENGINES.values():
         scheduling.recompute_activity_scores(_engine.db, *scheduling.get_check_intervals(_engine.db, _engine.platform))
     print(f"{_ts()} Startup: activity scores computed for all creators.")
@@ -514,12 +378,15 @@ if __name__ == "__main__":
     app = create_app()
 
     print(f"{_ts()} Starting loop threads...")
-    threading.Thread(target=_user_loop_thread,  daemon=True, name="user-loop-thread").start()
-    threading.Thread(target=_sound_loop_thread, daemon=True, name="sound-loop-thread").start()
     for _engine in ENGINES.values():
-        threading.Thread(target=_channel_loop_thread, args=(_engine,), daemon=True,
+        _target = _tiktok_loop_thread if _engine.platform == "tiktok" else _channel_loop_thread
+        threading.Thread(target=_target, args=(_engine,), daemon=True,
                          name=f"{_engine.adapter.prefix}-loop-thread").start()
+    threading.Thread(target=get_sound_loop(ENGINES["tiktok"]).scheduler_thread,
+                     daemon=True, name="sound-loop-thread").start()
     threading.Thread(target=_file_check_thread,  daemon=True, name="file-check-thread").start()
+    from thumbnailer import backfill_thumbnails
+    threading.Thread(target=backfill_thumbnails, daemon=True, name="thumb-backfill").start()
     start_backup_thread()
 
     print(f"{_ts()} Web UI available at http://0.0.0.0:{WEB_PORT}")

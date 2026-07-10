@@ -37,6 +37,11 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Channel list APIs now return `last_saved` (most recent download) per creator
 - One backend engine now runs all channel platforms: the twelve per-platform database, loop, tracker, and web clone files collapsed into shared engine modules plus one small adapter per platform; behaviour is unchanged and every future fix lands once for all platforms
 - Each platform's loops, run queues, and log consoles are isolated engine instances; nothing is shared between platforms at runtime
+- TikTok now runs on the same engine as every other platform: its database is migrated in place to the shared schema (users table renamed to channels, tiktok_id/username/bio/follower_count renamed to channel_id/handle/description/subscriber_count, videos type/description renamed to content_type/title) with an automatic backup written next to it before the first start; its API moves to the standard /api/tiktok/channels/... route shape; its user loop is the shared session scheduler and ChannelLoop; sounds, the stats backfill, photo serving, and the maintenance jobs remain TikTok-only extras on top of the engine
+- The engine loop gained TikTok's full session feature set for every platform: run-start persistence with crash recovery, the inter-creator sleep indicator, session completed/total counts, and isolated midpoint re-scans on large deletion spikes
+- The Recent panel and deletion history are TikTok-grade on all platforms: deletions grouped by creator, ban feed, and starred/banned name colouring
+- The engine add flow now re-enables soft-disabled creator stubs (e.g. TikTok authors discovered via sound tracking) instead of rejecting them as duplicates
+- Ancient tiktok-downloader one-time migrations (flat data/videos layout, del_ file prefixes, username_history backfill, ytdlp blob cleanup) were removed; upgrade to this version from v1.25.0 or later so those migrations have already run
 
 ### Fixed
 - Instagram and Twitter databases are now included in the nightly backup rotation; previously only TikTok and YouTube were backed up
@@ -48,6 +53,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - YouTube Diagnostics now also returns the parsed channel profile and its raw metadata alongside the video entries
 - Twitter photo posts are no longer treated as videos in the web UI: photo thumbnails open the image viewer instead of the video player, the Download button saves the file under its real extension instead of a broken .mp4, and photos are served with an image mimetype
 - Pressing Escape with a media overlay open (carousel, image viewer, video player) on a channel platform no longer also closes the creator modal underneath it
+- Video list responses no longer include the large raw metadata blobs (ytdlp_data, raw_video_data, chapters); on YouTube channels with many videos these forced SQLite to read megabytes per request just to discard them
 
 ## [0.4.0] - 2026-06-29
 

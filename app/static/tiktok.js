@@ -12,9 +12,9 @@ let _logClearSeq      = 0;    // lines before this seq were cleared; don't re-re
 let _logClearRestored = false;
 let pending       = {};
 const dismissed   = new Set();
-let runQueue      = [];   // tiktok_ids queued for manual run
-let runCurrent    = null; // tiktok_id currently being run manually
-let pendingRescans = {};  // {tiktok_id: fires_at_unix_secs} for large-spike midpoint re-scans
+let runQueue      = [];   // channel_ids queued for manual run
+let runCurrent    = null; // channel_id currently being run manually
+let pendingRescans = {};  // {channel_id: fires_at_unix_secs} for large-spike midpoint re-scans
 let userSort      = { field: 'username', dir: 'asc' };
 let userFilter    = { priv: 'all', stat: 'all', star: 'all' };
 
@@ -31,7 +31,7 @@ async function loadCookies()        { return _cookiesLoad('tiktok', 'cookie'); }
 
 function renderStats(s) {
   _renderStatGrid('statsGrid', [
-    { label: 'Tracked users', value: (s.user_count    || 0).toLocaleString() },
+    { label: 'Tracked users', value: (s.channel_count || 0).toLocaleString() },
     { label: 'Saved videos',  value: (s.saved_count   || 0).toLocaleString() },
     { label: 'Video posts',   value: (s.video_count   || 0).toLocaleString() },
     { label: 'Photo posts',   value: (s.photo_count   || 0).toLocaleString() },
@@ -50,7 +50,8 @@ async function loadStats() {
 // ── Recent panel ──────────────────────────────────────────────────────────────
 
 const _FIELD_LABELS = {
-  username: 'Handle', display_name: 'Name', bio: 'Bio', bio_link: 'Bio link', avatar: 'Avatar',
+  username: 'Handle', handle: 'Handle', display_name: 'Name', bio: 'Bio', description: 'Bio',
+  bio_link: 'Bio link', avatar: 'Avatar',
   account_status: 'Status', privacy_status: 'Privacy',
 };
 
@@ -72,13 +73,13 @@ function renderRecent(data) {
     left += data.deletions.map(d => {
       const onclick = d.enabled !== 0
         ? (d.count === 1
-            ? `openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')`
-            : `openUserModal('${esc(d.tiktok_id)}')`)
+            ? `openUserModalAndHighlight('${esc(d.channel_id)}','${esc(d.video_id)}')`
+            : `openUserModal('${esc(d.channel_id)}')`)
         : d.sound_id ? `openSoundModalAndHighlight('${esc(d.sound_id)}','${esc(d.video_id)}')` : '';
       const nameStyle = d.enabled === 0 ? 'style="color:var(--text-dim)"' : d.starred ? 'style="color:var(--yellow)"' : d.account_status === 'banned' ? 'style="color:var(--red)"' : '';
-      return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.username)}">
+      return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.handle)}">
         <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
-        <span class="recent-name" ${nameStyle}>@${esc(d.username)}</span>
+        <span class="recent-name" ${nameStyle}>@${esc(d.handle)}</span>
         <span class="recent-detail">${d.count}x</span>
       </div>`;
     }).join('');
@@ -92,9 +93,9 @@ function renderRecent(data) {
   left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('profile-changes')" title="View all profile changes">Recently changed profile</div>`;
   if (data.profile_changes.length) {
     left += data.profile_changes.map(p =>
-      `<div class="recent-entry" onclick="openUserModalWithHistory('${esc(p.tiktok_id)}','${esc(p.field)}')" title="Open @${esc(p.username)} · ${esc(_FIELD_LABELS[p.field] || p.field)} history">
+      `<div class="recent-entry" onclick="openUserModalWithHistory('${esc(p.channel_id)}','${esc(p.field)}')" title="Open @${esc(p.handle)} · ${esc(_FIELD_LABELS[p.field] || p.field)} history">
         <span class="recent-date">${_recentDate(p.changed_at, now)}</span>
-        <span class="recent-name" ${p.starred ? 'style="color:var(--yellow)"' : p.account_status === 'banned' ? 'style="color:var(--red)"' : ''}>@${esc(p.username)}</span>
+        <span class="recent-name" ${p.starred ? 'style="color:var(--yellow)"' : p.account_status === 'banned' ? 'style="color:var(--red)"' : ''}>@${esc(p.handle)}</span>
         <span class="recent-detail">${esc(_FIELD_LABELS[p.field] || p.field)}</span>
       </div>`
     ).join('');
@@ -108,9 +109,9 @@ function renderRecent(data) {
   left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('bans')" title="View all banned accounts">Recently banned</div>`;
   if (data.bans && data.bans.length) {
     const b = data.bans[0];
-    left += `<div class="recent-entry" onclick="openUserModal('${esc(b.tiktok_id)}')" title="Open @${esc(b.username)}">
+    left += `<div class="recent-entry" onclick="openUserModal('${esc(b.channel_id)}')" title="Open @${esc(b.handle)}">
       <span class="recent-date">${_recentDate(b.banned_at, now)}</span>
-      <span class="recent-name" ${b.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(b.username)}</span>
+      <span class="recent-name" ${b.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(b.handle)}</span>
       <span class="recent-detail" style="color:var(--red)">Banned</span>
     </div>`;
   } else {
@@ -129,13 +130,13 @@ function renderRecent(data) {
     right += data.saved.map(g => {
       const onclick = g.enabled !== 0
         ? (g.count === 1
-            ? `openUserModalAndHighlight('${esc(g.tiktok_id)}','${esc(g.video_id)}','all','download_date','desc')`
-            : `openUserModal('${esc(g.tiktok_id)}')`)
+            ? `openUserModalAndHighlight('${esc(g.channel_id)}','${esc(g.video_id)}','all','download_date','desc')`
+            : `openUserModal('${esc(g.channel_id)}')`)
         : g.sound_id ? `openSoundModalAndHighlight('${esc(g.sound_id)}','${esc(g.video_id)}')` : '';
       const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : g.account_status === 'banned' ? 'style="color:var(--red)"' : '';
-      return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(g.username)}">
+      return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(g.handle)}">
         <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-        <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>
+        <span class="recent-name" ${nameStyle}>@${esc(g.handle)}</span>
         <span class="recent-detail">${g.count}x</span>
       </div>`;
     }).join('');
@@ -164,18 +165,18 @@ const _RECENT_LOG_TITLES = {
 function _ttRenderSavedRow(g, now) {
   const row = document.createElement('div');
   row.className = 'recent-entry';
-  row.title = `Open @${g.username}`;
+  row.title = `Open @${g.handle}`;
   if (g.enabled !== 0) {
     row.onclick = g.count === 1
-      ? () => openUserModalAndHighlight(g.tiktok_id, g.video_id, 'all', 'download_date', 'desc')
-      : () => openUserModal(g.tiktok_id);
+      ? () => openUserModalAndHighlight(g.channel_id, g.video_id, 'all', 'download_date', 'desc')
+      : () => openUserModal(g.channel_id);
   } else if (g.sound_id) {
     row.onclick = () => openSoundModalAndHighlight(g.sound_id, g.video_id);
   }
   const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : g.account_status === 'banned' ? 'style="color:var(--red)"' : '';
   row.innerHTML = `
     <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-    <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>
+    <span class="recent-name" ${nameStyle}>@${esc(g.handle)}</span>
     <span class="recent-detail">${g.count}x</span>`;
   return row;
 }
@@ -183,18 +184,18 @@ function _ttRenderSavedRow(g, now) {
 function _ttRenderDeletedGroupRow(g, now) {
   const row = document.createElement('div');
   row.className = 'recent-entry';
-  row.title = `Open @${g.username}`;
+  row.title = `Open @${g.handle}`;
   if (g.enabled !== 0) {
     row.onclick = g.count === 1
-      ? () => openUserModalAndHighlight(g.tiktok_id, g.video_id)
-      : () => openUserModal(g.tiktok_id);
+      ? () => openUserModalAndHighlight(g.channel_id, g.video_id)
+      : () => openUserModal(g.channel_id);
   } else if (g.sound_id) {
     row.onclick = () => openSoundModalAndHighlight(g.sound_id, g.video_id);
   }
   const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : g.account_status === 'banned' ? 'style="color:var(--red)"' : '';
   row.innerHTML = `
     <span class="recent-date">${_recentDate(g.deleted_at, now)}</span>
-    <span class="recent-name" ${nameStyle}>@${esc(g.username)}</span>
+    <span class="recent-name" ${nameStyle}>@${esc(g.handle)}</span>
     <span class="recent-detail">${g.count}x</span>`;
   return row;
 }
@@ -203,31 +204,31 @@ function _ttRenderOtherRow(item, type, now) {
   const row = document.createElement('div');
   row.className = 'recent-entry';
   if (type === 'deletions') {
-    row.title = `Open @${item.username}`;
+    row.title = `Open @${item.handle}`;
     if (item.enabled !== 0) {
-      row.onclick = () => openUserModalAndHighlight(item.tiktok_id, item.video_id);
+      row.onclick = () => openUserModalAndHighlight(item.channel_id, item.video_id);
     } else if (item.sound_id) {
       row.onclick = () => openSoundModalAndHighlight(item.sound_id, item.video_id);
     }
     const nameStyle = item.enabled === 0 ? 'style="color:var(--text-dim)"' : item.starred ? 'style="color:var(--yellow)"' : item.account_status === 'banned' ? 'style="color:var(--red)"' : '';
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
-      <span class="recent-name" ${nameStyle}>@${esc(item.username)}</span>
+      <span class="recent-name" ${nameStyle}>@${esc(item.handle)}</span>
       <span class="recent-detail">${esc(item.video_id)}</span>`;
   } else if (type === 'profile-changes') {
     const label = _FIELD_LABELS[item.field] || item.field;
-    row.title = `Open @${item.username} · ${label} history`;
-    row.onclick = () => openUserModalWithHistory(item.tiktok_id, item.field);
+    row.title = `Open @${item.handle} · ${label} history`;
+    row.onclick = () => openUserModalWithHistory(item.channel_id, item.field);
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
-      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : item.account_status === 'banned' ? 'style="color:var(--red)"' : ''}>@${esc(item.username)}</span>
+      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : item.account_status === 'banned' ? 'style="color:var(--red)"' : ''}>@${esc(item.handle)}</span>
       <span class="recent-detail">${esc(label)}</span>`;
   } else {
-    row.title = `Open @${item.username}`;
-    row.onclick = () => openUserModal(item.tiktok_id);
+    row.title = `Open @${item.handle}`;
+    row.onclick = () => openUserModal(item.channel_id);
     row.innerHTML = `
       <span class="recent-date">${_recentDate(item.banned_at, now)}</span>
-      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(item.username)}</span>
+      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(item.handle)}</span>
       <span class="recent-detail" style="color:var(--red)">Banned</span>`;
   }
   return row;
@@ -237,7 +238,7 @@ function openRecentLog(type) {
   _openRecentLogModal(type, {
     apiBase:        '/api/tiktok/recent',
     titles:         _RECENT_LOG_TITLES,
-    groupKey:       'tiktok_id',
+    groupKey:       'channel_id',
     renderSaved:    _ttRenderSavedRow,
     renderGrouped:  _ttRenderDeletedGroupRow,
     renderOther:    _ttRenderOtherRow,
@@ -563,13 +564,13 @@ async function triggerFilePurge() {
 
 const _DIAG_ACTIONS = {
   get_video_details: [{ value: "",                 label: "Fetch post details (paste TikTok URL)" }],
-  ytdlp:            [{ value: "user_videos",       label: "List user videos (paste tiktok_id)" },
+  ytdlp:            [{ value: "user_videos",       label: "List user videos (paste channel_id)" },
                      { value: "video_info",        label: "Raw video info (paste TikTok URL)" }],
   tiktokapi:        [{ value: "user_info",            label: "User profile by username (paste @username)" },
-                     { value: "resolve_username",    label: "Resolve username to tiktok_id + sec_uid (raw)" },
-                     { value: "user_info_by_id",     label: "User profile by ID (paste tiktok_id:sec_uid)" },
+                     { value: "resolve_username",    label: "Resolve username to channel_id + sec_uid (raw)" },
+                     { value: "user_info_by_id",     label: "User profile by ID (paste channel_id:sec_uid)" },
                      { value: "item_list_username",  label: "item_list by username (library resolves sec_uid)" },
-                     { value: "item_list_by_id",     label: "item_list by tiktok_id:sec_uid" },
+                     { value: "item_list_by_id",     label: "item_list by channel_id:sec_uid" },
                      { value: "item_list_from_db",   label: "item_list from DB (mirrors loop -- paste @username)" },
                      { value: "sound_raw",           label: "Sound raw API output (paste sound_id or URL)" }],
 };
@@ -587,13 +588,13 @@ function diagActionChanged() {
   const action = document.getElementById('diagAction').value;
   const placeholders = {
     'get_video_details:':          'https://www.tiktok.com/@user/video/123…',
-    'ytdlp:user_videos':           'tiktok_id (numeric)',
+    'ytdlp:user_videos':           'channel_id (numeric)',
     'ytdlp:video_info':            'https://www.tiktok.com/@user/video/123…',
     'tiktokapi:user_info':              '@username or username',
     'tiktokapi:resolve_username':       '@username or username',
-    'tiktokapi:user_info_by_id':        'tiktok_id:sec_uid',
+    'tiktokapi:user_info_by_id':        'channel_id:sec_uid',
     'tiktokapi:item_list_username':     '@username or username',
-    'tiktokapi:item_list_by_id':        'tiktok_id:sec_uid',
+    'tiktokapi:item_list_by_id':        'channel_id:sec_uid',
     'tiktokapi:item_list_from_db':      '@username (must exist in DB)',
     'tiktokapi:sound_raw':              'sound_id (numeric) or TikTok sound URL',
   };
@@ -668,7 +669,7 @@ function diagCopy() {
 const _SORT_DIR_LABELS = {
   username:       { asc: 'A → Z',           desc: 'Z → A'           },
   display_name:   { asc: 'A → Z',           desc: 'Z → A'           },
-  follower_count: { asc: 'Low → High',      desc: 'High → Low'      },
+  subscriber_count: { asc: 'Low → High',    desc: 'High → Low'      },
   video_total:    { asc: 'Low → High',      desc: 'High → Low'      },
   video_deleted:  { asc: 'Low → High',      desc: 'High → Low'      },
   added_at:       { asc: 'Oldest first',    desc: 'Newest first'    },
@@ -768,8 +769,8 @@ function _filteredUsers() {
     if (userFilter.stat === 'inactive' && u.tracking_enabled !== 0) return false;
     if (userFilter.star === 'starred'  && !u.starred) return false;
     if (q) {
-      const hay = [u.username, u.display_name, u.tiktok_id,
-                   ...(u.old_usernames || []), ...(u.old_display_names || []), ...(u.old_bios || [])]
+      const hay = [u.handle, u.display_name, u.channel_id,
+                   ...(u.old_handles || []), ...(u.old_display_names || []), ...(u.old_descriptions || [])]
                   .filter(Boolean).join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
@@ -780,8 +781,8 @@ function _filteredUsers() {
 function _sortedUsers() {
   const { field, dir } = userSort;
   return _filteredUsers().sort((a, b) => {
-    const av = field === 'display_name' ? (a.display_name || a.username) : (a[field] ?? (field === 'username' ? '' : 0));
-    const bv = field === 'display_name' ? (b.display_name || b.username) : (b[field] ?? (field === 'username' ? '' : 0));
+    const av = field === 'display_name' ? (a.display_name || a.handle) : (a[field] ?? (field === 'username' ? '' : 0));
+    const bv = field === 'display_name' ? (b.display_name || b.handle) : (b[field] ?? (field === 'username' ? '' : 0));
     return _cmp(av, bv, dir);
   });
 }
@@ -807,7 +808,7 @@ function _relationPill(u) {
 }
 
 function _renderUserCard(u) {
-  const isCurrent        = u.username === currentUser;
+  const isCurrent        = u.handle === currentUser;
   const isInactive       = u.tracking_enabled === 0;
   const isBanned         = u.account_status === 'banned';
   const isBlocked        = u.privacy_status === 'blocked';
@@ -816,31 +817,31 @@ function _renderUserCard(u) {
 
   const { cls: trackingCls, label: trackingLabel } = _trackingBadge(u.tracking_enabled);
   const accountBadge = _relationPill(u);
-  const oldNames   = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
+  const oldNames   = (u.old_handles || []).map(n => `@${esc(n)}`).join(' · ');
   const oldNameTag = oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
-  const idLine     = `id:${esc(u.tiktok_id)}`;
+  const idLine     = `id:${esc(u.channel_id)}`;
 
-  const inRunQueue   = runQueue.includes(u.tiktok_id);
-  const isRunCurrent = runCurrent === u.tiktok_id;
+  const inRunQueue   = runQueue.includes(u.channel_id);
+  const isRunCurrent = runCurrent === u.channel_id;
   const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
-  const rescanAt = pendingRescans[u.tiktok_id];
+  const rescanAt = pendingRescans[u.channel_id];
   const rescanBadge = rescanAt
     ? `<div class="user-rescan-notice" title="Isolated full re-scan scheduled to verify deletion candidates">Re-scan ${fmt.rel(new Date(rescanAt * 1000).toISOString())}</div>`
     : '';
 
   return `
-    <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned || isBlocked || isPrivateBlocked ? ' user-card-inactive' : ''}${isBanned || isBlocked ? ' user-card-banned' : ''}${isPrivateBlocked ? ' user-card-private' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
+    <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned || isBlocked || isPrivateBlocked ? ' user-card-inactive' : ''}${isBanned || isBlocked ? ' user-card-banned' : ''}${isPrivateBlocked ? ' user-card-private' : ''}" data-userid="${esc(u.channel_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.channel_id)}')" role="button" tabindex="0">
       <div class="user-card-top">
         <div class="avatar-wrap">
-          <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
-          ${u.avatar_cached ? `<img class="user-avatar" src="/api/tiktok/users/${esc(u.tiktok_id)}/avatar" alt=""
+          <span class="avatar-letter">${esc((u.handle||'?')[0])}</span>
+          ${u.avatar_cached ? `<img class="user-avatar" src="/api/tiktok/channels/${esc(u.channel_id)}/avatar" alt=""
                onerror="this.style.display='none'"
-               onclick="event.stopPropagation();openImgModalUrl('/api/tiktok/users/${esc(u.tiktok_id)}/avatar')">` : ''}
+               onclick="event.stopPropagation();openImgModalUrl('/api/tiktok/channels/${esc(u.channel_id)}/avatar')">` : ''}
         </div>
         <div class="user-identity">
-          <div class="user-display-name">${isPrivateAccount ? LOCK_SVG : ''}${esc(u.display_name || u.username)}</div>
-          <div class="user-handle">@${esc(u.username)}${oldNameTag}</div>
+          <div class="user-display-name">${isPrivateAccount ? LOCK_SVG : ''}${esc(u.display_name || u.handle)}</div>
+          <div class="user-handle">@${esc(u.handle)}${oldNameTag}</div>
           <div class="user-id-line">${idLine}</div>
         </div>
         <div class="user-badges">
@@ -851,11 +852,11 @@ function _renderUserCard(u) {
       </div>
 
       <div class="user-bio-area">
-        ${u.bio ? `<div class="user-bio">${esc(u.bio)}</div>` : ''}
+        ${u.description ? `<div class="user-bio">${esc(u.description)}</div>` : ''}
       </div>
 
       <div class="user-stats">
-        <span class="stat-item"><span class="stat-item-label">followers</span><span class="stat-item-value">${(u.follower_count||0).toLocaleString()}</span></span>
+        <span class="stat-item"><span class="stat-item-label">followers</span><span class="stat-item-value">${(u.subscriber_count||0).toLocaleString()}</span></span>
         <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${u.video_total||0}</span></span>
         ${(u.video_deleted || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${(u.video_deleted || 0)}</span></span>` : ''}
         ${u.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${u.video_undeleted}</span></span>` : ''}
@@ -865,10 +866,10 @@ function _renderUserCard(u) {
 
       <div class="user-card-footer">
         <div style="display:flex;gap:6px;">
-          <button class="btn-star${u.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleUserStar('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
-          <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUserQuick('${esc(u.tiktok_id)}')">${_refreshIcon} Quick</button>
-          <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.tiktok_id)}')">${_refreshIcon} Full</button>
-          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.tiktok_id)}')},{label:'Remove',danger:true,onclick:()=>removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')}])">•••</button>
+          <button class="btn-star${u.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleUserStar('${esc(u.channel_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
+          <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUserQuick('${esc(u.channel_id)}')">${_refreshIcon} Quick</button>
+          <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.channel_id)}')">${_refreshIcon} Full</button>
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.channel_id)}')},{label:'Remove',danger:true,onclick:()=>removeUser('${esc(u.channel_id)}','@${esc(u.handle)}')}])">•••</button>
         </div>
       </div>
       <div class="user-card-meta-footer">
@@ -1057,9 +1058,9 @@ async function mobileAddSubmit() {
       input.focus();
       return;
     }
-    const { ok, data } = await apiJSON('/api/tiktok/users', {
+    const { ok, data } = await apiJSON('/api/tiktok/channels', {
       method: 'POST',
-      body: JSON.stringify({ username: name }),
+      body: JSON.stringify({ handle: name }),
     });
     if (ok) {
       input.value = '';
@@ -1085,9 +1086,9 @@ async function addUser() {
   input.textContent = '';
   input.focus();
 
-  const { ok, data } = await apiJSON('/api/tiktok/users', {
+  const { ok, data } = await apiJSON('/api/tiktok/channels', {
     method: 'POST',
-    body: JSON.stringify({ username: name }),
+    body: JSON.stringify({ handle: name }),
   });
 
   if (ok) {
@@ -1099,14 +1100,14 @@ async function addUser() {
   renderPending();
 }
 
-async function runUser(id)             { return _creatorRun('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }, 'full'); }
-async function runUserQuick(id)        { return _creatorRun('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }, 'quick'); }
-async function runUserProfile(id)      { return _creatorRunProfile('/api/tiktok/users', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }); }
-async function removeUser(id, label)   { return _creatorRemove('/api/tiktok/users', id, label, loadUsers); }
-async function toggleUserStar(id)      { return _creatorToggleStar('/api/tiktok/users', id, users, 'tiktok_id', renderUsers); }
+async function runUser(id)             { return _creatorRun('/api/tiktok/channels', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }, 'full'); }
+async function runUserQuick(id)        { return _creatorRun('/api/tiktok/channels', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }, 'quick'); }
+async function runUserProfile(id)      { return _creatorRunProfile('/api/tiktok/channels', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }); }
+async function removeUser(id, label)   { return _creatorRemove('/api/tiktok/channels', id, label, loadUsers); }
+async function toggleUserStar(id)      { return _creatorToggleStar('/api/tiktok/channels', id, users, 'channel_id', renderUsers); }
 
 async function loadUsers() {
-  const { ok, data } = await apiJSON('/api/tiktok/users');
+  const { ok, data } = await apiJSON('/api/tiktok/channels');
   if (ok) { users = data; renderUsers(); }
 }
 
@@ -1342,10 +1343,10 @@ const _SOUND_MODAL_CFG = {
   filterFn: 'setSoundModalFilter', typeFilterFn: 'setSoundModalTypeFilter',
   sortFn: 'setSoundModalSort', toggleFn: 'toggleSoundModalToolbar', searchFn: 'onSoundModalSearch',
   authorCol: v => {
-    const name = v.author_username || v.tiktok_id || '?';
+    const name = v.author_handle || v.channel_id || '?';
     return v.author_enabled === 1
-      ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();openUserModal('${esc(v.tiktok_id)}')">@${esc(name)}</span>`
-      : `<span class="author-chip untracked" onclick="event.stopPropagation();closeSoundModal();openUntrackedUserModal('${esc(v.tiktok_id)}','${esc(name)}')">@${esc(name)}</span>`;
+      ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();openUserModal('${esc(v.channel_id)}')">@${esc(name)}</span>`
+      : `<span class="author-chip untracked" onclick="event.stopPropagation();closeSoundModal();openUntrackedUserModal('${esc(v.channel_id)}','${esc(name)}')">@${esc(name)}</span>`;
   },
   hasSearch: true, hasViewToggle: true, viewFn: 'setSoundModalView',
   gridId: 'soundVideoGrid', hasPhistBtn: false,
@@ -1454,6 +1455,8 @@ function setSoundModalSort(f)       { _mSetSort(_SOUND_MODAL_CFG, f); }
 async function _loadSoundModalVideos(soundId) {
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/videos`);
   if (!ok || _soundModalId !== soundId) return;
+  // Engine vocabulary: expose content_type/title under the names the renderers use
+  data.forEach(v => { v.type = v.content_type; v.description = v.title; });
   _soundState.videos = data;
   if (_soundModalPendingHighlight) {
     const { videoId, filter } = _soundModalPendingHighlight;
@@ -1520,11 +1523,11 @@ const _sEl = {
 };
 
 function renderStatus(state) {
-  isRunning    = state.user_loop_running;
-  currentUser  = state.user_loop_current_user;
-  _sleepUntil   = state.user_loop_sleep_until != null ? state.user_loop_sleep_until * 1000 : null;
-  _sleepNext    = state.user_loop_sleep_next  || null;
-  _nextUserRun  = state.user_loop_next  || null;
+  isRunning    = state.loop_running;
+  currentUser  = state.loop_current_channel;
+  _sleepUntil   = state.loop_sleep_until != null ? state.loop_sleep_until * 1000 : null;
+  _sleepNext    = state.loop_sleep_next  || null;
+  _nextUserRun  = state.loop_next  || null;
   _nextSoundRun = state.sound_loop_next || null;
   runQueue         = state.run_queue         || [];
   runCurrent       = state.run_current       || null;
@@ -1541,20 +1544,20 @@ function renderStatus(state) {
   // User loop card
   if (_sEl.uMeta) {
     const parts = [];
-    if (state.user_loop_last_start) parts.push(`Last: ${fmt.rel(state.user_loop_last_start)}`);
+    if (state.loop_last_start) parts.push(`Last: ${fmt.rel(state.loop_last_start)}`);
     else parts.push('Never run');
-    const comp = state.user_loop_last_session_completed, total = state.user_loop_last_session_total;
+    const comp = state.loop_last_session_completed, total = state.loop_last_session_total;
     if (comp != null && total != null) parts.push(`${comp}/${total} users`);
-    if (state.user_loop_last_new_videos != null) parts.push(`${state.user_loop_last_new_videos} new`);
-    if (state.user_loop_last_duration_secs != null) parts.push(fmt.dur(state.user_loop_last_duration_secs));
+    if (state.loop_last_new_videos != null) parts.push(`${state.loop_last_new_videos} new`);
+    if (state.loop_last_duration_secs != null) parts.push(fmt.dur(state.loop_last_duration_secs));
     _sEl.uMeta.textContent = parts.join(' · ');
   }
-  if (_sEl.uNext) _sEl.uNext.textContent = state.user_loop_running
+  if (_sEl.uNext) _sEl.uNext.textContent = state.loop_running
     ? 'Running…'
-    : (state.user_loop_next ? `Next: ${fmt.relFuture(state.user_loop_next)}` : '');
-  _renderSessionPills(_sEl.uSessions, state.user_loop_sessions_today || [],
-                      state.user_loop_running, state.user_loop_manual_run);
-  const _uRunning = state.user_loop_running;
+    : (state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '');
+  _renderSessionPills(_sEl.uSessions, state.loop_sessions_today || [],
+                      state.loop_running, state.loop_manual_run);
+  const _uRunning = state.loop_running;
   if (_sEl.uBtnNext)    _sEl.uBtnNext.disabled     = _uRunning;
   if (_sEl.uBtnStarred) _sEl.uBtnStarred.disabled = _uRunning;
   if (_sEl.uBtnHalf)    _sEl.uBtnHalf.disabled    = _uRunning;
@@ -1663,14 +1666,14 @@ function renderLogs(lines, log_seq) {
 }
 
 async function setUserTracking(tiktokId, enabled) {
-  const { ok, data } = await apiJSON(`/api/tiktok/users/${encodeURIComponent(tiktokId)}/tracking`, {
+  const { ok, data } = await apiJSON(`/api/tiktok/channels/${encodeURIComponent(tiktokId)}/tracking`, {
     method: 'PATCH',
     body: JSON.stringify({ enabled }),
   });
   if (!ok) { showToast(data.error || 'Failed to update tracking', { type: 'error' }); return; }
-  const u = users.find(u => u.tiktok_id === tiktokId);
+  const u = users.find(u => u.channel_id === tiktokId);
   if (u) u.tracking_enabled = enabled ? 1 : 0;
-  if (_modalUser && _modalUser.tiktok_id === tiktokId) {
+  if (_modalUser && _modalUser.channel_id === tiktokId) {
     _modalUser.tracking_enabled = enabled ? 1 : 0;
     _renderModalHeader(_modalUser);
   }
@@ -1678,8 +1681,8 @@ async function setUserTracking(tiktokId, enabled) {
 }
 
 async function saveUserComment(id, value) {
-  const ok = await _saveCreatorComment('/api/tiktok/users', id, value, users, 'tiktok_id');
-  if (ok && _modalUser && _modalUser.tiktok_id === id) _modalUser.comment = value.trim() || null;
+  const ok = await _saveCreatorComment('/api/tiktok/channels', id, value, users, 'channel_id');
+  if (ok && _modalUser && _modalUser.channel_id === id) _modalUser.comment = value.trim() || null;
 }
 
 async function saveSoundComment(id, value) {
@@ -1769,8 +1772,8 @@ function updateRunStates() {
   document.querySelectorAll('.user-card[data-userid]').forEach(card => {
     const id    = card.dataset.userid;
     const busy  = runQueue.includes(id) || runCurrent === id;
-    const uObj  = users.find(u => u.tiktok_id === id);
-    card.classList.toggle('user-card-current', !!(uObj && uObj.username === currentUser));
+    const uObj  = users.find(u => u.channel_id === id);
+    card.classList.toggle('user-card-current', !!(uObj && uObj.handle === currentUser));
     card.querySelectorAll('.btn-run').forEach(b => { b.disabled = busy; });
   });
   document.querySelectorAll('.user-card[data-soundid]').forEach(card => {
@@ -1783,7 +1786,7 @@ function updateRunStates() {
     btn.disabled    = inQueue || isCur;
   });
   if (_modalUser) {
-    const id    = _modalUser.tiktok_id;
+    const id    = _modalUser.channel_id;
     const busy  = runQueue.includes(id) || runCurrent === id;
     const qBtn  = document.getElementById('modalRunQuickBtn');
     const fBtn  = document.getElementById('modalRunFullBtn');
@@ -1841,7 +1844,7 @@ let _modalUser             = null;   // full user object for the open modal
 let _modalPendingHighlight = null;   // { videoId, filter, sortField, sortDir } or null
 
 function openUserModal(tiktokId) {
-  const u = users.find(u => u.tiktok_id === tiktokId);
+  const u = users.find(u => u.channel_id === tiktokId);
   if (!u) return;
   _modalUserId = tiktokId;
   _modalUser   = u;
@@ -1872,7 +1875,7 @@ function openUserModal(tiktokId) {
 
 function openUntrackedUserModal(tiktokId, username) {
   _modalUserId = tiktokId;
-  _modalUser   = { tiktok_id: tiktokId, username, enabled: 0 };
+  _modalUser   = { channel_id: tiktokId, handle: username, enabled: 0 };
   Object.assign(_userState, {
     videos: [], filter: 'all', typeFilter: 'all', search: '',
     sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
@@ -1930,14 +1933,14 @@ async function _trackUser(tiktokId, username) {
   overlay.innerHTML = '<div class="modal-untracked-spinner"><div class="spinner" style="width:24px;height:24px;border-width:3px"></div></div>';
 
   const { ok, data } = await apiJSON(
-    `/api/tiktok/users/${encodeURIComponent(tiktokId)}/track`,
+    `/api/tiktok/channels/${encodeURIComponent(tiktokId)}/track`,
     { method: 'POST' }
   );
   if (!ok) {
     overlay.innerHTML = `<div class="modal-untracked-error">${esc(data?.error || 'Failed to start tracking')}</div>`;
     return;
   }
-  _pollUntilTracked(tiktokId, data.username, overlay);
+  _pollUntilTracked(tiktokId, data.handle, overlay);
 }
 
 function _pollUntilTracked(tiktokId, username, overlay) {
@@ -1952,9 +1955,9 @@ function _pollUntilTracked(tiktokId, username, overlay) {
     }
     if (!entry) {
       clearInterval(iv);
-      const { ok, data } = await apiJSON('/api/tiktok/users');
+      const { ok, data } = await apiJSON('/api/tiktok/channels');
       if (ok) users = data;
-      const u = users.find(u => u.tiktok_id === tiktokId);
+      const u = users.find(u => u.channel_id === tiktokId);
       if (u) {
         _modalUser = u;
         const hdr = document.getElementById('modalHeader');
@@ -2067,8 +2070,10 @@ async function openCarousel(videoId) {
 }
 
 async function _loadModalVideos(tiktokId) {
-  const { ok, data } = await apiJSON(`/api/tiktok/users/${tiktokId}/videos`);
+  const { ok, data } = await apiJSON(`/api/tiktok/channels/${tiktokId}/videos`);
   if (!ok || _modalUserId !== tiktokId) return;
+  // Engine vocabulary: expose content_type/title under the names the renderers use
+  data.forEach(v => { v.type = v.content_type; v.description = v.title; });
   _userState.videos = data;
 
   if (_modalPendingHighlight) {
@@ -2114,16 +2119,16 @@ function onSoundModalSearch(val) {
 
 async function toggleUserStarModal(id) {
   await toggleUserStar(id);
-  const u = users.find(u => u.tiktok_id === id);
+  const u = users.find(u => u.channel_id === id);
   if (u) _renderModalHeader(u);
 }
 
 async function removeUserModal(id, label) {
-  return _creatorRemove('/api/tiktok/users', id, label, () => { closeModal(); loadUsers(); });
+  return _creatorRemove('/api/tiktok/channels', id, label, () => { closeModal(); loadUsers(); });
 }
 
 function _renderModalHeader(u) {
-  const oldNames = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
+  const oldNames = (u.old_handles || []).map(n => `@${esc(n)}`).join(' · ');
 
   const isInactive       = u.tracking_enabled === 0;
   const isPrivateAccount = ['private_accessible', 'private_blocked', 'blocked'].includes(u.privacy_status);
@@ -2148,39 +2153,39 @@ function _renderModalHeader(u) {
     return `Next check ${fmt.relFuture(new Date(u.next_check_at * 1000).toISOString())}`;
   })();
 
-  const inRunQueue   = runQueue.includes(u.tiktok_id);
-  const isRunCurrent = runCurrent === u.tiktok_id;
+  const inRunQueue   = runQueue.includes(u.channel_id);
+  const isRunCurrent = runCurrent === u.channel_id;
   const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
   document.getElementById('modalHeader').innerHTML = `
     <div class="modal-avatar-wrap">
-      <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
-      ${u.avatar_cached ? `<img class="modal-avatar" src="/api/tiktok/users/${esc(u.tiktok_id)}/avatar" alt=""
+      <span class="avatar-letter">${esc((u.handle||'?')[0])}</span>
+      ${u.avatar_cached ? `<img class="modal-avatar" src="/api/tiktok/channels/${esc(u.channel_id)}/avatar" alt=""
            onerror="this.style.display='none'"
-           onclick="openImgModalUrl('/api/tiktok/users/${esc(u.tiktok_id)}/avatar')">` : ''}
+           onclick="openImgModalUrl('/api/tiktok/channels/${esc(u.channel_id)}/avatar')">` : ''}
     </div>
     <div class="modal-name-row">
-      <span class="modal-name">${isPrivateAccount ? LOCK_SVG : ''}${esc(u.display_name || u.username)}</span>
+      <span class="modal-name">${isPrivateAccount ? LOCK_SVG : ''}${esc(u.display_name || u.handle)}</span>
       ${u.verified ? '<span class="modal-verified">✓ Verified</span>' : ''}
       <span class="account-status ${trackingCls}">${trackingLbl}</span>
       ${accountBadge}
       <label class="tracking-toggle" title="${isInactive ? 'Video tracking off (profile changes still tracked)' : 'Video tracking on'}">
-        <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setUserTracking('${esc(u.tiktok_id)}', this.checked)">
+        <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setUserTracking('${esc(u.channel_id)}', this.checked)">
         <span class="toggle-track"><span class="toggle-thumb"></span></span>
         <span class="toggle-label">Track videos</span>
       </label>
     </div>
     <div class="modal-user-meta">
       <div class="modal-handle">
-        @${esc(u.username)}
+        @${esc(u.handle)}
         ${oldNames ? `<span class="user-old-names">· ${oldNames}</span>` : ''}
       </div>
-      <div class="modal-id-line">id:${esc(u.tiktok_id)}${joinStr}${nextCheckStr ? ` · ${nextCheckStr}` : ''}</div>
+      <div class="modal-id-line">id:${esc(u.channel_id)}${joinStr}${nextCheckStr ? ` · ${nextCheckStr}` : ''}</div>
       ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
-      ${u.bio ? `<div class="modal-bio" onclick="this.classList.toggle('expanded')">${esc(u.bio)}</div>` : ''}
+      ${u.description ? `<div class="modal-bio" onclick="this.classList.toggle('expanded')">${esc(u.description)}</div>` : ''}
       ${u.bio_link ? `<div class="modal-bio-link"><a href="${esc(u.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(u.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
       <div class="modal-stats-row">
-        <span><strong>${(u.follower_count || 0).toLocaleString()}</strong> followers</span>
+        <span><strong>${(u.subscriber_count || 0).toLocaleString()}</strong> followers</span>
         ${u.following_count != null ? `<span><strong>${u.following_count.toLocaleString()}</strong> following</span>` : ''}
         ${u.video_count     != null ? `<span><strong>${u.video_count.toLocaleString()}</strong> on TikTok</span>` : ''}
         <span><strong>${u.video_total || 0}</strong> saved locally</span>
@@ -2189,14 +2194,14 @@ function _renderModalHeader(u) {
         ${u.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="openProfileHistory()" title="Open profile change history"><strong>${u.profile_history_count}</strong> profile ${u.profile_history_count === 1 ? 'update' : 'updates'}</span>` : ''}
       </div>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn-star${u.starred ? ' starred' : ''}" onclick="toggleUserStarModal('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
-        <button id="modalRunQuickBtn" class="btn-run" ${runDisabled} onclick="runUserQuick('${esc(u.tiktok_id)}')">${_refreshIcon} Quick</button>
-        <button id="modalRunFullBtn" class="btn-run" ${runDisabled} onclick="runUser('${esc(u.tiktok_id)}')">${_refreshIcon} Full</button>
-        <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.tiktok_id)}')},{label:'Add note',onclick:_toggleUserNote},{label:'Remove',danger:true,onclick:()=>removeUserModal('${esc(u.tiktok_id)}','@${esc(u.username)}')}])">•••</button>
+        <button class="btn-star${u.starred ? ' starred' : ''}" onclick="toggleUserStarModal('${esc(u.channel_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
+        <button id="modalRunQuickBtn" class="btn-run" ${runDisabled} onclick="runUserQuick('${esc(u.channel_id)}')">${_refreshIcon} Quick</button>
+        <button id="modalRunFullBtn" class="btn-run" ${runDisabled} onclick="runUser('${esc(u.channel_id)}')">${_refreshIcon} Full</button>
+        <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.channel_id)}')},{label:'Add note',onclick:_toggleUserNote},{label:'Remove',danger:true,onclick:()=>removeUserModal('${esc(u.channel_id)}','@${esc(u.handle)}')}])">•••</button>
       </div>
       <div id="modalNoteArea" style="display:none;margin-top:8px">
         <textarea placeholder="Add a note about this user…"
-          onblur="saveUserComment('${esc(u.tiktok_id)}', this.value)"
+          onblur="saveUserComment('${esc(u.channel_id)}', this.value)"
           style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
                  background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
                  color:var(--text);font-family:inherit;line-height:1.5"
@@ -2223,8 +2228,10 @@ let _phistUserId = null;
 const _PHIST_FIELD_LABELS = {
   all:            'All',
   username:       'Username',
+  handle:         'Username',
   display_name:   'Display name',
   bio:            'Bio',
+  description:    'Bio',
   bio_link:       'Bio link',
   avatar:         'Avatar',
   account_status: 'Account status',
@@ -2257,7 +2264,7 @@ async function openProfileHistory(field) {
 
   _renderHistoryToolbar();
 
-  const { ok, data } = await apiJSON(`/api/tiktok/users/${encodeURIComponent(_phistUserId)}/profile-history`);
+  const { ok, data } = await apiJSON(`/api/tiktok/channels/${encodeURIComponent(_phistUserId)}/profile-history`);
   if (!ok) {
     document.getElementById('phistPanel').innerHTML = '<div class="phist-empty">Failed to load history.</div>';
     return;
@@ -2319,9 +2326,9 @@ function _renderHistoryEntries() {
   // old_value of the next-newer entry for that same field.
   const u = _modalUser;
   const _currentVal = {
-    username:       u?.username       || null,
+    username:       u?.handle       || null,
     display_name:   u?.display_name   || null,
-    bio:            u?.bio            || null,
+    bio:            u?.description            || null,
     bio_link:       u?.bio_link       || null,
     avatar:         '__current__',
     account_status: u?.account_status || null,
@@ -2344,10 +2351,10 @@ function _renderHistoryEntries() {
     const newVal = newValMap.get(e);
 
     if (e.field === 'avatar') {
-      const oldSrc = `/api/tiktok/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(e.old_value)}`;
+      const oldSrc = `/api/tiktok/channels/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(e.old_value)}`;
       const newSrc = newVal === '__current__'
-        ? `/api/tiktok/users/${encodeURIComponent(_phistUserId)}/avatar?t=${e.changed_at}`
-        : `/api/tiktok/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(newVal)}`;
+        ? `/api/tiktok/channels/${encodeURIComponent(_phistUserId)}/avatar?t=${e.changed_at}`
+        : `/api/tiktok/channels/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(newVal)}`;
       const img = (src, label) =>
         `<div class="phist-avatar-col">
           <span class="phist-side-label">${label}</span>
@@ -2473,7 +2480,7 @@ async function toggleFailedList() {
   if (!data.length) { el.textContent = 'None.'; return; }
   el.innerHTML = data.map(v =>
     `<div><code style="user-select:all">${esc(v.video_id)}</code>`
-    + ` · @${esc(v.username)}`
+    + ` · @${esc(v.handle)}`
     + (v.stats_last_error ? ` — <span style="color:var(--red)">${esc(v.stats_last_error)}</span>` : '')
     + `</div>`
   ).join('');

@@ -170,6 +170,35 @@ class ChannelDB:
             "ALTER TABLE channels ADD COLUMN banned_at              INTEGER",
             "ALTER TABLE channels ADD COLUMN privacy_status         TEXT",
             "ALTER TABLE channels ADD COLUMN viewer_relations       TEXT",
+            # Present in the engine's initial schema but absent from a folded-in
+            # TikTok DB, whose own migration history dropped them.
+            "ALTER TABLE videos   ADD COLUMN pending_deletion_count INTEGER DEFAULT 0",
+            "ALTER TABLE videos   ADD COLUMN pending_deletion_since INTEGER",
+            # Creator profile fields shared by cookie-authenticated platforms
+            # (populated where the platform exposes them; TikTok fold-in).
+            "ALTER TABLE channels ADD COLUMN sec_uid                TEXT",
+            "ALTER TABLE channels ADD COLUMN following_count        INTEGER",
+            "ALTER TABLE channels ADD COLUMN join_date              INTEGER",
+            "ALTER TABLE channels ADD COLUMN verified               INTEGER DEFAULT 0",
+            "ALTER TABLE channels ADD COLUMN bio_link               TEXT",
+            "ALTER TABLE channels ADD COLUMN relation               INTEGER",
+            "ALTER TABLE channels ADD COLUMN profile_fail_count     INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE channels ADD COLUMN last_quick_video_ids   TEXT",
+            "ALTER TABLE channels ADD COLUMN full_refresh_pending   INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE channels ADD COLUMN refresh_batch          INTEGER",
+            "ALTER TABLE videos   ADD COLUMN share_count            INTEGER",
+            "ALTER TABLE videos   ADD COLUMN save_count             INTEGER",
+            "ALTER TABLE videos   ADD COLUMN repost_count           INTEGER",
+            "ALTER TABLE videos   ADD COLUMN music_title            TEXT",
+            "ALTER TABLE videos   ADD COLUMN music_artist           TEXT",
+            "ALTER TABLE videos   ADD COLUMN music_id               TEXT",
+            "ALTER TABLE videos   ADD COLUMN stats_backfilled_at    INTEGER",
+            "ALTER TABLE videos   ADD COLUMN stats_error_count      INTEGER DEFAULT 0",
+            "ALTER TABLE videos   ADD COLUMN stats_last_error       TEXT",
+            "ALTER TABLE videos   ADD COLUMN stats_updated_at       INTEGER",
+            "ALTER TABLE videos   ADD COLUMN deleted_reason         TEXT",
+            "ALTER TABLE videos   ADD COLUMN deletion_confirmed     INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE videos   ADD COLUMN false_positive_count   INTEGER NOT NULL DEFAULT 0",
         ]
         for sql in migrations:
             try:
@@ -186,15 +215,21 @@ class ChannelDB:
                     description: str | None = None, subscriber_count: int | None = None,
                     video_count: int | None = None, avatar_url: str | None = None,
                     banner_url: str | None = None,
-                    raw_channel_data: str | None = None) -> None:
+                    raw_channel_data: str | None = None,
+                    following_count: int | None = None, join_date: int | None = None,
+                    sec_uid: str | None = None, verified: int | None = None,
+                    bio_link: str | None = None) -> None:
         with self.get_db() as conn:
             conn.execute("""
                 INSERT OR IGNORE INTO channels
                     (channel_id, handle, display_name, description, subscriber_count,
-                     video_count, avatar_url, banner_url, raw_channel_data, added_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     video_count, avatar_url, banner_url, raw_channel_data,
+                     following_count, join_date, sec_uid, verified, bio_link, added_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (channel_id, handle, display_name, description, subscriber_count,
-                  video_count, avatar_url, banner_url, raw_channel_data, int(time.time())))
+                  video_count, avatar_url, banner_url, raw_channel_data,
+                  following_count, join_date, sec_uid, verified or 0, bio_link,
+                  int(time.time())))
 
 
     def remove_channel(self, channel_id: str) -> None:
@@ -306,6 +341,54 @@ class ChannelDB:
             ).fetchall()]
 
 
+    def get_legacy_path_prefixes(self) -> dict:
+        """Return counts of file_path values not under MEDIA_DIR, grouped by prefix before /@."""
+        from config import MEDIA_DIR
+        media_norm = os.path.normpath(MEDIA_DIR)
+        with self.get_db() as conn:
+            rows = conn.execute(
+                "SELECT file_path FROM videos WHERE file_path IS NOT NULL"
+            ).fetchall()
+        counts: dict[str, int] = {}
+        for (path,) in rows:
+            norm = os.path.normpath(path)
+            if norm == media_norm or norm.startswith(media_norm + os.sep):
+                continue
+            idx = path.find("/@")
+            prefix = path[:idx] if idx >= 0 else path
+            counts[prefix] = counts.get(prefix, 0) + 1
+        return {"prefixes": counts, "media_dir": MEDIA_DIR, "total_legacy": sum(counts.values())}
+
+
+    def rewrite_file_paths(self, old_prefix: str, new_prefix: str) -> int:
+        """Replace old_prefix with new_prefix at the start of every file_path in the videos table."""
+        with self.get_db() as conn:
+            cur = conn.execute(
+                "UPDATE videos SET file_path = ? || SUBSTR(file_path, ?) WHERE file_path LIKE ?",
+                (new_prefix, len(old_prefix) + 1, f"{old_prefix}%"),
+            )
+        return cur.rowcount
+
+
+    def get_all_profile_history_for_search(self) -> dict:
+        """Historical handle, display_name, and description values keyed by
+        channel_id and field. Accepts both the engine field names and the
+        pre-fold-in TikTok names (username, bio) still present in old rows."""
+        _canon = {"username": "handle", "bio": "description"}
+        out: dict = {}
+        with self.get_db() as conn:
+            rows = conn.execute("""
+                SELECT channel_id, field, old_value FROM profile_history
+                WHERE field IN ('handle', 'username', 'display_name', 'description', 'bio')
+                  AND old_value IS NOT NULL
+                ORDER BY changed_at
+            """).fetchall()
+        for r in rows:
+            field = _canon.get(r["field"], r["field"])
+            out.setdefault(r["channel_id"], {}).setdefault(field, []).append(r["old_value"])
+        return out
+
+
     def get_all_profile_history_counts(self) -> dict:
         with self.get_db() as conn:
             rows = conn.execute(
@@ -316,15 +399,21 @@ class ChannelDB:
 
     # Video operations
 
-    def get_video_id_sets(self, channel_id: str) -> tuple[set, set]:
-        """Return (known_ids, active_ids) for a channel."""
+    def get_video_id_sets(self, channel_id: str) -> tuple[set, set, set]:
+        """Return (known_ids, active_ids, pending_ids) for a channel.
+
+        active_ids:  status in ('up', 'undeleted'); videos we believe are currently live
+        pending_ids: status='deleted' AND deletion_confirmed=0; seen missing once, not yet confirmed
+        """
         with self.get_db() as conn:
             rows = conn.execute(
-                "SELECT video_id, status FROM videos WHERE channel_id = ?", (channel_id,)
+                "SELECT video_id, status, deletion_confirmed FROM videos WHERE channel_id = ?",
+                (channel_id,)
             ).fetchall()
-        known  = {r["video_id"] for r in rows}
-        active = {r["video_id"] for r in rows if r["status"] in ("up", "undeleted")}
-        return known, active
+        known   = {r["video_id"] for r in rows}
+        active  = {r["video_id"] for r in rows if r["status"] in ("up", "undeleted")}
+        pending = {r["video_id"] for r in rows if r["status"] == "deleted" and not r["deletion_confirmed"]}
+        return known, active, pending
 
 
     def add_video(self, video_id: str, channel_id: str, title: str | None, upload_date: int | None,
@@ -475,10 +564,16 @@ class ChannelDB:
             """, (int(time.time()), video_id))
 
 
+    # Blob columns excluded from list queries: ytdlp_data averages hundreds of KB
+    # per YouTube video, so SELECT * would read megabytes off disk per request.
+    _VIDEO_LIST_EXCLUDE = ("raw_video_data", "ytdlp_data", "chapters")
+
     def get_videos_for_channel(self, channel_id: str) -> list[dict]:
         with self.get_db() as conn:
+            cols   = [r[1] for r in conn.execute("PRAGMA table_info(videos)")]
+            select = ", ".join(c for c in cols if c not in self._VIDEO_LIST_EXCLUDE)
             return [dict(r) for r in conn.execute(
-                "SELECT * FROM videos WHERE channel_id = ? ORDER BY upload_date DESC",
+                f"SELECT {select} FROM videos WHERE channel_id = ? ORDER BY upload_date DESC",
                 (channel_id,)
             ).fetchall()]
 
@@ -591,7 +686,12 @@ class ChannelDB:
                 SELECT
                     SUM(CASE WHEN status != 'deleted' THEN 1 ELSE 0 END) AS saved_count,
                     SUM(CASE WHEN status =  'deleted' THEN 1 ELSE 0 END) AS deleted_count,
+                    SUM(CASE WHEN status != 'deleted' AND COALESCE(content_type, 'video') = 'video'
+                             THEN 1 ELSE 0 END)                          AS video_count,
+                    SUM(CASE WHEN status != 'deleted' AND content_type IN ('photo', 'image')
+                             THEN 1 ELSE 0 END)                          AS photo_count,
                     COALESCE(SUM(view_count), 0)                         AS total_views,
+                    COALESCE(SUM(like_count), 0)                         AS total_likes,
                     MAX(download_date)                                   AS latest_download
                 FROM videos
                 WHERE file_path IS NOT NULL
@@ -600,12 +700,17 @@ class ChannelDB:
             "channel_count":   crow[0],
             "saved_count":     (vrow["saved_count"]   or 0) if vrow else 0,
             "deleted_count":   (vrow["deleted_count"] or 0) if vrow else 0,
+            "video_count":     (vrow["video_count"]   or 0) if vrow else 0,
+            "photo_count":     (vrow["photo_count"]   or 0) if vrow else 0,
             "total_views":     (vrow["total_views"]    or 0) if vrow else 0,
+            "total_likes":     (vrow["total_likes"]    or 0) if vrow else 0,
             "latest_download": vrow["latest_download"]       if vrow else None,
         }
 
 
     def _group_consecutive_by_channel(self, rows: list[dict], date_key: str) -> list[dict]:
+        """Collapse a newest-first row list into groups of consecutive same-channel
+        entries. Groups break when the gap between adjacent rows exceeds 5 minutes."""
         groups: list[dict] = []
         for row in rows:
             if (groups
@@ -615,40 +720,66 @@ class ChannelDB:
                 groups[-1]["_last_ts"] = row[date_key]
             else:
                 groups.append({
-                    "channel_id": row["channel_id"],
-                    "handle":     row["handle"],
-                    "enabled":    row.get("enabled", 1),
-                    "video_id":   row.get("video_id"),
-                    date_key:     row[date_key],
-                    "_last_ts":   row[date_key],
-                    "count":      1,
+                    "channel_id":     row["channel_id"],
+                    "handle":         row["handle"],
+                    "enabled":        row.get("enabled", 1),
+                    "starred":        row.get("starred", 0),
+                    "account_status": row.get("account_status"),
+                    "video_id":       row.get("video_id"),
+                    "sound_id":       row.get("sound_id"),
+                    date_key:         row[date_key],
+                    "_last_ts":       row[date_key],
+                    "count":          1,
                 })
         for g in groups:
             del g["_last_ts"]
         return groups
 
 
+    def _sound_id_select(self, conn) -> str:
+        """Subselect exposing the owning sound for sound-discovered videos.
+        Falls back to NULL on platforms without the TikTok sound tables."""
+        has = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sound_videos'"
+        ).fetchone()
+        if has:
+            return "(SELECT sv.sound_id FROM sound_videos sv WHERE sv.video_id = v.video_id LIMIT 1)"
+        return "NULL"
+
+
     def get_recent_activity(self) -> dict:
         with self.get_db() as conn:
-            deletions = [dict(r) for r in conn.execute("""
-                SELECT v.video_id, v.deleted_at, c.handle, c.channel_id, c.enabled
+            _sound = self._sound_id_select(conn)
+            del_rows = [dict(r) for r in conn.execute(f"""
+                SELECT v.video_id, v.deleted_at, c.handle, c.channel_id, c.enabled,
+                       c.starred, c.account_status, {_sound} AS sound_id
                 FROM videos v JOIN channels c ON c.channel_id = v.channel_id
                 WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
-                ORDER BY v.deleted_at DESC LIMIT 3
+                  AND (v.deleted_reason IS NULL OR v.deleted_reason != 'user_banned')
+                ORDER BY v.deleted_at DESC LIMIT 300
             """).fetchall()]
             profile_changes = [dict(r) for r in conn.execute("""
-                SELECT ph.field, ph.changed_at, c.handle, c.channel_id
+                SELECT ph.field, ph.changed_at, c.handle, c.channel_id, c.starred, c.account_status
                 FROM profile_history ph JOIN channels c ON c.channel_id = ph.channel_id
                 ORDER BY ph.changed_at DESC LIMIT 3
             """).fetchall()]
-            saved_rows = [dict(r) for r in conn.execute("""
-                SELECT v.download_date, c.handle, c.channel_id, c.enabled, v.video_id
+            bans = [dict(r) for r in conn.execute("""
+                SELECT channel_id, handle, banned_at, starred
+                FROM channels
+                WHERE account_status = 'banned' AND banned_at IS NOT NULL
+                ORDER BY banned_at DESC LIMIT 1
+            """).fetchall()]
+            saved_rows = [dict(r) for r in conn.execute(f"""
+                SELECT v.download_date, c.handle, c.channel_id, c.enabled,
+                       c.starred, c.account_status, v.video_id, {_sound} AS sound_id
                 FROM videos v JOIN channels c ON c.channel_id = v.channel_id
                 WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
                 ORDER BY v.download_date DESC LIMIT 2000
             """).fetchall()]
-        saved = self._group_consecutive_by_channel(saved_rows, "download_date")[:9]
-        return {"deletions": deletions, "profile_changes": profile_changes, "saved": saved}
+        deletions = self._group_consecutive_by_channel(del_rows, "deleted_at")[:3]
+        saved     = self._group_consecutive_by_channel(saved_rows, "download_date")[:9]
+        return {"deletions": deletions, "profile_changes": profile_changes,
+                "bans": bans, "saved": saved}
 
 
     def get_deletion_history(self, offset: int = 0, limit: int = 50) -> list[dict]:
@@ -661,6 +792,25 @@ class ChannelDB:
                 (limit, offset),
             ).fetchall()
         return [dict(r) for r in rows]
+
+
+    def get_deletion_history_grouped(self, offset: int = 0, limit: int = 50) -> dict:
+        """Paginated grouped deletion history (newest first), excluding user_banned.
+        Consecutive deletions for the same channel collapse into one group.
+        Returns {"items": [...groups...], "rows_consumed": N}."""
+        with self.get_db() as conn:
+            _sound = self._sound_id_select(conn)
+            rows = [dict(r) for r in conn.execute(f"""
+                SELECT v.video_id, v.deleted_at, c.handle, c.channel_id, c.enabled,
+                       c.starred, c.account_status, {_sound} AS sound_id
+                FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+                WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+                  AND (v.deleted_reason IS NULL OR v.deleted_reason != 'user_banned')
+                ORDER BY v.deleted_at DESC LIMIT ? OFFSET ?""",
+                (self._GROUP_SCAN, offset),
+            ).fetchall()]
+        groups = self._group_consecutive_by_channel(rows, "deleted_at")[:limit]
+        return {"items": groups, "rows_consumed": sum(g["count"] for g in groups)}
 
 
     def get_profile_change_history(self, offset: int = 0, limit: int = 50) -> list[dict]:
