@@ -1638,6 +1638,14 @@ function renderLogs(lines, log_seq) {
     if (saved != null) _logClearSeq = parseInt(saved, 10) || 0;
   }
 
+  // log_seq resets when the app restarts; a persisted watermark above the
+  // current counter is stale and would hide every line until the counter
+  // catches up. Drop it and show the console again.
+  if (_logClearSeq > log_seq) {
+    _logClearSeq = 0;
+    localStorage.removeItem('logClearSeq');
+  }
+
   if (log_seq <= _logSeq) return;  // nothing new
 
   // Sequence number of lines[i] = log_seq - lines.length + i

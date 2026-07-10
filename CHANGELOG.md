@@ -54,6 +54,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Twitter photo posts are no longer treated as videos in the web UI: photo thumbnails open the image viewer instead of the video player, the Download button saves the file under its real extension instead of a broken .mp4, and photos are served with an image mimetype
 - Pressing Escape with a media overlay open (carousel, image viewer, video player) on a channel platform no longer also closes the creator modal underneath it
 - Video list responses no longer include the large raw metadata blobs (ytdlp_data, raw_video_data, chapters); on YouTube channels with many videos these forced SQLite to read megabytes per request just to discard them
+- The TikTok log console no longer goes blank after an app restart when logs had been cleared earlier: the persisted clear position pointed past the restarted log counter and silently hid every new line until the counter caught up
 
 ## [0.4.0] - 2026-06-29
 
