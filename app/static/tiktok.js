@@ -10,8 +10,7 @@ let _nextSoundRun = null;   // ISO string of next scheduled sound loop
 let _logSeq           = 0;    // log_seq from last server response (monotonic, never resets)
 let _logClearSeq      = 0;    // lines before this seq were cleared; don't re-render them
 let _logClearRestored = false;
-let pending       = {};
-const dismissed   = new Set();
+const addToasts   = _makeAddToasts('/api/tiktok', () => loadUsers());
 let runQueue      = [];   // channel_ids queued for manual run
 let runCurrent    = null; // channel_id currently being run manually
 let pendingRescans = {};  // {channel_id: fires_at_unix_secs} for large-spike midpoint re-scans
@@ -934,43 +933,9 @@ function renderUsers() {
   }
 }
 
-function renderPending() {
-  const container = document.getElementById('pendingList');
-  const entries   = Object.entries(pending).filter(([u]) => !dismissed.has(u));
-  if (!entries.length) { container.innerHTML = ''; return; }
-  container.innerHTML = entries.map(([uname, info]) => {
-    if (info.status === 'pending') {
-      return `<div class="pending-item"><span class="spinner"></span>Looking up @${esc(uname)}…</div>`;
-    }
-    return `<div class="pending-item error">Failed to add @${esc(uname)}: ${esc(info.message)} <button onclick="dismissPending('${esc(uname)}')" title="Dismiss">×</button></div>`;
-  }).join('');
-}
-
-async function dismissPending(username) {
-  await apiJSON(`/api/tiktok/queue/${encodeURIComponent(username)}`, { method: 'DELETE' });
-  delete pending[username];
-  renderPending();
-}
-
 async function loadQueue() {
   const { ok, data } = await apiJSON('/api/tiktok/queue');
-  if (!ok) return;
-  // Remove entries that are no longer in server pending (successfully added)
-  let anyResolved = false;
-  for (const u of Object.keys(pending)) {
-    if (!(u in data) && !dismissed.has(u)) {
-      delete pending[u];
-      anyResolved = true;
-    }
-  }
-  // Merge in current server state
-  for (const [u, info] of Object.entries(data)) {
-    if (!dismissed.has(u)) pending[u] = info;
-  }
-  renderPending();
-  // A pending lookup just completed; refresh the user list immediately
-  // rather than waiting for the next 15-second interval.
-  if (anyResolved) loadUsers();
+  if (ok) addToasts.sync(data);
 }
 
 // Sanitise contenteditable input: strip invalid chars, keep cursor at end
@@ -1020,28 +985,23 @@ async function addPaste() {
 // One field for users and sounds: numeric IDs and music/sound URLs go to the
 // sound tracker, everything else is treated as a username or profile URL
 async function addTracked() {
-  const input    = document.getElementById('handleInput');
-  const statusEl = document.getElementById('addStatus');
-  const val      = input.textContent.trim();
+  const input = document.getElementById('handleInput');
+  const val   = input.textContent.trim();
   if (!val) return;
   input.textContent = '';
   input.focus();
 
   if (_isSoundInput(val)) {
-    statusEl.className = 'add-status info';
-    statusEl.textContent = 'Adding sound…';
+    const t = showToast('Adding sound…', { spinner: true, duration: 0 });
     const { ok, data } = await apiJSON('/api/tiktok/sounds', {
       method: 'POST',
       body: JSON.stringify({ sound_id: val, label: null }),
     });
     if (ok) {
-      statusEl.className = 'add-status ok';
-      statusEl.textContent = `Sound ${data.sound_id} added.`;
-      setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'add-status'; }, 5000);
+      t.update(`Sound ${data.sound_id} added.`, { type: 'success' });
       loadSounds();
     } else {
-      statusEl.className = 'add-status error';
-      statusEl.textContent = data.error || 'Failed.';
+      t.update(data.error || 'Could not add sound.', { type: 'error', duration: 8000 });
     }
     return;
   }
@@ -1049,25 +1009,16 @@ async function addTracked() {
   const urlMatch = val.match(/tiktok\.com\/@([a-zA-Z0-9_.]+)/);
   const name = urlMatch ? urlMatch[1] : val.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
   if (!name) {
-    statusEl.className = 'add-status error';
-    statusEl.textContent = 'Invalid username.';
+    showToast('Invalid username.', { type: 'error' });
     return;
   }
-  statusEl.className = 'add-status';
-  statusEl.textContent = '';
 
   const { ok, data } = await apiJSON('/api/tiktok/channels', {
     method: 'POST',
     body: JSON.stringify({ handle: name }),
   });
-
-  if (ok) {
-    dismissed.delete(name);
-    pending[name] = { status: 'pending' };
-  } else {
-    pending[name] = { status: 'error', message: data.error || 'Request failed' };
-  }
-  renderPending();
+  if (ok) addToasts.start(data.handle || name);
+  else showToast(data.error || 'Could not add user.', { type: 'error' });
 }
 
 async function runUser(id)             { return _creatorRun('/api/tiktok/channels', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }, 'full'); }

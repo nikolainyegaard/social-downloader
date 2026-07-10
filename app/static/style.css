@@ -87,6 +87,7 @@ body {
 }
 
 .toast.leaving { animation: toast-out 0.18s ease forwards; }
+.toast > .spinner { margin-top: 4px; }
 
 .toast-success { border-left-color: var(--green); }
 .toast-warning { border-left-color: var(--yellow); }
@@ -395,19 +396,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   transition: background 0.15s;
 }
 .add-bar-paste-btn:hover { background: var(--surface); }
-.add-status { font-size: 13px; padding: 4px 0; min-height: 20px; }
-.add-status.error { color: var(--red); }
-.add-status.ok    { color: var(--green); }
-.add-status.info  { color: var(--muted); }
 
-.pending-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
-.pending-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.pending-item.error { color: var(--red); }
-.pending-item.error button {
-  background: none; border: none; color: var(--red); cursor: pointer;
-  font-size: 15px; padding: 0 4px; opacity: 0.7; border-radius: 4px; line-height: 1;
-}
-.pending-item.error button:hover { opacity: 1; background: var(--red-bg-h); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner {
   width: 11px; height: 11px; flex-shrink: 0;

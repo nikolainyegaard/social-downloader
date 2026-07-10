@@ -42,8 +42,6 @@ function initChannelApp(cfg) {
     </div>
     <button class="btn-primary" onclick="${P}AddCreator()">Add</button>
   </div>
-  <div class="add-status" id="${P}AddStatus"></div>
-  <div class="pending-list" id="${P}PendingList"></div>
 
   <div class="top-panels">
     <div class="panel-card">
@@ -171,8 +169,7 @@ function initChannelApp(cfg) {
   let sort           = { field: 'handle', dir: 'asc' };
   let filter         = { stat: new Set(), star: new Set() };
   let search         = '';
-  let pending        = {};
-  const dismissed    = new Set();
+  const addToasts    = _makeAddToasts(API, () => loadCreators());
   let runQueue       = [];
   let runCurrent     = null;
   let loopRunning    = false;
@@ -621,31 +618,17 @@ function initChannelApp(cfg) {
   });
 
   X('AddCreator', async () => {
-    const statusEl = _el('AddStatus');
-    const raw      = handleInput.textContent.trim();
+    const raw = handleInput.textContent.trim();
     if (!raw) return;
     handleInput.textContent = '';
     handleInput.focus();
-
-    statusEl.className   = 'add-status info';
-    statusEl.textContent = 'Adding…';
 
     const { ok, data } = await apiJSON(`${API}/channels`, {
       method: 'POST',
       body: JSON.stringify({ handle: raw }),
     });
-    if (ok) {
-      const handle = data.handle || raw.replace(/^@/, '');
-      dismissed.delete(handle);
-      pending[handle] = { status: 'pending' };
-      statusEl.className   = 'add-status ok';
-      statusEl.textContent = `@${handle} queued.`;
-      setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'add-status'; }, 5000);
-      renderPending();
-    } else {
-      statusEl.className   = 'add-status error';
-      statusEl.textContent = data.error || 'Failed.';
-    }
+    if (ok) addToasts.start(data.handle || raw.replace(/^@/, ''));
+    else showToast(data.error || `Could not add ${CREATOR}.`, { type: 'error' });
   });
 
   X('AddPaste', async () => {
@@ -657,38 +640,7 @@ function initChannelApp(cfg) {
 
   const loadQueue = X('LoadQueue', async () => {
     const { ok, data } = await apiJSON(`${API}/queue`);
-    if (!ok) return;
-    let anyResolved = false;
-    for (const h of Object.keys(pending)) {
-      if (!(h in data) && !dismissed.has(h)) {
-        delete pending[h];
-        anyResolved = true;
-      }
-    }
-    for (const [h, info] of Object.entries(data)) {
-      if (!dismissed.has(h)) pending[h] = info;
-    }
-    renderPending();
-    if (anyResolved) loadCreators();
-  });
-
-  function renderPending() {
-    const container = _el('PendingList');
-    if (!container) return;
-    const entries = Object.entries(pending).filter(([h]) => !dismissed.has(h));
-    if (!entries.length) { container.innerHTML = ''; return; }
-    container.innerHTML = entries.map(([handle, info]) => {
-      if (info.status === 'pending') {
-        return `<div class="pending-item"><span class="spinner"></span>Looking up @${esc(handle)}…</div>`;
-      }
-      return `<div class="pending-item error">Failed to add @${esc(handle)}: ${esc(info.message)} <button onclick="${P}DismissPending('${esc(handle)}')" title="Dismiss">×</button></div>`;
-    }).join('');
-  }
-
-  X('DismissPending', async handle => {
-    await apiJSON(`${API}/queue/${encodeURIComponent(handle)}`, { method: 'DELETE' });
-    delete pending[handle];
-    renderPending();
+    if (ok) addToasts.sync(data);
   });
 
   // ── Filters and sort ──────────────────────────────────────────────────────

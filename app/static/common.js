@@ -253,7 +253,7 @@ checkHealth();
 //   action:   { label: string, onclick: fn }              (optional)
 // Returns { dismiss } for programmatic dismissal.
 
-function showToast(message, { type = 'info', duration = 5000, action = null } = {}) {
+function showToast(message, { type = 'info', duration = 5000, action = null, spinner = false } = {}) {
   let container = document.getElementById('toast-container');
   if (!container) {
     container = document.createElement('div');
@@ -263,6 +263,13 @@ function showToast(message, { type = 'info', duration = 5000, action = null } = 
 
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
+
+  let spin = null;
+  if (spinner) {
+    spin = document.createElement('span');
+    spin.className = 'spinner';
+    toast.appendChild(spin);
+  }
 
   const body = document.createElement('div');
   body.className = 'toast-body';
@@ -293,8 +300,67 @@ function showToast(message, { type = 'info', duration = 5000, action = null } = 
   }
 
   container.appendChild(toast);
-  if (duration > 0) setTimeout(dismiss, duration);
-  return { dismiss };
+  let timer = duration > 0 ? setTimeout(dismiss, duration) : null;
+
+  // Morph this toast in place (e.g. loading spinner into a result). If the
+  // user already dismissed it, the result is shown as a fresh toast instead.
+  function update(newMessage, { type: newType = 'info', duration: newDuration = 5000 } = {}) {
+    if (!toast.isConnected) { showToast(newMessage, { type: newType, duration: newDuration }); return; }
+    msg.textContent = newMessage;
+    toast.className = `toast toast-${newType}`;
+    if (spin) { spin.remove(); spin = null; }
+    if (timer) clearTimeout(timer);
+    timer = newDuration > 0 ? setTimeout(dismiss, newDuration) : null;
+  }
+
+  return { dismiss, update };
+}
+
+// ── Add-lookup toasts ─────────────────────────────────────────────────────────
+// Adding a creator is asynchronous: POST /channels enqueues a lookup that a
+// worker resolves seconds later. Each platform polls its /queue; this manager
+// mirrors that queue as toasts: one sticky spinner toast per pending lookup
+// (including lookups already in flight when the page loads), morphed into a
+// success or error toast when the entry resolves. Error entries are dismissed
+// server-side once their toast is shown so they do not resurface on the next
+// poll or page load.
+function _makeAddToasts(apiBase, onAdded) {
+  const active     = new Map();   // handle -> toast controller
+  const seenErrors = new Set();   // error toast shown; server DELETE in flight
+
+  function start(handle) {
+    if (!active.has(handle)) {
+      active.set(handle, showToast(`Looking up @${handle}…`, { spinner: true, duration: 0 }));
+    }
+  }
+
+  function sync(queue) {
+    for (const [handle, info] of Object.entries(queue)) {
+      if (info.status === 'pending') {
+        start(handle);
+      } else if (info.status === 'error' && !seenErrors.has(handle)) {
+        seenErrors.add(handle);
+        const message = `Failed to add @${handle}: ${info.message || 'lookup failed'}`;
+        const t = active.get(handle);
+        active.delete(handle);
+        if (t) t.update(message, { type: 'error', duration: 8000 });
+        else showToast(message, { type: 'error', duration: 8000 });
+        apiJSON(`${apiBase}/queue/${encodeURIComponent(handle)}`, { method: 'DELETE' })
+          .then(() => seenErrors.delete(handle));
+      }
+    }
+    let resolved = false;
+    for (const [handle, t] of [...active]) {
+      if (!(handle in queue) && !seenErrors.has(handle)) {
+        active.delete(handle);
+        t.update(`@${handle} added.`, { type: 'success' });
+        resolved = true;
+      }
+    }
+    if (resolved && onAdded) onAdded();
+  }
+
+  return { start, sync };
 }
 
 // ── HTML escape helper ─────────────────────────────────────────────────────────
