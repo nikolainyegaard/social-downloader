@@ -61,6 +61,13 @@ function initChannelApp(cfg) {
     </div>
   </div>
 
+  <div class="mid-panels">
+  <div class="panel-card">
+    <div class="panel-header"><span class="section-title">Activity</span></div>
+    <div class="panel-body" style="padding:12px 16px">
+      <div id="${P}ActivityChart" style="display:flex;align-items:center;justify-content:center;min-height:120px;color:var(--muted);font-size:12px">Downloads per day chart coming soon</div>
+    </div>
+  </div>
   <div class="panel-card loops-card">
     <div class="panel-header"><span class="section-title">Loop</span></div>
     <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:12px">
@@ -82,6 +89,7 @@ function initChannelApp(cfg) {
         </div>
       </div>
     </div>
+  </div>
   </div>
 
   <section>

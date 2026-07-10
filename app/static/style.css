@@ -1069,6 +1069,15 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 @media (max-width: 900px) { .top-panels { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 600px) { .top-panels { grid-template-columns: 1fr; } }
 
+/* Activity chart (2/3) + Loops (1/3) */
+.mid-panels {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+@media (max-width: 900px) { .mid-panels { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .mid-panels { grid-template-columns: 1fr; } }
+
 /* Recent panel two-column split */
 .recent-split {
   display: grid;
