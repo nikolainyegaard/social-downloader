@@ -297,6 +297,13 @@ async def process_single_user(
         # Skipped for accessible private accounts with 0 videos -- yt-dlp cannot
         # access private content and would incorrectly trigger private_blocked.
         if not item_list_map and not (is_private and info and (info.get("relation") or 0) in (1, 2)):
+            _profile_video_count = info.get("video_count") if info else None
+            # Already flagged blocked and the profile still reports videos we cannot
+            # list: nothing has changed, don't burn a yt-dlp attempt every cycle.
+            if user.get("privacy_status") == "blocked" and (_profile_video_count or 0) > 0:
+                log(f"  Cookies account still blocked by this user, skipping")
+                db.touch_user_last_checked(tiktok_id)
+                return _profile_ok, _deletion_detected
             try:
                 ydlp_videos = get_user_videos(tiktok_id, sec_uid=sec_uid,
                                               cookies_path=COOKIES_PATH)
@@ -304,11 +311,23 @@ async def process_single_user(
                 log(f"  {_npost(len(ydlp_map))} found")
                 logd(f"  [{tiktok_id}] {len(ydlp_map)} videos via yt-dlp fallback")
             except Exception as e:
-                log(f"  Video fetch failed -- skipping user")
                 logd(f"  [{tiktok_id}] yt-dlp fallback error: {e}")
-                if "private" in str(e).lower():
-                    db.update_user_privacy_status(tiktok_id, "private_blocked")
-                return _profile_ok, _deletion_detected  # both sources failed; propagate profile result
+                if "does not have any videos" in str(e) and (_profile_video_count or 0) > 0:
+                    # Profile reports videos but neither source can list any: the
+                    # account has most likely blocked the cookies account.
+                    log(f"  Profile reports {_profile_video_count} videos but none are listable; cookies account is likely blocked by this user")
+                    db.update_user_privacy_status(tiktok_id, "blocked")
+                    db.touch_user_last_checked(tiktok_id)
+                    return _profile_ok, _deletion_detected
+                if "does not have any videos" in str(e) and _profile_video_count == 0:
+                    # Genuinely empty account (profile confirms 0 videos): continue to
+                    # the diff so deletion tracking of saved videos still runs.
+                    log(f"  Account has no videos posted")
+                else:
+                    log(f"  Video fetch failed -- skipping user")
+                    if "private" in str(e).lower():
+                        db.update_user_privacy_status(tiktok_id, "private_blocked")
+                    return _profile_ok, _deletion_detected  # both sources failed; propagate profile result
 
         # If stop was requested during the item_list fetch, the result is partial.
         # Treat it the same as quick mode: skip the full deletion diff and don't

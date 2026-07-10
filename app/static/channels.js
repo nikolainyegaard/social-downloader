@@ -204,9 +204,12 @@ function initChannelApp(cfg) {
   const _IMG_EXTS = ['avif', 'jpg', 'jpeg', 'png', 'webp', 'gif'];
   const _mediaExt = v => ((v.file_path || '').split('.').pop() || '').toLowerCase();
   const _isImage  = v => _IMG_EXTS.includes(_mediaExt(v));
+  // Multi-media posts store {id}_01.ext as file_path with siblings on disk.
+  const _isMulti  = v => (((v.file_path || '').split('/').pop()) || '').startsWith(`${v.video_id}_`);
 
   function _openMediaFor(v) {
     const id = esc(v.video_id);
+    if (_isMulti(v)) return `${P}OpenCarousel('${id}')`;
     return _isImage(v)
       ? `openImgModalUrl('${API}/videos/${id}/file')`
       : `${P}OpenVidModal('${id}')`;
@@ -218,7 +221,7 @@ function initChannelApp(cfg) {
     return `<div style="position:relative;line-height:0;width:90px;flex-shrink:0">
       <img class="video-thumb" src="${API}/videos/${id}/thumbnail" alt="" loading="lazy"
            onerror="this.style.opacity='.15'"
-           onclick="event.stopPropagation();${_openMediaFor(v)}" title="${isImg ? 'View photo' : 'Play video'}" style="cursor:pointer">
+           onclick="event.stopPropagation();${_openMediaFor(v)}" title="${_isMulti(v) ? 'View media' : isImg ? 'View photo' : 'Play video'}" style="cursor:pointer">
       ${isImg ? _photoBadge : thumbBadge(v)}
     </div>`;
   }
@@ -226,9 +229,10 @@ function initChannelApp(cfg) {
   function _videoActionBtns(v) {
     const id = esc(v.video_id);
     if (v.file_path) {
-      const ext = _mediaExt(v) || 'mp4';
-      return `<a class="play-btn" href="${API}/videos/${id}/file" download="${id}.${ext}"
-               onclick="event.stopPropagation()" title="Download">${_dlIcon}</a>`;
+      const ext  = _mediaExt(v) || 'mp4';
+      const name = _isMulti(v) ? (v.file_path.split('/').pop()) : `${id}.${ext}`;
+      return `<a class="play-btn" href="${API}/videos/${id}/file" download="${esc(name)}"
+               onclick="event.stopPropagation()" title="${_isMulti(v) ? 'Download first file' : 'Download'}">${_dlIcon}</a>`;
     }
     return '';
   }
@@ -243,6 +247,12 @@ function initChannelApp(cfg) {
     document.getElementById('vidModal').style.display = 'flex';
     _lockScroll();
     vid.play().catch(() => {});
+  });
+
+  X('OpenCarousel', async videoId => {
+    const { ok, data } = await apiJSON(`${API}/videos/${encodeURIComponent(videoId)}/files`);
+    if (!ok || !data.files || !data.files.length) return;
+    openCarouselSlides(data.files);
   });
 
   // ── Detail modal config ───────────────────────────────────────────────────
@@ -295,9 +305,11 @@ function initChannelApp(cfg) {
     actionBtnsFn: _videoActionBtns,
     previewFn:    `${P}OpenImgModal`,
     gridThumbSrc: v => `${API}/videos/${esc(v.video_id)}/thumbnail`,
-    gridCellOnclick: v => _isImage(v)
-      ? openImgModalUrl(`${API}/videos/${encodeURIComponent(v.video_id)}/file`)
-      : window[`${P}OpenVidModal`](v.video_id),
+    gridCellOnclick: v => _isMulti(v)
+      ? window[`${P}OpenCarousel`](v.video_id)
+      : _isImage(v)
+        ? openImgModalUrl(`${API}/videos/${encodeURIComponent(v.video_id)}/file`)
+        : window[`${P}OpenVidModal`](v.video_id),
   };
 
   // ── Stats panel ───────────────────────────────────────────────────────────

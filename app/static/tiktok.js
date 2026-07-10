@@ -846,6 +846,7 @@ function _renderUserCard(u) {
         <div class="user-badges">
           <span class="account-status ${trackingCls}">${trackingLabel}</span>
           ${accountBadge}
+          ${u.starred ? '<span class="account-status priority" title="Starred: checked on the high-priority interval">★ Priority</span>' : ''}
         </div>
       </div>
 
@@ -1189,6 +1190,7 @@ function renderSounds() {
     const label      = s.label || s.sound_id;
     const ttUrl      = `https://www.tiktok.com/music/-${s.sound_id}`;
     const checked    = _fmtLastChecked(s.last_checked);
+    const saved      = s.last_saved ? ` · Last saved ${fmt.rel(new Date(s.last_saved * 1000).toISOString())}` : '';
     const inQueue      = soundRunQueue.includes(s.sound_id);
     const isCurrent    = soundRunCurrent === s.sound_id;
     const runLabel     = isCurrent ? 'Running…' : inQueue ? 'Queued' : 'Run';
@@ -1218,7 +1220,7 @@ function renderSounds() {
           ${s.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${s.video_undeleted}</span></span>` : ''}
         </div>
         <div class="user-card-footer">
-          <span class="user-checked">${checked}</span>
+          <span class="user-checked">${checked}${saved}</span>
           <div style="display:flex;gap:6px;align-items:center;">
             <label class="tracking-toggle" title="${isInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}" onclick="event.stopPropagation()">
               <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
@@ -2056,41 +2058,12 @@ function closeVidModal() {
   _unlockScroll();
 }
 
-// ── Photo carousel modal ──────────────────────────────────────────────────
-
-let _carouselUrls = [];
-let _carouselIdx  = 0;
+// ── Photo carousel modal (shared engine in common.js) ─────────────────────
 
 async function openCarousel(videoId) {
   const { ok, data } = await apiJSON(`/api/tiktok/videos/${encodeURIComponent(videoId)}/photos`);
   if (!ok || !data.urls || !data.urls.length) return;
-  _carouselUrls = data.urls;
-  _showCarouselSlide(0);
-  document.getElementById('carouselModal').style.display = 'flex';
-  _lockScroll();
-}
-
-function _showCarouselSlide(idx) {
-  _carouselIdx = idx;
-  document.getElementById('carouselImg').src = _carouselUrls[idx];
-  document.getElementById('carouselCounter').textContent =
-    _carouselUrls.length > 1 ? `${idx + 1} / ${_carouselUrls.length}` : '';
-  document.getElementById('carouselPrev').disabled = idx === 0;
-  document.getElementById('carouselNext').disabled = idx === _carouselUrls.length - 1;
-}
-
-function carouselStep(dir) {
-  const next = _carouselIdx + dir;
-  if (next < 0 || next >= _carouselUrls.length) return;
-  _showCarouselSlide(next);
-}
-
-function closeCarousel() {
-  document.getElementById('carouselModal').style.display = 'none';
-  document.getElementById('carouselImg').src = '';
-  _carouselUrls = [];
-  _carouselIdx  = 0;
-  _unlockScroll();
+  openCarouselSlides(data.urls);
 }
 
 async function _loadModalVideos(tiktokId) {
@@ -2169,6 +2142,12 @@ function _renderModalHeader(u) {
     return `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} until inactive`;
   })();
 
+  const nextCheckStr = (() => {
+    if (u.enabled === 0 || u.tracking_enabled === 0) return '';
+    if (!u.next_check_at || u.next_check_at * 1000 <= Date.now()) return 'Next check: at next session';
+    return `Next check ${fmt.relFuture(new Date(u.next_check_at * 1000).toISOString())}`;
+  })();
+
   const inRunQueue   = runQueue.includes(u.tiktok_id);
   const isRunCurrent = runCurrent === u.tiktok_id;
   const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
@@ -2196,7 +2175,7 @@ function _renderModalHeader(u) {
         @${esc(u.username)}
         ${oldNames ? `<span class="user-old-names">· ${oldNames}</span>` : ''}
       </div>
-      <div class="modal-id-line">id:${esc(u.tiktok_id)}${joinStr}</div>
+      <div class="modal-id-line">id:${esc(u.tiktok_id)}${joinStr}${nextCheckStr ? ` · ${nextCheckStr}` : ''}</div>
       ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
       ${u.bio ? `<div class="modal-bio" onclick="this.classList.toggle('expanded')">${esc(u.bio)}</div>` : ''}
       ${u.bio_link ? `<div class="modal-bio-link"><a href="${esc(u.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(u.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}

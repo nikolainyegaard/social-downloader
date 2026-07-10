@@ -1514,7 +1514,8 @@ def get_all_sounds() -> list[dict]:
             SELECT s.*,
                    COUNT(sv.video_id)                                              AS video_count,
                    SUM(CASE WHEN v.status = 'deleted'   THEN 1 ELSE 0 END)        AS video_deleted,
-                   SUM(CASE WHEN v.status = 'undeleted' THEN 1 ELSE 0 END)        AS video_undeleted
+                   SUM(CASE WHEN v.status = 'undeleted' THEN 1 ELSE 0 END)        AS video_undeleted,
+                   MAX(v.download_date)                                            AS last_saved
             FROM sounds s
             LEFT JOIN sound_videos sv ON sv.sound_id = s.sound_id
             LEFT JOIN videos v        ON v.video_id  = sv.video_id

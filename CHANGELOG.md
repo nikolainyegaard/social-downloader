@@ -13,6 +13,10 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Twitter cookies management in Settings > Twitter: upload a cookies.txt from a logged-in x.com session; required for timeline access and sensitive media
 - Twitter pane in Settings > Diagnostics: fetch raw profile info or the first 5 media posts for any handle
 - Deletion tracking, undeletion, profile change history, and avatar archiving for Twitter accounts, matching the TikTok behaviour
+- Multi-media tweets are now fully viewable: a TikTok-style carousel steps through every photo and video of a post, backed by a new sibling-file listing endpoint on all channel platforms; the carousel now supports video slides
+- TikTok user modals show the next scheduled check time; starred user cards get a Priority badge
+- TikTok sound cards show a "Last saved" timestamp next to "Last checked"
+- TikTok detects accounts that have blocked the cookies account without revealing it in the profile relation: a profile reporting videos while both video sources return none is flagged Blocked, surfaced in the UI, and skipped until it recovers; a profile confirming zero videos is treated as a genuinely empty account and deletion tracking still runs
 
 ### Changed
 - Header cookies pill is now platform-aware: it reflects the authentication state of the active platform tab (TikTok cookies, Instagram session, Twitter cookies), hides on YouTube, and opens the matching Settings section when clicked

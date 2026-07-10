@@ -873,6 +873,64 @@ function closeImgModal() {
   _unlockScroll();
 }
 
+// ── Media carousel modal ──────────────────────────────────────────────────────
+// Slides are plain image URL strings (TikTok photo posts) or
+// {url, type: 'image'|'video'} objects (multi-media tweets).
+
+let _carouselUrls = [];
+let _carouselIdx  = 0;
+
+function openCarouselSlides(slides) {
+  if (!slides || !slides.length) return;
+  _carouselUrls = slides;
+  _showCarouselSlide(0);
+  document.getElementById('carouselModal').style.display = 'flex';
+  _lockScroll();
+}
+
+function _showCarouselSlide(idx) {
+  _carouselIdx = idx;
+  const slide = _carouselUrls[idx];
+  const url   = typeof slide === 'string' ? slide : slide.url;
+  const isVid = typeof slide !== 'string' && slide.type === 'video';
+  const img   = document.getElementById('carouselImg');
+  const vid   = document.getElementById('carouselVid');
+  vid.pause();
+  if (isVid) {
+    img.style.display = 'none';
+    img.src = '';
+    vid.style.display = '';
+    vid.src = url;
+    vid.play().catch(() => {});
+  } else {
+    vid.style.display = 'none';
+    vid.src = '';
+    img.style.display = '';
+    img.src = url;
+  }
+  document.getElementById('carouselCounter').textContent =
+    _carouselUrls.length > 1 ? `${idx + 1} / ${_carouselUrls.length}` : '';
+  document.getElementById('carouselPrev').disabled = idx === 0;
+  document.getElementById('carouselNext').disabled = idx === _carouselUrls.length - 1;
+}
+
+function carouselStep(dir) {
+  const next = _carouselIdx + dir;
+  if (next < 0 || next >= _carouselUrls.length) return;
+  _showCarouselSlide(next);
+}
+
+function closeCarousel() {
+  const vid = document.getElementById('carouselVid');
+  vid.pause();
+  vid.src = '';
+  document.getElementById('carouselModal').style.display = 'none';
+  document.getElementById('carouselImg').src = '';
+  _carouselUrls = [];
+  _carouselIdx  = 0;
+  _unlockScroll();
+}
+
 // ── Shared icons and badges ───────────────────────────────────────────────────
 
 const _dlIcon         = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12L12 16M12 16L16 12M12 16V4M4 20H20"/></svg>`;

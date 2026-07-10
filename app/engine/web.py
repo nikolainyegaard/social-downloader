@@ -346,6 +346,49 @@ def create_channel_blueprint(engine) -> Blueprint:
         mime = _VIDEO_MIME.get(ext, "video/mp4")
         return send_file(path, mimetype=mime, conditional=True)
 
+    def _sibling_files(video) -> list[str]:
+        """Media files of a post: multi-media posts store {id}_01.ext, {id}_02.ext...
+        with the first file as file_path; single-file posts store {id}.ext."""
+        main   = video["file_path"]
+        vid_id = video["video_id"]
+        if not os.path.basename(main).startswith(f"{vid_id}_"):
+            return [main] if os.path.exists(main) else []
+        pattern = os.path.join(
+            _glob.escape(os.path.dirname(main)),
+            _glob.escape(vid_id) + "_[0-9][0-9].*",
+        )
+        return sorted(_glob.glob(pattern))
+
+    @bp.route("/videos/<video_id>/files", methods=["GET"])
+    def video_files(video_id: str):
+        video = db.get_video(video_id)
+        if not video or not video.get("file_path"):
+            return ("", 404)
+        files = _sibling_files(video)
+        if not files:
+            return ("", 404)
+        items = []
+        for i, path in enumerate(files):
+            ext  = os.path.splitext(path)[1].lower()
+            mime = _VIDEO_MIME.get(ext, "video/mp4")
+            items.append({
+                "name": os.path.basename(path),
+                "type": "image" if mime.startswith("image/") else "video",
+                "url":  f"/api/{platform}/videos/{video_id}/files/{i}",
+            })
+        return jsonify({"files": items, "count": len(items)})
+
+    @bp.route("/videos/<video_id>/files/<int:n>", methods=["GET"])
+    def video_file_n(video_id: str, n: int):
+        video = db.get_video(video_id)
+        if not video or not video.get("file_path"):
+            return ("", 404)
+        files = _sibling_files(video)
+        if n < 0 or n >= len(files):
+            return ("", 404)
+        ext = os.path.splitext(files[n])[1].lower()
+        return send_file(files[n], mimetype=_VIDEO_MIME.get(ext, "video/mp4"), conditional=True)
+
     # ── Diagnostics ───────────────────────────────────────────────────────────
 
     @bp.route("/db/query", methods=["POST"])

@@ -467,6 +467,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .account-status.active   { background: var(--green-bg); color: var(--green); }
 .account-status.inactive { background: var(--surface2);      color: var(--muted); }
 .account-status.unknown  { background: var(--surface2);      color: var(--muted); }
+.account-status.priority { background: var(--yellow-bg);     color: var(--yellow); }
 
 .privacy-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
 .privacy-status.public             { background: var(--green-bg); color: var(--green); }
@@ -1021,7 +1022,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   align-items: center;
   gap: 10px;
 }
-.carousel-inner img {
+.carousel-inner img,
+.carousel-inner video {
   max-width: min(78vw, 520px);
   max-height: 85vh;
   border-radius: 8px;
