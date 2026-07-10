@@ -222,7 +222,7 @@ function initChannelApp(cfg) {
       <img class="video-thumb" src="${API}/videos/${id}/thumbnail" alt="" loading="lazy"
            onerror="this.style.opacity='.15'"
            onclick="event.stopPropagation();${_openMediaFor(v)}" title="${_isMulti(v) ? 'View media' : isImg ? 'View photo' : 'Play video'}" style="cursor:pointer">
-      ${isImg ? _photoBadge : thumbBadge(v)}
+      ${_isMulti(v) ? _photoBadge : isImg ? _imageBadge : thumbBadge(v)}
     </div>`;
   }
 
@@ -297,7 +297,7 @@ function initChannelApp(cfg) {
     ],
     viewVideoFilter: cfg.viewVideoFilter || ((view, vids) => vids),
     gridClassFn:     cfg.gridClassFn || (() => ''),
-    typeIconFn:      cfg.typeIconFn || (v => (v.type === 'photo' || _isImage(v)) ? _vgridPhotoIcon : _vgridPlayIcon),
+    typeIconFn:      cfg.typeIconFn || (v => _isMulti(v) ? _vgridPhotoIcon : (v.type === 'photo' || _isImage(v)) ? _vgridImageIcon : _vgridPlayIcon),
     gridId:       `${P}VideoGrid`,
     hasPhistBtn:  true,
     phistBtnFn:   `${P}OpenProfileHistory`,
@@ -1256,6 +1256,11 @@ function initChannelApp(cfg) {
 
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
+    // Overlay modals (carousel, image, video) sit on top of the creator modal
+    // and close themselves via their own handler; don't close both at once.
+    for (const id of ['carouselModal', 'imgModal', 'vidModal']) {
+      if (document.getElementById(id)?.style.display !== 'none') return;
+    }
     if (_el('ModalBackdrop')?.style.display !== 'none') {
       window[`${P}CloseModal`]();
     }

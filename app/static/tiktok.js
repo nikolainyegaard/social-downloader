@@ -1332,7 +1332,7 @@ const _USER_MODAL_CFG = {
   thumbCellFn:  v => _thumbCell(v),
   actionBtnsFn: v => _videoActionBtns(v),
   previewFn:    'openImgModal',
-  typeIconFn:   v => v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? _vgridPhotoIcon : '',
+  typeIconFn:   v => v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? (v.multi ? _vgridPhotoIcon : _vgridImageIcon) : '',
   gridThumbSrc: v => `/api/tiktok/videos/${esc(v.video_id)}/thumbnail`,
   gridCellOnclick: v => { if (v.type === 'video') openVidModal(v.video_id); else if (v.type === 'photo') openCarousel(v.video_id); },
 };
@@ -1352,7 +1352,7 @@ const _SOUND_MODAL_CFG = {
   thumbCellFn:  v => _thumbCell(v),
   actionBtnsFn: v => _videoActionBtns(v),
   previewFn:    'openImgModal',
-  typeIconFn:   v => v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? _vgridPhotoIcon : '',
+  typeIconFn:   v => v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? (v.multi ? _vgridPhotoIcon : _vgridImageIcon) : '',
   gridThumbSrc: v => `/api/tiktok/videos/${esc(v.video_id)}/thumbnail`,
   gridCellOnclick: v => { if (v.type === 'video') openVidModal(v.video_id); else if (v.type === 'photo') openCarousel(v.video_id); },
 };
@@ -2384,7 +2384,7 @@ function _renderHistoryEntries() {
 
 function _thumbCell(v) {
   const id    = esc(v.video_id);
-  const badge = v.type === 'video' ? _playBadge : v.type === 'photo' ? _photoBadge : '';
+  const badge = v.type === 'video' ? _playBadge : v.type === 'photo' ? (v.multi ? _photoBadge : _imageBadge) : '';
   return `<div style="position:relative;line-height:0;width:90px;flex-shrink:0">
     <img class="video-thumb" src="/api/tiktok/videos/${id}/thumbnail" alt="" loading="lazy"
          onerror="this.style.opacity='.15'"

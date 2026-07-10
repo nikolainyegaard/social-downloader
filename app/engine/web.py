@@ -10,6 +10,7 @@ from __future__ import annotations
 import glob as _glob
 import os
 import queue as _queue_module
+import re as _re
 import threading
 import time
 from flask import Blueprint, jsonify, request, send_file
@@ -347,17 +348,21 @@ def create_channel_blueprint(engine) -> Blueprint:
         return send_file(path, mimetype=mime, conditional=True)
 
     def _sibling_files(video) -> list[str]:
-        """Media files of a post: multi-media posts store {id}_01.ext, {id}_02.ext...
-        with the first file as file_path; single-file posts store {id}.ext."""
+        """Media files of a post: multi-media posts store numbered siblings with the
+        first file as file_path ({id}_01.ext on Twitter, {id}_1.ext on Instagram);
+        single-file posts store {id}.ext."""
         main   = video["file_path"]
         vid_id = video["video_id"]
         if not os.path.basename(main).startswith(f"{vid_id}_"):
             return [main] if os.path.exists(main) else []
-        pattern = os.path.join(
-            _glob.escape(os.path.dirname(main)),
-            _glob.escape(vid_id) + "_[0-9][0-9].*",
-        )
-        return sorted(_glob.glob(pattern))
+        rx = _re.compile(_re.escape(vid_id) + r"_(\d+)\.\w+$")
+        files = []
+        for path in _glob.glob(os.path.join(_glob.escape(os.path.dirname(main)),
+                                            _glob.escape(vid_id) + "_*")):
+            m = rx.fullmatch(os.path.basename(path))
+            if m and os.path.splitext(path)[1].lower() in _VIDEO_MIME:
+                files.append((int(m.group(1)), path))
+        return [path for _, path in sorted(files)]
 
     @bp.route("/videos/<video_id>/files", methods=["GET"])
     def video_files(video_id: str):

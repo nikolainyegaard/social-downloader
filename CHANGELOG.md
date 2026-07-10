@@ -14,6 +14,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Twitter pane in Settings > Diagnostics: fetch raw profile info or the first 5 media posts for any handle
 - Deletion tracking, undeletion, profile change history, and avatar archiving for Twitter accounts, matching the TikTok behaviour
 - Multi-media tweets are now fully viewable: a TikTok-style carousel steps through every photo and video of a post, backed by a new sibling-file listing endpoint on all channel platforms; the carousel now supports video slides
+- Photo posts show distinct glyphs by image count on every platform: a picture-frame glyph for single photos and the grid-squares glyph for carousels, in both the list thumbnail badge and the grid view corner icon
 - TikTok user modals show the next scheduled check time; starred user cards get a Priority badge
 - TikTok sound cards show a "Last saved" timestamp next to "Last checked"
 - TikTok detects accounts that have blocked the cookies account without revealing it in the profile relation: a profile reporting videos while both video sources return none is flagged Blocked, surfaced in the UI, and skipped until it recovers; a profile confirming zero videos is treated as a genuinely empty account and deletion tracking still runs
@@ -46,6 +47,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Twitter, Instagram, and YouTube log consoles now colorize lines (session separators, processing, errors, warnings, downloads, profile changes) like the TikTok log console
 - YouTube Diagnostics now also returns the parsed channel profile and its raw metadata alongside the video entries
 - Twitter photo posts are no longer treated as videos in the web UI: photo thumbnails open the image viewer instead of the video player, the Download button saves the file under its real extension instead of a broken .mp4, and photos are served with an image mimetype
+- Pressing Escape with a media overlay open (carousel, image viewer, video player) on a channel platform no longer also closes the creator modal underneath it
 
 ## [0.4.0] - 2026-06-29
 

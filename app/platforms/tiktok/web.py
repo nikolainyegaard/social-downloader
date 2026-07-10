@@ -528,9 +528,22 @@ def remove_user(tiktok_id: str):
     return jsonify({"ok": True})
 
 
+def _annotate_photo_multi(videos: list[dict]) -> list[dict]:
+    """Mark photo posts holding more than one image ({id}_02.* exists on disk),
+    so the UI can show a carousel glyph vs a single-image glyph."""
+    for v in videos:
+        if v.get("type") == "photo" and v.get("file_path"):
+            folder = os.path.dirname(v["file_path"])
+            v["multi"] = any(
+                os.path.exists(os.path.join(folder, f"{v['video_id']}_02.{ext}"))
+                for ext in ("avif", "jpg", "jpeg")
+            )
+    return videos
+
+
 @tiktok_bp.route("/users/<tiktok_id>/videos", methods=["GET"])
 def user_videos(tiktok_id: str):
-    return jsonify(db.get_videos_for_user(tiktok_id))
+    return jsonify(_annotate_photo_multi(db.get_videos_for_user(tiktok_id)))
 
 
 @tiktok_bp.route("/users/<tiktok_id>/avatar", methods=["GET"])
@@ -914,7 +927,7 @@ def remove_sound(sound_id: str):
 def sound_videos(sound_id: str):
     if not db.get_sound(sound_id):
         return jsonify({"error": "Sound not found"}), 404
-    return jsonify(db.get_sound_videos(sound_id))
+    return jsonify(_annotate_photo_multi(db.get_sound_videos(sound_id)))
 
 
 @tiktok_bp.route("/sounds/<sound_id>/run", methods=["POST"])
