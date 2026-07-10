@@ -15,6 +15,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Deletion tracking, undeletion, profile change history, and avatar archiving for Twitter accounts, matching the TikTok behaviour
 - Multi-media tweets are now fully viewable: a TikTok-style carousel steps through every photo and video of a post, backed by a new sibling-file listing endpoint on all channel platforms; the carousel now supports video slides
 - Photo posts show distinct glyphs by image count on every platform: a picture-frame glyph for single photos and the grid-squares glyph for carousels, in both the list thumbnail badge and the grid view corner icon
+- The Statistics panel on every platform shows the media storage size of that app's library in MB or GB (replaces Total likes on TikTok); the size is computed from the platform's media folder and cached for 15 minutes
+- A mobile add bar on every platform: at phone widths, Twitter, Instagram, and YouTube now show the same unified add field TikTok has (input, Paste button, Add), replacing the desktop track panel that used to disappear entirely on mobile
 - TikTok user modals show the next scheduled check time; starred user cards get a Priority badge
 - TikTok sound cards show a "Last saved" timestamp next to "Last checked"
 - TikTok detects accounts that have blocked the cookies account without revealing it in the profile relation: a profile reporting videos while both video sources return none is flagged Blocked, surfaced in the UI, and skipped until it recovers; a profile confirming zero videos is treated as a genuinely empty account and deletion tracking still runs
@@ -42,6 +44,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The Recent panel and deletion history are TikTok-grade on all platforms: deletions grouped by creator, ban feed, and starred/banned name colouring
 - The engine add flow now re-enables soft-disabled creator stubs (e.g. TikTok authors discovered via sound tracking) instead of rejecting them as duplicates
 - Ancient tiktok-downloader one-time migrations (flat data/videos layout, del_ file prefixes, username_history backfill, ytdlp blob cleanup) were removed; upgrade to this version from v1.25.0 or later so those migrations have already run
+- All filters across the app are now on/off toggles instead of single-choice selectors: the user and sound catalog filter groups, the status and type filters in every detail modal, and the profile history field pills; each pill toggles independently, several pills in a group combine (e.g. Public and Banned show both), turning everything off shows all, and the All pills are gone
 
 ### Fixed
 - Instagram and Twitter databases are now included in the nightly backup rotation; previously only TikTok and YouTube were backed up

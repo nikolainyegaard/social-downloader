@@ -818,6 +818,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .filter-pills .filter-pill { background: transparent; border-color: transparent; }
 .filter-pills .filter-pill.active { background: transparent; border-color: transparent; color: #fff; }
 .filter-pills .filter-pill:hover:not(.active) { background: rgba(255,255,255,.06); border-color: transparent; color: var(--text); }
+/* Multi-toggle pill groups: no glider; every active pill gets its own fill */
+.filter-pills.multi .filter-pill.active { background: var(--accent); }
 .glider { position: absolute; z-index: 1; background: var(--accent); border-radius: var(--radius-pill); transition: left .2s ease, width .2s ease; pointer-events: none; }
 
 .modal-vid-count { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }

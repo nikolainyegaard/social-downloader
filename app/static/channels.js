@@ -34,6 +34,16 @@ function initChannelApp(cfg) {
 
   function _sectionHtml() {
     return `
+  <div class="mobile-add-bar">
+    <div class="mobile-add-input-row">
+      <input type="text" id="${P}MobileAddInput" class="mobile-add-input"
+             placeholder="${cfg.addPlaceholder}" autocomplete="off" spellcheck="false">
+      <button class="mobile-add-paste-btn" onclick="${P}MobileAddPaste()" aria-label="Paste">Paste</button>
+    </div>
+    <button class="btn-primary" onclick="${P}MobileAddSubmit()">Add</button>
+  </div>
+  <div class="mobile-add-status" id="${P}MobileAddStatus"></div>
+
   <div class="top-panels">
     <div class="panel-card">
       <div class="panel-header"><span class="section-title">Statistics</span></div>
@@ -102,17 +112,15 @@ function initChannelApp(cfg) {
       <div id="${P}Controls" class="filter-control-group">
         <div class="filter-row">
           <span class="filter-row-label">Tracking</span>
-          <div class="filter-pills">
-            <button class="filter-pill active" id="${P}fStatAll"      onclick="${P}SetFilter('stat','all')">All</button>
-            <button class="filter-pill"        id="${P}fStatActive"   onclick="${P}SetFilter('stat','active')">Active</button>
-            <button class="filter-pill"        id="${P}fStatInactive" onclick="${P}SetFilter('stat','inactive')">Inactive</button>
+          <div class="filter-pills multi">
+            <button class="filter-pill" id="${P}fStatActive"   onclick="${P}SetFilter('stat','active')">Active</button>
+            <button class="filter-pill" id="${P}fStatInactive" onclick="${P}SetFilter('stat','inactive')">Inactive</button>
           </div>
         </div>
         <div class="filter-row">
           <span class="filter-row-label">Starred</span>
-          <div class="filter-pills">
-            <button class="filter-pill active" id="${P}fStarAll"     onclick="${P}SetFilter('star','all')">All</button>
-            <button class="filter-pill"        id="${P}fStarStarred" onclick="${P}SetFilter('star','starred')">Starred</button>
+          <div class="filter-pills multi">
+            <button class="filter-pill" id="${P}fStarStarred" onclick="${P}SetFilter('star','starred')">Starred</button>
           </div>
         </div>
         <div class="filter-row">
@@ -173,7 +181,7 @@ function initChannelApp(cfg) {
 
   let creators       = [];
   let sort           = { field: 'handle', dir: 'asc' };
-  let filter         = { stat: 'all', star: 'all' };
+  let filter         = { stat: new Set(), star: new Set() };
   let search         = '';
   let pending        = {};
   const dismissed    = new Set();
@@ -269,7 +277,7 @@ function initChannelApp(cfg) {
   ];
 
   const _creatorState = {
-    videos: [], filter: 'all', typeFilter: 'all', search: '',
+    videos: [], filter: new Set(), typeFilter: new Set(), search: '',
     sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, obs: null,
     toolbarExpanded: false, view: 'list',
   };
@@ -321,6 +329,7 @@ function initChannelApp(cfg) {
       { label: 'Deleted',             value: (s.deleted_count || 0).toLocaleString() },
       { label: 'Latest saved',        value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
       { label: 'Total views',         value: _fmtLarge(s.total_views || 0) },
+      { label: 'Storage',             value: _fmtBytes(s.media_size_bytes || 0) },
     ]);
   }
 
@@ -623,15 +632,8 @@ function initChannelApp(cfg) {
     document.execCommand('insertText', false, text);
   });
 
-  X('AddCreator', async () => {
-    const input    = handleInput;
-    const statusEl = _el('AddStatus');
-    const raw      = input.textContent.trim();
-    if (!raw) return;
-    input.textContent = '';
-    input.focus();
-
-    statusEl.className   = 'add-status info';
+  async function _submitAdd(raw, statusEl, base) {
+    statusEl.className   = `${base} info`;
     statusEl.textContent = 'Adding…';
 
     const { ok, data } = await apiJSON(`${API}/channels`, {
@@ -642,14 +644,43 @@ function initChannelApp(cfg) {
       const handle = data.handle || raw.replace(/^@/, '');
       dismissed.delete(handle);
       pending[handle] = { status: 'pending' };
-      statusEl.className   = 'add-status ok';
+      statusEl.className   = `${base} ok`;
       statusEl.textContent = `@${handle} queued.`;
-      setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'add-status'; }, 5000);
+      setTimeout(() => { statusEl.textContent = ''; statusEl.className = base; }, 5000);
       renderPending();
     } else {
-      statusEl.className   = 'add-status error';
+      statusEl.className   = `${base} error`;
       statusEl.textContent = data.error || 'Failed.';
     }
+  }
+
+  X('AddCreator', async () => {
+    const raw = handleInput.textContent.trim();
+    if (!raw) return;
+    handleInput.textContent = '';
+    handleInput.focus();
+    await _submitAdd(raw, _el('AddStatus'), 'add-status');
+  });
+
+  X('MobileAddPaste', async () => {
+    const input = _el('MobileAddInput');
+    try {
+      input.value = (await navigator.clipboard.readText()).trim();
+    } catch { /* clipboard permission denied; leave the field as is */ }
+    input.focus();
+  });
+
+  X('MobileAddSubmit', async () => {
+    const input = _el('MobileAddInput');
+    const raw   = input.value.trim();
+    if (!raw) return;
+    input.value = '';
+    await _submitAdd(raw, _el('MobileAddStatus'), 'mobile-add-status');
+    input.focus();
+  });
+
+  _el('MobileAddInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); window[`${P}MobileAddSubmit`](); }
   });
 
   const loadQueue = X('LoadQueue', async () => {
@@ -690,18 +721,17 @@ function initChannelApp(cfg) {
 
   // ── Filters and sort ──────────────────────────────────────────────────────
 
-  const STAT_IDS = { all: `${P}fStatAll`, active: `${P}fStatActive`, inactive: `${P}fStatInactive` };
-  const STAR_IDS = { all: `${P}fStarAll`, starred: `${P}fStarStarred` };
+  const STAT_IDS = { active: `${P}fStatActive`, inactive: `${P}fStatInactive` };
+  const STAR_IDS = { starred: `${P}fStarStarred` };
 
   X('SetFilter', (group, value) => {
-    filter[group] = value;
+    const set = filter[group];
+    set.has(value) ? set.delete(value) : set.add(value);
     const map = group === 'stat' ? STAT_IDS : STAR_IDS;
     Object.entries(map).forEach(([v, id]) => {
-      document.getElementById(id)?.classList.toggle('active', v === value);
+      document.getElementById(id)?.classList.toggle('active', set.has(v));
     });
     renderCreators();
-    const anchorId = group === 'stat' ? `${P}fStatAll` : `${P}fStarAll`;
-    _placeGlider(document.getElementById(anchorId).closest('.filter-pills'));
   });
 
   X('SetSortField', field => {
@@ -724,18 +754,16 @@ function initChannelApp(cfg) {
 
   X('ResetFilters', () => {
     sort   = { field: 'handle', dir: 'asc' };
-    filter = { stat: 'all', star: 'all' };
+    filter = { stat: new Set(), star: new Set() };
     search = '';
     const searchEl = _el('Search');
     if (searchEl) searchEl.value = '';
     const sel = _el('SortField');
     if (sel) sel.value = 'handle';
     _updateSortBtn();
-    Object.entries(STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
-    Object.entries(STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
+    Object.values(STAT_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
+    Object.values(STAR_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
     renderCreators();
-    _placeGlider(document.getElementById(`${P}fStatAll`).closest('.filter-pills'));
-    _placeGlider(document.getElementById(`${P}fStarAll`).closest('.filter-pills'));
   });
 
   X('OnSearch', val => {
@@ -746,9 +774,8 @@ function initChannelApp(cfg) {
   function _filteredCreators() {
     const q = search.toLowerCase();
     return creators.filter(ch => {
-      if (filter.stat === 'active'   && ch.tracking_enabled === 0) return false;
-      if (filter.stat === 'inactive' && ch.tracking_enabled !== 0) return false;
-      if (filter.star === 'starred'  && !ch.starred)               return false;
+      if (filter.stat.size && !filter.stat.has(ch.tracking_enabled === 0 ? 'inactive' : 'active')) return false;
+      if (filter.star.has('starred') && !ch.starred) return false;
       if (q) {
         const hay = [ch.handle, ch.display_name, ch.channel_id, ch.description]
                     .filter(Boolean).join(' ').toLowerCase();
@@ -859,7 +886,7 @@ function initChannelApp(cfg) {
     const grid = _el('Grid');
     if (!grid) return;
     const filtered   = _filteredCreators();
-    const isFiltered = filter.stat !== 'all' || filter.star !== 'all' || !!search;
+    const isFiltered = filter.stat.size > 0 || filter.star.size > 0 || !!search;
     const countEl    = _el('Count');
     if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${creators.length}` : creators.length;
 
@@ -924,13 +951,13 @@ function initChannelApp(cfg) {
   let modalPendingHighlight = null;
 
   let phistData  = [];
-  let phistField = 'all';
+  let phistField = new Set();
   let phistChId  = null;
 
   X('OpenModalAndHighlight', (channelId, videoId, mFilter, sortField, sortDir) => {
     modalPendingHighlight = {
       videoId,
-      filter:    mFilter   || 'all',
+      filter:    mFilter && mFilter !== 'all' ? new Set([mFilter]) : new Set(),
       sortField: sortField || 'upload_date',
       sortDir:   sortDir   || 'desc',
     };
@@ -943,14 +970,14 @@ function initChannelApp(cfg) {
     modalCreatorId = channelId;
     modalCreator   = ch;
     Object.assign(_creatorState, {
-      videos: [], filter: 'all', typeFilter: 'all', search: '',
+      videos: [], filter: new Set(), typeFilter: new Set(), search: '',
       sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
       view: window.innerWidth <= 640 ? 'grid' : 'list',
     });
     if (_creatorState.obs) { _creatorState.obs.disconnect(); _creatorState.obs = null; }
 
     phistData  = [];
-    phistField = 'all';
+    phistField = new Set();
     phistChId  = null;
     _el('PhistPanel').style.display     = 'none';
     _el('ModalVideoList').style.display = '';
@@ -1135,7 +1162,7 @@ function initChannelApp(cfg) {
     vidList.style.display = 'none';
     panel.style.display   = '';
 
-    phistField = field || 'all';
+    phistField = field ? new Set([field]) : new Set();
     phistChId  = modalCreatorId;
 
     panel.innerHTML = '<div class="vlist-loading">Loading history…</div>';
@@ -1152,21 +1179,21 @@ function initChannelApp(cfg) {
     if (panel)   panel.style.display   = 'none';
     if (vidList) vidList.style.display = '';
     phistData  = [];
-    phistField = 'all';
+    phistField = new Set();
   });
 
   function _renderPhistPanel() {
     const panel = _el('PhistPanel');
     if (!panel) return;
 
-    const entries = phistField === 'all'
-      ? phistData
-      : phistData.filter(e => e.field === phistField);
+    const entries = phistField.size
+      ? phistData.filter(e => phistField.has(e.field))
+      : phistData;
 
     const fields  = [...new Set(phistData.map(e => e.field))];
-    const fieldPills = ['all', ...fields].map(f => {
-      const active = phistField === f ? ' active' : '';
-      const label  = f === 'all' ? 'All' : (FIELD_LABELS[f] || f);
+    const fieldPills = fields.map(f => {
+      const active = phistField.has(f) ? ' active' : '';
+      const label  = FIELD_LABELS[f] || f;
       return `<button class="filter-pill${active}" onclick="${P}PhistSetField('${esc(f)}')">${label}</button>`;
     }).join('');
 
@@ -1174,12 +1201,12 @@ function initChannelApp(cfg) {
 
     panel.innerHTML = `
       <div class="phist-hdr" style="display:flex;align-items:center;gap:8px;padding:8px 0 12px;border-bottom:1px solid var(--border);margin-bottom:12px">
-        <div class="filter-pills" style="flex:1">${fieldPills}</div>
+        <div class="filter-pills multi" style="flex:1">${fieldPills}</div>
         <button class="btn-ghost" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="${P}CloseProfileHistory()">Back to ${ITEMS}</button>
       </div>
       ${entries.length
         ? entries.map(e => _phistEntryHtml(e, ch)).join('')
-        : `<div style="color:var(--muted);font-size:13px;padding:12px 0">No profile changes recorded${phistField !== 'all' ? ' for this field' : ''}.</div>`}
+        : `<div style="color:var(--muted);font-size:13px;padding:12px 0">No profile changes recorded${phistField.size ? ' for the selected fields' : ''}.</div>`}
     `;
     panel.querySelectorAll('.filter-pills').forEach(_placeGlider);
   }
@@ -1222,7 +1249,7 @@ function initChannelApp(cfg) {
   }
 
   X('PhistSetField', field => {
-    phistField = field;
+    phistField.has(field) ? phistField.delete(field) : phistField.add(field);
     _renderPhistPanel();
   });
 

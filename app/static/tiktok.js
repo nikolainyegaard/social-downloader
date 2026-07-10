@@ -16,7 +16,7 @@ let runQueue      = [];   // channel_ids queued for manual run
 let runCurrent    = null; // channel_id currently being run manually
 let pendingRescans = {};  // {channel_id: fires_at_unix_secs} for large-spike midpoint re-scans
 let userSort      = { field: 'username', dir: 'asc' };
-let userFilter    = { priv: 'all', stat: 'all', star: 'all' };
+let userFilter    = { priv: new Set(), stat: new Set(), star: new Set() };
 
 // ── Cookie management ─────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ function renderStats(s) {
     { label: 'Deleted',       value: (s.deleted_count || 0).toLocaleString() },
     { label: 'Latest saved',  value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
     { label: 'Total views',   value: _fmtLarge(s.total_views || 0) },
-    { label: 'Total likes',   value: _fmtLarge(s.total_likes || 0) },
+    { label: 'Storage',       value: _fmtBytes(s.media_size_bytes || 0) },
   ]);
 }
 
@@ -712,14 +712,13 @@ function onTrackingSearch(val) {
 }
 
 function setUserFilter(group, value) {
-  userFilter[group] = value;
+  const set = userFilter[group];
+  set.has(value) ? set.delete(value) : set.add(value);
   const map = group === 'priv' ? USER_PRIV_IDS : group === 'stat' ? USER_STAT_IDS : USER_STAR_IDS;
   Object.entries(map).forEach(([v, id]) => {
-    document.getElementById(id)?.classList.toggle('active', v === value);
+    document.getElementById(id)?.classList.toggle('active', set.has(v));
   });
   renderUsers();
-  const anchorId = group === 'priv' ? 'ufPrivAll' : group === 'stat' ? 'ufStatAll' : 'ufStarAll';
-  _placeGlider(document.getElementById(anchorId).closest('.filter-pills'));
 }
 
 function setUserSortField(field) {
@@ -731,20 +730,17 @@ function setUserSortField(field) {
 
 function resetUserFilters() {
   userSort   = { field: 'username', dir: 'asc' };
-  userFilter = { priv: 'all', stat: 'all', star: 'all' };
+  userFilter = { priv: new Set(), stat: new Set(), star: new Set() };
   _trackingSearch = '';
   const searchEl = document.getElementById('trackingSearch');
   if (searchEl) searchEl.value = '';
   const sel = document.getElementById('userSortField');
   if (sel) sel.value = 'username';
   _updateSortBtn('userSortDirBtn', userSort);
-  Object.entries(USER_PRIV_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
-  Object.entries(USER_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
-  Object.entries(USER_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
+  Object.values(USER_PRIV_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
+  Object.values(USER_STAT_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
+  Object.values(USER_STAR_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
   renderUsers();
-  _placeGlider(document.getElementById('ufPrivAll').closest('.filter-pills'));
-  _placeGlider(document.getElementById('ufStatAll').closest('.filter-pills'));
-  _placeGlider(document.getElementById('ufStarAll').closest('.filter-pills'));
 }
 
 function toggleUserSortDir() {
@@ -761,13 +757,16 @@ function _updateSortBtn(btnId, sortState) {
 function _filteredUsers() {
   const q = _trackingSearch.toLowerCase();
   return users.filter(u => {
-    if (userFilter.priv === 'public'   && (u.privacy_status !== 'public' || u.account_status === 'banned')) return false;
-    if (userFilter.priv === 'private'  && (!['private_accessible','private_blocked'].includes(u.privacy_status) || u.account_status === 'banned')) return false;
-    if (userFilter.priv === 'blocked'  && (u.privacy_status !== 'blocked' || u.account_status === 'banned')) return false;
-    if (userFilter.priv === 'banned'   && u.account_status !== 'banned') return false;
-    if (userFilter.stat === 'active'   && u.tracking_enabled === 0) return false;
-    if (userFilter.stat === 'inactive' && u.tracking_enabled !== 0) return false;
-    if (userFilter.star === 'starred'  && !u.starred) return false;
+    if (userFilter.priv.size) {
+      const privKey = u.account_status === 'banned' ? 'banned'
+        : u.privacy_status === 'public' ? 'public'
+        : u.privacy_status === 'blocked' ? 'blocked'
+        : ['private_accessible', 'private_blocked'].includes(u.privacy_status) ? 'private'
+        : null;
+      if (!userFilter.priv.has(privKey)) return false;
+    }
+    if (userFilter.stat.size && !userFilter.stat.has(u.tracking_enabled === 0 ? 'inactive' : 'active')) return false;
+    if (userFilter.star.has('starred') && !u.starred) return false;
     if (q) {
       const hay = [u.handle, u.display_name, u.channel_id,
                    ...(u.old_handles || []), ...(u.old_display_names || []), ...(u.old_descriptions || [])]
@@ -906,7 +905,7 @@ function renderUsers() {
   if (_userGridObs) { _userGridObs.disconnect(); _userGridObs = null; }
   const grid     = document.getElementById('usersGrid');
   const filtered = _filteredUsers();
-  const isFiltered = userFilter.priv !== 'all' || userFilter.stat !== 'all' || userFilter.star !== 'all' || !!_trackingSearch;
+  const isFiltered = userFilter.priv.size > 0 || userFilter.stat.size > 0 || userFilter.star.size > 0 || !!_trackingSearch;
   document.getElementById('userCount').textContent =
     isFiltered ? `${filtered.length} of ${users.length}` : users.length;
   const _tvPills = document.getElementById('tvUsers')?.closest('.filter-pills');
@@ -1116,18 +1115,17 @@ async function loadUsers() {
 let sounds        = [];
 let soundRunCurrent = null;
 let soundRunQueue   = [];
-let soundFilter   = { stat: 'all', star: 'all' };
+let soundFilter   = { stat: new Set(), star: new Set() };
 let soundSort     = { field: 'label', dir: 'asc' };
 
 function setSoundFilter(group, value) {
-  soundFilter[group] = value;
+  const set = soundFilter[group];
+  set.has(value) ? set.delete(value) : set.add(value);
   const map = group === 'stat' ? SOUND_STAT_IDS : SOUND_STAR_IDS;
   Object.entries(map).forEach(([v, id]) => {
-    document.getElementById(id)?.classList.toggle('active', v === value);
+    document.getElementById(id)?.classList.toggle('active', set.has(v));
   });
   renderSounds();
-  const anchorId = group === 'stat' ? 'sfStatAll' : 'sfStarAll';
-  _placeGlider(document.getElementById(anchorId).closest('.filter-pills'));
 }
 
 function setSoundSortField(field) {
@@ -1145,7 +1143,7 @@ function toggleSoundSortDir() {
 
 
 function resetSoundFilters() {
-  soundFilter = { stat: 'all', star: 'all' };
+  soundFilter = { stat: new Set(), star: new Set() };
   soundSort   = { field: 'label', dir: 'asc' };
   _trackingSearch = '';
   const searchEl = document.getElementById('trackingSearch');
@@ -1153,11 +1151,9 @@ function resetSoundFilters() {
   const sel = document.getElementById('soundSortField');
   if (sel) sel.value = 'label';
   _updateSortBtn('soundSortDirBtn', soundSort);
-  Object.entries(SOUND_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
-  Object.entries(SOUND_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
+  Object.values(SOUND_STAT_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
+  Object.values(SOUND_STAR_IDS).forEach(id => document.getElementById(id)?.classList.remove('active'));
   renderSounds();
-  _placeGlider(document.getElementById('sfStatAll').closest('.filter-pills'));
-  _placeGlider(document.getElementById('sfStarAll').closest('.filter-pills'));
 }
 
 function renderSounds() {
@@ -1165,11 +1161,10 @@ function renderSounds() {
   const countEl = document.getElementById('soundCount');
   const q = _trackingSearch.toLowerCase();
   let filtered = sounds;
-  if (soundFilter.stat === 'active')   filtered = filtered.filter(s => s.tracking_enabled !== 0);
-  if (soundFilter.stat === 'inactive') filtered = filtered.filter(s => s.tracking_enabled === 0);
-  if (soundFilter.star === 'starred')  filtered = filtered.filter(s => s.starred);
+  if (soundFilter.stat.size)          filtered = filtered.filter(s => soundFilter.stat.has(s.tracking_enabled === 0 ? 'inactive' : 'active'));
+  if (soundFilter.star.has('starred')) filtered = filtered.filter(s => s.starred);
   if (q) filtered = filtered.filter(s => `${s.label || ''} ${s.sound_id}`.toLowerCase().includes(q));
-  const isFiltered = soundFilter.stat !== 'all' || soundFilter.star !== 'all' || !!_trackingSearch;
+  const isFiltered = soundFilter.stat.size > 0 || soundFilter.star.size > 0 || !!_trackingSearch;
   countEl.textContent = isFiltered ? `${filtered.length} of ${sounds.length}` : sounds.length;
   const { field, dir } = soundSort;
   filtered = [...filtered].sort((a, b) => {
@@ -1320,8 +1315,8 @@ const SOUND_VCOLS = [
   { field: null,             label: '' },
 ];
 
-const _userState  = { videos:[], filter:'all', typeFilter:'all', search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false, view:'list' };
-const _soundState = { videos:[], filter:'all', typeFilter:'all', search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false, view:'list' };
+const _userState  = { videos:[], filter:new Set(), typeFilter:new Set(), search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false, view:'list' };
+const _soundState = { videos:[], filter:new Set(), typeFilter:new Set(), search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false, view:'list' };
 
 const _USER_MODAL_CFG = {
   st: _userState, listElId: 'modalVideoList', toolbarElId: 'modalToolbar',
@@ -1371,7 +1366,7 @@ function openSoundModal(soundId) {
   _soundModalId = soundId;
   _soundModal   = s;
   Object.assign(_soundState, {
-    videos: [], filter: 'all', typeFilter: 'all', search: '',
+    videos: [], filter: new Set(), typeFilter: new Set(), search: '',
     sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false, view: 'list',
   });
   if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
@@ -1388,7 +1383,7 @@ function openSoundModal(soundId) {
 }
 
 function openSoundModalAndHighlight(soundId, videoId, filter) {
-  _soundModalPendingHighlight = { videoId, filter: filter || null };
+  _soundModalPendingHighlight = { videoId, filter: filter && filter !== 'all' ? new Set([filter]) : null };
   openSoundModal(soundId);
 }
 
@@ -1857,7 +1852,7 @@ function openUserModal(tiktokId) {
   _modalUserId = tiktokId;
   _modalUser   = u;
   Object.assign(_userState, {
-    videos: [], filter: 'all', typeFilter: 'all', search: '',
+    videos: [], filter: new Set(), typeFilter: new Set(), search: '',
     sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
     view: window.innerWidth <= 640 ? 'grid' : 'list',
   });
@@ -1865,7 +1860,7 @@ function openUserModal(tiktokId) {
 
   // Reset history panel state
   _phistData   = [];
-  _phistField  = 'all';
+  _phistField  = new Set();
   _phistUserId = null;
   document.getElementById('phistPanel').style.display     = 'none';
   document.getElementById('modalVideoList').style.display = '';
@@ -1885,13 +1880,13 @@ function openUntrackedUserModal(tiktokId, username) {
   _modalUserId = tiktokId;
   _modalUser   = { channel_id: tiktokId, handle: username, enabled: 0 };
   Object.assign(_userState, {
-    videos: [], filter: 'all', typeFilter: 'all', search: '',
+    videos: [], filter: new Set(), typeFilter: new Set(), search: '',
     sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
     view: window.innerWidth <= 640 ? 'grid' : 'list',
   });
   if (_userState.obs) { _userState.obs.disconnect(); _userState.obs = null; }
   _phistData   = [];
-  _phistField  = 'all';
+  _phistField  = new Set();
   _phistUserId = null;
   document.getElementById('phistPanel').style.display     = 'none';
   document.getElementById('modalVideoList').style.display = '';
@@ -1992,7 +1987,7 @@ function _pollUntilTracked(tiktokId, username, overlay) {
 function openUserModalAndHighlight(tiktokId, videoId, filter, sortField, sortDir) {
   _modalPendingHighlight = {
     videoId,
-    filter:    filter    || 'all',
+    filter:    filter && filter !== 'all' ? new Set([filter]) : new Set(),
     sortField: sortField || 'upload_date',
     sortDir:   sortDir   || 'desc',
   };
@@ -2089,7 +2084,7 @@ async function _loadModalVideos(tiktokId) {
     _modalPendingHighlight   = null;
     _userState.view          = 'list';
     _userState.filter        = filter;
-    _userState.typeFilter    = 'all';
+    _userState.typeFilter    = new Set();
     _userState.sort          = { field: sortField, dir: sortDir };
     _mRenderColHdrs(_USER_MODAL_CFG);
     _mRenderToolbar(_USER_MODAL_CFG, data);
@@ -2229,7 +2224,7 @@ function _toggleUserNote() {
 
 // ── Profile history ──────────────────────────────────────────────────────────
 
-let _phistField  = 'all';
+let _phistField  = new Set();
 let _phistData   = [];
 let _phistUserId = null;
 
@@ -2258,7 +2253,7 @@ const _STATUS_LABELS = {
 async function openProfileHistory(field) {
   _phistUserId = _modalUserId;
   if (!_phistUserId) return;
-  if (field) _phistField = field;
+  if (field) _phistField = new Set([field]);
 
   // Toggle off if already open
   if (document.getElementById('phistPanel').style.display !== 'none') {
@@ -2278,8 +2273,8 @@ async function openProfileHistory(field) {
     return;
   }
   _phistData = data;
-  // keep _phistField if it was pre-set by openUserModalWithHistory, otherwise default to 'all'
-  if (!field) _phistField = 'all';
+  // keep _phistField if it was pre-set by openUserModalWithHistory, otherwise show all fields
+  if (!field) _phistField = new Set();
   _renderHistoryToolbar();
   _renderHistoryEntries();
 }
@@ -2296,35 +2291,33 @@ function _closeProfileHistory() {
 }
 
 function setHistoryField(field) {
-  _phistField = field;
+  _phistField.has(field) ? _phistField.delete(field) : _phistField.add(field);
   const toolbar = document.getElementById('modalToolbar');
   toolbar.querySelectorAll('[data-hist-key]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.histKey === field);
+    btn.classList.toggle('active', _phistField.has(btn.dataset.histKey));
   });
-  toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
   _renderHistoryEntries();
 }
 
 function _renderHistoryToolbar() {
-  const fields = ['all', 'username', 'display_name', 'bio', 'bio_link', 'avatar', 'account_status', 'privacy_status'];
+  const fields = ['username', 'display_name', 'bio', 'bio_link', 'avatar', 'account_status', 'privacy_status'];
   const pills  = fields.map(f => {
-    const active = _phistField === f ? ' active' : '';
+    const active = _phistField.has(f) ? ' active' : '';
     return `<button class="filter-pill${active}" data-hist-key="${f}" onclick="setHistoryField('${f}')">${_PHIST_FIELD_LABELS[f]}</button>`;
   }).join('');
   document.getElementById('modalToolbar').innerHTML =
-    `<div class="filter-pills">${pills}</div>`
+    `<div class="filter-pills multi">${pills}</div>`
     + `<button class="filter-pill" style="margin-left:auto" onclick="_closeProfileHistory()">← Videos</button>`;
-  document.getElementById('modalToolbar').querySelectorAll('.filter-pills').forEach(_placeGlider);
 }
 
 function _renderHistoryEntries() {
   const panel   = document.getElementById('phistPanel');
-  const entries = _phistField === 'all'
-    ? _phistData
-    : _phistData.filter(e => e.field === _phistField);
+  const entries = _phistField.size
+    ? _phistData.filter(e => _phistField.has(e.field))
+    : _phistData;
 
   if (!entries.length) {
-    panel.innerHTML = '<div class="phist-empty">No history recorded for this field yet.</div>';
+    panel.innerHTML = '<div class="phist-empty">No history recorded for the selected fields yet.</div>';
     return;
   }
 

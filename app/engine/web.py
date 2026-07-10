@@ -495,9 +495,28 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     # ── Stats and recent activity ─────────────────────────────────────────────
 
+    # Walking a large media library takes a moment, so the size is cached and
+    # refreshed at most every 15 minutes even though stats poll every 60 s
+    _media_size_cache = {"ts": 0.0, "size": 0}
+
+    def _media_size_bytes() -> int:
+        now = time.time()
+        if now - _media_size_cache["ts"] > 900:
+            total = 0
+            for dirpath, _dirs, files in os.walk(os.path.join(MEDIA_DIR, platform)):
+                for name in files:
+                    try:
+                        total += os.path.getsize(os.path.join(dirpath, name))
+                    except OSError:
+                        pass
+            _media_size_cache.update(ts=now, size=total)
+        return _media_size_cache["size"]
+
     @bp.route("/stats", methods=["GET"])
     def get_aggregate_stats():
-        return jsonify(db.get_aggregate_stats())
+        stats = db.get_aggregate_stats()
+        stats["media_size_bytes"] = _media_size_bytes()
+        return jsonify(stats)
 
     @bp.route("/recent", methods=["GET"])
     def get_recent():

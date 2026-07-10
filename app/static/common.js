@@ -600,6 +600,11 @@ function _fmtLarge(n) {
   return n.toLocaleString();
 }
 
+function _fmtBytes(n) {
+  if (n >= 1024 ** 3) return _fmtSuffix(n, 1024 ** 3, ' GB');
+  return _fmtSuffix(n, 1024 ** 2, ' MB');
+}
+
 function fmtCount(n) {
   if (n == null) return '—';
   if (n >= 1_000_000) return _fmtSuffix(n, 1_000_000, 'M');
@@ -636,11 +641,11 @@ const PRIVACY_MAP = {
   'blocked':            ['blocked',            'Blocked'],
 };
 
-const USER_PRIV_IDS  = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', blocked: 'ufPrivBlocked', banned: 'ufPrivBanned' };
-const USER_STAT_IDS  = { all: 'ufStatAll', active: 'ufStatActive', inactive: 'ufStatInactive' };
-const USER_STAR_IDS  = { all: 'ufStarAll', starred: 'ufStarStarred' };
-const SOUND_STAT_IDS = { all: 'sfStatAll', active: 'sfStatActive', inactive: 'sfStatInactive' };
-const SOUND_STAR_IDS = { all: 'sfStarAll', starred: 'sfStarStarred' };
+const USER_PRIV_IDS  = { public: 'ufPrivPublic', private: 'ufPrivPrivate', blocked: 'ufPrivBlocked', banned: 'ufPrivBanned' };
+const USER_STAT_IDS  = { active: 'ufStatActive', inactive: 'ufStatInactive' };
+const USER_STAR_IDS  = { starred: 'ufStarStarred' };
+const SOUND_STAT_IDS = { active: 'sfStatActive', inactive: 'sfStatInactive' };
+const SOUND_STAR_IDS = { starred: 'sfStarStarred' };
 
 function _videoStatus(v) {
   const cls   = v.status === 'deleted'   ? 'deleted'
@@ -677,15 +682,15 @@ function _fmtLastChecked(ts) {
     : 'Never checked';
 }
 
-function _pill(key, label, activeKey, onclickFn, counts) {
-  const active = activeKey === key ? ' active' : '';
+function _pill(key, label, activeSet, onclickFn, counts) {
+  const active = activeSet.has(key) ? ' active' : '';
   const n      = counts[key];
   return `<button class="filter-pill${active}" data-filter-key="${key}" onclick="${onclickFn}('${key}')">`
        + `${label}${n ? ` <span style="opacity:.65">(${n})</span>` : ''}</button>`;
 }
 
-function _typePill(key, label, activeKey, onclickFn) {
-  const active = activeKey === key ? ' active' : '';
+function _typePill(key, label, activeSet, onclickFn) {
+  const active = activeSet.has(key) ? ' active' : '';
   return `<button class="filter-pill${active}" data-type-key="${key}" onclick="${onclickFn}('${key}')">${label}</button>`;
 }
 
@@ -741,6 +746,7 @@ function _unlockScroll() {
 // ── Pill glider ───────────────────────────────────────────────────────────────
 
 function _placeGlider(container) {
+  if (container.classList.contains('multi')) return;
   let g = container.querySelector(':scope > .glider');
   const isNew = !g;
   if (isNew) {
@@ -946,13 +952,12 @@ const _imageBadge = `<span style="${_badgeStyle}"><svg width="18" height="18" vi
 
 // ── Modal engine ──────────────────────────────────────────────────────────────
 
+const _STATUS_FILTER_KEY = { up: 'active', deleted: 'deleted', undeleted: 'restored' };
+
 function _mFiltered(cfg, skipSearch = false) {
   let vids = cfg.st.videos;
-  if (cfg.st.filter === 'active')   vids = vids.filter(v => v.status === 'up');
-  if (cfg.st.filter === 'deleted')  vids = vids.filter(v => v.status === 'deleted');
-  if (cfg.st.filter === 'restored') vids = vids.filter(v => v.status === 'undeleted');
-  if (cfg.st.typeFilter === 'video') vids = vids.filter(v => v.type === 'video');
-  if (cfg.st.typeFilter === 'photo') vids = vids.filter(v => v.type === 'photo');
+  if (cfg.st.filter.size)     vids = vids.filter(v => cfg.st.filter.has(_STATUS_FILTER_KEY[v.status]));
+  if (cfg.st.typeFilter.size) vids = vids.filter(v => cfg.st.typeFilter.has(v.type));
   if (!skipSearch && cfg.st.search) {
     const q = cfg.st.search.toLowerCase();
     vids = vids.filter(v =>
@@ -985,7 +990,7 @@ function _mRenderToolbar(cfg, vids) {
   const countLabel = cfg.st.search
     ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
     : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
-  const hasActiveFilters = cfg.st.filter !== 'all' || cfg.st.typeFilter !== 'all';
+  const hasActiveFilters = cfg.st.filter.size > 0 || cfg.st.typeFilter.size > 0;
   const toggleLabel = (cfg.st.toolbarExpanded ? '▲' : '▼') + (hasActiveFilters ? ' Filters •' : ' Filters');
   const toolbar = document.getElementById(cfg.toolbarElId);
   const searchWasFocused = cfg.hasSearch &&
@@ -1014,14 +1019,13 @@ function _mRenderToolbar(cfg, vids) {
   }
   html += `</div>`
     + `<div class="toolbar-filter-wrap${cfg.st.toolbarExpanded ? '' : ' collapsed'}">`
-    + `<div class="filter-pills">`
-    + pill('all', 'All') + pill('active', 'Active')
+    + `<div class="filter-pills multi">`
+    + pill('active', 'Active')
     + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
     + (counts.restored ? pill('restored', 'Restored') : '')
     + `</div>`
     + (hasMultipleTypes
-        ? `<div class="filter-pills">`
-          + typePill('all', 'All types')
+        ? `<div class="filter-pills multi">`
           + typePill('video', `Videos (${typeCounts.video.toLocaleString()})`)
           + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
           + `</div>`
@@ -1035,11 +1039,11 @@ function _mRenderToolbar(cfg, vids) {
   }
 }
 
-function _mSetFilter(cfg, filter) {
-  cfg.st.filter = filter;
+function _mSetFilter(cfg, key) {
+  cfg.st.filter.has(key) ? cfg.st.filter.delete(key) : cfg.st.filter.add(key);
   const toolbar = document.getElementById(cfg.toolbarElId);
   toolbar.querySelectorAll('[data-filter-key]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.filterKey === filter);
+    btn.classList.toggle('active', cfg.st.filter.has(btn.dataset.filterKey));
   });
   toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
   const shown = _mFiltered(cfg).length;
@@ -1050,17 +1054,17 @@ function _mSetFilter(cfg, filter) {
     : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
   const toggleBtn = toolbar.querySelector('.toolbar-toggle');
   if (toggleBtn) {
-    const hasActive = cfg.st.filter !== 'all' || cfg.st.typeFilter !== 'all';
+    const hasActive = cfg.st.filter.size > 0 || cfg.st.typeFilter.size > 0;
     toggleBtn.textContent = (cfg.st.toolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
   }
   _mRenderList(cfg);
 }
 
-function _mSetTypeFilter(cfg, type) {
-  cfg.st.typeFilter = type;
+function _mSetTypeFilter(cfg, key) {
+  cfg.st.typeFilter.has(key) ? cfg.st.typeFilter.delete(key) : cfg.st.typeFilter.add(key);
   const toolbar = document.getElementById(cfg.toolbarElId);
   toolbar.querySelectorAll('[data-type-key]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.typeKey === type);
+    btn.classList.toggle('active', cfg.st.typeFilter.has(btn.dataset.typeKey));
   });
   toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
   const shown = _mFiltered(cfg).length;
@@ -1071,7 +1075,7 @@ function _mSetTypeFilter(cfg, type) {
     : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
   const toggleBtn = toolbar.querySelector('.toolbar-toggle');
   if (toggleBtn) {
-    const hasActive = cfg.st.filter !== 'all' || cfg.st.typeFilter !== 'all';
+    const hasActive = cfg.st.filter.size > 0 || cfg.st.typeFilter.size > 0;
     toggleBtn.textContent = (cfg.st.toolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
   }
   _mRenderList(cfg);
@@ -1080,7 +1084,7 @@ function _mSetTypeFilter(cfg, type) {
 function _mToggleToolbar(cfg) {
   cfg.st.toolbarExpanded = _doToggleToolbar(
     cfg.st.toolbarExpanded, cfg.toolbarElId,
-    () => cfg.st.filter !== 'all' || cfg.st.typeFilter !== 'all'
+    () => cfg.st.filter.size > 0 || cfg.st.typeFilter.size > 0
   );
 }
 
