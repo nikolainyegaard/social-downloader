@@ -16,7 +16,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Multi-media tweets are now fully viewable: a TikTok-style carousel steps through every photo and video of a post, backed by a new sibling-file listing endpoint on all channel platforms; the carousel now supports video slides
 - Photo posts show distinct glyphs by image count on every platform: a picture-frame glyph for single photos and the grid-squares glyph for carousels, in both the list thumbnail badge and the grid view corner icon
 - The Statistics panel on every platform shows the media storage size of that app's library in MB or GB (replaces Total likes on TikTok); the size is computed from the platform's media folder and cached for 15 minutes
-- A mobile add bar on every platform: at phone widths, Twitter, Instagram, and YouTube now show the same unified add field TikTok has (input, Paste button, Add), replacing the desktop track panel that used to disappear entirely on mobile
+- One unified add field per app, identical on desktop and mobile: a single smart bar (input, Paste button, Add) at the top of every platform tab; on TikTok it accepts usernames, profile URLs, sound IDs, and sound URLs and routes each to the right tracker, and on the other platforms it accepts handles and profile URLs; this also fixes mobile, where the non-TikTok apps previously had no add field at all
 - TikTok user modals show the next scheduled check time; starred user cards get a Priority badge
 - TikTok sound cards show a "Last saved" timestamp next to "Last checked"
 - TikTok detects accounts that have blocked the cookies account without revealing it in the profile relation: a profile reporting videos while both video sources return none is flagged Blocked, surfaced in the UI, and skipped until it recovers; a profile confirming zero videos is treated as a genuinely empty account and deletion tracking still runs
@@ -45,6 +45,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The engine add flow now re-enables soft-disabled creator stubs (e.g. TikTok authors discovered via sound tracking) instead of rejecting them as duplicates
 - Ancient tiktok-downloader one-time migrations (flat data/videos layout, del_ file prefixes, username_history backfill, ytdlp blob cleanup) were removed; upgrade to this version from v1.25.0 or later so those migrations have already run
 - All filters across the app are now on/off toggles instead of single-choice selectors: the user and sound catalog filter groups, the status and type filters in every detail modal, and the profile history field pills; each pill toggles independently, several pills in a group combine (e.g. Public and Banned show both), turning everything off shows all, and the All pills are gone
+- The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel takes the full row; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
 - Instagram and Twitter databases are now included in the nightly backup rotation; previously only TikTok and YouTube were backed up

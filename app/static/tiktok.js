@@ -975,7 +975,7 @@ async function loadQueue() {
 
 // Sanitise contenteditable input: strip invalid chars, keep cursor at end
 function _sanitiseHandle(el) {
-  const clean = el.textContent.replace(/[^a-zA-Z0-9_.@]/g, '');
+  const clean = el.textContent.replace(/[^a-zA-Z0-9_.@:/?=&%-]/g, '');
   if (el.textContent !== clean) {
     el.textContent = clean;
     // move cursor to end
@@ -993,7 +993,7 @@ document.getElementById('handleInput').addEventListener('input', function() {
 });
 
 document.getElementById('handleInput').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') { e.preventDefault(); addUser(); }
+  if (e.key === 'Enter') { e.preventDefault(); addTracked(); }
 });
 
 // Prevent paste from bringing in rich text
@@ -1003,87 +1003,58 @@ document.getElementById('handleInput').addEventListener('paste', function(e) {
   document.execCommand('insertText', false, text);
 });
 
-// Mobile smart add bar
-document.getElementById('mobileAddInput').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') { e.preventDefault(); mobileAddSubmit(); }
-});
-
 function _isSoundInput(val) {
   if (/\/music\/|\/sound\//.test(val)) return true;
   if (/^\d+$/.test(val.trim())) return true;
   return false;
 }
 
-async function mobileAddPaste() {
-  const input = document.getElementById('mobileAddInput');
+async function addPaste() {
+  const input = document.getElementById('handleInput');
   try {
-    const text = await navigator.clipboard.readText();
-    input.value = text.trim();
-    input.focus();
-  } catch {
-    input.focus();
-  }
+    input.textContent = (await navigator.clipboard.readText()).trim();
+  } catch { /* clipboard permission denied; leave the field as is */ }
+  input.focus();
 }
 
-async function mobileAddSubmit() {
-  const input    = document.getElementById('mobileAddInput');
-  const statusEl = document.getElementById('mobileAddStatus');
-  const val = input.value.trim();
+// One field for users and sounds: numeric IDs and music/sound URLs go to the
+// sound tracker, everything else is treated as a username or profile URL
+async function addTracked() {
+  const input    = document.getElementById('handleInput');
+  const statusEl = document.getElementById('addStatus');
+  const val      = input.textContent.trim();
   if (!val) return;
-
-  statusEl.textContent = 'Adding...';
-  statusEl.className = 'mobile-add-status';
+  input.textContent = '';
+  input.focus();
 
   if (_isSoundInput(val)) {
+    statusEl.className = 'add-status info';
+    statusEl.textContent = 'Adding sound…';
     const { ok, data } = await apiJSON('/api/tiktok/sounds', {
       method: 'POST',
       body: JSON.stringify({ sound_id: val, label: null }),
     });
     if (ok) {
-      input.value = '';
-      statusEl.className = 'mobile-add-status ok';
+      statusEl.className = 'add-status ok';
       statusEl.textContent = `Sound ${data.sound_id} added.`;
-      setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'mobile-add-status'; }, 5000);
+      setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'add-status'; }, 5000);
       loadSounds();
     } else {
-      statusEl.className = 'mobile-add-status error';
+      statusEl.className = 'add-status error';
       statusEl.textContent = data.error || 'Failed.';
     }
-  } else {
-    const name = val.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
-    if (!name) {
-      statusEl.className = 'mobile-add-status error';
-      statusEl.textContent = 'Invalid username.';
-      input.focus();
-      return;
-    }
-    const { ok, data } = await apiJSON('/api/tiktok/channels', {
-      method: 'POST',
-      body: JSON.stringify({ handle: name }),
-    });
-    if (ok) {
-      input.value = '';
-      dismissed.delete(name);
-      pending[name] = { status: 'pending' };
-      statusEl.className = 'mobile-add-status ok';
-      statusEl.textContent = `@${name} queued.`;
-      setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'mobile-add-status'; }, 5000);
-      renderPending();
-    } else {
-      statusEl.className = 'mobile-add-status error';
-      statusEl.textContent = data.error || 'Failed.';
-    }
+    return;
   }
-  input.focus();
-}
 
-async function addUser() {
-  const input = document.getElementById('handleInput');
-  const name  = input.textContent.trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
-  if (!name) return;
-
-  input.textContent = '';
-  input.focus();
+  const urlMatch = val.match(/tiktok\.com\/@([a-zA-Z0-9_.]+)/);
+  const name = urlMatch ? urlMatch[1] : val.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
+  if (!name) {
+    statusEl.className = 'add-status error';
+    statusEl.textContent = 'Invalid username.';
+    return;
+  }
+  statusEl.className = 'add-status';
+  statusEl.textContent = '';
 
   const { ok, data } = await apiJSON('/api/tiktok/channels', {
     method: 'POST',
@@ -1236,30 +1207,6 @@ async function loadSounds() {
   if (ok) { sounds = data; renderSounds(); }
 }
 
-async function addSound() {
-  const input      = document.getElementById('soundInput');
-  const labelInput = document.getElementById('soundLabelInput');
-  const statusEl   = document.getElementById('soundAddStatus');
-  const raw        = input.value.trim();
-  const label      = labelInput.value.trim() || null;
-  if (!raw) { statusEl.className = 'add-status info'; statusEl.textContent = 'Enter a sound ID or URL.'; return; }
-
-  statusEl.className = 'add-status info'; statusEl.textContent = 'Adding…';
-  const { ok, data } = await apiJSON('/api/tiktok/sounds', {
-    method: 'POST',
-    body: JSON.stringify({ sound_id: raw, label }),
-  });
-  if (!ok) {
-    statusEl.className = 'add-status error'; statusEl.textContent = data.error || 'Failed.';
-  } else {
-    input.value      = '';
-    labelInput.value = '';
-    statusEl.className = 'add-status ok'; statusEl.textContent = `Sound ${data.sound_id} added.`;
-    setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'add-status'; }, 5000);
-    loadSounds();
-  }
-}
-
 async function removeSound(soundId, label) {
   if (!confirm(`Remove sound "${label}" (${soundId})?\n\nVideos already downloaded will not be deleted.`)) return;
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
@@ -1286,10 +1233,6 @@ async function runSound(soundId) {
   soundRunQueue = [...soundRunQueue, soundId];
   renderSounds();
 }
-
-document.getElementById('soundInput')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') addSound();
-});
 
 // ── Modal engine ──────────────────────────────────────────────────────────────
 

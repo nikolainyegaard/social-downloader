@@ -34,15 +34,16 @@ function initChannelApp(cfg) {
 
   function _sectionHtml() {
     return `
-  <div class="mobile-add-bar">
-    <div class="mobile-add-input-row">
-      <input type="text" id="${P}MobileAddInput" class="mobile-add-input"
-             placeholder="${cfg.addPlaceholder}" autocomplete="off" spellcheck="false">
-      <button class="mobile-add-paste-btn" onclick="${P}MobileAddPaste()" aria-label="Paste">Paste</button>
+  <div class="add-bar">
+    <div class="add-bar-input-row">
+      <div class="add-bar-input" id="${P}HandleInput" contenteditable="true" role="textbox"
+           aria-label="${cfg.addAriaLabel}" data-placeholder="${cfg.addPlaceholder}" spellcheck="false"></div>
+      <button class="add-bar-paste-btn" onclick="${P}AddPaste()" aria-label="Paste">Paste</button>
     </div>
-    <button class="btn-primary" onclick="${P}MobileAddSubmit()">Add</button>
+    <button class="btn-primary" onclick="${P}AddCreator()">Add</button>
   </div>
-  <div class="mobile-add-status" id="${P}MobileAddStatus"></div>
+  <div class="add-status" id="${P}AddStatus"></div>
+  <div class="pending-list" id="${P}PendingList"></div>
 
   <div class="top-panels">
     <div class="panel-card">
@@ -62,37 +63,24 @@ function initChannelApp(cfg) {
     </div>
   </div>
 
-  <div class="track-panels">
-    <section>
-      <div class="section-title">Track a ${CREATOR}</div>
-      <div class="add-form">
-        <div class="handle-input" id="${P}HandleInput" contenteditable="true" role="textbox"
-             aria-label="${cfg.addAriaLabel}" data-placeholder="${cfg.addPlaceholder}" spellcheck="false"></div>
-        <button class="btn-primary" onclick="${P}AddCreator()">Add</button>
-      </div>
-      <div class="add-status" id="${P}AddStatus"></div>
-      <div class="pending-list" id="${P}PendingList"></div>
-    </section>
-
-    <div class="panel-card loops-card">
-      <div class="panel-header"><span class="section-title">Loop</span></div>
-      <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:12px">
-        <div class="loop-block">
-          <div class="loop-block-header">
-            <span class="loop-section-label">${cfg.loopLabel}</span>
-            <span id="${P}LoopNext" class="loop-next"></span>
+  <div class="panel-card loops-card">
+    <div class="panel-header"><span class="section-title">Loop</span></div>
+    <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:12px">
+      <div class="loop-block">
+        <div class="loop-block-header">
+          <span class="loop-section-label">${cfg.loopLabel}</span>
+          <span id="${P}LoopNext" class="loop-next"></span>
+        </div>
+        <div id="${P}LoopMeta" class="loop-meta">Never run</div>
+        <div id="${P}LoopSessions" class="loop-sessions"></div>
+        <div class="loop-actions">
+          <div style="display:flex;gap:5px">
+            <button class="btn-run btn-trigger" id="${P}TriggerNextBtn"    onclick="${P}TriggerNext()">${_triggerIcon} Next</button>
+            <button class="btn-run btn-trigger" id="${P}TriggerStarredBtn" onclick="${P}TriggerStarred()">${_triggerIcon} Starred</button>
+            <button class="btn-run btn-trigger" id="${P}TriggerHalfBtn"    onclick="${P}TriggerHalf()">${_triggerIcon} Half</button>
+            <button class="btn-run btn-trigger" id="${P}TriggerAllBtn"     onclick="${P}TriggerAll()">${_triggerIcon} All</button>
           </div>
-          <div id="${P}LoopMeta" class="loop-meta">Never run</div>
-          <div id="${P}LoopSessions" class="loop-sessions"></div>
-          <div class="loop-actions">
-            <div style="display:flex;gap:5px">
-              <button class="btn-run btn-trigger" id="${P}TriggerNextBtn"    onclick="${P}TriggerNext()">${_triggerIcon} Next</button>
-              <button class="btn-run btn-trigger" id="${P}TriggerStarredBtn" onclick="${P}TriggerStarred()">${_triggerIcon} Starred</button>
-              <button class="btn-run btn-trigger" id="${P}TriggerHalfBtn"    onclick="${P}TriggerHalf()">${_triggerIcon} Half</button>
-              <button class="btn-run btn-trigger" id="${P}TriggerAllBtn"     onclick="${P}TriggerAll()">${_triggerIcon} All</button>
-            </div>
-            <button class="btn-danger btn-trigger" id="${P}StopBtn" onclick="${P}StopLoop()" disabled>Stop</button>
-          </div>
+          <button class="btn-danger btn-trigger" id="${P}StopBtn" onclick="${P}StopLoop()" disabled>Stop</button>
         </div>
       </div>
     </div>
@@ -610,7 +598,7 @@ function initChannelApp(cfg) {
   const handleInput = _el('HandleInput');
 
   handleInput.addEventListener('input', function() {
-    const clean = this.textContent.replace(/[^a-zA-Z0-9_.@/-]/g, '');
+    const clean = this.textContent.replace(/[^a-zA-Z0-9_.@:/?=&%-]/g, '');
     if (this.textContent !== clean) {
       this.textContent = clean;
       const range = document.createRange();
@@ -632,8 +620,14 @@ function initChannelApp(cfg) {
     document.execCommand('insertText', false, text);
   });
 
-  async function _submitAdd(raw, statusEl, base) {
-    statusEl.className   = `${base} info`;
+  X('AddCreator', async () => {
+    const statusEl = _el('AddStatus');
+    const raw      = handleInput.textContent.trim();
+    if (!raw) return;
+    handleInput.textContent = '';
+    handleInput.focus();
+
+    statusEl.className   = 'add-status info';
     statusEl.textContent = 'Adding…';
 
     const { ok, data } = await apiJSON(`${API}/channels`, {
@@ -644,43 +638,21 @@ function initChannelApp(cfg) {
       const handle = data.handle || raw.replace(/^@/, '');
       dismissed.delete(handle);
       pending[handle] = { status: 'pending' };
-      statusEl.className   = `${base} ok`;
+      statusEl.className   = 'add-status ok';
       statusEl.textContent = `@${handle} queued.`;
-      setTimeout(() => { statusEl.textContent = ''; statusEl.className = base; }, 5000);
+      setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'add-status'; }, 5000);
       renderPending();
     } else {
-      statusEl.className   = `${base} error`;
+      statusEl.className   = 'add-status error';
       statusEl.textContent = data.error || 'Failed.';
     }
-  }
-
-  X('AddCreator', async () => {
-    const raw = handleInput.textContent.trim();
-    if (!raw) return;
-    handleInput.textContent = '';
-    handleInput.focus();
-    await _submitAdd(raw, _el('AddStatus'), 'add-status');
   });
 
-  X('MobileAddPaste', async () => {
-    const input = _el('MobileAddInput');
+  X('AddPaste', async () => {
     try {
-      input.value = (await navigator.clipboard.readText()).trim();
+      handleInput.textContent = (await navigator.clipboard.readText()).trim();
     } catch { /* clipboard permission denied; leave the field as is */ }
-    input.focus();
-  });
-
-  X('MobileAddSubmit', async () => {
-    const input = _el('MobileAddInput');
-    const raw   = input.value.trim();
-    if (!raw) return;
-    input.value = '';
-    await _submitAdd(raw, _el('MobileAddStatus'), 'mobile-add-status');
-    input.focus();
-  });
-
-  _el('MobileAddInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); window[`${P}MobileAddSubmit`](); }
+    handleInput.focus();
   });
 
   const loadQueue = X('LoadQueue', async () => {
