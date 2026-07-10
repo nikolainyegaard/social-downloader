@@ -50,6 +50,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel takes the full row; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
+- Sorting TikTok users by follower count works again; the sort dropdown still submitted the pre-migration field name, so every user compared equal and the order never changed
 - Instagram and Twitter databases are now included in the nightly backup rotation; previously only TikTok and YouTube were backed up
 - Twitter and Instagram avatars are now cached and shown on creator cards; the avatar cache only supported TikTok and YouTube, so Twitter profile fetches silently dropped the profile picture
 - YouTube no longer reports a false handle change to an empty value on every loop: the channel profile fetch could return an unresolved result with no metadata, and an empty field is now treated as missing instead of a change
