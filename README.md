@@ -4,8 +4,9 @@ Self-hosted social media archiver. Monitors creators across multiple platforms, 
 
 **Platform support:**
 - TikTok: users and sounds
-- YouTube: channels (in development)
-- Instagram, X: planned
+- YouTube: channels
+- X/Twitter: accounts (requires an uploaded cookies.txt from a logged-in account)
+- Instagram: profiles (built, currently untested)
 
 ---
 
@@ -27,12 +28,12 @@ Key environment variables (set in `docker-compose.yml`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TIKTOK_SESSIONS_PER_DAY` | `4` | Number of TikTok user-check sessions per 24-hour window; fire times are randomised within each segment |
-| `TIKTOK_HIGH_PRIORITY_CHECK_HOURS` | `6` | Check interval for starred TikTok users (hours) |
-| `TIKTOK_ACTIVE_CHECK_HOURS` | `24` | Check interval for active TikTok users (posted within 30 days) |
-| `TIKTOK_INACTIVE_CHECK_HOURS` | `72` | Check interval for inactive TikTok users |
+| `{PLATFORM}_SESSIONS_PER_DAY` | `4` | Check sessions per 24-hour window; fire times are randomised within each segment. `{PLATFORM}` is `TIKTOK`, `YOUTUBE`, `TWITTER`, or `INSTAGRAM` |
+| `{PLATFORM}_HIGH_PRIORITY_CHECK_HOURS` | `6` | Check interval for starred creators (hours) |
+| `{PLATFORM}_ACTIVE_CHECK_HOURS` | `24` | Check interval for active creators (posted within 30 days) |
+| `{PLATFORM}_INACTIVE_CHECK_HOURS` | `72` | Check interval for inactive creators |
+| `{PLATFORM}_FULL_REFRESH_DAYS` | `7` | Days between full deletion-detecting checks per creator (YouTube, Twitter, Instagram) |
 | `TIKTOK_SOUND_LOOP_INTERVAL_MINUTES` | `60` | How often to check tracked TikTok sounds |
-| `YOUTUBE_LOOP_INTERVAL_MINUTES` | `180` | How often to check tracked YouTube channels |
 | `TZ` | system | Timezone for log timestamps (e.g. `Europe/Oslo`) |
 | `WEB_PORT` | `5000` | Flask listen port |
 | `OAUTH_FORCE_DISABLE` | `false` | Set `true` to bypass OAuth enforcement without changing the saved config; use when locked out due to OIDC provider failure |
@@ -94,6 +95,10 @@ If the old docker-compose used `LOOP_INTERVAL_MINUTES`, the app still accepts it
 
 ---
 
-## TikTok cookies
+## Cookies
 
-TikTok requires a valid session cookie. Upload `cookies.txt` from the **Settings > Cookies** panel. Export using the [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) extension (Netscape format, must include `msToken`). Refresh cookies regularly -- stale cookies are the primary cause of bot detection.
+TikTok requires a valid session cookie. Upload `cookies.txt` from the **Settings > TikTok** cookies panel. Export using the [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) extension (Netscape format, must include `msToken`). Refresh cookies regularly; stale cookies are the primary cause of bot detection.
+
+X/Twitter requires a `cookies.txt` from a logged-in x.com session (must include `auth_token` and `ct0`), uploaded from the **Settings > Twitter** cookies panel. Profile lookups work without it, but timelines and downloads do not.
+
+Instagram uses a username/password login from the **Settings > Instagram** panel instead of a cookies file; only the resulting session cookie is stored, never the password.
