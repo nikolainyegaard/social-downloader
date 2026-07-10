@@ -823,8 +823,11 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .filter-pills .filter-pill { background: transparent; border-color: transparent; }
 .filter-pills .filter-pill.active { background: transparent; border-color: transparent; color: #fff; }
 .filter-pills .filter-pill:hover:not(.active) { background: rgba(255,255,255,.06); border-color: transparent; color: var(--text); }
-/* Multi-toggle pill groups: no glider; every active pill gets its own fill */
-.filter-pills.multi .filter-pill.active { background: var(--accent); }
+/* Multi-toggle pill groups: segmented bar; active pills tint with an accent underline */
+.filter-pills.multi { gap: 0; padding: 0; border-radius: var(--radius); overflow: hidden; box-shadow: none; }
+.filter-pills.multi .filter-pill { border-radius: 0; height: 26px; padding: 0 12px; border-right: 1px solid var(--border); }
+.filter-pills.multi .filter-pill:last-child { border-right: 1px solid transparent; }
+.filter-pills.multi .filter-pill.active { background: var(--accent-bg-h); color: #fff; box-shadow: inset 0 -2px 0 var(--accent); }
 .glider { position: absolute; z-index: 1; background: var(--accent); border-radius: var(--radius-pill); transition: left .2s ease, width .2s ease; pointer-events: none; }
 
 .modal-vid-count { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
