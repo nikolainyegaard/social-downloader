@@ -28,6 +28,8 @@ initChannelApp({
     avatar: 'Avatar', banner: 'Banner',
   },
   hasBanner:  true,
+  // yt-dlp only provides a calendar date for uploads, no time of day
+  uploadDateOnly: true,
   thumbBadge: v => v.content_type === 'short' ? _ytShortsBadge : _playBadge,
   viewKeys: [
     { key: 'list',   icon: _listViewIcon, title: 'List view' },

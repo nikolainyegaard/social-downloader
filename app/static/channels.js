@@ -323,7 +323,9 @@ function initChannelApp(cfg) {
     cols:           VCOLS,
     colsCls:        'vcols',
     pageSize:       50,
-    uploadDateFmt:  fmtDateOnly,
+    // Date plus time of day by default; platforms whose API only provides a
+    // calendar date (YouTube) set cfg.uploadDateOnly
+    uploadDateFmt:  cfg.uploadDateOnly ? fmtDateOnly : fmtDateShort,
     filterFn:     `${P}SetModalFilter`,
     typeFilterFn: `${P}SetModalTypeFilter`,
     sortFn:       `${P}SetModalSort`,

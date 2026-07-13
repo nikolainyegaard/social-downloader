@@ -62,6 +62,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel takes the full row; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
+- The Uploaded column in the creator modal shows the time of day again on TikTok, Twitter, and Instagram; the engine fold-in had switched every platform to YouTube's date-only format, even though those three APIs provide full timestamps
 - The mobile page no longer overflows the screen edge: the engine fold-in left several mobile style rules pointing at the old static TikTok element names (toolbar wrapping, full-width search, compact modal header), and the page grids now cap their tracks so no single wide element can stretch every panel past the viewport
 - Very long text in the add field no longer stretches the input and the page with it; the field keeps its size and clips the text like a browser URL bar, showing the end of the text when unfocused
 - The All Deleted history modal on Twitter, Instagram, and YouTube crashed on open; the endpoint returns grouped entries but the shared modal had no grouped renderer
