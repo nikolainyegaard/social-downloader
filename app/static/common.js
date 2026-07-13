@@ -700,16 +700,6 @@ function fmtDateOnly(unix) {
 
 // ── Shared render helpers ─────────────────────────────────────────────────────
 
-const PRIVACY_MAP = {
-  'public':             ['public',             'Public'],
-  'private_accessible': ['private-accessible', 'Private'],
-  'private_blocked':    ['private-blocked',    'Private'],
-  'blocked':            ['blocked',            'Blocked'],
-};
-
-const USER_PRIV_IDS  = { public: 'ufPrivPublic', private: 'ufPrivPrivate', blocked: 'ufPrivBlocked', banned: 'ufPrivBanned' };
-const USER_STAT_IDS  = { active: 'ufStatActive', inactive: 'ufStatInactive' };
-const USER_STAR_IDS  = { starred: 'ufStarStarred' };
 const SOUND_STAT_IDS = { active: 'sfStatActive', inactive: 'sfStatInactive' };
 const SOUND_STAR_IDS = { starred: 'sfStarStarred' };
 
@@ -722,6 +712,9 @@ function _videoStatus(v) {
               :                           'Active';
   return { cls, label };
 }
+
+const _GHOST_CARD = '<div class="user-card" aria-hidden="true" style="visibility:hidden;pointer-events:none;min-height:220px"></div>';
+function _ghostCards(n) { return n > 0 ? Array(n).fill(_GHOST_CARD).join('') : ''; }
 
 function _trackingBadge(tracking_enabled) {
   return tracking_enabled === 0
@@ -940,6 +933,14 @@ function openImgModalUrl(url) {
   _lockScroll();
 }
 
+function closeVidModal() {
+  const vid = document.getElementById('vidModalPlayer');
+  vid.pause();
+  vid.src = '';
+  document.getElementById('vidModal').style.display = 'none';
+  _unlockScroll();
+}
+
 function closeImgModal() {
   document.getElementById('imgModal').style.display = 'none';
   document.getElementById('imgModalImg').src = '';
@@ -1003,6 +1004,26 @@ function closeCarousel() {
   _carouselIdx  = 0;
   _unlockScroll();
 }
+
+// ── Global overlay keyboard handling ──────────────────────────────────────────
+// Carousel arrow keys plus Escape for the shared overlay modals. Platform
+// detail modals handle their own Escape in channels.js.
+
+document.addEventListener('keydown', e => {
+  const _open = id => { const el = document.getElementById(id); return el && el.style.display !== 'none'; };
+  if (_open('carouselModal')) {
+    if (e.key === 'ArrowLeft')  { carouselStep(-1); return; }
+    if (e.key === 'ArrowRight') { carouselStep(1);  return; }
+    if (e.key === 'Escape')     { closeCarousel();  return; }
+    return;
+  }
+  if (e.key !== 'Escape') return;
+  if (_open('imgModal'))           { closeImgModal(); return; }
+  if (_open('vidModal'))           { closeVidModal(); return; }
+  if (_open('soundModalBackdrop')) { window.closeSoundModal?.(); return; }
+  if (_open('recentLogBackdrop'))  { closeRecentLog(); return; }
+  if (_open('settingsBackdrop'))   { window.closeSettings?.(); }
+});
 
 // ── Shared icons and badges ───────────────────────────────────────────────────
 

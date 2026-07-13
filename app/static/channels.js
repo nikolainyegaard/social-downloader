@@ -28,6 +28,9 @@ function initChannelApp(cfg) {
     handle: 'Handle', display_name: 'Display name', description: 'Bio', avatar: 'Avatar',
   };
 
+  const EXTRA_FILTER_GROUPS = cfg.extraFilterGroups || [];
+  const EXTRA_VIEWS         = cfg.extraViews || [];
+
   // ── Section HTML ──────────────────────────────────────────────────────────
 
   const _triggerIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12C21 16.9706 16.9706 21 12 21C9.69494 21 7.59227 20.1334 6 18.7083L3 16M3 12C3 7.02944 7.02944 3 12 3C14.3051 3 16.4077 3.86656 18 5.29168L21 8M3 21V16M3 16H8M21 3V8M21 8H16"/></svg>`;
@@ -69,7 +72,7 @@ function initChannelApp(cfg) {
     </div>
   </div>
   <div class="panel-card loops-card">
-    <div class="panel-header"><span class="section-title">Loop</span></div>
+    <div class="panel-header"><span class="section-title">${cfg.loopsTitle || 'Loop'}</span></div>
     <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:12px">
       <div class="loop-block">
         <div class="loop-block-header">
@@ -88,6 +91,7 @@ function initChannelApp(cfg) {
           <button class="btn-danger btn-trigger" id="${P}StopBtn" onclick="${P}StopLoop()" disabled>Stop</button>
         </div>
       </div>
+      ${cfg.extraLoopHtml || ''}
     </div>
   </div>
   </div>
@@ -97,6 +101,7 @@ function initChannelApp(cfg) {
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="filter-pills">
           <button class="filter-pill active" id="${P}TvCreators" onclick="${P}SetTrackingView('creators')">${CreatorsCap}</button>
+          ${EXTRA_VIEWS.map(v => `<button class="filter-pill" id="${P}Tv_${v.key}" onclick="${P}SetTrackingView('${v.key}')">${v.label}</button>`).join('')}
           <button class="filter-pill"        id="${P}TvLog"      onclick="${P}SetTrackingView('log')">Log</button>
         </div>
         <span id="${P}Count" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
@@ -104,6 +109,13 @@ function initChannelApp(cfg) {
                style="width:160px;font-size:12px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
       </div>
       <div id="${P}Controls" class="filter-control-group">
+        ${EXTRA_FILTER_GROUPS.map(g => `
+        <div class="filter-row">
+          <span class="filter-row-label">${g.label}</span>
+          <div class="filter-pills multi">
+            ${g.options.map(o => `<button class="filter-pill${(g.defaults || []).includes(o.key) ? ' active' : ''}" id="${P}f_${g.key}_${o.key}" onclick="${P}SetFilter('${g.key}','${o.key}')">${o.label}</button>`).join('')}
+          </div>
+        </div>`).join('')}
         <div class="filter-row">
           <span class="filter-row-label">Tracking</span>
           <div class="filter-pills multi">
@@ -127,16 +139,20 @@ function initChannelApp(cfg) {
               <option value="video_total">Saved ${ITEMS}</option>
               <option value="video_deleted">Deleted ${ITEMS}</option>
               <option value="added_at">Date added</option>
+              <option value="last_checked">Last checked</option>
+              <option value="last_saved">Last saved</option>
             </select>
             <button class="sort-dir-btn" id="${P}SortDirBtn" onclick="${P}ToggleSortDir()">A → Z</button>
             <button class="sort-dir-btn" onclick="${P}ResetFilters()" title="Reset filters and sort">Reset</button>
           </div>
         </div>
       </div>
+      ${EXTRA_VIEWS.map(v => `<div id="${P}Controls_${v.key}" class="filter-control-group" style="display:none">${v.controlsHtml || ''}</div>`).join('')}
     </div>
     <div class="users-grid" id="${P}Grid">
       <div class="empty-state">No ${CREATORS} tracked yet.</div>
     </div>
+    ${EXTRA_VIEWS.map(v => `<div class="users-grid" id="${P}Grid_${v.key}" style="display:none"><div class="empty-state">${v.emptyLabel || ''}</div></div>`).join('')}
     <div id="${P}LogPanel" style="display:none">
       <div class="log-panel">
         <div class="log-header">
@@ -177,7 +193,11 @@ function initChannelApp(cfg) {
   let creators       = [];
   let sort           = { field: 'handle', dir: 'asc' };
   // Default filter: hide inactive creators; Starred stays off
-  const _defaultFilter = () => ({ stat: new Set(['active']), star: new Set() });
+  const _defaultFilter = () => {
+    const f = { stat: new Set(['active']), star: new Set() };
+    EXTRA_FILTER_GROUPS.forEach(g => { f[g.key] = new Set(g.defaults || []); });
+    return f;
+  };
   let filter         = _defaultFilter();
   let search         = '';
   const addToasts    = _makeAddToasts(API, () => loadCreators());
@@ -185,12 +205,13 @@ function initChannelApp(cfg) {
   let runCurrent     = null;
   let loopRunning    = false;
   let currentCreator = null;
-  let logLines       = [];
-  let logClearIndex  = 0;
+  let pendingRescans = {};     // {channel_id: fires_at_unix_secs} for large-spike midpoint re-scans
+  let logSeq           = 0;    // log_seq from last server response (monotonic, resets on app restart)
+  let logClearSeq      = 0;    // lines before this seq were cleared; don't re-render them
   let logClearRestored = false;
   let sleepUntil     = null;   // Unix timestamp (ms) when current sleep ends; null = no sleep
   let sleepNext      = null;   // Label for what runs after the sleep
-  let nextRun        = null;   // ISO string of next scheduled session
+  let nextRuns       = [];     // [{iso, label}] upcoming scheduled runs for the activity bar
   let cleanupPoll    = null;
 
   const SORT_DIR_LABELS = {
@@ -200,6 +221,8 @@ function initChannelApp(cfg) {
     video_total:      { asc: 'Low → High',   desc: 'High → Low'   },
     video_deleted:    { asc: 'Low → High',   desc: 'High → Low'   },
     added_at:         { asc: 'Oldest first', desc: 'Newest first' },
+    last_checked:     { asc: 'Oldest first', desc: 'Newest first' },
+    last_saved:       { asc: 'Oldest first', desc: 'Newest first' },
   };
 
   // ── Video render helpers ──────────────────────────────────────────────────
@@ -212,7 +235,11 @@ function initChannelApp(cfg) {
   const _mediaExt = v => ((v.file_path || '').split('.').pop() || '').toLowerCase();
   const _isImage  = v => _IMG_EXTS.includes(_mediaExt(v));
   // Multi-media posts store {id}_01.ext as file_path with siblings on disk.
-  const _isMulti  = v => (((v.file_path || '').split('/').pop()) || '').startsWith(`${v.video_id}_`);
+  // The videos endpoint annotates `multi` from disk (single photos are also
+  // stored numbered, so the filename alone can't distinguish the two).
+  const _isMulti  = v => v.multi !== undefined
+    ? !!v.multi
+    : (((v.file_path || '').split('/').pop()) || '').startsWith(`${v.video_id}_`);
 
   function _openMediaFor(v) {
     const id = esc(v.video_id);
@@ -233,7 +260,7 @@ function initChannelApp(cfg) {
     </div>`;
   }
 
-  function _videoActionBtns(v) {
+  function _defaultVideoActionBtns(v) {
     const id = esc(v.video_id);
     if (v.file_path) {
       const ext  = _mediaExt(v) || 'mp4';
@@ -243,6 +270,8 @@ function initChannelApp(cfg) {
     }
     return '';
   }
+
+  const _videoActionBtns = cfg.videoActionBtnsFn || _defaultVideoActionBtns;
 
   X('OpenImgModal', videoId => {
     openImgModalUrl(`${API}/videos/${encodeURIComponent(videoId)}/thumbnail`);
@@ -266,7 +295,7 @@ function initChannelApp(cfg) {
 
   const VCOLS = [
     { field: null,            label: '' },
-    { field: null,            label: 'Title' },
+    { field: null,            label: cfg.titleColLabel || 'Title' },
     { field: 'status',        label: 'Status' },
     { field: 'view_count',    label: 'Views' },
     { field: 'upload_date',   label: cfg.uploadDateLabel },
@@ -321,15 +350,17 @@ function initChannelApp(cfg) {
 
   // ── Stats panel ───────────────────────────────────────────────────────────
 
+  const _statsRows = cfg.statsRows || (s => [
+    { label: `Tracked ${CREATORS}`, value: (s.channel_count || 0).toLocaleString() },
+    { label: `Saved ${ITEMS}`,      value: (s.saved_count   || 0).toLocaleString() },
+    { label: 'Deleted',             value: (s.deleted_count || 0).toLocaleString() },
+    { label: 'Latest saved',        value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
+    { label: 'Total views',         value: _fmtLarge(s.total_views || 0) },
+    { label: 'Storage',             value: _fmtBytes(s.media_size_bytes || 0) },
+  ]);
+
   function renderStats(s) {
-    _renderStatGrid(`${P}StatsGrid`, [
-      { label: `Tracked ${CREATORS}`, value: (s.channel_count || 0).toLocaleString() },
-      { label: `Saved ${ITEMS}`,      value: (s.saved_count   || 0).toLocaleString() },
-      { label: 'Deleted',             value: (s.deleted_count || 0).toLocaleString() },
-      { label: 'Latest saved',        value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
-      { label: 'Total views',         value: _fmtLarge(s.total_views || 0) },
-      { label: 'Storage',             value: _fmtBytes(s.media_size_bytes || 0) },
-    ]);
+    _renderStatGrid(`${P}StatsGrid`, _statsRows(s));
   }
 
   const loadStats = X('LoadStats', async () => {
@@ -343,19 +374,45 @@ function initChannelApp(cfg) {
     'deletions':       `All Deleted ${ItemsCap}`,
     'profile-changes': 'All Profile Changes',
     'saved':           `All Saved ${ItemsCap}`,
+    'bans':            'All Banned Accounts',
   };
 
   const _nameStyle = r => r.enabled === 0 ? 'style="color:var(--text-dim)"'
     : r.starred ? 'style="color:var(--yellow)"'
     : r.account_status === 'banned' ? 'style="color:var(--red)"' : '';
 
+  // Onclick string for a saved/deleted group: single-item groups jump straight
+  // to the item; soft-disabled creators route through the platform fallback
+  // (e.g. TikTok sound-discovered authors open the sound modal).
+  function _recentOnclick(item, kind) {
+    if (item.enabled === 0) return (cfg.recentFallback && cfg.recentFallback(item)) || '';
+    if (item.count === 1 && item.video_id) {
+      return kind === 'saved'
+        ? `${P}OpenModalAndHighlight('${esc(item.channel_id)}','${esc(item.video_id)}','all','download_date','desc')`
+        : `${P}OpenModalAndHighlight('${esc(item.channel_id)}','${esc(item.video_id)}')`;
+    }
+    return `${P}OpenModal('${esc(item.channel_id)}')`;
+  }
+
   function _renderSavedRow(g, now) {
     const row = document.createElement('div');
     row.className = 'recent-entry';
     row.title = `Open @${g.handle}`;
-    row.onclick = () => window[`${P}OpenModal`](g.channel_id);
+    row.setAttribute('onclick', _recentOnclick(g, 'saved'));
     row.innerHTML = `
       <span class="recent-date">${_recentDate(g.download_date, now)}</span>
+      <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
+      <span class="recent-detail">${g.count}x</span>`;
+    return row;
+  }
+
+  function _renderDeletedGroupRow(g, now) {
+    const row = document.createElement('div');
+    row.className = 'recent-entry';
+    row.title = `Open @${g.handle}`;
+    row.setAttribute('onclick', _recentOnclick(g, 'deleted'));
+    row.innerHTML = `
+      <span class="recent-date">${_recentDate(g.deleted_at, now)}</span>
       <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
       <span class="recent-detail">${g.count}x</span>`;
     return row;
@@ -366,11 +423,18 @@ function initChannelApp(cfg) {
     row.className = 'recent-entry';
     if (type === 'deletions') {
       row.title = `Open @${item.handle}`;
-      row.onclick = () => window[`${P}OpenModalAndHighlight`](item.channel_id, item.video_id);
+      row.setAttribute('onclick', _recentOnclick({ ...item, count: 1 }, 'deleted'));
       row.innerHTML = `
         <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
         <span class="recent-name" ${_nameStyle(item)}>@${esc(item.handle)}</span>
         <span class="recent-detail">${esc((item.video_id || '').slice(0, 11))}</span>`;
+    } else if (type === 'bans') {
+      row.title = `Open @${item.handle}`;
+      row.onclick = () => window[`${P}OpenModal`](item.channel_id);
+      row.innerHTML = `
+        <span class="recent-date">${_recentDate(item.banned_at, now)}</span>
+        <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(item.handle)}</span>
+        <span class="recent-detail" style="color:var(--red)">Banned</span>`;
     } else {
       const label = FIELD_LABELS[item.field] || item.field;
       row.title = `Open @${item.handle} · ${label} history`;
@@ -385,11 +449,12 @@ function initChannelApp(cfg) {
 
   X('OpenRecentLog', type => {
     _openRecentLogModal(type, {
-      apiBase:     `${API}/recent`,
-      titles:      RECENT_LOG_TITLES,
-      groupKey:    'channel_id',
-      renderSaved: _renderSavedRow,
-      renderOther: _renderOtherRow,
+      apiBase:       `${API}/recent`,
+      titles:        RECENT_LOG_TITLES,
+      groupKey:      'channel_id',
+      renderSaved:   _renderSavedRow,
+      renderGrouped: _renderDeletedGroupRow,
+      renderOther:   _renderOtherRow,
     });
   });
 
@@ -404,14 +469,13 @@ function initChannelApp(cfg) {
     left += `<div class="recent-section">`;
     left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('deletions')" title="View all deleted ${ITEMS}">Recently deleted</div>`;
     if (data.deletions && data.deletions.length) {
-      left += data.deletions.map(d => {
-        const onclick = `${P}OpenModalAndHighlight('${esc(d.channel_id)}','${esc(d.video_id)}')`;
-        return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.handle)}">
+      left += data.deletions.map(d =>
+        `<div class="recent-entry" onclick="${_recentOnclick(d, 'deleted')}" title="Open @${esc(d.handle)}">
           <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
           <span class="recent-name" ${_nameStyle(d)}>@${esc(d.handle)}</span>
-          <span class="recent-detail">${esc((d.video_id || '').slice(0, 11))}</span>
-        </div>`;
-      }).join('');
+          <span class="recent-detail">${d.count}x</span>
+        </div>`
+      ).join('');
     } else {
       left += `<div class="recent-empty">No deleted ${ITEMS} yet</div>`;
     }
@@ -432,6 +496,22 @@ function initChannelApp(cfg) {
     }
     left += `</div>`;
 
+    if (cfg.hasBans) {
+      left += `<div class="recent-section">`;
+      left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('bans')" title="View all banned accounts">Recently banned</div>`;
+      if (data.bans && data.bans.length) {
+        const b = data.bans[0];
+        left += `<div class="recent-entry" onclick="${P}OpenModal('${esc(b.channel_id)}')" title="Open @${esc(b.handle)}">
+          <span class="recent-date">${_recentDate(b.banned_at, now)}</span>
+          <span class="recent-name" ${b.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(b.handle)}</span>
+          <span class="recent-detail" style="color:var(--red)">Banned</span>
+        </div>`;
+      } else {
+        left += `<div class="recent-empty">No banned accounts</div>`;
+      }
+      left += `</div>`;
+    }
+
     leftEl.innerHTML = left;
 
     let right = '';
@@ -439,7 +519,7 @@ function initChannelApp(cfg) {
     right += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('saved')" title="View all saved ${ITEMS}">Recently saved</div>`;
     if (data.saved && data.saved.length) {
       right += data.saved.map(g =>
-        `<div class="recent-entry" onclick="${P}OpenModal('${esc(g.channel_id)}')" title="Open @${esc(g.handle)}">
+        `<div class="recent-entry" onclick="${_recentOnclick(g, 'saved')}" title="Open @${esc(g.handle)}">
           <span class="recent-date">${_recentDate(g.download_date, now)}</span>
           <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
           <span class="recent-detail">${g.count}x</span>
@@ -467,15 +547,21 @@ function initChannelApp(cfg) {
     currentCreator = state.loop_current_channel;
     runQueue       = state.run_queue  || [];
     runCurrent     = state.run_current || null;
+    pendingRescans = state.pending_rescans || {};
     sleepUntil     = state.loop_sleep_until != null ? state.loop_sleep_until * 1000 : null;
     sleepNext      = state.loop_sleep_next || null;
-    nextRun        = state.loop_next || null;
+    nextRuns       = (cfg.nextRunCandidates
+      ? cfg.nextRunCandidates(state)
+      : [state.loop_next ? { iso: state.loop_next, label: `${CREATOR} loop` } : null]
+    ).filter(Boolean);
 
     const meta = _el('LoopMeta');
     if (meta) {
       const parts = [];
-      if (state.loop_last_end) parts.push(`Last: ${fmt.rel(state.loop_last_end)}`);
+      if (state.loop_last_start) parts.push(`Last: ${fmt.rel(state.loop_last_start)}`);
       else parts.push('Never run');
+      const comp = state.loop_last_session_completed, total = state.loop_last_session_total;
+      if (comp != null && total != null) parts.push(`${comp}/${total} ${CREATORS}`);
       if (state.loop_last_new_videos != null) parts.push(`${state.loop_last_new_videos} new`);
       if (state.loop_last_duration_secs != null) parts.push(fmt.dur(state.loop_last_duration_secs));
       meta.textContent = parts.join(' · ');
@@ -496,35 +582,47 @@ function initChannelApp(cfg) {
     const text   = document.getElementById('statusText');
     const active = location.hash === `#${cfg.id}`;
     if (active && badge && text) {
-      const anyActive = loopRunning || !!runCurrent;
+      const anyActive = loopRunning || !!runCurrent || !!(cfg.statusActive && cfg.statusActive(state));
       badge.className  = `status-badge${anyActive ? ' running' : ''}`;
       text.textContent = anyActive
         ? (currentCreator ? `Downloading @${currentCreator}` : 'Running…')
         : 'Idle';
     }
 
-    const logBody = _el('LogBody');
-    if (logBody && state.logs) {
-      if (!logClearRestored) {
-        logClearRestored = true;
-        const mark = localStorage.getItem(`${P}-logClearWatermark`);
-        if (mark) {
-          const lines = state.logs;
-          for (let i = lines.length - 1; i >= 0; i--) {
-            if (lines[i] === mark) { logClearIndex = i + 1; break; }
-          }
-        }
-      }
-      const newLines = state.logs.slice(logClearIndex);
-      if (newLines.length !== logLines.length || (logLines.length && logLines[logLines.length - 1] !== newLines[newLines.length - 1])) {
-        logLines = newLines;
-        const auto = _el('AutoScroll')?.checked !== false;
-        logBody.innerHTML = logLines.map(l => `<div class="log-line ${_logLineClass(l)}">${esc(l)}</div>`).join('');
-        if (auto) logBody.scrollTop = logBody.scrollHeight;
-      }
-    }
-
+    _renderLogs(state.logs, state.log_seq);
+    if (cfg.onStatus) cfg.onStatus(state);
     updateRunStates();
+  }
+
+  // Incremental log rendering keyed on the server's monotonic log_seq: only
+  // lines newer than the last seen seq are appended, and a persisted clear
+  // watermark survives reloads. log_seq resets when the app restarts; a
+  // stale watermark above the counter is dropped so the console shows again.
+  function _renderLogs(lines, seq) {
+    if (!lines?.length || seq == null) return;
+    if (!logClearRestored) {
+      logClearRestored = true;
+      const saved = localStorage.getItem(`${P}-logClearSeq`);
+      if (saved != null) logClearSeq = parseInt(saved, 10) || 0;
+    }
+    if (logClearSeq > seq) {
+      logClearSeq = 0;
+      localStorage.removeItem(`${P}-logClearSeq`);
+    }
+    if (seq <= logSeq) return;  // nothing new
+
+    // Sequence number of lines[i] = seq - lines.length + i
+    const bufStart = seq - lines.length;
+    const startIdx = Math.max(0, Math.max(logSeq, logClearSeq) - bufStart);
+    const newLines = lines.slice(startIdx);
+    logSeq = seq;
+    if (!newLines.length) return;
+
+    const body = _el('LogBody');
+    if (!body) return;
+    body.insertAdjacentHTML('beforeend',
+      newLines.map(l => `<div class="log-line ${_logLineClass(l)}">${esc(l)}</div>`).join(''));
+    if (_el('AutoScroll')?.checked !== false) body.scrollTop = body.scrollHeight;
   }
 
   function updateRunStates() {
@@ -563,24 +661,22 @@ function initChannelApp(cfg) {
         + (sleepNext ? ` <span class="lab-next">-- up next: ${esc(sleepNext)}</span>` : '');
       return;
     }
-    const ts = nextRun ? new Date(nextRun).getTime() : 0;
-    if (ts > Date.now()) {
-      const rem = Math.max(0, Math.round((ts - Date.now()) / 1000));
-      bar.innerHTML = `waiting ${dur(rem)} <span class="lab-next">-- up next: ${esc(CREATOR)} loop</span>`;
+    const now = Date.now();
+    const candidates = nextRuns
+      .map(c => ({ ts: new Date(c.iso).getTime(), label: c.label }))
+      .filter(c => c.ts > now)
+      .sort((a, b) => a.ts - b.ts);
+    if (candidates.length) {
+      const rem = Math.max(0, Math.round((candidates[0].ts - now) / 1000));
+      bar.innerHTML = `waiting ${dur(rem)} <span class="lab-next">-- up next: ${esc(candidates[0].label)}</span>`;
     } else {
       bar.innerHTML = 'idle';
     }
   }
 
   X('ClearLog', () => {
-    const lastLine = logLines[logLines.length - 1];
-    if (lastLine) {
-      localStorage.setItem(`${P}-logClearWatermark`, lastLine);
-    } else {
-      localStorage.removeItem(`${P}-logClearWatermark`);
-    }
-    logClearIndex = 0;
-    logLines = [];
+    logClearSeq = logSeq;
+    localStorage.setItem(`${P}-logClearSeq`, String(logSeq));
     const logBody = _el('LogBody');
     if (logBody) logBody.innerHTML = '';
   });
@@ -666,6 +762,10 @@ function initChannelApp(cfg) {
     handleInput.textContent = '';
     handleInput.focus();
 
+    // Platform hook: returns true when it fully handled the input
+    // (e.g. TikTok routing sound IDs/URLs to the sound tracker)
+    if (cfg.addHandler && await cfg.addHandler(raw, addToasts)) return;
+
     const { ok, data } = await apiJSON(`${API}/channels`, {
       method: 'POST',
       body: JSON.stringify({ handle: raw }),
@@ -691,11 +791,25 @@ function initChannelApp(cfg) {
   const STAT_IDS = { active: `${P}fStatActive`, inactive: `${P}fStatInactive` };
   const STAR_IDS = { starred: `${P}fStarStarred` };
 
+  function _filterPillIds(group) {
+    if (group === 'stat') return STAT_IDS;
+    if (group === 'star') return STAR_IDS;
+    const g = EXTRA_FILTER_GROUPS.find(g => g.key === group);
+    return g ? Object.fromEntries(g.options.map(o => [o.key, `${P}f_${g.key}_${o.key}`])) : {};
+  }
+
+  function _syncFilterPills() {
+    for (const group of ['stat', 'star', ...EXTRA_FILTER_GROUPS.map(g => g.key)]) {
+      Object.entries(_filterPillIds(group)).forEach(([v, id]) => {
+        document.getElementById(id)?.classList.toggle('active', filter[group].has(v));
+      });
+    }
+  }
+
   X('SetFilter', (group, value) => {
     const set = filter[group];
     set.has(value) ? set.delete(value) : set.add(value);
-    const map = group === 'stat' ? STAT_IDS : STAR_IDS;
-    Object.entries(map).forEach(([v, id]) => {
+    Object.entries(_filterPillIds(group)).forEach(([v, id]) => {
       document.getElementById(id)?.classList.toggle('active', set.has(v));
     });
     renderCreators();
@@ -728,23 +842,28 @@ function initChannelApp(cfg) {
     const sel = _el('SortField');
     if (sel) sel.value = 'handle';
     _updateSortBtn();
-    Object.entries(STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', filter.stat.has(v)));
-    Object.entries(STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', filter.star.has(v)));
+    _syncFilterPills();
     renderCreators();
   });
 
   X('OnSearch', val => {
     search = val.trim();
-    renderCreators();
+    if (trackingView === 'creators') { renderCreators(); return; }
+    const extra = EXTRA_VIEWS.find(v => v.key === trackingView);
+    if (extra) extra.show(search);
   });
 
   function _filteredCreators() {
     const q = search.toLowerCase();
     return creators.filter(ch => {
+      for (const g of EXTRA_FILTER_GROUPS) {
+        if (filter[g.key].size && !g.test(ch, filter[g.key])) return false;
+      }
       if (filter.stat.size && !filter.stat.has(ch.tracking_enabled === 0 ? 'inactive' : 'active')) return false;
       if (filter.star.has('starred') && !ch.starred) return false;
       if (q) {
-        const hay = [ch.handle, ch.display_name, ch.channel_id, ch.description]
+        const hay = [ch.handle, ch.display_name, ch.channel_id, ch.description,
+                     ...(ch.old_handles || []), ...(ch.old_display_names || []), ...(ch.old_descriptions || [])]
                     .filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
@@ -768,16 +887,45 @@ function initChannelApp(cfg) {
   let renderedCount  = 0;
   let sortedCache    = [];
 
+  // Relation and privacy pill; only rendered when the platform's adapter
+  // populates the fields (engine schema has them for every platform)
+  function _relationPill(ch) {
+    if (ch.account_status === 'banned') return `<span class="privacy-status banned">Banned</span>`;
+    if (ch.privacy_status === 'blocked') return `<span class="privacy-status banned">Blocked</span>`;
+    if (ch.privacy_status === 'private_blocked') return `<span class="relation-pill">Private</span>`;
+    const rel = ch.relation;
+    if (rel === 2) return `<span class="relation-pill">Friends</span>`;
+    if (rel === 1) return `<span class="relation-pill">Following</span>`;
+    if (rel === 6) return `<span class="relation-pill">Follows you</span>`;
+    if (rel === 0) return `<span class="relation-pill">No relation</span>`;
+    return '';
+  }
+
+  const _isPrivateAccount = ch => ['private_accessible', 'private_blocked', 'blocked'].includes(ch.privacy_status);
+
+  const _oldNamesTag = ch => {
+    const oldNames = (ch.old_handles || []).map(n => `@${esc(n)}`).join(' · ');
+    return oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
+  };
+
   function _renderCreatorCard(ch) {
     const isCurrent  = !!currentCreator && ch.handle === currentCreator;
     const isInactive = ch.tracking_enabled === 0;
+    const isBanned   = ch.account_status === 'banned';
+    const isBlocked  = ch.privacy_status === 'blocked';
+    const isPrivBlk  = ch.privacy_status === 'private_blocked';
     const { cls: trackingCls, label: trackingLabel } = _trackingBadge(ch.tracking_enabled);
     const inQueue    = runQueue.includes(ch.channel_id);
     const isRunCur   = runCurrent === ch.channel_id;
     const runDis     = (inQueue || isRunCur) ? 'disabled' : '';
 
+    const rescanAt = pendingRescans[ch.channel_id];
+    const rescanBadge = rescanAt
+      ? `<div class="user-rescan-notice" title="Isolated full re-scan scheduled to verify deletion candidates">Re-scan ${fmt.rel(new Date(rescanAt * 1000).toISOString())}</div>`
+      : '';
+
     return `
-      <div class="user-card ${P}-creator-card${isCurrent ? ' user-card-current' : ''}${isInactive ? ' user-card-inactive' : ''}"
+      <div class="user-card ${P}-creator-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned || isBlocked || isPrivBlk ? ' user-card-inactive' : ''}${isBanned || isBlocked ? ' user-card-banned' : ''}${isPrivBlk ? ' user-card-private' : ''}"
            data-channelid="${esc(ch.channel_id)}"
            onclick="if(!event.target.closest('button'))${P}OpenModal('${esc(ch.channel_id)}')"
            role="button" tabindex="0">
@@ -789,12 +937,14 @@ function initChannelApp(cfg) {
                  onclick="event.stopPropagation();openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')">` : ''}
           </div>
           <div class="user-identity">
-            <div class="user-display-name">${esc(ch.display_name || ch.handle)}</div>
-            <div class="user-handle">@${esc(ch.handle)}</div>
+            <div class="user-display-name">${_isPrivateAccount(ch) ? LOCK_SVG : ''}${esc(ch.display_name || ch.handle)}</div>
+            <div class="user-handle">@${esc(ch.handle)}${_oldNamesTag(ch)}</div>
             <div class="user-id-line">${esc(ch.channel_id)}</div>
           </div>
           <div class="user-badges">
             <span class="account-status ${trackingCls}">${trackingLabel}</span>
+            ${_relationPill(ch)}
+            ${ch.starred ? '<span class="account-status priority" title="Starred: checked on the high-priority interval">★ Priority</span>' : ''}
           </div>
         </div>
 
@@ -809,6 +959,8 @@ function initChannelApp(cfg) {
           ${ch.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:#ff9800">${ch.video_missing}</span></span>` : ''}
           ${ch.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${ch.video_undeleted}</span></span>` : ''}
         </div>
+
+        ${rescanBadge}
 
         <div class="user-card-footer">
           <div style="display:flex;gap:6px;">
@@ -931,10 +1083,11 @@ function initChannelApp(cfg) {
     window[`${P}OpenModal`](channelId);
   });
 
-  X('OpenModal', channelId => {
-    const ch = creators.find(c => c.channel_id === channelId);
-    if (!ch) return;
-    modalCreatorId = channelId;
+  // Open the modal for a creator object that may not be in the tracked list
+  // (e.g. a soft-disabled sound-discovered author). renderHeaderFn overrides
+  // the default header, used by the TikTok untracked-user flow.
+  function _openModalRaw(ch, renderHeaderFn) {
+    modalCreatorId = ch.channel_id;
     modalCreator   = ch;
     Object.assign(_creatorState, {
       videos: [], filter: new Set(), typeFilter: new Set(), search: '',
@@ -952,12 +1105,19 @@ function initChannelApp(cfg) {
     _el('ModalBackdrop').style.display = 'flex';
     _lockScroll();
 
-    _renderModalHeader(ch);
+    _el('ModalHeader').className = 'modal-header';  // reset custom header classes
+    (renderHeaderFn || _renderModalHeader)(ch);
     _mRenderToolbar(MODAL_CFG, []);
     _el('ModalVideoList').innerHTML =
       `<div class="vlist-loading">Loading ${ITEMS}…</div>`;
 
-    _loadModalVideos(channelId);
+    _loadModalVideos(ch.channel_id);
+  }
+
+  X('OpenModal', channelId => {
+    const ch = creators.find(c => c.channel_id === channelId);
+    if (!ch) return;
+    _openModalRaw(ch);
   });
 
   X('OpenModalWithHistory', (channelId, field) => {
@@ -1013,6 +1173,23 @@ function initChannelApp(cfg) {
     const runDisabled = busy ? 'disabled' : '';
     const platformLabel = (PLATFORMS.find(p => p.id === cfg.id) || {}).label || cfg.id;
 
+    const joinStr = ch.join_date
+      ? ' · Joined ' + _dtFmtMonthYear.format(new Date(ch.join_date * 1000))
+      : '';
+
+    const banCountdownStr = (() => {
+      if (ch.account_status !== 'banned' || !ch.banned_at || ch.tracking_enabled === 0) return '';
+      const daysLeft = 14 - Math.floor((Date.now() / 1000 - ch.banned_at) / 86400);
+      if (daysLeft <= 0) return '';
+      return `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} until inactive`;
+    })();
+
+    const nextCheckStr = (() => {
+      if (ch.enabled === 0 || ch.tracking_enabled === 0) return '';
+      if (!ch.next_check_at || ch.next_check_at * 1000 <= Date.now()) return 'Next check: at next session';
+      return `Next check ${fmt.relFuture(new Date(ch.next_check_at * 1000).toISOString())}`;
+    })();
+
     _el('ModalHeader').innerHTML = `
       <div class="modal-avatar-wrap">
         <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
@@ -1022,20 +1199,24 @@ function initChannelApp(cfg) {
       </div>
       <div class="modal-user-body">
         <div class="modal-name-row">
-          <span class="modal-name">${esc(ch.display_name || ch.handle)}</span>
+          <span class="modal-name">${_isPrivateAccount(ch) ? LOCK_SVG : ''}${esc(ch.display_name || ch.handle)}</span>
+          ${ch.verified ? '<span class="modal-verified">✓ Verified</span>' : ''}
           <span class="account-status ${trackingCls}">${trackingLbl}</span>
-          <label class="tracking-toggle" title="${isInactive ? `${ItemsCap} tracking off` : `${ItemsCap} tracking on`}">
+          ${_relationPill(ch)}
+          <label class="tracking-toggle" title="${isInactive ? `${ItemsCap} tracking off (profile changes still tracked)` : `${ItemsCap} tracking on`}">
             <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="${P}SetTracking('${esc(ch.channel_id)}', this.checked)">
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
             <span class="toggle-label">Track ${ITEMS}</span>
           </label>
         </div>
         <div class="modal-handle">
-          <a href="${extUrl}" target="_blank" rel="noopener" class="tt-link">@${esc(ch.handle)}</a>
-          <span style="color:var(--muted);font-size:12px;margin-left:6px">${esc(ch.channel_id)}</span>
+          <a href="${extUrl}" target="_blank" rel="noopener" class="tt-link">@${esc(ch.handle)}</a>${_oldNamesTag(ch)}
+          <span style="color:var(--muted);font-size:12px;margin-left:6px">${esc(ch.channel_id)}${joinStr}${nextCheckStr ? ` · ${nextCheckStr}` : ''}</span>
         </div>
+        ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
         <div class="modal-stats-row">
           ${ch.subscriber_count != null ? `<span><strong>${(ch.subscriber_count || 0).toLocaleString()}</strong> ${cfg.subLabelModal}</span>` : ''}
+          ${ch.following_count != null ? `<span><strong>${ch.following_count.toLocaleString()}</strong> following</span>` : ''}
           ${ch.video_count != null ? `<span><strong>${(ch.video_count || 0).toLocaleString()}</strong> on ${esc(platformLabel)}</span>` : ''}
           <span><strong>${ch.video_total || 0}</strong> saved locally</span>
           ${(ch.video_deleted || 0) > 0 ? `<span style="color:var(--red)"><strong>${ch.video_deleted}</strong> deleted</span>` : ''}
@@ -1044,6 +1225,7 @@ function initChannelApp(cfg) {
           <span style="color:var(--muted)">${esc(checked)}</span>
         </div>
         ${ch.description ? `<div class="modal-bio" onclick="this.classList.toggle('expanded')">${esc(ch.description)}</div>` : ''}
+        ${ch.bio_link ? `<div class="modal-bio-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
           <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
           <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
@@ -1126,6 +1308,12 @@ function initChannelApp(cfg) {
     const vidList = _el('ModalVideoList');
     if (!panel || !vidList) return;
 
+    // Toggle off if already open (e.g. clicking the profile-updates stat again)
+    if (panel.style.display !== 'none' && !field) {
+      window[`${P}CloseProfileHistory`]();
+      return;
+    }
+
     vidList.style.display = 'none';
     panel.style.display   = '';
 
@@ -1149,6 +1337,41 @@ function initChannelApp(cfg) {
     phistField = new Set();
   });
 
+  const _PHIST_STATUS_LABELS = {
+    active:              'Active',
+    banned:              'Banned',
+    public:              'Public',
+    private_accessible:  'Private (accessible)',
+    private_blocked:     'Private',
+    blocked:             'Blocked',
+  };
+
+  // Current profile value per history field, used as the "New" side of the
+  // most recent entry; older entries take the next-newer entry's old_value.
+  const _PHIST_CURRENT = {
+    handle:         ch => ch?.handle,
+    username:       ch => ch?.handle,
+    display_name:   ch => ch?.display_name,
+    description:    ch => ch?.description,
+    bio:            ch => ch?.description,
+    bio_link:       ch => ch?.bio_link,
+    avatar:         () => '__current__',
+    account_status: ch => ch?.account_status,
+    privacy_status: ch => ch?.privacy_status,
+  };
+
+  function _phistNewValMap() {
+    const ch = modalCreator;
+    const map = new Map();
+    [...new Set(phistData.map(e => e.field))].forEach(field => {
+      const fe = phistData.filter(e => e.field === field); // newest-first
+      fe.forEach((e, fi) => {
+        map.set(e, fi === 0 ? (_PHIST_CURRENT[field] ? _PHIST_CURRENT[field](ch) : null) : fe[fi - 1].old_value);
+      });
+    });
+    return map;
+  }
+
   function _renderPhistPanel() {
     const panel = _el('PhistPanel');
     if (!panel) return;
@@ -1164,7 +1387,7 @@ function initChannelApp(cfg) {
       return `<button class="filter-pill${active}" onclick="${P}PhistSetField('${esc(f)}')">${label}</button>`;
     }).join('');
 
-    const ch = modalCreator;
+    const newValMap = _phistNewValMap();
 
     panel.innerHTML = `
       <div class="phist-hdr" style="display:flex;align-items:center;gap:8px;padding:8px 0 12px;border-bottom:1px solid var(--border);margin-bottom:12px">
@@ -1172,24 +1395,27 @@ function initChannelApp(cfg) {
         <button class="btn-ghost" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="${P}CloseProfileHistory()">Back to ${ITEMS}</button>
       </div>
       ${entries.length
-        ? entries.map(e => _phistEntryHtml(e, ch)).join('')
+        ? entries.map(e => _phistEntryHtml(e, newValMap.get(e))).join('')
         : `<div style="color:var(--muted);font-size:13px;padding:12px 0">No profile changes recorded${phistField.size ? ' for the selected fields' : ''}.</div>`}
     `;
     panel.querySelectorAll('.filter-pills').forEach(_placeGlider);
   }
 
-  function _phistEntryHtml(e, ch) {
+  function _phistEntryHtml(e, newVal) {
     const dateStr    = _dtFmt.format(new Date(e.changed_at * 1000));
     const fieldLabel = FIELD_LABELS[e.field] || e.field;
 
     if (e.field === 'avatar') {
-      const chId   = esc(ch ? ch.channel_id : phistChId || '');
+      const chId   = esc(modalCreator ? modalCreator.channel_id : phistChId || '');
       const oldSrc = `${API}/channels/${chId}/avatar-history/${encodeURIComponent(e.old_value)}`;
+      const newSrc = newVal === '__current__'
+        ? `${API}/channels/${chId}/avatar?t=${e.changed_at}`
+        : `${API}/channels/${chId}/avatar-history/${encodeURIComponent(newVal)}`;
       const img    = (src, label) =>
         `<div class="phist-avatar-col">
           <span class="phist-side-label">${label}</span>
           <img class="phist-avatar-lg" src="${src}" alt="${label}"
-               onerror="this.style.visibility='hidden'"
+               onerror="this.style.visibility='hidden';this.style.cursor='default';this.onclick=null"
                onclick="openImgModalUrl('${src}')">
         </div>`;
       return `<div class="phist-entry">
@@ -1197,20 +1423,21 @@ function initChannelApp(cfg) {
         <div class="phist-avatar-diff">
           ${img(oldSrc, 'Old')}
           <div class="phist-arrow">→</div>
-          ${img(`${API}/channels/${chId}/avatar`, 'Current')}
+          ${img(newSrc, 'New')}
         </div>
       </div>`;
     }
 
+    const isStatusField = e.field === 'account_status' || e.field === 'privacy_status';
     const valHtml = v => v
-      ? `<div class="phist-value">${esc(v)}</div>`
+      ? `<div class="phist-value">${esc(isStatusField ? (_PHIST_STATUS_LABELS[v] || v) : v)}</div>`
       : `<div class="phist-value empty">(empty)</div>`;
     return `<div class="phist-entry">
       <div class="phist-entry-hdr"><strong>${esc(fieldLabel)}</strong> <span class="phist-date">· Changed ${dateStr}</span></div>
       <div class="phist-diff">
         <div class="phist-side"><div class="phist-side-hdr"><span class="phist-side-label">Old</span></div>${valHtml(e.old_value)}</div>
         <div class="phist-arrow">→</div>
-        <div class="phist-side"><div class="phist-side-hdr"><span class="phist-side-label">New</span></div>${valHtml(null)}</div>
+        <div class="phist-side"><div class="phist-side-hdr"><span class="phist-side-label">New</span></div>${valHtml(newVal)}</div>
       </div>
     </div>`;
   }
@@ -1236,28 +1463,40 @@ function initChannelApp(cfg) {
     search = '';
     _el('TvCreators').classList.toggle('active', view === 'creators');
     _el('TvLog').classList.toggle('active', view === 'log');
+    EXTRA_VIEWS.forEach(v => _el(`Tv_${v.key}`)?.classList.toggle('active', view === v.key));
     const grid   = _el('Grid');
     const logPnl = _el('LogPanel');
     const ctrl   = _el('Controls');
     if (grid)   grid.style.display   = view === 'creators' ? '' : 'none';
     if (logPnl) logPnl.style.display = view === 'log'      ? '' : 'none';
     if (ctrl)   ctrl.style.display   = view === 'creators' ? '' : 'none';
+    EXTRA_VIEWS.forEach(v => {
+      const g = _el(`Grid_${v.key}`);
+      const c = _el(`Controls_${v.key}`);
+      if (g) g.style.display = view === v.key ? '' : 'none';
+      if (c) c.style.display = view === v.key ? 'flex' : 'none';
+    });
     if (view === 'log') {
       const body = _el('LogBody');
       if (body) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
     }
     if (view === 'creators') renderCreators();
+    const extra = EXTRA_VIEWS.find(v => v.key === view);
+    if (extra) extra.show(search);
     _placeGlider(_el('TvCreators').closest('.filter-pills'));
+    const activeCtrl = extra ? _el(`Controls_${extra.key}`) : ctrl;
+    if (activeCtrl) activeCtrl.querySelectorAll('.filter-pills').forEach(_placeGlider);
   });
 
   // ── Keyboard handler (Escape) ─────────────────────────────────────────────
 
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    // Overlay modals (carousel, image, video) sit on top of the creator modal
-    // and close themselves via their own handler; don't close both at once.
-    for (const id of ['carouselModal', 'imgModal', 'vidModal']) {
-      if (document.getElementById(id)?.style.display !== 'none') return;
+    // Overlay modals (carousel, image, video, sound, recent log, settings) sit
+    // on top of the creator modal and close themselves via their own handler;
+    // don't close both at once.
+    for (const id of ['carouselModal', 'imgModal', 'vidModal', 'soundModalBackdrop', 'recentLogBackdrop', 'settingsBackdrop']) {
+      if (document.getElementById(id) && document.getElementById(id).style.display !== 'none') return;
     }
     if (_el('ModalBackdrop')?.style.display !== 'none') {
       window[`${P}CloseModal`]();
@@ -1278,4 +1517,26 @@ function initChannelApp(cfg) {
   setInterval(loadStats,    60000);
   setInterval(loadRecent,   30000);
   setInterval(loadQueue,     3000);
+
+  // App handle for platform extras (e.g. the TikTok sounds catalog and
+  // untracked-user modal) that need to drive the engine-generated UI.
+  return {
+    prefix: P,
+    api:    API,
+    el:     _el,
+    getCreators:       () => creators,
+    loadCreators,
+    renderCreators,
+    updateRunStates,
+    addToasts,
+    openModal:         id => window[`${P}OpenModal`](id),
+    closeModal:        () => window[`${P}CloseModal`](),
+    openModalRaw:      _openModalRaw,
+    renderModalHeader: _renderModalHeader,
+    loadModalVideos:   _loadModalVideos,
+    getModalCreator:   () => modalCreator,
+    setModalCreator:   ch => { modalCreator = ch; modalCreatorId = ch.channel_id; },
+    getTrackingView:   () => trackingView,
+    getSearch:         () => search,
+  };
 }

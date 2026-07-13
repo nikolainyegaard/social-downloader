@@ -23,6 +23,12 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - TikTok detects accounts that have blocked the cookies account without revealing it in the profile relation: a profile reporting videos while both video sources return none is flagged Blocked, surfaced in the UI, and skipped until it recovers; a profile confirming zero videos is treated as a genuinely empty account and deletion tracking still runs
 
 ### Changed
+- The TikTok frontend now renders from the shared platform engine: the standalone TikTok implementation collapsed into a config over the engine plus TikTok-only extras (sounds catalog and sound modal, sound loop panel, stats backfill, jobs, diagnostics, migration); UI fixes now land once for all four apps
+- TikTok-only UI features became engine features that appear on any platform whose data supplies them: relation and privacy pills, banned and blocked card styling, private-account lock icon, Priority badge on starred creators, pending re-scan notice on cards, session completed/total counts in the loop meta line, verified badge, join date, ban countdown, bio link, follower/following counts, old handles in search and display, and a next-check line in the detail modal
+- Every platform's log console now appends new lines incrementally using the server's log sequence counter instead of rebuilding the console on each update; the log clear position survives reloads on all platforms the same way
+- The profile history panel on every platform now shows old to new value diffs (the newest entry diffs against the current profile) with readable labels for status changes, and toggles closed when the profile updates counter is clicked again
+- Recent panel entries open smarter on all platforms: a single-item saved or deleted group jumps straight to that item highlighted in the creator modal, grouped deletions show a count, and the catalog sort menu gained Last checked and Last saved
+- Single-photo posts show the picture-frame glyph and open the image viewer directly on every platform; only true carousels get the grid glyph and the carousel
 - Header cookies pill is now platform-aware: it reflects the authentication state of the active platform tab (TikTok cookies, Instagram session, Twitter cookies), hides on YouTube, and opens the matching Settings section when clicked
 - Instagram and Twitter loops now use the TikTok-style session scheduler: check sessions are spread randomly across each 24-hour window, and each session only processes creators whose per-creator interval has come due (starred 6h, active 24h, inactive 72h by default; configurable per platform in Settings)
 - Instagram and Twitter sessions shuffle the due list and add random gaps between creators instead of hammering profiles back to back
@@ -50,6 +56,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel takes the full row; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
+- The All Deleted history modal on Twitter, Instagram, and YouTube crashed on open; the endpoint returns grouped entries but the shared modal had no grouped renderer
+- The shared frontend engine script is now served with a content-hashed URL like the other assets, so browsers pick up engine changes after a deploy instead of running stale cached code
+- Pressing Escape with the settings modal or a history modal open above a creator detail modal no longer closes both at once; overlay keyboard handling now lives in one global handler
 - Sorting TikTok users by follower count works again; the sort dropdown still submitted the pre-migration field name, so every user compared equal and the order never changed
 - Instagram and Twitter databases are now included in the nightly backup rotation; previously only TikTok and YouTube were backed up
 - Twitter and Instagram avatars are now cached and shown on creator cards; the avatar cache only supported TikTok and YouTube, so Twitter profile fetches silently dropped the profile picture

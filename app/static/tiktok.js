@@ -1,38 +1,243 @@
-// ── State ────────────────────────────────────────────────────────────────────
-
-let users         = [];
-let currentUser   = null;
-let isRunning     = false;
-let _sleepUntil   = null;   // Unix timestamp (ms) when current sleep ends; null = no sleep
-let _sleepNext    = null;   // Label for what runs after the sleep
-let _nextUserRun  = null;   // ISO string of next scheduled user session
-let _nextSoundRun = null;   // ISO string of next scheduled sound loop
-let _logSeq           = 0;    // log_seq from last server response (monotonic, never resets)
-let _logClearSeq      = 0;    // lines before this seq were cleared; don't re-render them
-let _logClearRestored = false;
-const addToasts   = _makeAddToasts('/api/tiktok', () => loadUsers());
-let runQueue      = [];   // channel_ids queued for manual run
-let runCurrent    = null; // channel_id currently being run manually
-let pendingRescans = {};  // {channel_id: fires_at_unix_secs} for large-spike midpoint re-scans
-let userSort      = { field: 'username', dir: 'asc' };
-// Default filters: hide banned, blocked, and inactive; leave Starred off
-const _defaultUserFilter  = () => ({ priv: new Set(['public', 'private']), stat: new Set(['active']), star: new Set() });
-const _defaultSoundFilter = () => ({ stat: new Set(['active']), star: new Set() });
-let userFilter    = _defaultUserFilter();
+// TikTok app: config over the shared channel engine (channels.js) plus
+// TikTok-only extras: the sounds catalog and sound detail modal, the
+// untracked-user modal flow for sound-discovered authors, the sound loop
+// panel, stats backfill, cookies, jobs, diagnostics, and DB migration wiring.
 
 // ── Cookie management ─────────────────────────────────────────────────────────
-
-// Shared panel logic lives in common.js (_cookiesRender and friends).
+// The static settings markup references these by name (see index.html).
 
 function renderCookies(info)        { _cookiesRender('tiktok', 'cookie', info); }
 async function uploadCookies(input) { return _cookiesUpload('tiktok', 'cookie', input); }
 async function deleteCookies()      { return _cookiesDelete('tiktok', 'cookie'); }
 async function loadCookies()        { return _cookiesLoad('tiktok', 'cookie'); }
 
-// ── Statistics panel ─────────────────────────────────────────────────────────
+// ── Sounds state ──────────────────────────────────────────────────────────────
 
-function renderStats(s) {
-  _renderStatGrid('statsGrid', [
+let sounds          = [];
+let soundRunCurrent = null;
+let soundRunQueue   = [];
+const _defaultSoundFilter = () => ({ stat: new Set(['active']), star: new Set() });
+let soundFilter   = _defaultSoundFilter();
+let soundSort     = { field: 'label', dir: 'asc' };
+let _soundSearch  = '';
+
+const _SOUND_SORT_DIR_LABELS = {
+  label:       { asc: 'A → Z',        desc: 'Z → A'        },
+  video_count: { asc: 'Low → High',   desc: 'High → Low'   },
+  added_at:    { asc: 'Oldest first', desc: 'Newest first' },
+};
+
+// ── Engine config pieces ──────────────────────────────────────────────────────
+
+const _TT_SOUND_CONTROLS_HTML = `
+  <div class="filter-row">
+    <span class="filter-row-label">Tracking</span>
+    <div class="filter-pills multi">
+      <button class="filter-pill active" id="sfStatActive"   onclick="setSoundFilter('stat','active')">Active</button>
+      <button class="filter-pill" id="sfStatInactive" onclick="setSoundFilter('stat','inactive')">Inactive</button>
+    </div>
+  </div>
+  <div class="filter-row">
+    <span class="filter-row-label">Starred</span>
+    <div class="filter-pills multi">
+      <button class="filter-pill" id="sfStarStarred" onclick="setSoundFilter('star','starred')">Starred</button>
+    </div>
+  </div>
+  <div class="filter-row">
+    <span class="filter-row-label">Sort</span>
+    <div class="sort-controls">
+      <select class="sort-select" id="soundSortField" onchange="setSoundSortField(this.value)">
+        <option value="label">Label</option>
+        <option value="video_count">Saved videos</option>
+        <option value="added_at">Date added</option>
+      </select>
+      <button class="sort-dir-btn" id="soundSortDirBtn" onclick="toggleSoundSortDir()">A → Z</button>
+      <button class="sort-dir-btn" onclick="resetSoundFilters()" title="Reset all filters and sort to default">Reset</button>
+    </div>
+  </div>`;
+
+const _TT_SOUND_LOOP_HTML = `
+  <div style="border-top:1px solid var(--border);margin:0 -16px"></div>
+  <div class="loop-block">
+    <div class="loop-block-header">
+      <span class="loop-section-label">Sound Loop</span>
+      <span id="soundLoopNext" class="loop-next"></span>
+    </div>
+    <div id="soundLoopMeta" class="loop-meta">Never run</div>
+    <div id="soundLoopSessions" class="loop-sessions"></div>
+    <div class="loop-actions">
+      <button class="btn-run btn-trigger" id="triggerSoundBtn" onclick="triggerSoundLoop()">Run Now</button>
+      <button class="btn-danger btn-trigger" id="stopSoundBtn" onclick="stopSoundLoop()" disabled>Stop</button>
+    </div>
+  </div>`;
+
+// Numeric IDs and music/sound URLs go to the sound tracker, everything else
+// is treated as a username or profile URL
+function _isSoundInput(val) {
+  if (/\/music\/|\/sound\//.test(val)) return true;
+  if (/^\d+$/.test(val.trim())) return true;
+  return false;
+}
+
+async function _ttAddHandler(val, addToasts) {
+  if (_isSoundInput(val)) {
+    const t = showToast('Adding sound…', { spinner: true, duration: 0 });
+    const { ok, data } = await apiJSON('/api/tiktok/sounds', {
+      method: 'POST',
+      body: JSON.stringify({ sound_id: val, label: null }),
+    });
+    if (ok) {
+      t.update(`Sound ${data.sound_id} added.`, { type: 'success' });
+      loadSounds();
+    } else {
+      t.update(data.error || 'Could not add sound.', { type: 'error', duration: 8000 });
+    }
+    return true;
+  }
+
+  const urlMatch = val.match(/tiktok\.com\/@([a-zA-Z0-9_.]+)/);
+  const name = urlMatch ? urlMatch[1] : val.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
+  if (!name) { showToast('Invalid username.', { type: 'error' }); return true; }
+
+  const { ok, data } = await apiJSON('/api/tiktok/channels', {
+    method: 'POST',
+    body: JSON.stringify({ handle: name }),
+  });
+  if (ok) addToasts.start(data.handle || name);
+  else showToast(data.error || 'Could not add user.', { type: 'error' });
+  return true;
+}
+
+// Videos download as mp4, photo posts as a zip of all images
+function _ttVideoActionBtns(v) {
+  const id = esc(v.video_id);
+  if (v.type === 'video' && v.file_path) {
+    return `<a class="play-btn" href="/api/tiktok/videos/${id}/file" download="${id}.mp4"
+             onclick="event.stopPropagation()" title="Download video">${_dlIcon}</a>`;
+  } else if (v.type === 'photo' && v.file_path) {
+    return `<a class="play-btn" href="/api/tiktok/videos/${id}/photos/zip" download="${id}_photos.zip"
+             onclick="event.stopPropagation()" title="Download all photos as zip">${_dlIcon}</a>`;
+  }
+  return '';
+}
+
+// Sound loop card, backfill counters, and sound run queue, rendered from the
+// TikTok status extras on every engine status poll
+function _ttOnStatus(state) {
+  soundRunQueue   = state.sound_run_queue   || [];
+  soundRunCurrent = state.sound_run_current || null;
+
+  const el = id => document.getElementById(id);
+
+  const sMeta = el('soundLoopMeta');
+  if (sMeta) {
+    const parts = [];
+    if (state.sound_loop_last_start) parts.push(`Last: ${fmt.rel(state.sound_loop_last_start)}`);
+    else parts.push('Never run');
+    if (state.sound_loop_last_new_videos != null) parts.push(`${state.sound_loop_last_new_videos} new`);
+    if (state.sound_loop_last_duration_secs != null) parts.push(fmt.dur(state.sound_loop_last_duration_secs));
+    sMeta.textContent = parts.join(' · ');
+  }
+  const sNext = el('soundLoopNext');
+  if (sNext) sNext.textContent = state.sound_loop_running
+    ? 'Running…'
+    : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');
+
+  const sSessions = el('soundLoopSessions');
+  if (sSessions) {
+    const nextIso    = state.sound_loop_next;
+    const intervalMs = (state.sound_loop_interval_minutes || 60) * 60 * 1000;
+    if (nextIso && intervalMs) {
+      const nowMs  = Date.now();
+      const nextMs = new Date(nextIso).getTime();
+      const times  = [nextMs, nextMs + intervalMs, nextMs + 2 * intervalMs, nextMs + 3 * intervalMs];
+      let   foundNext = false;
+      sSessions.innerHTML = times.map(ts => {
+        const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        let cls = 'loop-session-pill';
+        if (state.sound_loop_running && !foundNext && ts >= nowMs) {
+          foundNext = true; cls += ' running';
+        } else if (ts < nowMs) {
+          cls += ' done';
+        } else if (!foundNext) {
+          foundNext = true; cls += ' next';
+        }
+        return `<span class="${cls}">${time}</span>`;
+      }).join('');
+    } else {
+      sSessions.innerHTML = '';
+    }
+  }
+  const sBtn     = el('triggerSoundBtn');
+  const sStopBtn = el('stopSoundBtn');
+  if (sBtn)     sBtn.disabled     = state.sound_loop_running;
+  if (sStopBtn) sStopBtn.disabled = !state.sound_loop_running;
+
+  const missing = el('missingStatsCount');
+  if (missing) {
+    const n = state.missing_stats_count ?? 0;
+    missing.textContent = n > 0 ? `${n.toLocaleString()} missing` : '';
+  }
+  const failed = el('statsFailedCount');
+  if (failed) {
+    const f = state.stats_failed_count ?? 0;
+    failed.textContent   = f > 0 ? `${f.toLocaleString()} unavailable` : '';
+    failed.style.display = f > 0 ? '' : 'none';
+    const retryBtn = el('retryFailedBtn');
+    if (retryBtn) retryBtn.style.display = f > 0 ? '' : 'none';
+  }
+
+  // Header backfill pill, visible only when there's work to do
+  const bfPill  = el('hdrBackfillPill');
+  const bfCount = el('hdrBackfillCount');
+  if (bfPill && bfCount) {
+    const n = state.missing_stats_count ?? 0;
+    bfCount.textContent  = n.toLocaleString();
+    bfPill.style.display = n > 0 ? '' : 'none';
+  }
+
+  _patchSoundRunStates();
+}
+
+function _patchSoundRunStates() {
+  document.querySelectorAll('.user-card[data-soundid]').forEach(card => {
+    const id      = card.dataset.soundid;
+    const inQueue = soundRunQueue.includes(id);
+    const isCur   = soundRunCurrent === id;
+    const btn     = card.querySelector('.btn-run');
+    if (!btn) return;
+    btn.textContent = isCur ? 'Running…' : inQueue ? 'Queued' : 'Run';
+    btn.disabled    = inQueue || isCur;
+  });
+}
+
+// ── App init ──────────────────────────────────────────────────────────────────
+
+const tt = initChannelApp({
+  id:                'tiktok',
+  prefix:            'tt',
+  api:               '/api/tiktok',
+  creatorNoun:       'user',
+  creatorNounPlural: 'users',
+  itemNoun:          'video',
+  itemNounPlural:    'videos',
+  subLabelCard:      'followers',
+  subLabelModal:     'followers',
+  subLabelSort:      'Followers',
+  uploadDateLabel:   'Uploaded',
+  titleColLabel:     'Description',
+  loopLabel:         'User Loop',
+  loopsTitle:        'Loops',
+  addPlaceholder:    '@username, sound ID, or URL',
+  addAriaLabel:      'TikTok username, sound ID, or URL',
+  profileUrl:        h => `https://www.tiktok.com/@${h}`,
+  fieldLabels: {
+    username: 'Handle', handle: 'Handle', display_name: 'Display name',
+    bio: 'Bio', description: 'Bio', bio_link: 'Bio link', avatar: 'Avatar',
+    account_status: 'Account status', privacy_status: 'Privacy',
+  },
+  hasBans: true,
+  statsRows: s => [
     { label: 'Tracked users', value: (s.channel_count || 0).toLocaleString() },
     { label: 'Saved videos',  value: (s.saved_count   || 0).toLocaleString() },
     { label: 'Video posts',   value: (s.video_count   || 0).toLocaleString() },
@@ -41,210 +246,519 @@ function renderStats(s) {
     { label: 'Latest saved',  value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
     { label: 'Total views',   value: _fmtLarge(s.total_views || 0) },
     { label: 'Storage',       value: _fmtBytes(s.media_size_bytes || 0) },
-  ]);
+  ],
+  extraFilterGroups: [{
+    key: 'priv', label: 'Privacy',
+    options: [
+      { key: 'public',  label: 'Public'  },
+      { key: 'private', label: 'Private' },
+      { key: 'blocked', label: 'Blocked' },
+      { key: 'banned',  label: 'Banned'  },
+    ],
+    defaults: ['public', 'private'],
+    test: (u, set) => {
+      const key = u.account_status === 'banned' ? 'banned'
+        : u.privacy_status === 'blocked' ? 'blocked'
+        : ['private_accessible', 'private_blocked'].includes(u.privacy_status) ? 'private'
+        : 'public';  // includes not-yet-checked users so new adds show under the default filter
+      return set.has(key);
+    },
+  }],
+  extraViews: [{
+    key: 'sounds', label: 'Sounds',
+    emptyLabel: 'No sounds tracked yet.',
+    controlsHtml: _TT_SOUND_CONTROLS_HTML,
+    show: q => { _soundSearch = q || ''; renderSounds(); },
+  }],
+  extraLoopHtml:     _TT_SOUND_LOOP_HTML,
+  addHandler:        _ttAddHandler,
+  videoActionBtnsFn: _ttVideoActionBtns,
+  recentFallback:    item => item.sound_id
+    ? `openSoundModalAndHighlight('${esc(item.sound_id)}','${esc(item.video_id)}')`
+    : '',
+  statusActive:      state => state.sound_loop_running || !!state.sound_run_current,
+  nextRunCandidates: state => [
+    state.loop_next       ? { iso: state.loop_next,       label: 'user loop'  } : null,
+    state.sound_loop_next ? { iso: state.sound_loop_next, label: 'sound loop' } : null,
+  ],
+  onStatus:          _ttOnStatus,
+});
+
+// ── Sound loop triggers ───────────────────────────────────────────────────────
+
+function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/tiktok/trigger/sounds', 'Could not trigger sound loop'); }
+
+async function stopSoundLoop() {
+  const btn = document.getElementById('stopSoundBtn');
+  if (btn) btn.disabled = true;
+  const { ok } = await apiJSON('/api/tiktok/stop/sounds', { method: 'POST' });
+  if (!ok) {
+    if (btn) btn.disabled = false;
+    showToast('Could not stop sound loop.', { type: 'error' });
+  }
 }
 
-async function loadStats() {
-  const { ok, data } = await apiJSON('/api/tiktok/stats');
-  if (ok) renderStats(data);
-}
+// ── Sounds catalog ────────────────────────────────────────────────────────────
 
-// ── Recent panel ──────────────────────────────────────────────────────────────
-
-const _FIELD_LABELS = {
-  username: 'Handle', handle: 'Handle', display_name: 'Name', bio: 'Bio', description: 'Bio',
-  bio_link: 'Bio link', avatar: 'Avatar',
-  account_status: 'Status', privacy_status: 'Privacy',
-};
-
-
-function renderRecent(data) {
-  const leftEl  = document.getElementById('recentLeft');
-  const rightEl = document.getElementById('recentRight');
-  if (!leftEl || !rightEl) return;
-  const now = new Date();
-
-  // ── Left column ───────────────────────────────────────────────────────────
-
-  let left = '';
-
-  // Recently deleted
-  left += `<div class="recent-section">`;
-  left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('deletions')" title="View all deleted videos">Recently deleted</div>`;
-  if (data.deletions.length) {
-    left += data.deletions.map(d => {
-      const onclick = d.enabled !== 0
-        ? (d.count === 1
-            ? `openUserModalAndHighlight('${esc(d.channel_id)}','${esc(d.video_id)}')`
-            : `openUserModal('${esc(d.channel_id)}')`)
-        : d.sound_id ? `openSoundModalAndHighlight('${esc(d.sound_id)}','${esc(d.video_id)}')` : '';
-      const nameStyle = d.enabled === 0 ? 'style="color:var(--text-dim)"' : d.starred ? 'style="color:var(--yellow)"' : d.account_status === 'banned' ? 'style="color:var(--red)"' : '';
-      return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.handle)}">
-        <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
-        <span class="recent-name" ${nameStyle}>@${esc(d.handle)}</span>
-        <span class="recent-detail">${d.count}x</span>
-      </div>`;
-    }).join('');
-  } else {
-    left += `<div class="recent-empty">No deleted videos yet</div>`;
-  }
-  left += `</div>`;
-
-  // Recently changed profile
-  left += `<div class="recent-section">`;
-  left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('profile-changes')" title="View all profile changes">Recently changed profile</div>`;
-  if (data.profile_changes.length) {
-    left += data.profile_changes.map(p =>
-      `<div class="recent-entry" onclick="openUserModalWithHistory('${esc(p.channel_id)}','${esc(p.field)}')" title="Open @${esc(p.handle)} · ${esc(_FIELD_LABELS[p.field] || p.field)} history">
-        <span class="recent-date">${_recentDate(p.changed_at, now)}</span>
-        <span class="recent-name" ${p.starred ? 'style="color:var(--yellow)"' : p.account_status === 'banned' ? 'style="color:var(--red)"' : ''}>@${esc(p.handle)}</span>
-        <span class="recent-detail">${esc(_FIELD_LABELS[p.field] || p.field)}</span>
-      </div>`
-    ).join('');
-  } else {
-    left += `<div class="recent-empty">No profile changes recorded yet</div>`;
-  }
-  left += `</div>`;
-
-  // Recently banned
-  left += `<div class="recent-section">`;
-  left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('bans')" title="View all banned accounts">Recently banned</div>`;
-  if (data.bans && data.bans.length) {
-    const b = data.bans[0];
-    left += `<div class="recent-entry" onclick="openUserModal('${esc(b.channel_id)}')" title="Open @${esc(b.handle)}">
-      <span class="recent-date">${_recentDate(b.banned_at, now)}</span>
-      <span class="recent-name" ${b.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(b.handle)}</span>
-      <span class="recent-detail" style="color:var(--red)">Banned</span>
-    </div>`;
-  } else {
-    left += `<div class="recent-empty">No banned accounts</div>`;
-  }
-  left += `</div>`;
-
-  leftEl.innerHTML = left;
-
-  // ── Right column: Recently saved ──────────────────────────────────────────
-
-  let right = '';
-  right += `<div class="recent-section">`;
-  right += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('saved')" title="View all saved videos">Recently saved</div>`;
-  if (data.saved && data.saved.length) {
-    right += data.saved.map(g => {
-      const onclick = g.enabled !== 0
-        ? (g.count === 1
-            ? `openUserModalAndHighlight('${esc(g.channel_id)}','${esc(g.video_id)}','all','download_date','desc')`
-            : `openUserModal('${esc(g.channel_id)}')`)
-        : g.sound_id ? `openSoundModalAndHighlight('${esc(g.sound_id)}','${esc(g.video_id)}')` : '';
-      const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : g.account_status === 'banned' ? 'style="color:var(--red)"' : '';
-      return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(g.handle)}">
-        <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-        <span class="recent-name" ${nameStyle}>@${esc(g.handle)}</span>
-        <span class="recent-detail">${g.count}x</span>
-      </div>`;
-    }).join('');
-  } else {
-    right += `<div class="recent-empty">No videos saved yet</div>`;
-  }
-  right += `</div>`;
-
-  rightEl.innerHTML = right;
-}
-
-async function loadRecent() {
-  const { ok, data } = await apiJSON('/api/tiktok/recent');
-  if (ok) renderRecent(data);
-}
-
-// ── Recent log modal ──────────────────────────────────────────────────────────
-
-const _RECENT_LOG_TITLES = {
-  'deletions':       'All Deleted Videos',
-  'profile-changes': 'All Profile Changes',
-  'bans':            'All Banned Accounts',
-  'saved':           'All Saved Videos',
-};
-
-function _ttRenderSavedRow(g, now) {
-  const row = document.createElement('div');
-  row.className = 'recent-entry';
-  row.title = `Open @${g.handle}`;
-  if (g.enabled !== 0) {
-    row.onclick = g.count === 1
-      ? () => openUserModalAndHighlight(g.channel_id, g.video_id, 'all', 'download_date', 'desc')
-      : () => openUserModal(g.channel_id);
-  } else if (g.sound_id) {
-    row.onclick = () => openSoundModalAndHighlight(g.sound_id, g.video_id);
-  }
-  const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : g.account_status === 'banned' ? 'style="color:var(--red)"' : '';
-  row.innerHTML = `
-    <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-    <span class="recent-name" ${nameStyle}>@${esc(g.handle)}</span>
-    <span class="recent-detail">${g.count}x</span>`;
-  return row;
-}
-
-function _ttRenderDeletedGroupRow(g, now) {
-  const row = document.createElement('div');
-  row.className = 'recent-entry';
-  row.title = `Open @${g.handle}`;
-  if (g.enabled !== 0) {
-    row.onclick = g.count === 1
-      ? () => openUserModalAndHighlight(g.channel_id, g.video_id)
-      : () => openUserModal(g.channel_id);
-  } else if (g.sound_id) {
-    row.onclick = () => openSoundModalAndHighlight(g.sound_id, g.video_id);
-  }
-  const nameStyle = g.enabled === 0 ? 'style="color:var(--text-dim)"' : g.starred ? 'style="color:var(--yellow)"' : g.account_status === 'banned' ? 'style="color:var(--red)"' : '';
-  row.innerHTML = `
-    <span class="recent-date">${_recentDate(g.deleted_at, now)}</span>
-    <span class="recent-name" ${nameStyle}>@${esc(g.handle)}</span>
-    <span class="recent-detail">${g.count}x</span>`;
-  return row;
-}
-
-function _ttRenderOtherRow(item, type, now) {
-  const row = document.createElement('div');
-  row.className = 'recent-entry';
-  if (type === 'deletions') {
-    row.title = `Open @${item.handle}`;
-    if (item.enabled !== 0) {
-      row.onclick = () => openUserModalAndHighlight(item.channel_id, item.video_id);
-    } else if (item.sound_id) {
-      row.onclick = () => openSoundModalAndHighlight(item.sound_id, item.video_id);
-    }
-    const nameStyle = item.enabled === 0 ? 'style="color:var(--text-dim)"' : item.starred ? 'style="color:var(--yellow)"' : item.account_status === 'banned' ? 'style="color:var(--red)"' : '';
-    row.innerHTML = `
-      <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
-      <span class="recent-name" ${nameStyle}>@${esc(item.handle)}</span>
-      <span class="recent-detail">${esc(item.video_id)}</span>`;
-  } else if (type === 'profile-changes') {
-    const label = _FIELD_LABELS[item.field] || item.field;
-    row.title = `Open @${item.handle} · ${label} history`;
-    row.onclick = () => openUserModalWithHistory(item.channel_id, item.field);
-    row.innerHTML = `
-      <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
-      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : item.account_status === 'banned' ? 'style="color:var(--red)"' : ''}>@${esc(item.handle)}</span>
-      <span class="recent-detail">${esc(label)}</span>`;
-  } else {
-    row.title = `Open @${item.handle}`;
-    row.onclick = () => openUserModal(item.channel_id);
-    row.innerHTML = `
-      <span class="recent-date">${_recentDate(item.banned_at, now)}</span>
-      <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(item.handle)}</span>
-      <span class="recent-detail" style="color:var(--red)">Banned</span>`;
-  }
-  return row;
-}
-
-function openRecentLog(type) {
-  _openRecentLogModal(type, {
-    apiBase:        '/api/tiktok/recent',
-    titles:         _RECENT_LOG_TITLES,
-    groupKey:       'channel_id',
-    renderSaved:    _ttRenderSavedRow,
-    renderGrouped:  _ttRenderDeletedGroupRow,
-    renderOther:    _ttRenderOtherRow,
+function setSoundFilter(group, value) {
+  const set = soundFilter[group];
+  set.has(value) ? set.delete(value) : set.add(value);
+  const map = group === 'stat' ? SOUND_STAT_IDS : SOUND_STAR_IDS;
+  Object.entries(map).forEach(([v, id]) => {
+    document.getElementById(id)?.classList.toggle('active', set.has(v));
   });
+  renderSounds();
+}
+
+function setSoundSortField(field) {
+  soundSort.field = field;
+  soundSort.dir   = (field === 'label') ? 'asc' : 'desc';
+  _updateSoundSortBtn();
+  renderSounds();
+}
+
+function toggleSoundSortDir() {
+  soundSort.dir = soundSort.dir === 'asc' ? 'desc' : 'asc';
+  _updateSoundSortBtn();
+  renderSounds();
+}
+
+function _updateSoundSortBtn() {
+  const btn = document.getElementById('soundSortDirBtn');
+  if (btn) btn.textContent = _SOUND_SORT_DIR_LABELS[soundSort.field]?.[soundSort.dir] ?? soundSort.dir;
+}
+
+function resetSoundFilters() {
+  soundFilter  = _defaultSoundFilter();
+  soundSort    = { field: 'label', dir: 'asc' };
+  _soundSearch = '';
+  const searchEl = tt.el('Search');
+  if (searchEl) searchEl.value = '';
+  const sel = document.getElementById('soundSortField');
+  if (sel) sel.value = 'label';
+  _updateSoundSortBtn();
+  Object.entries(SOUND_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', soundFilter.stat.has(v)));
+  Object.entries(SOUND_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', soundFilter.star.has(v)));
+  renderSounds();
+}
+
+function renderSounds() {
+  const grid = tt.el('Grid_sounds');
+  if (!grid) return;
+  const q = _soundSearch.toLowerCase();
+  let filtered = sounds;
+  if (soundFilter.stat.size)           filtered = filtered.filter(s => soundFilter.stat.has(s.tracking_enabled === 0 ? 'inactive' : 'active'));
+  if (soundFilter.star.has('starred')) filtered = filtered.filter(s => s.starred);
+  if (q) filtered = filtered.filter(s => `${s.label || ''} ${s.sound_id}`.toLowerCase().includes(q));
+  const isFiltered = soundFilter.stat.size > 0 || soundFilter.star.size > 0 || !!_soundSearch;
+  if (tt.getTrackingView() === 'sounds') {
+    const countEl = tt.el('Count');
+    if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${sounds.length}` : sounds.length;
+  }
+  const { field, dir } = soundSort;
+  filtered = [...filtered].sort((a, b) => {
+    const av = field === 'label' ? (a.label || a.sound_id) : (a[field] ?? 0);
+    const bv = field === 'label' ? (b.label || b.sound_id) : (b[field] ?? 0);
+    return _cmp(av, bv, dir);
+  });
+  if (!sounds.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds tracked yet.</div>';
+    return;
+  }
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds match this search.</div>' + _ghostCards(9);
+    return;
+  }
+  grid.innerHTML = filtered.map(s => {
+    const label      = s.label || s.sound_id;
+    const ttUrl      = `https://www.tiktok.com/music/-${s.sound_id}`;
+    const checked    = _fmtLastChecked(s.last_checked);
+    const saved      = s.last_saved ? ` · Last saved ${fmt.rel(new Date(s.last_saved * 1000).toISOString())}` : '';
+    const inQueue    = soundRunQueue.includes(s.sound_id);
+    const isCurrent  = soundRunCurrent === s.sound_id;
+    const runLabel   = isCurrent ? 'Running…' : inQueue ? 'Queued' : 'Run';
+    const runDis     = (inQueue || isCurrent) ? 'disabled' : '';
+    const { cls: sTrackingCls, label: sTrackingLabel } = _trackingBadge(s.tracking_enabled);
+    const isInactive = s.tracking_enabled === 0;
+    return `
+      <div class="user-card${isInactive ? ' user-card-inactive' : ''}" data-soundid="${esc(s.sound_id)}" onclick="if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')" role="button" tabindex="0">
+        <div class="user-card-top">
+          <div class="sound-icon-wrap"><span class="sound-icon-letter">♫</span></div>
+          <div class="user-identity">
+            <div class="user-display-name">${esc(label)}</div>
+            <div class="user-handle">
+              <a href="${esc(ttUrl)}" target="_blank" rel="noopener"
+                 onclick="event.stopPropagation()" class="tt-link"
+              >${esc(s.sound_id)}</a>
+            </div>
+          </div>
+          <div class="user-badges">
+            <span class="account-status ${sTrackingCls}">${sTrackingLabel}</span>
+          </div>
+        </div>
+        <div class="user-bio-area"></div>
+        <div class="user-stats">
+          <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${s.video_count || 0}</span></span>
+          ${s.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${s.video_deleted}</span></span>` : ''}
+          ${s.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${s.video_undeleted}</span></span>` : ''}
+        </div>
+        <div class="user-card-footer">
+          <span class="user-checked">${checked}${saved}</span>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <label class="tracking-toggle" title="${isInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}" onclick="event.stopPropagation()">
+              <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+            <button class="btn-star${s.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleSoundStar('${esc(s.sound_id)}')" title="${s.starred ? 'Unstar' : 'Star'}">${s.starred ? '★' : '☆'}</button>
+            <button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${runLabel}</button>
+            <button class="btn-danger" onclick="event.stopPropagation();removeSound('${esc(s.sound_id)}','${esc(label)}')">Remove</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('') + _ghostCards(Math.max(0, 9 - filtered.length));
+}
+
+async function loadSounds() {
+  const { ok, data } = await apiJSON('/api/tiktok/sounds');
+  if (ok) { sounds = data; renderSounds(); }
+}
+
+async function removeSound(soundId, label) {
+  if (!confirm(`Remove sound "${label}" (${soundId})?\n\nVideos already downloaded will not be deleted.`)) return;
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
+  if (!ok) { showToast(data.error || 'Failed to remove sound.', { type: 'error' }); return; }
+  if (_soundModalId === soundId) closeSoundModal();
+  loadSounds();
+}
+
+async function toggleSoundStar(soundId) {
+  const sound = sounds.find(s => s.sound_id === soundId);
+  if (!sound) return;
+  const newVal = !sound.starred;
+  sound.starred = newVal ? 1 : 0;
+  renderSounds();
+  await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/star`, {
+    method: 'PATCH',
+    body: JSON.stringify({ starred: newVal }),
+  });
+}
+
+async function runSound(soundId) {
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/run`, { method: 'POST' });
+  if (!ok) { showToast(data.error || 'Could not start sound run.', { type: 'error' }); return; }
+  soundRunQueue = [...soundRunQueue, soundId];
+  renderSounds();
+}
+
+async function setSoundTracking(soundId, enabled) {
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/tracking`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  });
+  if (!ok) { showToast(data.error || 'Failed to update tracking', { type: 'error' }); return; }
+  const s = sounds.find(s => s.sound_id === soundId);
+  if (s) s.tracking_enabled = enabled ? 1 : 0;
+  if (_soundModal && _soundModal.sound_id === soundId) {
+    _soundModal.tracking_enabled = enabled ? 1 : 0;
+    _renderSoundModalHeader(_soundModal);
+  }
+  renderSounds();
+}
+
+async function saveSoundComment(id, value) {
+  const ok = await _saveCreatorComment('/api/tiktok/sounds', id, value, sounds, 'sound_id');
+  if (ok && _soundModal && _soundModal.sound_id === id) _soundModal.comment = value.trim() || null;
+}
+
+async function editSoundLabel(soundId) {
+  const s = sounds.find(s => s.sound_id === soundId);
+  const newLabel = prompt('Edit label for this sound:', s?.label || '');
+  if (newLabel === null) return;
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ label: newLabel.trim() || null }),
+  });
+  if (!ok) { showToast(data.error || 'Failed to update label.', { type: 'error' }); return; }
+  await loadSounds();
+  if (_soundModalId === soundId) {
+    _soundModal = sounds.find(s => s.sound_id === soundId);
+    if (_soundModal) _renderSoundModalHeader(_soundModal);
+  }
+}
+
+// ── Sound detail modal ────────────────────────────────────────────────────────
+
+const SOUND_VCOLS = [
+  { field: null,             label: '' },
+  { field: null,             label: 'Description' },
+  { field: null,             label: 'Author' },
+  { field: 'status',         label: 'Status' },
+  { field: 'view_count',     label: 'Views' },
+  { field: 'upload_date',    label: 'Uploaded' },
+  { field: 'download_date',  label: 'Downloaded' },
+  { field: 'deleted_at',     label: 'Deleted' },
+  { field: null,             label: '' },
+];
+
+const _soundState = { videos:[], filter:new Set(), typeFilter:new Set(), search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false, view:'list' };
+
+function _soundThumbCell(v) {
+  const id    = esc(v.video_id);
+  const badge = v.type === 'video' ? _playBadge : v.type === 'photo' ? (v.multi ? _photoBadge : _imageBadge) : '';
+  const action = v.type === 'video'
+    ? `onclick="event.stopPropagation();ttOpenVidModal('${id}')" title="Play video" style="cursor:pointer"`
+    : v.type === 'photo'
+      ? `onclick="event.stopPropagation();ttOpenCarousel('${id}')" title="View photos" style="cursor:pointer"`
+      : 'style="cursor:default"';
+  return `<div style="position:relative;line-height:0;width:90px;flex-shrink:0">
+    <img class="video-thumb" src="/api/tiktok/videos/${id}/thumbnail" alt="" loading="lazy"
+         onerror="this.style.opacity='.15'"
+         ${action}>${badge}</div>`;
+}
+
+const _SOUND_MODAL_CFG = {
+  st: _soundState, listElId: 'soundModalVideoList', toolbarElId: 'soundModalToolbar',
+  cols: SOUND_VCOLS, colsCls: 'sound-vcols', pageSize: 50,
+  filterFn: 'setSoundModalFilter', typeFilterFn: 'setSoundModalTypeFilter',
+  sortFn: 'setSoundModalSort', toggleFn: 'toggleSoundModalToolbar', searchFn: 'onSoundModalSearch',
+  authorCol: v => {
+    const name = v.author_handle || v.channel_id || '?';
+    return v.author_enabled === 1
+      ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();ttOpenModal('${esc(v.channel_id)}')">@${esc(name)}</span>`
+      : `<span class="author-chip untracked" onclick="event.stopPropagation();closeSoundModal();openUntrackedUserModal('${esc(v.channel_id)}','${esc(name)}')">@${esc(name)}</span>`;
+  },
+  hasSearch: true, hasViewToggle: true, viewFn: 'setSoundModalView',
+  gridId: 'soundVideoGrid', hasPhistBtn: false,
+  thumbCellFn:  v => _soundThumbCell(v),
+  actionBtnsFn: v => _ttVideoActionBtns(v),
+  previewFn:    'ttOpenImgModal',
+  typeIconFn:   v => v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? (v.multi ? _vgridPhotoIcon : _vgridImageIcon) : '',
+  gridThumbSrc: v => `/api/tiktok/videos/${esc(v.video_id)}/thumbnail`,
+  gridCellOnclick: v => { if (v.type === 'video') ttOpenVidModal(v.video_id); else if (v.type === 'photo') ttOpenCarousel(v.video_id); },
+};
+
+let _soundModalId               = null;
+let _soundModal                 = null;
+let _soundModalPendingHighlight = null; // { videoId, filter? }
+
+function openSoundModal(soundId) {
+  const s = sounds.find(s => s.sound_id === soundId);
+  if (!s) return;
+  _soundModalId = soundId;
+  _soundModal   = s;
+  Object.assign(_soundState, {
+    videos: [], filter: new Set(), typeFilter: new Set(), search: '',
+    sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false, view: 'list',
+  });
+  if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
+
+  document.getElementById('soundModalBackdrop').style.display = 'flex';
+  _lockScroll();
+
+  _renderSoundModalHeader(s);
+  _mRenderToolbar(_SOUND_MODAL_CFG, []);
+  document.getElementById('soundModalVideoList').innerHTML =
+    '<div class="vlist-loading">Loading videos…</div>';
+
+  _loadSoundModalVideos(soundId);
+}
+
+function openSoundModalAndHighlight(soundId, videoId, filter) {
+  _soundModalPendingHighlight = { videoId, filter: filter && filter !== 'all' ? new Set([filter]) : null };
+  openSoundModal(soundId);
+}
+
+function closeSoundModal() {
+  document.getElementById('soundModalBackdrop').style.display = 'none';
+  _unlockScroll();
+  if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
+  _soundModalId      = null;
+  _soundModal        = null;
+  _soundState.videos = [];
+}
+
+function _renderSoundModalHeader(s) {
+  const label  = s.label || s.sound_id;
+  const ttUrl  = `https://www.tiktok.com/music/-${esc(s.sound_id)}`;
+  const checked = _fmtLastChecked(s.last_checked);
+  const { cls: sSoundTrackingCls, label: sSoundTrackingLbl } = _trackingBadge(s.tracking_enabled);
+  const sSoundInactive = s.tracking_enabled === 0;
+  document.getElementById('soundModalHeader').innerHTML = `
+    <div class="modal-avatar-wrap">
+      <div class="sound-icon-wrap" style="width:56px;height:56px">
+        <span class="sound-icon-letter" style="font-size:26px">♫</span>
+      </div>
+    </div>
+    <div class="modal-user-body">
+      <div class="modal-name-row">
+        <span class="modal-name">${esc(label)}</span>
+        <button class="btn-ghost" style="font-size:11px;padding:3px 8px;margin-left:4px"
+          onclick="editSoundLabel('${esc(s.sound_id)}')">Edit label</button>
+        <span class="account-status ${sSoundTrackingCls}">${sSoundTrackingLbl}</span>
+        <label class="tracking-toggle" title="${sSoundInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}">
+          <input type="checkbox" ${sSoundInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          <span class="toggle-label">Track videos</span>
+        </label>
+      </div>
+      <div class="modal-handle">
+        <a href="${ttUrl}" target="_blank" rel="noopener"
+           class="tt-link">${esc(s.sound_id)}</a>
+      </div>
+      <div class="modal-stats-row">
+        <span><strong>${s.video_count || 0}</strong> saved locally</span>
+        ${s.video_deleted   ? `<span style="color:var(--red)"><strong>${s.video_deleted}</strong> deleted</span>` : ''}
+        ${s.video_undeleted ? `<span style="color:var(--yellow)"><strong>${s.video_undeleted}</strong> restored</span>` : ''}
+        <span style="color:var(--muted)">${esc(checked)}</span>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
+        <textarea placeholder="Add a note about this sound…"
+          onblur="saveSoundComment('${esc(s.sound_id)}', this.value)"
+          style="flex:1;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
+                 background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
+                 color:var(--text);font-family:inherit;line-height:1.5"
+        >${esc(s.comment || '')}</textarea>
+      </div>
+    </div>
+  `;
+}
+
+function setSoundModalFilter(f)     { _mSetFilter(_SOUND_MODAL_CFG, f); }
+function setSoundModalTypeFilter(t) { _mSetTypeFilter(_SOUND_MODAL_CFG, t); }
+function toggleSoundModalToolbar()  { _mToggleToolbar(_SOUND_MODAL_CFG); }
+function setSoundModalSort(f)       { _mSetSort(_SOUND_MODAL_CFG, f); }
+
+function setSoundModalView(view) {
+  _soundState.view = view;
+  const toolbar = document.getElementById('soundModalToolbar');
+  toolbar.querySelectorAll('[data-view-key]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.viewKey === view);
+  });
+  toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
+  _mRenderList(_SOUND_MODAL_CFG);
+}
+
+function onSoundModalSearch(val) {
+  _soundState.search = val.trim();
+  _mRenderToolbar(_SOUND_MODAL_CFG, _soundState.videos);
+  _mRenderList(_SOUND_MODAL_CFG);
+}
+
+async function _loadSoundModalVideos(soundId) {
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/videos`);
+  if (!ok || _soundModalId !== soundId) return;
+  // Engine vocabulary: expose content_type/title under the names the renderers use
+  data.forEach(v => { v.type = v.content_type; v.description = v.title; });
+  _soundState.videos = data;
+  if (_soundModalPendingHighlight) {
+    const { videoId, filter } = _soundModalPendingHighlight;
+    _soundModalPendingHighlight = null;
+    if (filter) {
+      _soundState.filter = filter;
+      _soundState.sort   = { field: 'deleted_at', dir: 'desc' };
+      _mRenderColHdrs(_SOUND_MODAL_CFG);
+    }
+    _mRenderToolbar(_SOUND_MODAL_CFG, data);
+    _mRenderList(_SOUND_MODAL_CFG);
+    const row = document.querySelector(`[data-video-id="${CSS.escape(videoId)}"]`);
+    if (row) {
+      row.scrollIntoView({ block: 'center' });
+      row.classList.add('video-row-highlight');
+      row.addEventListener('mouseenter', () => row.classList.remove('video-row-highlight'), { once: true });
+    }
+  } else {
+    _mRenderToolbar(_SOUND_MODAL_CFG, data);
+    _mRenderList(_SOUND_MODAL_CFG);
+  }
+}
+
+// ── Untracked user modal (sound-discovered authors) ───────────────────────────
+
+function openUntrackedUserModal(tiktokId, username) {
+  tt.openModalRaw({ channel_id: tiktokId, handle: username, enabled: 0 },
+                  () => _renderUntrackedHeader(tiktokId, username));
+}
+
+function _renderUntrackedHeader(tiktokId, username) {
+  const hdr = tt.el('ModalHeader');
+  hdr.classList.add('modal-header-untracked');
+  hdr.innerHTML = `
+    <div class="modal-avatar-wrap">
+      <span class="avatar-letter">${esc((username || '?')[0])}</span>
+    </div>
+    <div class="modal-name-row">
+      <span class="modal-name">@${esc(username)}</span>
+    </div>
+    <div class="modal-user-meta">
+      <div class="modal-handle">@${esc(username)}</div>
+      <div class="modal-id-line">id:${esc(tiktokId)}</div>
+      <div class="modal-stats-row">
+        <span><strong>-</strong> followers</span>
+        <span><strong>-</strong> following</span>
+        <span><strong>-</strong> on TikTok</span>
+        <span><strong>0</strong> saved locally</span>
+      </div>
+    </div>
+    <div class="modal-untracked-overlay" id="untrackedOverlay">
+      <div class="modal-untracked-content">
+        <div class="modal-untracked-identity">@${esc(username)}</div>
+        <button class="btn-run btn-track-user"
+                onclick="_trackUser('${esc(tiktokId)}','${esc(username)}')">Track user</button>
+      </div>
+    </div>`;
+}
+
+async function _trackUser(tiktokId, username) {
+  const overlay = document.getElementById('untrackedOverlay');
+  if (!overlay) return;
+  overlay.innerHTML = '<div class="modal-untracked-spinner"><div class="spinner" style="width:24px;height:24px;border-width:3px"></div></div>';
+
+  const { ok, data } = await apiJSON(
+    `/api/tiktok/channels/${encodeURIComponent(tiktokId)}/track`,
+    { method: 'POST' }
+  );
+  if (!ok) {
+    overlay.innerHTML = `<div class="modal-untracked-error">${esc(data?.error || 'Failed to start tracking')}</div>`;
+    return;
+  }
+  _pollUntilTracked(tiktokId, data.handle, overlay);
+}
+
+function _pollUntilTracked(tiktokId, username, overlay) {
+  const iv = setInterval(async () => {
+    const { ok: qOk, data: queue } = await apiJSON('/api/tiktok/queue');
+    if (!qOk) return;
+    const entry = queue[username];
+    if (entry?.status === 'error') {
+      clearInterval(iv);
+      overlay.innerHTML = `<div class="modal-untracked-error">${esc(entry.message || 'Tracking failed')}</div>`;
+      return;
+    }
+    if (!entry) {
+      clearInterval(iv);
+      await tt.loadCreators();
+      const u = tt.getCreators().find(u => u.channel_id === tiktokId);
+      if (u) {
+        tt.setModalCreator(u);
+        const hdr = tt.el('ModalHeader');
+        tt.renderModalHeader(u);  // replaces innerHTML; overlay detached, class + position:relative kept
+        const fadeEl = document.createElement('div');
+        fadeEl.className = 'modal-untracked-overlay';
+        hdr.appendChild(fadeEl);
+        requestAnimationFrame(() => {
+          fadeEl.style.transition = 'opacity 0.3s';
+          fadeEl.style.opacity    = '0';
+        });
+        setTimeout(() => {
+          fadeEl.remove();
+          hdr.classList.remove('modal-header-untracked');
+        }, 320);
+        tt.loadModalVideos(tiktokId);
+      } else {
+        overlay.innerHTML = '<div class="modal-untracked-error">User data not found after tracking.</div>';
+      }
+    }
+  }, 2000);
 }
 
 // ── Settings modal ────────────────────────────────────────────────────────────
@@ -287,6 +801,37 @@ function switchSettingsSection(name) {
   if (name === 'diag')   { diagSourceChanged(); }
 }
 
+async function loadSettings() {
+  const { ok, data } = await apiJSON('/api/tiktok/settings');
+  if (!ok) return;
+  const _sv = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+  _sv('settingsSessionsPerDay',    data.sessions_per_day);
+  _sv('settingsHighPriorityHours', data.high_priority_check_hours);
+  _sv('settingsActiveHours',       data.active_check_hours);
+  _sv('settingsInactiveHours',     data.inactive_check_hours);
+  _sv('settingsStatsRefreshDays',  data.stats_refresh_days);
+  _sv('soundLoopIntervalInput',    data.sound_loop_interval_minutes);
+}
+
+async function saveLoopSettings() {
+  const _iv = id => { const el = document.getElementById(id); return el ? parseInt(el.value, 10) : null; };
+  const body = {
+    sessions_per_day:          _iv('settingsSessionsPerDay'),
+    high_priority_check_hours: _iv('settingsHighPriorityHours'),
+    active_check_hours:        _iv('settingsActiveHours'),
+    inactive_check_hours:      _iv('settingsInactiveHours'),
+    stats_refresh_days:        _iv('settingsStatsRefreshDays'),
+    sound_loop_interval_minutes: _iv('soundLoopIntervalInput'),
+  };
+  if (Object.values(body).some(v => !v || v < 1)) {
+    showToast('All values must be positive integers.', { type: 'warning', duration: 4000 });
+    return;
+  }
+  const { ok, data } = await apiJSON('/api/tiktok/settings', { method: 'PATCH', body: JSON.stringify(body) });
+  if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
+  showToast('Settings saved.', { type: 'success', duration: 2500 });
+}
+
 // ── Migration helpers ─────────────────────────────────────────────────────────
 
 async function loadMigratePreview() {
@@ -327,29 +872,24 @@ async function runMigration() {
   const statusEl  = document.getElementById('migrateStatus');
   const runBtn    = document.getElementById('migrateRunBtn');
   if (!oldPrefix || !newPrefix) {
-    statusEl.textContent = 'Both fields are required.';
-    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = 'Both path prefixes are required.';
     return;
   }
-  if (!confirm(`Rewrite all file paths starting with "${oldPrefix}" to "${newPrefix}"?`)) return;
-  runBtn.disabled      = true;
-  statusEl.textContent = 'Rewriting…';
-  statusEl.style.color = 'var(--muted)';
+  if (!confirm(`Rewrite all DB paths?\n\n${oldPrefix}  →  ${newPrefix}\n\nA backup is made automatically before changes.`)) return;
+  runBtn.disabled = true;
+  statusEl.textContent = 'Running migration…';
   try {
-    const { ok, data } = await apiJSON('/api/migrate', { method: 'POST', body: JSON.stringify({ old_prefix: oldPrefix, new_prefix: newPrefix }) });
-    if (!ok) {
-      statusEl.textContent = data.error || 'Failed.';
-      statusEl.style.color = 'var(--red)';
-    } else {
-      statusEl.textContent = `Done. ${data.updated} record${data.updated !== 1 ? 's' : ''} updated.`;
-      statusEl.style.color = 'var(--green)';
-      await loadMigratePreview();
-    }
-  } catch (e) {
-    statusEl.textContent = 'Error: ' + e.message;
-    statusEl.style.color = 'var(--red)';
-  } finally {
+    const { ok, data } = await apiJSON('/api/migrate/run', {
+      method: 'POST',
+      body: JSON.stringify({ old_prefix: oldPrefix, new_prefix: newPrefix }),
+    });
     runBtn.disabled = false;
+    if (!ok) { statusEl.textContent = data.error || 'Migration failed.'; return; }
+    statusEl.textContent = `Done. ${data.updated} record${data.updated !== 1 ? 's' : ''} updated. Backup: ${data.backup}`;
+    loadMigratePreview();
+  } catch (e) {
+    runBtn.disabled = false;
+    statusEl.textContent = 'Migration failed: ' + e.message;
   }
 }
 
@@ -427,7 +967,7 @@ async function triggerCleanup() {
       document.getElementById('job-cleanup-btn').disabled = false;
       _cleanupWidget.update({
         barPct: 100,
-        label: `Done — ${data.removed} item${data.removed !== 1 ? 's' : ''} removed`,
+        label: `Done: ${data.removed} item${data.removed !== 1 ? 's' : ''} removed`,
         steps: data.steps,
       });
     }
@@ -456,13 +996,13 @@ async function triggerAudioCleanup() {
       } else {
         const parts = [`Found ${data.found}`, `deleted ${data.deleted}`, `removed ${data.db_removed} from DB`];
         if (data.errors) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
-        _audioWidget.update({ label: parts.join(' · ') + ` — ${data.last_run}` });
+        _audioWidget.update({ label: parts.join(' · ') + ` (${data.last_run})` });
       }
     }
   }, 1000);
 }
 
-// Utilities — clear avatars
+// Utilities: clear avatars and thumbnails
 
 async function _runDeleteJob(btnId, statusId, textId, apiPath, bodyFn, resultFn) {
   const btn    = document.getElementById(btnId);
@@ -665,1676 +1205,6 @@ function diagCopy() {
   });
 }
 
-
-// ── Users ─────────────────────────────────────────────────────────────────────
-
-const _SORT_DIR_LABELS = {
-  username:       { asc: 'A → Z',           desc: 'Z → A'           },
-  display_name:   { asc: 'A → Z',           desc: 'Z → A'           },
-  subscriber_count: { asc: 'Low → High',    desc: 'High → Low'      },
-  video_total:    { asc: 'Low → High',      desc: 'High → Low'      },
-  video_deleted:  { asc: 'Low → High',      desc: 'High → Low'      },
-  added_at:       { asc: 'Oldest first',    desc: 'Newest first'    },
-  last_checked:   { asc: 'Oldest first',    desc: 'Newest first'    },
-  last_saved:     { asc: 'Oldest first',    desc: 'Newest first'    },
-  label:          { asc: 'A → Z',           desc: 'Z → A'           },
-  video_count:    { asc: 'Low → High',      desc: 'High → Low'      },
-};
-
-let _trackingView   = 'users';
-let _trackingSearch = '';
-function setTrackingView(view) {
-  _trackingView   = view;
-  _trackingSearch = '';
-  const searchEl = document.getElementById('trackingSearch');
-  if (searchEl) { searchEl.value = ''; searchEl.style.display = view === 'log' ? 'none' : ''; }
-  document.getElementById('tvUsers').classList.toggle('active', view === 'users');
-  document.getElementById('tvSounds').classList.toggle('active', view === 'sounds');
-  document.getElementById('tvLog').classList.toggle('active', view === 'log');
-  document.getElementById('usersGrid').style.display  = view === 'users'  ? '' : 'none';
-  document.getElementById('soundsGrid').style.display = view === 'sounds' ? '' : 'none';
-  document.getElementById('logPanel').style.display   = view === 'log'    ? '' : 'none';
-  if (view === 'log') {
-    const body = document.getElementById('logBody');
-    requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
-  }
-  document.getElementById('userControls').style.display    = view === 'users' ? '' : 'none';
-  document.getElementById('soundControls').style.display   = view === 'sounds' ? 'flex' : 'none';
-  renderUsers();
-  renderSounds();
-  _placeGlider(document.getElementById('tvUsers').closest('.filter-pills'));
-  const activeControls = document.getElementById(view === 'sounds' ? 'soundControls' : 'userControls');
-  activeControls.querySelectorAll('.filter-pills').forEach(_placeGlider);
-}
-
-function onTrackingSearch(val) {
-  _trackingSearch = val.trim();
-  if (_trackingView === 'users')  renderUsers();
-  if (_trackingView === 'sounds') renderSounds();
-}
-
-function setUserFilter(group, value) {
-  const set = userFilter[group];
-  set.has(value) ? set.delete(value) : set.add(value);
-  const map = group === 'priv' ? USER_PRIV_IDS : group === 'stat' ? USER_STAT_IDS : USER_STAR_IDS;
-  Object.entries(map).forEach(([v, id]) => {
-    document.getElementById(id)?.classList.toggle('active', set.has(v));
-  });
-  renderUsers();
-}
-
-function setUserSortField(field) {
-  userSort.field = field;
-  userSort.dir   = (field === 'username' || field === 'display_name') ? 'asc' : 'desc';
-  _updateSortBtn('userSortDirBtn', userSort);
-  renderUsers();
-}
-
-function resetUserFilters() {
-  userSort   = { field: 'username', dir: 'asc' };
-  userFilter = _defaultUserFilter();
-  _trackingSearch = '';
-  const searchEl = document.getElementById('trackingSearch');
-  if (searchEl) searchEl.value = '';
-  const sel = document.getElementById('userSortField');
-  if (sel) sel.value = 'username';
-  _updateSortBtn('userSortDirBtn', userSort);
-  Object.entries(USER_PRIV_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', userFilter.priv.has(v)));
-  Object.entries(USER_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', userFilter.stat.has(v)));
-  Object.entries(USER_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', userFilter.star.has(v)));
-  renderUsers();
-}
-
-function toggleUserSortDir() {
-  userSort.dir = userSort.dir === 'asc' ? 'desc' : 'asc';
-  _updateSortBtn('userSortDirBtn', userSort);
-  renderUsers();
-}
-
-function _updateSortBtn(btnId, sortState) {
-  const btn = document.getElementById(btnId);
-  if (btn) btn.textContent = _SORT_DIR_LABELS[sortState.field]?.[sortState.dir] ?? sortState.dir;
-}
-
-function _filteredUsers() {
-  const q = _trackingSearch.toLowerCase();
-  return users.filter(u => {
-    if (userFilter.priv.size) {
-      const privKey = u.account_status === 'banned' ? 'banned'
-        : u.privacy_status === 'blocked' ? 'blocked'
-        : ['private_accessible', 'private_blocked'].includes(u.privacy_status) ? 'private'
-        : 'public';   // includes not-yet-checked users so new adds show under the default filter
-      if (!userFilter.priv.has(privKey)) return false;
-    }
-    if (userFilter.stat.size && !userFilter.stat.has(u.tracking_enabled === 0 ? 'inactive' : 'active')) return false;
-    if (userFilter.star.has('starred') && !u.starred) return false;
-    if (q) {
-      const hay = [u.handle, u.display_name, u.channel_id,
-                   ...(u.old_handles || []), ...(u.old_display_names || []), ...(u.old_descriptions || [])]
-                  .filter(Boolean).join(' ').toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
-}
-
-function _sortedUsers() {
-  const { field, dir } = userSort;
-  return _filteredUsers().sort((a, b) => {
-    const av = field === 'display_name' ? (a.display_name || a.handle) : (a[field] ?? (field === 'username' ? '' : 0));
-    const bv = field === 'display_name' ? (b.display_name || b.handle) : (b[field] ?? (field === 'username' ? '' : 0));
-    return _cmp(av, bv, dir);
-  });
-}
-
-const _GHOST_CARD = '<div class="user-card" aria-hidden="true" style="visibility:hidden;pointer-events:none;min-height:220px"></div>';
-function _ghostCards(n) { return n > 0 ? Array(n).fill(_GHOST_CARD).join('') : ''; }
-
-const _USER_CARD_BATCH = 9;
-let _userGridObs       = null;
-let _userRenderedCount = 0;
-let _userSortedCache   = [];
-
-function _relationPill(u) {
-  if (u.account_status === 'banned') return `<span class="privacy-status banned">Banned</span>`;
-  if (u.privacy_status === 'blocked') return `<span class="privacy-status banned">Blocked</span>`;
-  if (u.privacy_status === 'private_blocked') return `<span class="relation-pill">Private</span>`;
-  const rel = u.relation;
-  if (rel === 2) return `<span class="relation-pill">Friends</span>`;
-  if (rel === 1) return `<span class="relation-pill">Following</span>`;
-  if (rel === 6) return `<span class="relation-pill">Follows you</span>`;
-  if (rel === 0) return `<span class="relation-pill">No relation</span>`;
-  return `<span class="relation-pill">-</span>`;
-}
-
-function _renderUserCard(u) {
-  const isCurrent        = u.handle === currentUser;
-  const isInactive       = u.tracking_enabled === 0;
-  const isBanned         = u.account_status === 'banned';
-  const isBlocked        = u.privacy_status === 'blocked';
-  const isPrivateBlocked = u.privacy_status === 'private_blocked';
-  const isPrivateAccount = ['private_accessible', 'private_blocked', 'blocked'].includes(u.privacy_status);
-
-  const { cls: trackingCls, label: trackingLabel } = _trackingBadge(u.tracking_enabled);
-  const accountBadge = _relationPill(u);
-  const oldNames   = (u.old_handles || []).map(n => `@${esc(n)}`).join(' · ');
-  const oldNameTag = oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
-  const idLine     = `id:${esc(u.channel_id)}`;
-
-  const inRunQueue   = runQueue.includes(u.channel_id);
-  const isRunCurrent = runCurrent === u.channel_id;
-  const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
-
-  const rescanAt = pendingRescans[u.channel_id];
-  const rescanBadge = rescanAt
-    ? `<div class="user-rescan-notice" title="Isolated full re-scan scheduled to verify deletion candidates">Re-scan ${fmt.rel(new Date(rescanAt * 1000).toISOString())}</div>`
-    : '';
-
-  return `
-    <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned || isBlocked || isPrivateBlocked ? ' user-card-inactive' : ''}${isBanned || isBlocked ? ' user-card-banned' : ''}${isPrivateBlocked ? ' user-card-private' : ''}" data-userid="${esc(u.channel_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.channel_id)}')" role="button" tabindex="0">
-      <div class="user-card-top">
-        <div class="avatar-wrap">
-          <span class="avatar-letter">${esc((u.handle||'?')[0])}</span>
-          ${u.avatar_cached ? `<img class="user-avatar" src="/api/tiktok/channels/${esc(u.channel_id)}/avatar" alt=""
-               onerror="this.style.display='none'"
-               onclick="event.stopPropagation();openImgModalUrl('/api/tiktok/channels/${esc(u.channel_id)}/avatar')">` : ''}
-        </div>
-        <div class="user-identity">
-          <div class="user-display-name">${isPrivateAccount ? LOCK_SVG : ''}${esc(u.display_name || u.handle)}</div>
-          <div class="user-handle">@${esc(u.handle)}${oldNameTag}</div>
-          <div class="user-id-line">${idLine}</div>
-        </div>
-        <div class="user-badges">
-          <span class="account-status ${trackingCls}">${trackingLabel}</span>
-          ${accountBadge}
-          ${u.starred ? '<span class="account-status priority" title="Starred: checked on the high-priority interval">★ Priority</span>' : ''}
-        </div>
-      </div>
-
-      <div class="user-bio-area">
-        ${u.description ? `<div class="user-bio">${esc(u.description)}</div>` : ''}
-      </div>
-
-      <div class="user-stats">
-        <span class="stat-item"><span class="stat-item-label">followers</span><span class="stat-item-value">${(u.subscriber_count||0).toLocaleString()}</span></span>
-        <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${u.video_total||0}</span></span>
-        ${(u.video_deleted || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${(u.video_deleted || 0)}</span></span>` : ''}
-        ${u.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${u.video_undeleted}</span></span>` : ''}
-      </div>
-
-      ${rescanBadge}
-
-      <div class="user-card-footer">
-        <div style="display:flex;gap:6px;">
-          <button class="btn-star${u.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleUserStar('${esc(u.channel_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
-          <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUserQuick('${esc(u.channel_id)}')">${_refreshIcon} Quick</button>
-          <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.channel_id)}')">${_refreshIcon} Full</button>
-          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.channel_id)}')},{label:'Remove',danger:true,onclick:()=>removeUser('${esc(u.channel_id)}','@${esc(u.handle)}')}])">•••</button>
-        </div>
-      </div>
-      <div class="user-card-meta-footer">
-        <div class="user-card-meta-item">
-          <span class="meta-label">Added</span>
-          <span class="meta-value">${fmtDateOnly(u.added_at)}</span>
-        </div>
-        <div class="user-card-meta-item">
-          <span class="meta-label">Last checked</span>
-          <span class="meta-value">${u.last_checked ? fmt.rel(new Date(u.last_checked * 1000).toISOString()) : 'never'}</span>
-        </div>
-        <div class="user-card-meta-item">
-          <span class="meta-label">Last saved</span>
-          <span class="meta-value">${u.last_saved ? fmt.rel(new Date(u.last_saved * 1000).toISOString()) : 'never'}</span>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function _appendUserCards() {
-  const grid = document.getElementById('usersGrid');
-  _userGridObs = null;
-  const next = _userSortedCache.slice(_userRenderedCount, _userRenderedCount + _USER_CARD_BATCH);
-  if (!next.length) return;
-  grid.insertAdjacentHTML('beforeend', next.map(_renderUserCard).join(''));
-  _userRenderedCount += next.length;
-  if (_userSortedCache.length > _userRenderedCount) {
-    _userGridObs = _attachGridSentinel(grid, _appendUserCards);
-  }
-}
-
-function renderUsers() {
-  if (_userGridObs) { _userGridObs.disconnect(); _userGridObs = null; }
-  const grid     = document.getElementById('usersGrid');
-  const filtered = _filteredUsers();
-  const isFiltered = userFilter.priv.size > 0 || userFilter.stat.size > 0 || userFilter.star.size > 0 || !!_trackingSearch;
-  document.getElementById('userCount').textContent =
-    isFiltered ? `${filtered.length} of ${users.length}` : users.length;
-  const _tvPills = document.getElementById('tvUsers')?.closest('.filter-pills');
-  if (_tvPills) _placeGlider(_tvPills);
-
-  if (!users.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users tracked yet.</div>';
-    _userRenderedCount = 0;
-    return;
-  }
-  if (!filtered.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No users match this filter.</div>' + _ghostCards(Math.min(users.length, _USER_CARD_BATCH));
-    _userRenderedCount = 0;
-    return;
-  }
-
-  _userSortedCache    = _sortedUsers();
-  const toShow        = Math.min(Math.max(_USER_CARD_BATCH, _userRenderedCount), _userSortedCache.length);
-  const slice         = _userSortedCache.slice(0, toShow);
-  grid.innerHTML      = slice.map(_renderUserCard).join('')
-    + (toShow < _USER_CARD_BATCH ? _ghostCards(_USER_CARD_BATCH - toShow) : '');
-  _userRenderedCount  = slice.length;
-
-  if (_userSortedCache.length > _userRenderedCount) {
-    _userGridObs = _attachGridSentinel(grid, _appendUserCards);
-  }
-}
-
-async function loadQueue() {
-  const { ok, data } = await apiJSON('/api/tiktok/queue');
-  if (ok) addToasts.sync(data);
-}
-
-// Sanitise contenteditable input: strip invalid chars, keep cursor at end
-function _sanitiseHandle(el) {
-  const clean = el.textContent.replace(/[^a-zA-Z0-9_.@:/?=&%-]/g, '');
-  if (el.textContent !== clean) {
-    el.textContent = clean;
-    // move cursor to end
-    const range = document.createRange();
-    const sel   = window.getSelection();
-    range.selectNodeContents(el);
-    range.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-}
-
-document.getElementById('handleInput').addEventListener('input', function() {
-  _sanitiseHandle(this);
-});
-
-document.getElementById('handleInput').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') { e.preventDefault(); addTracked(); }
-});
-
-// Prevent paste from bringing in rich text
-document.getElementById('handleInput').addEventListener('paste', function(e) {
-  e.preventDefault();
-  const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-  document.execCommand('insertText', false, text);
-});
-
-function _isSoundInput(val) {
-  if (/\/music\/|\/sound\//.test(val)) return true;
-  if (/^\d+$/.test(val.trim())) return true;
-  return false;
-}
-
-async function addPaste() {
-  const input = document.getElementById('handleInput');
-  try {
-    input.textContent = (await navigator.clipboard.readText()).trim();
-  } catch { /* clipboard permission denied; leave the field as is */ }
-  input.focus();
-}
-
-// One field for users and sounds: numeric IDs and music/sound URLs go to the
-// sound tracker, everything else is treated as a username or profile URL
-async function addTracked() {
-  const input = document.getElementById('handleInput');
-  const val   = input.textContent.trim();
-  if (!val) return;
-  input.textContent = '';
-  input.focus();
-
-  if (_isSoundInput(val)) {
-    const t = showToast('Adding sound…', { spinner: true, duration: 0 });
-    const { ok, data } = await apiJSON('/api/tiktok/sounds', {
-      method: 'POST',
-      body: JSON.stringify({ sound_id: val, label: null }),
-    });
-    if (ok) {
-      t.update(`Sound ${data.sound_id} added.`, { type: 'success' });
-      loadSounds();
-    } else {
-      t.update(data.error || 'Could not add sound.', { type: 'error', duration: 8000 });
-    }
-    return;
-  }
-
-  const urlMatch = val.match(/tiktok\.com\/@([a-zA-Z0-9_.]+)/);
-  const name = urlMatch ? urlMatch[1] : val.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
-  if (!name) {
-    showToast('Invalid username.', { type: 'error' });
-    return;
-  }
-
-  const { ok, data } = await apiJSON('/api/tiktok/channels', {
-    method: 'POST',
-    body: JSON.stringify({ handle: name }),
-  });
-  if (ok) addToasts.start(data.handle || name);
-  else showToast(data.error || 'Could not add user.', { type: 'error' });
-}
-
-async function runUser(id)             { return _creatorRun('/api/tiktok/channels', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }, 'full'); }
-async function runUserQuick(id)        { return _creatorRun('/api/tiktok/channels', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }, 'quick'); }
-async function runUserProfile(id)      { return _creatorRunProfile('/api/tiktok/channels', id, () => runQueue, q => { runQueue = q; }, () => { renderUsers(); updateRunStates(); }); }
-async function removeUser(id, label)   { return _creatorRemove('/api/tiktok/channels', id, label, loadUsers); }
-async function toggleUserStar(id)      { return _creatorToggleStar('/api/tiktok/channels', id, users, 'channel_id', renderUsers); }
-
-async function loadUsers() {
-  const { ok, data } = await apiJSON('/api/tiktok/channels');
-  if (ok) { users = data; renderUsers(); }
-}
-
-// ── Sounds ────────────────────────────────────────────────────────────────────
-
-let sounds        = [];
-let soundRunCurrent = null;
-let soundRunQueue   = [];
-let soundFilter   = _defaultSoundFilter();
-let soundSort     = { field: 'label', dir: 'asc' };
-
-function setSoundFilter(group, value) {
-  const set = soundFilter[group];
-  set.has(value) ? set.delete(value) : set.add(value);
-  const map = group === 'stat' ? SOUND_STAT_IDS : SOUND_STAR_IDS;
-  Object.entries(map).forEach(([v, id]) => {
-    document.getElementById(id)?.classList.toggle('active', set.has(v));
-  });
-  renderSounds();
-}
-
-function setSoundSortField(field) {
-  soundSort.field = field;
-  soundSort.dir   = (field === 'label') ? 'asc' : 'desc';
-  _updateSortBtn('soundSortDirBtn', soundSort);
-  renderSounds();
-}
-
-function toggleSoundSortDir() {
-  soundSort.dir = soundSort.dir === 'asc' ? 'desc' : 'asc';
-  _updateSortBtn('soundSortDirBtn', soundSort);
-  renderSounds();
-}
-
-
-function resetSoundFilters() {
-  soundFilter = _defaultSoundFilter();
-  soundSort   = { field: 'label', dir: 'asc' };
-  _trackingSearch = '';
-  const searchEl = document.getElementById('trackingSearch');
-  if (searchEl) searchEl.value = '';
-  const sel = document.getElementById('soundSortField');
-  if (sel) sel.value = 'label';
-  _updateSortBtn('soundSortDirBtn', soundSort);
-  Object.entries(SOUND_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', soundFilter.stat.has(v)));
-  Object.entries(SOUND_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', soundFilter.star.has(v)));
-  renderSounds();
-}
-
-function renderSounds() {
-  const grid    = document.getElementById('soundsGrid');
-  const countEl = document.getElementById('soundCount');
-  const q = _trackingSearch.toLowerCase();
-  let filtered = sounds;
-  if (soundFilter.stat.size)          filtered = filtered.filter(s => soundFilter.stat.has(s.tracking_enabled === 0 ? 'inactive' : 'active'));
-  if (soundFilter.star.has('starred')) filtered = filtered.filter(s => s.starred);
-  if (q) filtered = filtered.filter(s => `${s.label || ''} ${s.sound_id}`.toLowerCase().includes(q));
-  const isFiltered = soundFilter.stat.size > 0 || soundFilter.star.size > 0 || !!_trackingSearch;
-  countEl.textContent = isFiltered ? `${filtered.length} of ${sounds.length}` : sounds.length;
-  const { field, dir } = soundSort;
-  filtered = [...filtered].sort((a, b) => {
-    const av = field === 'label' ? (a.label || a.sound_id) : (a[field] ?? 0);
-    const bv = field === 'label' ? (b.label || b.sound_id) : (b[field] ?? 0);
-    return _cmp(av, bv, dir);
-  });
-  const _tvPills = document.getElementById('tvUsers')?.closest('.filter-pills');
-  if (_tvPills) _placeGlider(_tvPills);
-  if (!sounds.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds tracked yet.</div>';
-    return;
-  }
-  if (!filtered.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds match this search.</div>' + _ghostCards(9);
-    return;
-  }
-  grid.innerHTML = filtered.map(s => {
-    const label      = s.label || s.sound_id;
-    const ttUrl      = `https://www.tiktok.com/music/-${s.sound_id}`;
-    const checked    = _fmtLastChecked(s.last_checked);
-    const saved      = s.last_saved ? ` · Last saved ${fmt.rel(new Date(s.last_saved * 1000).toISOString())}` : '';
-    const inQueue      = soundRunQueue.includes(s.sound_id);
-    const isCurrent    = soundRunCurrent === s.sound_id;
-    const runLabel     = isCurrent ? 'Running…' : inQueue ? 'Queued' : 'Run';
-    const runDis       = (inQueue || isCurrent) ? 'disabled' : '';
-    const { cls: sTrackingCls, label: sTrackingLabel } = _trackingBadge(s.tracking_enabled);
-    const isInactive = s.tracking_enabled === 0;
-    return `
-      <div class="user-card${isInactive ? ' user-card-inactive' : ''}" data-soundid="${esc(s.sound_id)}" onclick="if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')" role="button" tabindex="0">
-        <div class="user-card-top">
-          <div class="sound-icon-wrap"><span class="sound-icon-letter">♫</span></div>
-          <div class="user-identity">
-            <div class="user-display-name">${esc(label)}</div>
-            <div class="user-handle">
-              <a href="${esc(ttUrl)}" target="_blank" rel="noopener"
-                 onclick="event.stopPropagation()" class="tt-link"
-              >${esc(s.sound_id)}</a>
-            </div>
-          </div>
-          <div class="user-badges">
-            <span class="account-status ${sTrackingCls}">${sTrackingLabel}</span>
-          </div>
-        </div>
-        <div class="user-bio-area"></div>
-        <div class="user-stats">
-          <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${s.video_count || 0}</span></span>
-          ${s.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${s.video_deleted}</span></span>` : ''}
-          ${s.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${s.video_undeleted}</span></span>` : ''}
-        </div>
-        <div class="user-card-footer">
-          <span class="user-checked">${checked}${saved}</span>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <label class="tracking-toggle" title="${isInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}" onclick="event.stopPropagation()">
-              <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            </label>
-            <button class="btn-star${s.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleSoundStar('${esc(s.sound_id)}')" title="${s.starred ? 'Unstar' : 'Star'}">${s.starred ? '★' : '☆'}</button>
-            <button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${runLabel}</button>
-            <button class="btn-danger" onclick="event.stopPropagation();removeSound('${esc(s.sound_id)}','${esc(label)}')">Remove</button>
-          </div>
-        </div>
-      </div>`;
-  }).join('') + _ghostCards(Math.max(0, 9 - filtered.length));
-}
-
-async function loadSounds() {
-  const { ok, data } = await apiJSON('/api/tiktok/sounds');
-  if (ok) { sounds = data; renderSounds(); }
-}
-
-async function removeSound(soundId, label) {
-  if (!confirm(`Remove sound "${label}" (${soundId})?\n\nVideos already downloaded will not be deleted.`)) return;
-  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
-  if (!ok) { showToast(data.error || 'Failed to remove sound.', { type: 'error' }); return; }
-  if (_soundModalId === soundId) closeSoundModal();
-  loadSounds();
-}
-
-async function toggleSoundStar(soundId) {
-  const sound = sounds.find(s => s.sound_id === soundId);
-  if (!sound) return;
-  const newVal = !sound.starred;
-  sound.starred = newVal ? 1 : 0;
-  renderSounds();
-  await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/star`, {
-    method: 'PATCH',
-    body: JSON.stringify({ starred: newVal }),
-  });
-}
-
-async function runSound(soundId) {
-  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/run`, { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Could not start sound run.', { type: 'error' }); return; }
-  soundRunQueue = [...soundRunQueue, soundId];
-  renderSounds();
-}
-
-// ── Modal engine ──────────────────────────────────────────────────────────────
-
-const VCOLS = [
-  { field: null,            label: '' },
-  { field: null,            label: 'Description' },
-  { field: 'status',        label: 'Status' },
-  { field: 'view_count',    label: 'Views' },
-  { field: 'upload_date',   label: 'Uploaded' },
-  { field: 'download_date', label: 'Saved' },
-  { field: 'deleted_at',    label: 'Deleted' },
-  { field: null,            label: '' },
-];
-const SOUND_VCOLS = [
-  { field: null,             label: '' },
-  { field: null,             label: 'Description' },
-  { field: null,             label: 'Author' },
-  { field: 'status',         label: 'Status' },
-  { field: 'view_count',     label: 'Views' },
-  { field: 'upload_date',    label: 'Uploaded' },
-  { field: 'download_date',  label: 'Downloaded' },
-  { field: 'deleted_at',     label: 'Deleted' },
-  { field: null,             label: '' },
-];
-
-const _userState  = { videos:[], filter:new Set(), typeFilter:new Set(), search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false, view:'list' };
-const _soundState = { videos:[], filter:new Set(), typeFilter:new Set(), search:'', sort:{field:'upload_date',dir:'desc'}, loaded:0, obs:null, toolbarExpanded:false, view:'list' };
-
-const _USER_MODAL_CFG = {
-  st: _userState, listElId: 'modalVideoList', toolbarElId: 'modalToolbar',
-  cols: VCOLS, colsCls: 'vcols', pageSize: 50,
-  filterFn: 'setModalFilter', typeFilterFn: 'setModalTypeFilter',
-  sortFn: 'setModalSort', toggleFn: 'toggleModalToolbar', searchFn: 'onModalSearch',
-  authorCol: null, hasSearch: true, hasViewToggle: true, viewFn: 'setModalView',
-  gridId: 'videoGrid', hasPhistBtn: true,
-  thumbCellFn:  v => _thumbCell(v),
-  actionBtnsFn: v => _videoActionBtns(v),
-  previewFn:    'openImgModal',
-  typeIconFn:   v => v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? (v.multi ? _vgridPhotoIcon : _vgridImageIcon) : '',
-  gridThumbSrc: v => `/api/tiktok/videos/${esc(v.video_id)}/thumbnail`,
-  gridCellOnclick: v => { if (v.type === 'video') openVidModal(v.video_id); else if (v.type === 'photo') openCarousel(v.video_id); },
-};
-const _SOUND_MODAL_CFG = {
-  st: _soundState, listElId: 'soundModalVideoList', toolbarElId: 'soundModalToolbar',
-  cols: SOUND_VCOLS, colsCls: 'sound-vcols', pageSize: 50,
-  filterFn: 'setSoundModalFilter', typeFilterFn: 'setSoundModalTypeFilter',
-  sortFn: 'setSoundModalSort', toggleFn: 'toggleSoundModalToolbar', searchFn: 'onSoundModalSearch',
-  authorCol: v => {
-    const name = v.author_handle || v.channel_id || '?';
-    return v.author_enabled === 1
-      ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();openUserModal('${esc(v.channel_id)}')">@${esc(name)}</span>`
-      : `<span class="author-chip untracked" onclick="event.stopPropagation();closeSoundModal();openUntrackedUserModal('${esc(v.channel_id)}','${esc(name)}')">@${esc(name)}</span>`;
-  },
-  hasSearch: true, hasViewToggle: true, viewFn: 'setSoundModalView',
-  gridId: 'soundVideoGrid', hasPhistBtn: false,
-  thumbCellFn:  v => _thumbCell(v),
-  actionBtnsFn: v => _videoActionBtns(v),
-  previewFn:    'openImgModal',
-  typeIconFn:   v => v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? (v.multi ? _vgridPhotoIcon : _vgridImageIcon) : '',
-  gridThumbSrc: v => `/api/tiktok/videos/${esc(v.video_id)}/thumbnail`,
-  gridCellOnclick: v => { if (v.type === 'video') openVidModal(v.video_id); else if (v.type === 'photo') openCarousel(v.video_id); },
-};
-
-
-// ── Sound modal ────────────────────────────────────────────────────────────────
-
-let _soundModalId               = null;
-let _soundModal                 = null;
-let _soundModalPendingHighlight = null; // { videoId, filter? }
-
-function openSoundModal(soundId) {
-  const s = sounds.find(s => s.sound_id === soundId);
-  if (!s) return;
-  _soundModalId = soundId;
-  _soundModal   = s;
-  Object.assign(_soundState, {
-    videos: [], filter: new Set(), typeFilter: new Set(), search: '',
-    sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false, view: 'list',
-  });
-  if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
-
-  document.getElementById('soundModalBackdrop').style.display = 'flex';
-  _lockScroll();
-
-  _renderSoundModalHeader(s);
-  _mRenderToolbar(_SOUND_MODAL_CFG, []);
-  document.getElementById('soundModalVideoList').innerHTML =
-    '<div class="vlist-loading">Loading videos…</div>';
-
-  _loadSoundModalVideos(soundId);
-}
-
-function openSoundModalAndHighlight(soundId, videoId, filter) {
-  _soundModalPendingHighlight = { videoId, filter: filter && filter !== 'all' ? new Set([filter]) : null };
-  openSoundModal(soundId);
-}
-
-function closeSoundModal() {
-  document.getElementById('soundModalBackdrop').style.display = 'none';
-  _unlockScroll();
-  if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
-  _soundModalId      = null;
-  _soundModal        = null;
-  _soundState.videos = [];
-}
-
-function _renderSoundModalHeader(s) {
-  const label  = s.label || s.sound_id;
-  const ttUrl  = `https://www.tiktok.com/music/-${esc(s.sound_id)}`;
-  const checked = _fmtLastChecked(s.last_checked);
-  const { cls: sSoundTrackingCls, label: sSoundTrackingLbl } = _trackingBadge(s.tracking_enabled);
-  const sSoundInactive = s.tracking_enabled === 0;
-  document.getElementById('soundModalHeader').innerHTML = `
-    <div class="modal-avatar-wrap">
-      <div class="sound-icon-wrap" style="width:56px;height:56px">
-        <span class="sound-icon-letter" style="font-size:26px">♫</span>
-      </div>
-    </div>
-    <div class="modal-user-body">
-      <div class="modal-name-row">
-        <span class="modal-name">${esc(label)}</span>
-        <button class="btn-ghost" style="font-size:11px;padding:3px 8px;margin-left:4px"
-          onclick="editSoundLabel('${esc(s.sound_id)}')">Edit label</button>
-        <span class="account-status ${sSoundTrackingCls}">${sSoundTrackingLbl}</span>
-        <label class="tracking-toggle" title="${sSoundInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}">
-          <input type="checkbox" ${sSoundInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
-          <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          <span class="toggle-label">Track videos</span>
-        </label>
-      </div>
-      <div class="modal-handle">
-        <a href="${ttUrl}" target="_blank" rel="noopener"
-           class="tt-link">${esc(s.sound_id)}</a>
-      </div>
-      <div class="modal-stats-row">
-        <span><strong>${s.video_count || 0}</strong> saved locally</span>
-        ${s.video_deleted   ? `<span style="color:var(--red)"><strong>${s.video_deleted}</strong> deleted</span>` : ''}
-        ${s.video_undeleted ? `<span style="color:var(--yellow)"><strong>${s.video_undeleted}</strong> restored</span>` : ''}
-        <span style="color:var(--muted)">${esc(checked)}</span>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
-        <textarea placeholder="Add a note about this sound…"
-          onblur="saveSoundComment('${esc(s.sound_id)}', this.value)"
-          style="flex:1;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
-                 background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
-                 color:var(--text);font-family:inherit;line-height:1.5"
-        >${esc(s.comment || '')}</textarea>
-      </div>
-    </div>
-  `;
-}
-
-function setSoundModalFilter(f)     { _mSetFilter(_SOUND_MODAL_CFG, f); }
-function setSoundModalTypeFilter(t) { _mSetTypeFilter(_SOUND_MODAL_CFG, t); }
-function toggleSoundModalToolbar()  { _mToggleToolbar(_SOUND_MODAL_CFG); }
-function setSoundModalSort(f)       { _mSetSort(_SOUND_MODAL_CFG, f); }
-
-async function _loadSoundModalVideos(soundId) {
-  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/videos`);
-  if (!ok || _soundModalId !== soundId) return;
-  // Engine vocabulary: expose content_type/title under the names the renderers use
-  data.forEach(v => { v.type = v.content_type; v.description = v.title; });
-  _soundState.videos = data;
-  if (_soundModalPendingHighlight) {
-    const { videoId, filter } = _soundModalPendingHighlight;
-    _soundModalPendingHighlight = null;
-    if (filter) {
-      _soundState.filter = filter;
-      _soundState.sort   = { field: 'deleted_at', dir: 'desc' };
-      _mRenderColHdrs(_SOUND_MODAL_CFG);
-    }
-    _mRenderToolbar(_SOUND_MODAL_CFG, data);
-    _mRenderList(_SOUND_MODAL_CFG);
-    const row = document.querySelector(`[data-video-id="${CSS.escape(videoId)}"]`);
-    if (row) {
-      row.scrollIntoView({ block: 'center' });
-      row.classList.add('video-row-highlight');
-      row.addEventListener('mouseenter', () => row.classList.remove('video-row-highlight'), { once: true });
-    }
-  } else {
-    _mRenderToolbar(_SOUND_MODAL_CFG, data);
-    _mRenderList(_SOUND_MODAL_CFG);
-  }
-}
-
-async function editSoundLabel(soundId) {
-  const s = sounds.find(s => s.sound_id === soundId);
-  const newLabel = prompt('Edit label for this sound:', s?.label || '');
-  if (newLabel === null) return;
-  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ label: newLabel.trim() || null }),
-  });
-  if (!ok) { showToast(data.error || 'Failed to update label.', { type: 'error' }); return; }
-  await loadSounds();
-  if (_soundModalId === soundId) {
-    _soundModal = sounds.find(s => s.sound_id === soundId);
-    if (_soundModal) _renderSoundModalHeader(_soundModal);
-  }
-}
-
-// ── Loop ──────────────────────────────────────────────────────────────────────
-
-// Cached element refs for renderStatus — queried once, reused every 5 s
-const _sEl = {
-  badge:      document.getElementById('statusBadge'),
-  text:       document.getElementById('statusText'),
-  uMeta:       document.getElementById('userLoopMeta'),
-  uNext:       document.getElementById('userLoopNext'),
-  uSessions:   document.getElementById('userLoopSessions'),
-  uBtnNext:    document.getElementById('triggerNextBtn'),
-  uBtnStarred: document.getElementById('triggerStarredBtn'),
-  uBtnHalf:    document.getElementById('triggerHalfBtn'),
-  uBtnAll:     document.getElementById('triggerAllBtn'),
-  uStopBtn:   document.getElementById('stopUserBtn'),
-  sMeta:      document.getElementById('soundLoopMeta'),
-  sNext:      document.getElementById('soundLoopNext'),
-  sSessions:  document.getElementById('soundLoopSessions'),
-  sBtn:       document.getElementById('triggerSoundBtn'),
-  sStopBtn:   document.getElementById('stopSoundBtn'),
-  missing:    document.getElementById('missingStatsCount'),
-  failed:     document.getElementById('statsFailedCount'),
-  retryBtn:   document.getElementById('retryFailedBtn'),
-  bfPill:     document.getElementById('hdrBackfillPill'),
-  bfCount:    document.getElementById('hdrBackfillCount'),
-};
-
-function renderStatus(state) {
-  isRunning    = state.loop_running;
-  currentUser  = state.loop_current_channel;
-  _sleepUntil   = state.loop_sleep_until != null ? state.loop_sleep_until * 1000 : null;
-  _sleepNext    = state.loop_sleep_next  || null;
-  _nextUserRun  = state.loop_next  || null;
-  _nextSoundRun = state.sound_loop_next || null;
-  runQueue         = state.run_queue         || [];
-  runCurrent       = state.run_current       || null;
-  soundRunQueue    = state.sound_run_queue   || [];
-  soundRunCurrent  = state.sound_run_current || null;
-  pendingRescans   = state.pending_rescans   || {};
-
-  const anyActive = isRunning || state.sound_loop_running || !!runCurrent || !!soundRunCurrent;
-  _sEl.badge.className  = `status-badge${anyActive ? ' running' : ''}`;
-  _sEl.text.textContent = anyActive
-    ? (currentUser ? `Downloading @${currentUser}` : 'Running…')
-    : 'Idle';
-
-  // User loop card
-  if (_sEl.uMeta) {
-    const parts = [];
-    if (state.loop_last_start) parts.push(`Last: ${fmt.rel(state.loop_last_start)}`);
-    else parts.push('Never run');
-    const comp = state.loop_last_session_completed, total = state.loop_last_session_total;
-    if (comp != null && total != null) parts.push(`${comp}/${total} users`);
-    if (state.loop_last_new_videos != null) parts.push(`${state.loop_last_new_videos} new`);
-    if (state.loop_last_duration_secs != null) parts.push(fmt.dur(state.loop_last_duration_secs));
-    _sEl.uMeta.textContent = parts.join(' · ');
-  }
-  if (_sEl.uNext) _sEl.uNext.textContent = state.loop_running
-    ? 'Running…'
-    : (state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '');
-  _renderSessionPills(_sEl.uSessions, state.loop_sessions_today || [],
-                      state.loop_running, state.loop_manual_run);
-  const _uRunning = state.loop_running;
-  if (_sEl.uBtnNext)    _sEl.uBtnNext.disabled     = _uRunning;
-  if (_sEl.uBtnStarred) _sEl.uBtnStarred.disabled = _uRunning;
-  if (_sEl.uBtnHalf)    _sEl.uBtnHalf.disabled    = _uRunning;
-  if (_sEl.uBtnAll)     _sEl.uBtnAll.disabled      = _uRunning;
-  if (_sEl.uStopBtn)    _sEl.uStopBtn.disabled     = !_uRunning;
-
-  // Sound loop card
-  if (_sEl.sMeta) {
-    const parts = [];
-    if (state.sound_loop_last_start) parts.push(`Last: ${fmt.rel(state.sound_loop_last_start)}`);
-    else parts.push('Never run');
-    if (state.sound_loop_last_new_videos != null) parts.push(`${state.sound_loop_last_new_videos} new`);
-    if (state.sound_loop_last_duration_secs != null) parts.push(fmt.dur(state.sound_loop_last_duration_secs));
-    _sEl.sMeta.textContent = parts.join(' · ');
-  }
-  if (_sEl.sNext) _sEl.sNext.textContent = state.sound_loop_running
-    ? 'Running…'
-    : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');
-  if (_sEl.sSessions) {
-    const nextIso    = state.sound_loop_next;
-    const intervalMs = (state.sound_loop_interval_minutes || 60) * 60 * 1000;
-    if (nextIso && intervalMs) {
-      const nowMs   = Date.now();
-      const nextMs  = new Date(nextIso).getTime();
-      const times   = [nextMs, nextMs + intervalMs, nextMs + 2 * intervalMs, nextMs + 3 * intervalMs];
-      let   foundNext = false;
-      _sEl.sSessions.innerHTML = times.map(ts => {
-        const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        let cls = 'loop-session-pill';
-        if (state.sound_loop_running && !foundNext && ts >= nowMs) {
-          foundNext = true; cls += ' running';
-        } else if (ts < nowMs) {
-          cls += ' done';
-        } else if (!foundNext) {
-          foundNext = true; cls += ' next';
-        }
-        return `<span class="${cls}">${time}</span>`;
-      }).join('');
-    } else {
-      _sEl.sSessions.innerHTML = '';
-    }
-  }
-  if (_sEl.sBtn)     _sEl.sBtn.disabled     = state.sound_loop_running;
-  if (_sEl.sStopBtn) _sEl.sStopBtn.disabled = !state.sound_loop_running;
-
-  if (_sEl.missing) {
-    const n = state.missing_stats_count ?? 0;
-    _sEl.missing.textContent = n > 0 ? `${n.toLocaleString()} missing` : '';
-  }
-  if (_sEl.failed) {
-    const f = state.stats_failed_count ?? 0;
-    _sEl.failed.textContent   = f > 0 ? `${f.toLocaleString()} unavailable` : '';
-    _sEl.failed.style.display = f > 0 ? '' : 'none';
-    if (_sEl.retryBtn) _sEl.retryBtn.style.display = f > 0 ? '' : 'none';
-  }
-
-  // Header backfill pill — visible only when there's work to do
-  if (_sEl.bfPill && _sEl.bfCount) {
-    const n = state.missing_stats_count ?? 0;
-    _sEl.bfCount.textContent  = n.toLocaleString();
-    _sEl.bfPill.style.display = n > 0 ? '' : 'none';
-  }
-}
-
-function clearLog() {
-  _logClearSeq = _logSeq;
-  document.getElementById('logBody').innerHTML = '';
-  localStorage.setItem('logClearSeq', String(_logSeq));
-}
-
-function renderLogs(lines, log_seq) {
-  if (!lines?.length || log_seq == null) return;
-
-  // Restore clear watermark once on first load
-  if (!_logClearRestored) {
-    _logClearRestored = true;
-    const saved = localStorage.getItem('logClearSeq');
-    if (saved != null) _logClearSeq = parseInt(saved, 10) || 0;
-  }
-
-  // log_seq resets when the app restarts; a persisted watermark above the
-  // current counter is stale and would hide every line until the counter
-  // catches up. Drop it and show the console again.
-  if (_logClearSeq > log_seq) {
-    _logClearSeq = 0;
-    localStorage.removeItem('logClearSeq');
-  }
-
-  if (log_seq <= _logSeq) return;  // nothing new
-
-  // Sequence number of lines[i] = log_seq - lines.length + i
-  const bufStart  = log_seq - lines.length;
-  // Start from whichever is later: last seen seq, or clear watermark
-  const startSeq  = Math.max(_logSeq, _logClearSeq);
-  const startIdx  = Math.max(0, startSeq - bufStart);
-  const newLines  = lines.slice(startIdx);
-
-  _logSeq = log_seq;
-
-  if (!newLines.length) return;
-
-  const body       = document.getElementById('logBody');
-  const autoScroll = document.getElementById('autoScroll').checked;
-
-  newLines.forEach(line => {
-    const span = document.createElement('span');
-    const cls  = _logLineClass(line);
-    if (cls) span.className = cls;
-    span.textContent = line + '\n';
-    body.appendChild(span);
-  });
-
-  if (autoScroll) body.scrollTop = body.scrollHeight;
-}
-
-async function setUserTracking(tiktokId, enabled) {
-  const { ok, data } = await apiJSON(`/api/tiktok/channels/${encodeURIComponent(tiktokId)}/tracking`, {
-    method: 'PATCH',
-    body: JSON.stringify({ enabled }),
-  });
-  if (!ok) { showToast(data.error || 'Failed to update tracking', { type: 'error' }); return; }
-  const u = users.find(u => u.channel_id === tiktokId);
-  if (u) u.tracking_enabled = enabled ? 1 : 0;
-  if (_modalUser && _modalUser.channel_id === tiktokId) {
-    _modalUser.tracking_enabled = enabled ? 1 : 0;
-    _renderModalHeader(_modalUser);
-  }
-  renderUsers();
-}
-
-async function saveUserComment(id, value) {
-  const ok = await _saveCreatorComment('/api/tiktok/channels', id, value, users, 'channel_id');
-  if (ok && _modalUser && _modalUser.channel_id === id) _modalUser.comment = value.trim() || null;
-}
-
-async function saveSoundComment(id, value) {
-  const ok = await _saveCreatorComment('/api/tiktok/sounds', id, value, sounds, 'sound_id');
-  if (ok && _soundModal && _soundModal.sound_id === id) _soundModal.comment = value.trim() || null;
-}
-
-async function setSoundTracking(soundId, enabled) {
-  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/tracking`, {
-    method: 'PATCH',
-    body: JSON.stringify({ enabled }),
-  });
-  if (!ok) { showToast(data.error || 'Failed to update tracking', { type: 'error' }); return; }
-  const s = sounds.find(s => s.sound_id === soundId);
-  if (s) s.tracking_enabled = enabled ? 1 : 0;
-  if (_soundModal && _soundModal.sound_id === soundId) {
-    _soundModal.tracking_enabled = enabled ? 1 : 0;
-    _renderSoundModalHeader(_soundModal);
-  }
-  renderSounds();
-}
-
-function _triggerUserToast(d) {
-  const n = d.queued ?? 0;
-  if (n === 0) return;
-  const labels = { next: 'scheduled check', starred: 'quick check', half: 'quick check', all: 'quick check' };
-  const mode   = labels[d.mode] || 'check';
-  showToast(`${n} user${n === 1 ? '' : 's'} queued for ${mode}`);
-}
-function triggerNext()    { return _triggerLoop('triggerNextBtn',    '/api/tiktok/trigger/next', 'Could not trigger user loop', _triggerUserToast); }
-function triggerStarred() { return _triggerLoop('triggerStarredBtn', '/api/tiktok/trigger',      'Could not trigger user loop', _triggerUserToast); }
-function triggerHalf()    { return _triggerLoop('triggerHalfBtn',    '/api/tiktok/trigger/half', 'Could not trigger user loop', _triggerUserToast); }
-function triggerAll()     { return _triggerLoop('triggerAllBtn',     '/api/tiktok/trigger/all',  'Could not trigger user loop', _triggerUserToast); }
-function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/tiktok/trigger/sounds', 'Could not trigger sound loop'); }
-
-async function stopUserLoop() {
-  if (_sEl.uStopBtn) _sEl.uStopBtn.disabled = true;
-  const { ok } = await apiJSON('/api/tiktok/stop', { method: 'POST' });
-  if (!ok) {
-    if (_sEl.uStopBtn) _sEl.uStopBtn.disabled = false;
-    showToast('Could not stop user loop.', { type: 'error' });
-  }
-}
-
-async function stopSoundLoop() {
-  if (_sEl.sStopBtn) _sEl.sStopBtn.disabled = true;
-  const { ok } = await apiJSON('/api/tiktok/stop/sounds', { method: 'POST' });
-  if (!ok) {
-    if (_sEl.sStopBtn) _sEl.sStopBtn.disabled = false;
-    showToast('Could not stop sound loop.', { type: 'error' });
-  }
-}
-
-async function loadSettings() {
-  const { ok, data } = await apiJSON('/api/tiktok/settings');
-  if (!ok) return;
-  const _sv = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
-  _sv('settingsSessionsPerDay',    data.sessions_per_day);
-  _sv('settingsHighPriorityHours', data.high_priority_check_hours);
-  _sv('settingsActiveHours',       data.active_check_hours);
-  _sv('settingsInactiveHours',     data.inactive_check_hours);
-  _sv('settingsStatsRefreshDays',  data.stats_refresh_days);
-  _sv('soundLoopIntervalInput',    data.sound_loop_interval_minutes);
-}
-
-async function saveLoopSettings() {
-  const _iv = id => { const el = document.getElementById(id); return el ? parseInt(el.value, 10) : null; };
-  const body = {
-    sessions_per_day:          _iv('settingsSessionsPerDay'),
-    high_priority_check_hours: _iv('settingsHighPriorityHours'),
-    active_check_hours:        _iv('settingsActiveHours'),
-    inactive_check_hours:      _iv('settingsInactiveHours'),
-    stats_refresh_days:        _iv('settingsStatsRefreshDays'),
-    sound_loop_interval_minutes: _iv('soundLoopIntervalInput'),
-  };
-  if (Object.values(body).some(v => !v || v < 1)) {
-    showToast('All values must be positive integers.', { type: 'warning', duration: 4000 });
-    return;
-  }
-  const { ok, data } = await apiJSON('/api/tiktok/settings', { method: 'PATCH', body: JSON.stringify(body) });
-  if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
-  showToast('Settings saved.', { type: 'success', duration: 2500 });
-}
-
-function updateRunStates() {
-  // Patch only the dynamic run-state parts of existing cards without rebuilding DOM.
-  document.querySelectorAll('.user-card[data-userid]').forEach(card => {
-    const id    = card.dataset.userid;
-    const busy  = runQueue.includes(id) || runCurrent === id;
-    const uObj  = users.find(u => u.channel_id === id);
-    card.classList.toggle('user-card-current', !!(uObj && uObj.handle === currentUser));
-    card.querySelectorAll('.btn-run').forEach(b => { b.disabled = busy; });
-  });
-  document.querySelectorAll('.user-card[data-soundid]').forEach(card => {
-    const id      = card.dataset.soundid;
-    const inQueue = soundRunQueue.includes(id);
-    const isCur   = soundRunCurrent === id;
-    const btn     = card.querySelector('.btn-run');
-    if (!btn) return;
-    btn.textContent = isCur ? 'Running…' : inQueue ? 'Queued' : 'Run';
-    btn.disabled    = inQueue || isCur;
-  });
-  if (_modalUser) {
-    const id    = _modalUser.channel_id;
-    const busy  = runQueue.includes(id) || runCurrent === id;
-    const qBtn  = document.getElementById('modalRunQuickBtn');
-    const fBtn  = document.getElementById('modalRunFullBtn');
-    const pBtn  = document.getElementById('modalRunProfileBtn');
-    if (qBtn) qBtn.disabled = busy;
-    if (fBtn) fBtn.disabled = busy;
-    if (pBtn) pBtn.disabled = busy;
-  }
-}
-
-async function loadStatus() {
-  const { ok, data } = await apiJSON('/api/tiktok/status');
-  if (ok) {
-    renderStatus(data);
-    renderLogs(data.logs, data.log_seq);
-    updateRunStates();
-  }
-}
-
-function _tickActivityBar() {
-  const bar = document.getElementById('logActivityBar');
-  if (!bar) return;
-  if (_sleepUntil) {
-    const remSecs = Math.max(0, Math.round((_sleepUntil - Date.now()) / 1000));
-    const m = Math.floor(remSecs / 60), s = remSecs % 60;
-    const dur = m > 0 ? `${m}m ${s}s` : `${s}s`;
-    bar.innerHTML = `sleeping ${dur}`
-      + (_sleepNext ? ` <span class="lab-next">-- up next: ${esc(_sleepNext)}</span>` : '');
-    return;
-  }
-  // Idle: show the nearest upcoming scheduled run
-  const now = Date.now();
-  const candidates = [
-    _nextUserRun  ? { ts: new Date(_nextUserRun).getTime(),  label: 'user loop' }  : null,
-    _nextSoundRun ? { ts: new Date(_nextSoundRun).getTime(), label: 'sound loop' } : null,
-  ].filter(c => c && c.ts > now).sort((a, b) => a.ts - b.ts);
-  if (candidates.length) {
-    const { ts, label } = candidates[0];
-    const remSecs = Math.max(0, Math.round((ts - now) / 1000));
-    const m = Math.floor(remSecs / 60), s = remSecs % 60;
-    const dur = m >= 60
-      ? `${Math.floor(m / 60)}h ${m % 60}m`
-      : m > 0 ? `${m}m ${s}s` : `${s}s`;
-    bar.innerHTML = `waiting ${dur} <span class="lab-next">-- up next: ${esc(label)}</span>`;
-  } else {
-    bar.innerHTML = 'idle';
-  }
-}
-setInterval(_tickActivityBar, 1000);
-
-// ── User detail modal ─────────────────────────────────────────────────────────
-
-let _modalUserId           = null;
-let _modalUser             = null;   // full user object for the open modal
-let _modalPendingHighlight = null;   // { videoId, filter, sortField, sortDir } or null
-
-function openUserModal(tiktokId) {
-  const u = users.find(u => u.channel_id === tiktokId);
-  if (!u) return;
-  _modalUserId = tiktokId;
-  _modalUser   = u;
-  Object.assign(_userState, {
-    videos: [], filter: new Set(), typeFilter: new Set(), search: '',
-    sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
-    view: window.innerWidth <= 640 ? 'grid' : 'list',
-  });
-  if (_userState.obs) { _userState.obs.disconnect(); _userState.obs = null; }
-
-  // Reset history panel state
-  _phistData   = [];
-  _phistField  = new Set();
-  _phistUserId = null;
-  document.getElementById('phistPanel').style.display     = 'none';
-  document.getElementById('modalVideoList').style.display = '';
-
-  document.getElementById('modalBackdrop').style.display = 'flex';
-  _lockScroll();
-
-  _renderModalHeader(u);
-  _mRenderToolbar(_USER_MODAL_CFG, []);
-  document.getElementById('modalVideoList').innerHTML =
-    '<div class="vlist-loading">Loading videos…</div>';
-
-  _loadModalVideos(tiktokId);
-}
-
-function openUntrackedUserModal(tiktokId, username) {
-  _modalUserId = tiktokId;
-  _modalUser   = { channel_id: tiktokId, handle: username, enabled: 0 };
-  Object.assign(_userState, {
-    videos: [], filter: new Set(), typeFilter: new Set(), search: '',
-    sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
-    view: window.innerWidth <= 640 ? 'grid' : 'list',
-  });
-  if (_userState.obs) { _userState.obs.disconnect(); _userState.obs = null; }
-  _phistData   = [];
-  _phistField  = new Set();
-  _phistUserId = null;
-  document.getElementById('phistPanel').style.display     = 'none';
-  document.getElementById('modalVideoList').style.display = '';
-
-  document.getElementById('modalBackdrop').style.display = 'flex';
-  _lockScroll();
-
-  _renderUntrackedHeader(tiktokId, username);
-  _mRenderToolbar(_USER_MODAL_CFG, []);
-  document.getElementById('modalVideoList').innerHTML =
-    '<div class="vlist-loading">Loading videos…</div>';
-  _loadModalVideos(tiktokId);
-}
-
-function _renderUntrackedHeader(tiktokId, username) {
-  const hdr = document.getElementById('modalHeader');
-  hdr.classList.add('modal-header-untracked');
-  hdr.innerHTML = `
-    <div class="modal-avatar-wrap">
-      <span class="avatar-letter">${esc((username || '?')[0])}</span>
-    </div>
-    <div class="modal-name-row">
-      <span class="modal-name">@${esc(username)}</span>
-    </div>
-    <div class="modal-user-meta">
-      <div class="modal-handle">@${esc(username)}</div>
-      <div class="modal-id-line">id:${esc(tiktokId)}</div>
-      <div class="modal-stats-row">
-        <span><strong>-</strong> followers</span>
-        <span><strong>-</strong> following</span>
-        <span><strong>-</strong> on TikTok</span>
-        <span><strong>0</strong> saved locally</span>
-      </div>
-    </div>
-    <div class="modal-untracked-overlay" id="untrackedOverlay">
-      <div class="modal-untracked-content">
-        <div class="modal-untracked-identity">@${esc(username)}</div>
-        <button class="btn-run btn-track-user"
-                onclick="_trackUser('${esc(tiktokId)}','${esc(username)}')">Track user</button>
-      </div>
-    </div>`;
-}
-
-async function _trackUser(tiktokId, username) {
-  const overlay = document.getElementById('untrackedOverlay');
-  if (!overlay) return;
-  overlay.innerHTML = '<div class="modal-untracked-spinner"><div class="spinner" style="width:24px;height:24px;border-width:3px"></div></div>';
-
-  const { ok, data } = await apiJSON(
-    `/api/tiktok/channels/${encodeURIComponent(tiktokId)}/track`,
-    { method: 'POST' }
-  );
-  if (!ok) {
-    overlay.innerHTML = `<div class="modal-untracked-error">${esc(data?.error || 'Failed to start tracking')}</div>`;
-    return;
-  }
-  _pollUntilTracked(tiktokId, data.handle, overlay);
-}
-
-function _pollUntilTracked(tiktokId, username, overlay) {
-  const iv = setInterval(async () => {
-    const { ok: qOk, data: queue } = await apiJSON('/api/tiktok/queue');
-    if (!qOk) return;
-    const entry = queue[username];
-    if (entry?.status === 'error') {
-      clearInterval(iv);
-      overlay.innerHTML = `<div class="modal-untracked-error">${esc(entry.message || 'Tracking failed')}</div>`;
-      return;
-    }
-    if (!entry) {
-      clearInterval(iv);
-      const { ok, data } = await apiJSON('/api/tiktok/channels');
-      if (ok) users = data;
-      const u = users.find(u => u.channel_id === tiktokId);
-      if (u) {
-        _modalUser = u;
-        const hdr = document.getElementById('modalHeader');
-        _renderModalHeader(u);  // replaces innerHTML; overlay detached, class + position:relative kept
-        const fadeEl = document.createElement('div');
-        fadeEl.className = 'modal-untracked-overlay';
-        hdr.appendChild(fadeEl);
-        requestAnimationFrame(() => {
-          fadeEl.style.transition = 'opacity 0.3s';
-          fadeEl.style.opacity    = '0';
-        });
-        setTimeout(() => {
-          fadeEl.remove();
-          hdr.classList.remove('modal-header-untracked');
-        }, 320);
-        _loadModalVideos(tiktokId);
-      } else {
-        overlay.innerHTML = '<div class="modal-untracked-error">User data not found after tracking.</div>';
-      }
-    }
-  }, 2000);
-}
-
-function openUserModalAndHighlight(tiktokId, videoId, filter, sortField, sortDir) {
-  _modalPendingHighlight = {
-    videoId,
-    filter:    filter && filter !== 'all' ? new Set([filter]) : new Set(),
-    sortField: sortField || 'upload_date',
-    sortDir:   sortDir   || 'desc',
-  };
-  openUserModal(tiktokId);
-}
-
-function openUserModalWithHistory(tiktokId, field) {
-  openUserModal(tiktokId);
-  openProfileHistory(field);
-}
-
-function closeModal() {
-  document.getElementById('modalBackdrop').style.display = 'none';
-  _unlockScroll();
-  if (_userState.obs) { _userState.obs.disconnect(); _userState.obs = null; }
-  _modalUserId       = null;
-  _modalUser         = null;
-  _userState.videos  = [];
-}
-
-function handleBackdropClick(e) {
-  if (e.target === e.currentTarget) closeModal();
-}
-
-document.addEventListener('keydown', e => {
-  if (document.getElementById('carouselModal').style.display !== 'none') {
-    if (e.key === 'ArrowLeft')  { carouselStep(-1); return; }
-    if (e.key === 'ArrowRight') { carouselStep(1);  return; }
-    if (e.key === 'Escape')     { closeCarousel();  return; }
-    return;
-  }
-  if (e.key !== 'Escape') return;
-  if (document.getElementById('imgModal').style.display !== 'none') {
-    closeImgModal(); return;
-  }
-  if (document.getElementById('vidModal').style.display !== 'none') {
-    closeVidModal(); return;
-  }
-  if (document.getElementById('soundModalBackdrop').style.display !== 'none') {
-    closeSoundModal(); return;
-  }
-  if (document.getElementById('modalBackdrop').style.display !== 'none') {
-    closeModal(); return;
-  }
-  if (document.getElementById('recentLogBackdrop').style.display !== 'none') {
-    closeRecentLog(); return;
-  }
-  if (document.getElementById('settingsBackdrop').style.display !== 'none') {
-    closeSettings();
-  }
-});
-
-// ── Image preview modal ───────────────────────────────────────────────────
-
-function openImgModal(videoId) {
-  openImgModalUrl(`/api/tiktok/videos/${encodeURIComponent(videoId)}/thumbnail`);
-}
-
-// ── Video player modal ────────────────────────────────────────────────────
-
-function openVidModal(videoId) {
-  const vid = document.getElementById('vidModalPlayer');
-  vid.src = `/api/tiktok/videos/${encodeURIComponent(videoId)}/file`;
-  document.getElementById('vidModal').style.display = 'flex';
-  _lockScroll();
-  vid.play().catch(() => {});
-}
-
-function closeVidModal() {
-  const vid = document.getElementById('vidModalPlayer');
-  vid.pause();
-  vid.src = '';
-  document.getElementById('vidModal').style.display = 'none';
-  _unlockScroll();
-}
-
-// ── Photo carousel modal (shared engine in common.js) ─────────────────────
-
-async function openCarousel(videoId) {
-  const { ok, data } = await apiJSON(`/api/tiktok/videos/${encodeURIComponent(videoId)}/photos`);
-  if (!ok || !data.urls || !data.urls.length) return;
-  openCarouselSlides(data.urls);
-}
-
-async function _loadModalVideos(tiktokId) {
-  const { ok, data } = await apiJSON(`/api/tiktok/channels/${tiktokId}/videos`);
-  if (!ok || _modalUserId !== tiktokId) return;
-  // Engine vocabulary: expose content_type/title under the names the renderers use
-  data.forEach(v => { v.type = v.content_type; v.description = v.title; });
-  _userState.videos = data;
-
-  if (_modalPendingHighlight) {
-    const { videoId, filter, sortField, sortDir } = _modalPendingHighlight;
-    _modalPendingHighlight   = null;
-    _userState.view          = 'list';
-    _userState.filter        = filter;
-    _userState.typeFilter    = new Set();
-    _userState.sort          = { field: sortField, dir: sortDir };
-    _mRenderColHdrs(_USER_MODAL_CFG);
-    _mRenderToolbar(_USER_MODAL_CFG, data);
-    _mRenderList(_USER_MODAL_CFG);
-    const row = document.querySelector(`[data-video-id="${CSS.escape(videoId)}"]`);
-    if (row) {
-      row.scrollIntoView({ block: 'center' });
-      row.classList.add('video-row-highlight');
-      row.addEventListener('mouseenter', () => row.classList.remove('video-row-highlight'), { once: true });
-    }
-  } else {
-    // Don't overwrite the toolbar/list if profile history is already open
-    const historyOpen = document.getElementById('phistPanel').style.display !== 'none';
-    if (!historyOpen) {
-      _mRenderToolbar(_USER_MODAL_CFG, data);
-      _mRenderList(_USER_MODAL_CFG);
-    }
-  }
-}
-
-function setModalFilter(f)       { _mSetFilter(_USER_MODAL_CFG, f); }
-function setModalTypeFilter(t)   { _mSetTypeFilter(_USER_MODAL_CFG, t); }
-function toggleModalToolbar()    { _mToggleToolbar(_USER_MODAL_CFG); }
-function setModalSort(f)         { _mSetSort(_USER_MODAL_CFG, f); }
-function onModalSearch(val) {
-  _userState.search = val.trim();
-  _mRenderToolbar(_USER_MODAL_CFG, _userState.videos);
-  _mRenderList(_USER_MODAL_CFG);
-}
-function onSoundModalSearch(val) {
-  _soundState.search = val.trim();
-  _mRenderToolbar(_SOUND_MODAL_CFG, _soundState.videos);
-  _mRenderList(_SOUND_MODAL_CFG);
-}
-
-async function toggleUserStarModal(id) {
-  await toggleUserStar(id);
-  const u = users.find(u => u.channel_id === id);
-  if (u) _renderModalHeader(u);
-}
-
-async function removeUserModal(id, label) {
-  return _creatorRemove('/api/tiktok/channels', id, label, () => { closeModal(); loadUsers(); });
-}
-
-function _renderModalHeader(u) {
-  const oldNames = (u.old_handles || []).map(n => `@${esc(n)}`).join(' · ');
-
-  const isInactive       = u.tracking_enabled === 0;
-  const isPrivateAccount = ['private_accessible', 'private_blocked', 'blocked'].includes(u.privacy_status);
-  const { cls: trackingCls, label: trackingLbl } = _trackingBadge(u.tracking_enabled);
-  const accountBadge = _relationPill(u);
-
-  const joinStr = u.join_date
-    ? ' · Joined ' + _dtFmtMonthYear.format(new Date(u.join_date * 1000))
-    : '';
-
-  const banCountdownStr = (() => {
-    if (u.account_status !== 'banned' || !u.banned_at || u.tracking_enabled === 0) return '';
-    const daysElapsed = Math.floor((Date.now() / 1000 - u.banned_at) / 86400);
-    const daysLeft    = 14 - daysElapsed;
-    if (daysLeft <= 0) return '';
-    return `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} until inactive`;
-  })();
-
-  const nextCheckStr = (() => {
-    if (u.enabled === 0 || u.tracking_enabled === 0) return '';
-    if (!u.next_check_at || u.next_check_at * 1000 <= Date.now()) return 'Next check: at next session';
-    return `Next check ${fmt.relFuture(new Date(u.next_check_at * 1000).toISOString())}`;
-  })();
-
-  const inRunQueue   = runQueue.includes(u.channel_id);
-  const isRunCurrent = runCurrent === u.channel_id;
-  const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
-
-  document.getElementById('modalHeader').innerHTML = `
-    <div class="modal-avatar-wrap">
-      <span class="avatar-letter">${esc((u.handle||'?')[0])}</span>
-      ${u.avatar_cached ? `<img class="modal-avatar" src="/api/tiktok/channels/${esc(u.channel_id)}/avatar" alt=""
-           onerror="this.style.display='none'"
-           onclick="openImgModalUrl('/api/tiktok/channels/${esc(u.channel_id)}/avatar')">` : ''}
-    </div>
-    <div class="modal-name-row">
-      <span class="modal-name">${isPrivateAccount ? LOCK_SVG : ''}${esc(u.display_name || u.handle)}</span>
-      ${u.verified ? '<span class="modal-verified">✓ Verified</span>' : ''}
-      <span class="account-status ${trackingCls}">${trackingLbl}</span>
-      ${accountBadge}
-      <label class="tracking-toggle" title="${isInactive ? 'Video tracking off (profile changes still tracked)' : 'Video tracking on'}">
-        <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setUserTracking('${esc(u.channel_id)}', this.checked)">
-        <span class="toggle-track"><span class="toggle-thumb"></span></span>
-        <span class="toggle-label">Track videos</span>
-      </label>
-    </div>
-    <div class="modal-user-meta">
-      <div class="modal-handle">
-        @${esc(u.handle)}
-        ${oldNames ? `<span class="user-old-names">· ${oldNames}</span>` : ''}
-      </div>
-      <div class="modal-id-line">id:${esc(u.channel_id)}${joinStr}${nextCheckStr ? ` · ${nextCheckStr}` : ''}</div>
-      ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
-      ${u.description ? `<div class="modal-bio" onclick="this.classList.toggle('expanded')">${esc(u.description)}</div>` : ''}
-      ${u.bio_link ? `<div class="modal-bio-link"><a href="${esc(u.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(u.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
-      <div class="modal-stats-row">
-        <span><strong>${(u.subscriber_count || 0).toLocaleString()}</strong> followers</span>
-        ${u.following_count != null ? `<span><strong>${u.following_count.toLocaleString()}</strong> following</span>` : ''}
-        ${u.video_count     != null ? `<span><strong>${u.video_count.toLocaleString()}</strong> on TikTok</span>` : ''}
-        <span><strong>${u.video_total || 0}</strong> saved locally</span>
-        ${(u.video_deleted || 0) > 0 ? `<span style="color:var(--red)"><strong>${(u.video_deleted || 0)}</strong> deleted</span>` : ''}
-        ${u.video_undeleted ? `<span style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
-        ${u.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="openProfileHistory()" title="Open profile change history"><strong>${u.profile_history_count}</strong> profile ${u.profile_history_count === 1 ? 'update' : 'updates'}</span>` : ''}
-      </div>
-      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn-star${u.starred ? ' starred' : ''}" onclick="toggleUserStarModal('${esc(u.channel_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
-        <button id="modalRunQuickBtn" class="btn-run" ${runDisabled} onclick="runUserQuick('${esc(u.channel_id)}')">${_refreshIcon} Quick</button>
-        <button id="modalRunFullBtn" class="btn-run" ${runDisabled} onclick="runUser('${esc(u.channel_id)}')">${_refreshIcon} Full</button>
-        <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>runUserProfile('${esc(u.channel_id)}')},{label:'Add note',onclick:_toggleUserNote},{label:'Remove',danger:true,onclick:()=>removeUserModal('${esc(u.channel_id)}','@${esc(u.handle)}')}])">•••</button>
-      </div>
-      <div id="modalNoteArea" style="display:none;margin-top:8px">
-        <textarea placeholder="Add a note about this user…"
-          onblur="saveUserComment('${esc(u.channel_id)}', this.value)"
-          style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
-                 background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
-                 color:var(--text);font-family:inherit;line-height:1.5"
-        >${esc(u.comment || '')}</textarea>
-      </div>
-    </div>
-  `;
-}
-
-function _toggleUserNote() {
-  const area = document.getElementById('modalNoteArea');
-  if (!area) return;
-  const hidden = area.style.display === 'none';
-  area.style.display = hidden ? '' : 'none';
-  if (hidden) setTimeout(() => area.querySelector('textarea').focus(), 0);
-}
-
-// ── Profile history ──────────────────────────────────────────────────────────
-
-let _phistField  = new Set();
-let _phistData   = [];
-let _phistUserId = null;
-
-const _PHIST_FIELD_LABELS = {
-  all:            'All',
-  username:       'Username',
-  handle:         'Username',
-  display_name:   'Display name',
-  bio:            'Bio',
-  description:    'Bio',
-  bio_link:       'Bio link',
-  avatar:         'Avatar',
-  account_status: 'Account status',
-  privacy_status: 'Privacy',
-};
-
-const _STATUS_LABELS = {
-  active:              'Active',
-  banned:              'Banned',
-  public:              'Public',
-  private_accessible:  'Private (accessible)',
-  private_blocked:     'Private',
-  blocked:             'Blocked',
-};
-
-async function openProfileHistory(field) {
-  _phistUserId = _modalUserId;
-  if (!_phistUserId) return;
-  if (field) _phistField = new Set([field]);
-
-  // Toggle off if already open
-  if (document.getElementById('phistPanel').style.display !== 'none') {
-    _closeProfileHistory();
-    return;
-  }
-
-  document.getElementById('phistPanel').style.display = '';
-  document.getElementById('modalVideoList').style.display = 'none';
-  document.getElementById('phistPanel').innerHTML = '<div class="phist-empty">Loading…</div>';
-
-  _renderHistoryToolbar();
-
-  const { ok, data } = await apiJSON(`/api/tiktok/channels/${encodeURIComponent(_phistUserId)}/profile-history`);
-  if (!ok) {
-    document.getElementById('phistPanel').innerHTML = '<div class="phist-empty">Failed to load history.</div>';
-    return;
-  }
-  _phistData = data;
-  // keep _phistField if it was pre-set by openUserModalWithHistory, otherwise show all fields
-  if (!field) _phistField = new Set();
-  _renderHistoryToolbar();
-  _renderHistoryEntries();
-}
-
-function _closeProfileHistory() {
-  document.getElementById('phistPanel').style.display     = 'none';
-  document.getElementById('modalVideoList').style.display = '';
-  if (_userState.videos.length) {
-    _mRenderToolbar(_USER_MODAL_CFG, _userState.videos);
-    _mRenderList(_USER_MODAL_CFG);
-  }
-  // If _userState.videos is still empty the load is still in flight; the
-  // historyOpen guard in _loadModalVideos will now pass and render normally.
-}
-
-function setHistoryField(field) {
-  _phistField.has(field) ? _phistField.delete(field) : _phistField.add(field);
-  const toolbar = document.getElementById('modalToolbar');
-  toolbar.querySelectorAll('[data-hist-key]').forEach(btn => {
-    btn.classList.toggle('active', _phistField.has(btn.dataset.histKey));
-  });
-  _renderHistoryEntries();
-}
-
-function _renderHistoryToolbar() {
-  const fields = ['username', 'display_name', 'bio', 'bio_link', 'avatar', 'account_status', 'privacy_status'];
-  const pills  = fields.map(f => {
-    const active = _phistField.has(f) ? ' active' : '';
-    return `<button class="filter-pill${active}" data-hist-key="${f}" onclick="setHistoryField('${f}')">${_PHIST_FIELD_LABELS[f]}</button>`;
-  }).join('');
-  document.getElementById('modalToolbar').innerHTML =
-    `<div class="filter-pills multi">${pills}</div>`
-    + `<button class="filter-pill" style="margin-left:auto" onclick="_closeProfileHistory()">← Videos</button>`;
-}
-
-function _renderHistoryEntries() {
-  const panel   = document.getElementById('phistPanel');
-  const entries = _phistField.size
-    ? _phistData.filter(e => _phistField.has(e.field))
-    : _phistData;
-
-  if (!entries.length) {
-    panel.innerHTML = '<div class="phist-empty">No history recorded for the selected fields yet.</div>';
-    return;
-  }
-
-  // Pre-compute the "new" value for each entry.
-  // _phistData is newest-first. For each field, the most-recent entry's "new"
-  // value is the current profile value; older entries' "new" value is the
-  // old_value of the next-newer entry for that same field.
-  const u = _modalUser;
-  const _currentVal = {
-    username:       u?.handle       || null,
-    display_name:   u?.display_name   || null,
-    bio:            u?.description            || null,
-    bio_link:       u?.bio_link       || null,
-    avatar:         '__current__',
-    account_status: u?.account_status || null,
-    privacy_status: u?.privacy_status || null,
-  };
-  const newValMap = new Map();
-  ['username', 'display_name', 'bio', 'bio_link', 'avatar', 'account_status', 'privacy_status'].forEach(field => {
-    const fe = _phistData.filter(e => e.field === field); // newest-first
-    fe.forEach((e, fi) => {
-      newValMap.set(e, fi === 0 ? _currentVal[field] : fe[fi - 1].old_value);
-    });
-  });
-
-  const sideHdr = (side) =>
-    `<div class="phist-side-hdr"><span class="phist-side-label">${side}</span></div>`;
-
-  panel.innerHTML = entries.map(e => {
-    const dateStr = _dtFmt.format(new Date(e.changed_at * 1000));
-    const fieldLabel = _PHIST_FIELD_LABELS[e.field] || e.field;
-    const newVal = newValMap.get(e);
-
-    if (e.field === 'avatar') {
-      const oldSrc = `/api/tiktok/channels/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(e.old_value)}`;
-      const newSrc = newVal === '__current__'
-        ? `/api/tiktok/channels/${encodeURIComponent(_phistUserId)}/avatar?t=${e.changed_at}`
-        : `/api/tiktok/channels/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(newVal)}`;
-      const img = (src, label) =>
-        `<div class="phist-avatar-col">
-          <span class="phist-side-label">${label}</span>
-          <img class="phist-avatar-lg" src="${src}" alt="${label}"
-               onerror="this.style.visibility='hidden';this.style.cursor='default';this.onclick=null"
-               onclick="openImgModalUrl('${src}')">
-        </div>`;
-      return `<div class="phist-entry">
-        <div class="phist-entry-hdr"><strong>${esc(fieldLabel)}</strong> <span class="phist-date">· Changed ${dateStr}</span></div>
-        <div class="phist-avatar-diff">
-          ${img(oldSrc, 'Old')}
-          <div class="phist-arrow">→</div>
-          ${img(newSrc, 'New')}
-        </div>
-      </div>`;
-    }
-
-    const isStatusField = e.field === 'account_status' || e.field === 'privacy_status';
-    const valHtml = (v) => v
-      ? `<div class="phist-value">${esc(isStatusField ? (_STATUS_LABELS[v] || v) : v)}</div>`
-      : `<div class="phist-value empty">(empty)</div>`;
-    return `<div class="phist-entry">
-      <div class="phist-entry-hdr"><strong>${esc(fieldLabel)}</strong> <span class="phist-date">· Changed ${dateStr}</span></div>
-      <div class="phist-diff">
-        <div class="phist-side">${sideHdr('Old')}${valHtml(e.old_value)}</div>
-        <div class="phist-arrow">→</div>
-        <div class="phist-side">${sideHdr('New')}${valHtml(newVal)}</div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-
-
-function _thumbCell(v) {
-  const id    = esc(v.video_id);
-  const badge = v.type === 'video' ? _playBadge : v.type === 'photo' ? (v.multi ? _photoBadge : _imageBadge) : '';
-  return `<div style="position:relative;line-height:0;width:90px;flex-shrink:0">
-    <img class="video-thumb" src="/api/tiktok/videos/${id}/thumbnail" alt="" loading="lazy"
-         onerror="this.style.opacity='.15'"
-         ${_videoThumbAction(v)}>${badge}</div>`;
-}
-
-function _videoThumbAction(v) {
-  const id = esc(v.video_id);
-  if (v.type === 'video') return `onclick="event.stopPropagation();openVidModal('${id}')" title="Play video" style="cursor:pointer"`;
-  if (v.type === 'photo') return `onclick="event.stopPropagation();openCarousel('${id}')" title="View photos" style="cursor:pointer"`;
-  return `style="cursor:default"`;
-}
-
-function _videoActionBtns(v) {
-  const id = esc(v.video_id);
-  if (v.type === 'video' && v.file_path) {
-    return `<a class="play-btn" href="/api/tiktok/videos/${id}/file" download="${id}.mp4"
-             onclick="event.stopPropagation()" title="Download video">${_dlIcon}</a>`;
-  } else if (v.type === 'photo' && v.file_path) {
-    return `<a class="play-btn" href="/api/tiktok/videos/${id}/photos/zip" download="${id}_photos.zip"
-             onclick="event.stopPropagation()" title="Download all photos as zip">${_dlIcon}</a>`;
-  }
-  return '';
-}
-
-
-function setModalView(view) {
-  _userState.view = view;
-  const toolbar = document.getElementById('modalToolbar');
-  toolbar.querySelectorAll('[data-view-key]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.viewKey === view);
-  });
-  toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
-  _mRenderList(_USER_MODAL_CFG);
-}
-
-function setSoundModalView(view) {
-  _soundState.view = view;
-  const toolbar = document.getElementById('soundModalToolbar');
-  toolbar.querySelectorAll('[data-view-key]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.viewKey === view);
-  });
-  toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
-  _mRenderList(_SOUND_MODAL_CFG);
-}
-
 // ── Stats backfill ────────────────────────────────────────────────────────────
 
 let _backfillPoll = null;
@@ -2361,7 +1231,7 @@ async function retryFailed() {
   statusEl.textContent = `${data.reset} video(s) cleared, ready to retry.`;
   setTimeout(() => { statusEl.textContent = ''; }, 8000);
   // Reload status so the counts update
-  loadStatus();
+  ttLoadStatus();
 }
 
 let _failedListOpen = false;
@@ -2378,7 +1248,7 @@ async function toggleFailedList() {
   el.innerHTML = data.map(v =>
     `<div><code style="user-select:all">${esc(v.video_id)}</code>`
     + ` · @${esc(v.handle)}`
-    + (v.stats_last_error ? ` — <span style="color:var(--red)">${esc(v.stats_last_error)}</span>` : '')
+    + (v.stats_last_error ? ` · <span style="color:var(--red)">${esc(v.stats_last_error)}</span>` : '')
     + `</div>`
   ).join('');
 }
@@ -2406,27 +1276,8 @@ function _startBackfillPoll() {
   }, 2000);
 }
 
+// Reset backfill: two-step confirmation
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-
-resetUserFilters();   // clear any browser-restored form state
-_initAllGliders();
-loadCookies();
-loadUsers();
-loadSounds();
-loadStatus();
-loadQueue();
-loadStats();
-loadRecent();
-setInterval(loadCookies, 30000);
-setInterval(loadUsers,   15000);
-setInterval(loadSounds,  60000);
-setInterval(loadStatus,   5000);
-setInterval(loadQueue,    3000);
-setInterval(loadStats,   60000);
-setInterval(loadRecent,  30000);
-
-// Reset backfill — two-step confirmation
 let _resetBackfillConfirming = false;
 let _resetBackfillTimer = null;
 
@@ -2435,7 +1286,7 @@ function resetBackfillStep() {
   const statusEl = document.getElementById('resetBackfillStatus');
 
   if (!_resetBackfillConfirming) {
-    // First click — enter confirm state
+    // First click enters the confirm state
     _resetBackfillConfirming = true;
     btn.textContent = 'Click again to confirm';
     btn.style.background = 'var(--red-bg)';
@@ -2449,7 +1300,7 @@ function resetBackfillStep() {
       statusEl.textContent = '';
     }, 5000);
   } else {
-    // Second click — execute
+    // Second click executes
     clearTimeout(_resetBackfillTimer);
     _resetBackfillConfirming = false;
     btn.disabled = true;
@@ -2464,13 +1315,25 @@ function resetBackfillStep() {
         statusEl.textContent = data.error || 'Failed.';
         statusEl.style.color = 'var(--red)';
       } else {
-        statusEl.textContent = `Done — ${data.reset.toLocaleString()} videos marked for re-backfill.`;
+        statusEl.textContent = `Done. ${data.reset.toLocaleString()} videos marked for re-backfill.`;
         statusEl.style.color = 'var(--green)';
         setTimeout(() => { statusEl.textContent = ''; }, 12000);
       }
     });
   }
 }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+loadCookies();
+loadSounds();
+setInterval(loadCookies, 30000);
+setInterval(loadSounds,  60000);
+_initAllGliders();
+
+// Settings platform tabs
+['jobs', 'diag', 'database'].forEach(s => initSettingsPlatformTabs(s));
+PLATFORMS.forEach(p => initDbQueryPane(p.id));
 
 // Resume backfill poll if it was running before page load
 (async () => {
@@ -2482,11 +1345,7 @@ function resetBackfillStep() {
   }
 })();
 
-// ── Settings platform tabs init ───────────────────────────────────────────────
-['jobs', 'diag', 'database'].forEach(s => initSettingsPlatformTabs(s));
-PLATFORMS.forEach(p => initDbQueryPane(p.id));
-
-// ── Migration warning ─────────────────────────────────────────────────────────
+// Migration warning
 
 (async function checkMigrationStatus() {
   try {
