@@ -74,7 +74,7 @@ function initChannelApp(cfg) {
   <div class="panel-card loops-card">
     <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">
       <span class="section-title">${cfg.loopsTitle || 'Loop'}</span>
-      ${cfg.extraLoopHtml ? `<div class="filter-pills">
+      ${cfg.extraLoopHtml ? `<div class="filter-pills loop-view-toggle">
         <button class="filter-pill active" id="${P}LvMain"  onclick="${P}SetLoopView('main')">${CreatorsCap}</button>
         <button class="filter-pill"        id="${P}LvExtra" onclick="${P}SetLoopView('extra')">${cfg.extraLoopLabel || 'More'}</button>
       </div>` : ''}
@@ -539,9 +539,19 @@ function initChannelApp(cfg) {
     rightEl.innerHTML = right;
   }
 
+  let _lastRecentJson = null;
   const loadRecent = X('LoadRecent', async () => {
     const { ok, data } = await apiJSON(`${API}/recent`);
-    if (ok) renderRecent(data);
+    if (!ok) return;
+    renderRecent(data);
+    // Warm the recent-log modal cache so the expanded lists open instantly;
+    // refresh only when the panel data actually changed
+    const j = JSON.stringify(data);
+    if (j !== _lastRecentJson) {
+      _lastRecentJson = j;
+      _prefetchRecentLog(`${API}/recent`,
+        ['saved', 'deletions', 'profile-changes', ...(cfg.hasBans ? ['bans'] : [])]);
+    }
   });
 
   // ── Loop status ───────────────────────────────────────────────────────────

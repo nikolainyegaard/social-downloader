@@ -1389,6 +1389,17 @@ let _recentLogObs       = null;
 let _recentLogLastGroup = null;
 let _recentLogCfg       = null;
 
+// First-batch cache per "apiBase/type", warmed by each platform's recents
+// poll when the panel data changes, so the expanded modals open instantly
+const _recentLogCache = {};
+
+async function _prefetchRecentLog(apiBase, types) {
+  for (const t of types) {
+    const { ok, data } = await apiJSON(`${apiBase}/${t}?offset=0&limit=50`);
+    if (ok) _recentLogCache[`${apiBase}/${t}`] = data;
+  }
+}
+
 function _openRecentLogModal(type, cfg) {
   _recentLogCfg       = cfg;
   _recentLogType      = type;
@@ -1432,8 +1443,13 @@ function _setupRecentLogScroll() {
 async function _loadRecentLogBatch() {
   if (_recentLogDone || !_recentLogType || !_recentLogCfg || _recentLogLoading) return;
   _recentLogLoading = true;
-  const url = `${_recentLogCfg.apiBase}/${_recentLogType}?offset=${_recentLogOffset}&limit=50`;
-  const { ok, data } = await apiJSON(url);
+  const cached = _recentLogOffset === 0
+    ? _recentLogCache[`${_recentLogCfg.apiBase}/${_recentLogType}`] : null;
+  let ok = true, data = cached;
+  if (!cached) {
+    const url = `${_recentLogCfg.apiBase}/${_recentLogType}?offset=${_recentLogOffset}&limit=50`;
+    ({ ok, data } = await apiJSON(url));
+  }
   if (!ok || !_recentLogType) { _recentLogLoading = false; return; }
 
   // Grouped responses return {items, rows_consumed}; flat responses return a plain array.

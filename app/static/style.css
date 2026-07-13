@@ -652,7 +652,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .modal-close::after,  .media-modal-close::after  { transform: translate(-50%, -50%) rotate(-45deg); }
 .modal-close:hover,
 .media-modal-close:hover { background: var(--border); color: var(--text); }
-.modal-close { top: 14px; right: 14px; z-index: 10; flex-shrink: 0; }
+/* Smaller than the media overlay X: sits centered in the short modal headers
+   (recent log, report view) without touching their bottom divider */
+.modal-close { width: 26px; height: 26px; top: 10px; right: 12px; z-index: 10; flex-shrink: 0; }
+.modal-close::before, .modal-close::after { width: 12px; }
 
 /* ── Modal header ─────────────────────────────────────────────────────────── */
 
@@ -804,6 +807,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 
 .filter-pills { display: flex; gap: 4px; position: relative; background: var(--surface2); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.25); padding: 4px; border-radius: var(--radius-pill); }
+
+/* Low-profile loop view toggle: must not add height to the panel header */
+.loop-view-toggle { padding: 2px; box-shadow: none; }
+.loop-view-toggle .filter-pill { height: 16px; padding: 0 8px; font-size: 10px; }
 .filter-pill {
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--surface2);
@@ -1080,6 +1087,15 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 @media (max-width: 900px) { .mid-panels { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 600px) { .mid-panels { grid-template-columns: 1fr; } }
+
+/* Uniform dashboard panel heights across all apps. Fixed heights only where
+   panels sit side by side; stacked single-column mobile keeps natural height.
+   Content taller than the card scrolls inside the panel body. */
+@media (min-width: 601px) {
+  .top-panels .panel-card { height: 320px; }
+  .mid-panels .panel-card { height: 190px; }
+  .top-panels .panel-body, .mid-panels .panel-body { overflow-y: auto; }
+}
 
 /* Recent panel two-column split */
 .recent-split {

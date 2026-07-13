@@ -25,6 +25,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The TikTok Loops panel now toggles between the User and Sound loops with pills in the panel header, so the panel is the same height as on the other apps instead of stacking both loops
 
 ### Changed
+- Dashboard panels have uniform heights on every app: Statistics and Recent share one fixed height, Activity and Loops another, with content scrolling inside the panel when it outgrows the card; stacked mobile panels keep their natural height
+- The expanded Recent modals (Recently saved, deleted, changed, banned) open instantly: the first page of each list is prefetched in the background whenever the Recent panel data changes
+- The modal close button is smaller and sits centered in short modal headers instead of touching the header divider
 - The TikTok frontend now renders from the shared platform engine: the standalone TikTok implementation collapsed into a config over the engine plus TikTok-only extras (sounds catalog and sound modal, sound loop panel, stats backfill, jobs, diagnostics, migration); UI fixes now land once for all four apps
 - TikTok-only UI features became engine features that appear on any platform whose data supplies them: relation and privacy pills, banned and blocked card styling, private-account lock icon, Priority badge on starred creators, pending re-scan notice on cards, session completed/total counts in the loop meta line, verified badge, join date, ban countdown, bio link, follower/following counts, old handles in search and display, and a next-check line in the detail modal
 - Every platform's log console now appends new lines incrementally using the server's log sequence counter instead of rebuilding the console on each update; the log clear position survives reloads on all platforms the same way
