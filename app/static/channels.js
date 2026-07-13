@@ -72,7 +72,7 @@ function initChannelApp(cfg) {
     </div>
   </div>
   <div class="panel-card loops-card">
-    <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">
+    <div class="panel-header" style="position:relative">
       <span class="section-title">${cfg.loopsTitle || 'Loop'}</span>
       ${cfg.extraLoopHtml ? `<div class="filter-pills loop-view-toggle">
         <button class="filter-pill active" id="${P}LvMain"  onclick="${P}SetLoopView('main')">${CreatorsCap}</button>

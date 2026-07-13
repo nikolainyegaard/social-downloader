@@ -808,8 +808,12 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 .filter-pills { display: flex; gap: 4px; position: relative; background: var(--surface2); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.25); padding: 4px; border-radius: var(--radius-pill); }
 
-/* Low-profile loop view toggle: must not add height to the panel header */
-.loop-view-toggle { padding: 2px; box-shadow: none; }
+/* Low-profile loop view toggle: absolutely positioned inside the panel
+   header so it can never influence the header height */
+.loop-view-toggle {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  padding: 2px; box-shadow: none;
+}
 .loop-view-toggle .filter-pill { height: 16px; padding: 0 8px; font-size: 10px; }
 .filter-pill {
   display: inline-flex; align-items: center; justify-content: center;
