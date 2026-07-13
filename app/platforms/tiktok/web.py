@@ -271,6 +271,11 @@ def register_tiktok_routes(bp, engine) -> None:
         engine.enqueue_add(row["handle"])
         return jsonify({"queued": True, "handle": row["handle"]}), 202
 
+    # Post IDs currently being fetched by a direct-add thread; a re-paste while
+    # the first attempt is still retrying must not spawn a second thread
+    _direct_inflight: set = set()
+    _direct_lock = threading.Lock()
+
     @bp.route("/videos/direct", methods=["POST"])
     def add_direct_video():
         """Save a single post from a direct URL (e.g. subscriber-only videos,
@@ -289,13 +294,23 @@ def register_tiktok_routes(bp, engine) -> None:
             store.set_video_direct_added(vid_id)
             return jsonify({"ok": True, "video_id": vid_id, "already_saved": True})
 
+        with _direct_lock:
+            if vid_id in _direct_inflight:
+                return jsonify({"ok": True, "video_id": vid_id, "in_progress": True})
+            _direct_inflight.add(vid_id)
+
         from platforms.tiktok.tracker import run_direct_video
         log = engine.loop._log
         log(f"=== Direct URL add: {vid_id} ===")
-        threading.Thread(
-            target=lambda: run_direct_video(engine, vid_id, log),
-            daemon=True,
-        ).start()
+
+        def _worker():
+            try:
+                run_direct_video(engine, vid_id, log)
+            finally:
+                with _direct_lock:
+                    _direct_inflight.discard(vid_id)
+
+        threading.Thread(target=_worker, daemon=True).start()
         return jsonify({"ok": True, "video_id": vid_id, "queued": True}), 202
 
     @bp.route("/channels/<channel_id>/avatar-history/<filename>", methods=["GET"])

@@ -999,7 +999,19 @@ def run_direct_video(engine, vid_id: str, log: Callable[[str], None]) -> None:
     not by listing diff.
     """
     _bind(engine)
-    result = save_video_by_id(vid_id, get_cookies_flat(), log)
+    # The page scrape intermittently returns no item data (soft bot detection)
+    # and succeeds on a later attempt. The sound loop retries next cycle; the
+    # direct flow has no next cycle, so retry here before giving up.
+    result = None
+    for attempt in range(3):
+        if attempt:
+            time.sleep(15)
+            log(f"Retrying direct post {vid_id} (attempt {attempt + 1}/3)")
+        result = save_video_by_id(vid_id, get_cookies_flat(), log)
+        if result:
+            break
     if result:
         store.set_video_direct_added(vid_id)
         log(f"Direct post {vid_id} recorded; exempt from deletion checks")
+    else:
+        log(f"Direct post {vid_id} failed after 3 attempts; paste the URL again to retry")

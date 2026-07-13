@@ -105,6 +105,8 @@ async function _ttAddHandler(val, addToasts) {
     });
     if (ok && data.already_saved) {
       t.update(`Post ${data.video_id} was already saved; now exempt from deletion checks.`, { type: 'success' });
+    } else if (ok && data.in_progress) {
+      t.update(`Post ${data.video_id} is already being fetched. Progress shows in the Log view.`, { type: 'success' });
     } else if (ok) {
       t.update(`Post ${data.video_id} queued. Progress shows in the Log view.`, { type: 'success' });
     } else {
