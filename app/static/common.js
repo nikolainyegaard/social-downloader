@@ -165,25 +165,18 @@ const _vgridImageIcon = `<svg width="12" height="12" viewBox="0 0 13 13" fill="n
 
 // ── Loop panel helpers (shared) ───────────────────────────────────────────────
 
-// Render session-time pills into el: done (past), running (current), next (upcoming).
+// Render session-time pills into el: at most the next 4 upcoming sessions,
+// so panels look the same regardless of how many sessions a day is set to.
+// The first pill is highlighted: running (loop active) or next.
 function _renderSessionPills(el, sessions, running, manualRun) {
   if (!el) return;
-  if (!sessions || !sessions.length) { el.innerHTML = ''; return; }
-  const nowMs = Date.now();
-  let foundNext = false;
-  el.innerHTML = sessions.map(isoStr => {
-    const ts   = new Date(isoStr).getTime();
+  const nowMs    = Date.now();
+  const upcoming = (sessions || []).filter(s => new Date(s).getTime() >= nowMs).slice(0, 4);
+  if (!upcoming.length) { el.innerHTML = ''; return; }
+  el.innerHTML = upcoming.map((isoStr, i) => {
     const time = new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     let cls = 'loop-session-pill';
-    if (running && !manualRun && !foundNext && ts >= nowMs) {
-      foundNext = true;
-      cls += ' running';
-    } else if (ts < nowMs) {
-      cls += ' done';
-    } else if (!foundNext) {
-      foundNext = true;
-      cls += ' next';
-    }
+    if (i === 0) cls += running && !manualRun ? ' running' : ' next';
     return `<span class="${cls}">${time}</span>`;
   }).join('');
 }

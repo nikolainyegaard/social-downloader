@@ -25,6 +25,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The TikTok Loops panel now toggles between the User and Sound loops with pills in the panel header, so the panel is the same height as on the other apps instead of stacking both loops
 
 ### Changed
+- Loop panels show at most the next 4 upcoming session times instead of every session in the 24 hour window, so a platform set to 12 sessions per day no longer fills the panel with pills; already-run sessions drop off instead of showing dimmed
 - Dashboard panels have uniform heights on every app: Statistics and Recent share one fixed height, Activity and Loops another, with content scrolling inside the panel when it outgrows the card; stacked mobile panels keep their natural height
 - The expanded Recent modals (Recently saved, deleted, changed, banned) open instantly: the first page of each list is prefetched in the background whenever the Recent panel data changes
 - The modal close button is smaller and sits centered in short modal headers instead of touching the header divider
