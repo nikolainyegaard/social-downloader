@@ -21,6 +21,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - TikTok user modals show the next scheduled check time; starred user cards get a Priority badge
 - TikTok sound cards show a "Last saved" timestamp next to "Last checked"
 - TikTok detects accounts that have blocked the cookies account without revealing it in the profile relation: a profile reporting videos while both video sources return none is flagged Blocked, surfaced in the UI, and skipped until it recovers; a profile confirming zero videos is treated as a genuinely empty account and deletion tracking still runs
+- TikTok posts can be saved from a direct URL pasted into the add bar, covering subscriber-only videos and anything else invisible in profile listings; the post downloads through the normal pipeline, associates with its author (added as an untracked stub when new), shows a Direct pill in the creator modal, and is exempt from listing-based deletion detection while still following ban handling
+- The TikTok Loops panel now toggles between the User and Sound loops with pills in the panel header, so the panel is the same height as on the other apps instead of stacking both loops
 
 ### Changed
 - The TikTok frontend now renders from the shared platform engine: the standalone TikTok implementation collapsed into a config over the engine plus TikTok-only extras (sounds catalog and sound modal, sound loop panel, stats backfill, jobs, diagnostics, migration); UI fixes now land once for all four apps
@@ -56,6 +58,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel takes the full row; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
+- The mobile page no longer overflows the screen edge: the engine fold-in left several mobile style rules pointing at the old static TikTok element names (toolbar wrapping, full-width search, compact modal header), and the page grids now cap their tracks so no single wide element can stretch every panel past the viewport
+- Very long text in the add field no longer stretches the input and the page with it; the field keeps its size and clips the text like a browser URL bar, showing the end of the text when unfocused
 - The All Deleted history modal on Twitter, Instagram, and YouTube crashed on open; the endpoint returns grouped entries but the shared modal had no grouped renderer
 - The shared frontend engine script is now served with a content-hashed URL like the other assets, so browsers pick up engine changes after a deploy instead of running stale cached code
 - Pressing Escape with the settings modal or a history modal open above a creator detail modal no longer closes both at once; overlay keyboard handling now lives in one global handler

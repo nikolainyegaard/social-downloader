@@ -271,6 +271,33 @@ def register_tiktok_routes(bp, engine) -> None:
         engine.enqueue_add(row["handle"])
         return jsonify({"queued": True, "handle": row["handle"]}), 202
 
+    @bp.route("/videos/direct", methods=["POST"])
+    def add_direct_video():
+        """Save a single post from a direct URL (e.g. subscriber-only videos,
+        which never appear in profile listings). Runs the download in a
+        background thread; progress shows in the loop log console."""
+        body = request.get_json(silent=True) or {}
+        url  = (body.get("url") or "").strip()
+        m    = re.search(r"tiktok\.com/(?:@[^/]+/)?(?:video|photo)/(\d+)", url)
+        if not m:
+            return jsonify({"error": "Not a TikTok post URL"}), 400
+        vid_id = m.group(1)
+
+        existing = db.get_video(vid_id)
+        if existing:
+            # Already known: just flag it as direct so listing diffs leave it alone
+            store.set_video_direct_added(vid_id)
+            return jsonify({"ok": True, "video_id": vid_id, "already_saved": True})
+
+        from platforms.tiktok.tracker import run_direct_video
+        log = engine.loop._log
+        log(f"=== Direct URL add: {vid_id} ===")
+        threading.Thread(
+            target=lambda: run_direct_video(engine, vid_id, log),
+            daemon=True,
+        ).start()
+        return jsonify({"ok": True, "video_id": vid_id, "queued": True}), 202
+
     @bp.route("/channels/<channel_id>/avatar-history/<filename>", methods=["GET"])
     def channel_avatar_history(channel_id: str, filename: str):
         if not re.fullmatch(r"[0-9]+_[0-9]+\.(jpg|avif)", filename):

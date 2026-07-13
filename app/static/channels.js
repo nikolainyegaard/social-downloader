@@ -72,9 +72,15 @@ function initChannelApp(cfg) {
     </div>
   </div>
   <div class="panel-card loops-card">
-    <div class="panel-header"><span class="section-title">${cfg.loopsTitle || 'Loop'}</span></div>
+    <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">
+      <span class="section-title">${cfg.loopsTitle || 'Loop'}</span>
+      ${cfg.extraLoopHtml ? `<div class="filter-pills">
+        <button class="filter-pill active" id="${P}LvMain"  onclick="${P}SetLoopView('main')">${CreatorsCap}</button>
+        <button class="filter-pill"        id="${P}LvExtra" onclick="${P}SetLoopView('extra')">${cfg.extraLoopLabel || 'More'}</button>
+      </div>` : ''}
+    </div>
     <div class="panel-body" style="padding:12px 16px;flex-direction:column;gap:12px">
-      <div class="loop-block">
+      <div class="loop-block" id="${P}LoopBlockMain">
         <div class="loop-block-header">
           <span class="loop-section-label">${cfg.loopLabel}</span>
           <span id="${P}LoopNext" class="loop-next"></span>
@@ -91,21 +97,21 @@ function initChannelApp(cfg) {
           <button class="btn-danger btn-trigger" id="${P}StopBtn" onclick="${P}StopLoop()" disabled>Stop</button>
         </div>
       </div>
-      ${cfg.extraLoopHtml || ''}
+      ${cfg.extraLoopHtml ? `<div id="${P}LoopBlockExtra" style="display:none">${cfg.extraLoopHtml}</div>` : ''}
     </div>
   </div>
   </div>
 
   <section>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;gap:8px;">
+      <div class="tracking-tab-row" style="display:flex;align-items:center;gap:8px;">
         <div class="filter-pills">
           <button class="filter-pill active" id="${P}TvCreators" onclick="${P}SetTrackingView('creators')">${CreatorsCap}</button>
           ${EXTRA_VIEWS.map(v => `<button class="filter-pill" id="${P}Tv_${v.key}" onclick="${P}SetTrackingView('${v.key}')">${v.label}</button>`).join('')}
           <button class="filter-pill"        id="${P}TvLog"      onclick="${P}SetTrackingView('log')">Log</button>
         </div>
         <span id="${P}Count" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
-        <input id="${P}Search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)"
+        <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)"
                style="width:160px;font-size:12px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
       </div>
       <div id="${P}Controls" class="filter-control-group">
@@ -701,6 +707,18 @@ function initChannelApp(cfg) {
 
   X('SaveLoopSettings', () => _scheduleSettingsSave(cfg.id, `${P}Settings`));
 
+  // Loops panel view toggle (platforms with a second loop, e.g. TikTok sounds)
+  X('SetLoopView', which => {
+    _el('LoopBlockMain').style.display  = which === 'extra' ? 'none' : '';
+    _el('LoopBlockExtra').style.display = which === 'extra' ? '' : 'none';
+    _el('LvMain').classList.toggle('active',  which !== 'extra');
+    _el('LvExtra').classList.toggle('active', which === 'extra');
+    localStorage.setItem(`${P}-loopView`, which);
+  });
+  if (cfg.extraLoopHtml && localStorage.getItem(`${P}-loopView`) === 'extra') {
+    window[`${P}SetLoopView`]('extra');
+  }
+
   // ── DB cleanup ────────────────────────────────────────────────────────────
 
   const _cleanupWidget = _makeJobWidget(`${P}-cleanup`);
@@ -754,6 +772,12 @@ function initChannelApp(cfg) {
     e.preventDefault();
     const text = (e.clipboardData || window.clipboardData).getData('text/plain');
     document.execCommand('insertText', false, text);
+  });
+
+  // Long input: keep the end of the text visible when the field loses focus,
+  // like a browser URL bar
+  handleInput.addEventListener('blur', function() {
+    this.scrollLeft = this.scrollWidth;
   });
 
   X('AddCreator', async () => {

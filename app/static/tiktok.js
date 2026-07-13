@@ -57,7 +57,6 @@ const _TT_SOUND_CONTROLS_HTML = `
   </div>`;
 
 const _TT_SOUND_LOOP_HTML = `
-  <div style="border-top:1px solid var(--border);margin:0 -16px"></div>
   <div class="loop-block">
     <div class="loop-block-header">
       <span class="loop-section-label">Sound Loop</span>
@@ -91,6 +90,25 @@ async function _ttAddHandler(val, addToasts) {
       loadSounds();
     } else {
       t.update(data.error || 'Could not add sound.', { type: 'error', duration: 8000 });
+    }
+    return true;
+  }
+
+  // Direct post URL: save one video/photo post, e.g. subscriber-only posts
+  // that never appear in profile listings
+  const postMatch = val.match(/tiktok\.com\/(?:@[^/]+\/)?(?:video|photo)\/(\d+)/);
+  if (postMatch) {
+    const t = showToast(`Fetching post ${postMatch[1]}…`, { spinner: true, duration: 0 });
+    const { ok, data } = await apiJSON('/api/tiktok/videos/direct', {
+      method: 'POST',
+      body: JSON.stringify({ url: val }),
+    });
+    if (ok && data.already_saved) {
+      t.update(`Post ${data.video_id} was already saved; now exempt from deletion checks.`, { type: 'success' });
+    } else if (ok) {
+      t.update(`Post ${data.video_id} queued. Progress shows in the Log view.`, { type: 'success' });
+    } else {
+      t.update(data.error || 'Could not fetch post.', { type: 'error', duration: 8000 });
     }
     return true;
   }
@@ -271,6 +289,7 @@ const tt = initChannelApp({
     show: q => { _soundSearch = q || ''; renderSounds(); },
   }],
   extraLoopHtml:     _TT_SOUND_LOOP_HTML,
+  extraLoopLabel:    'Sounds',
   addHandler:        _ttAddHandler,
   videoActionBtnsFn: _ttVideoActionBtns,
   recentFallback:    item => item.sound_id

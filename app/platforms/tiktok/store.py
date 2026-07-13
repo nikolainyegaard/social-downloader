@@ -170,12 +170,14 @@ class TikTokStore:
         return {r["video_id"] for r in rows}
 
     def get_sound_active_video_ids(self, sound_id: str) -> set:
-        """Video IDs linked to a sound that are currently active (up or undeleted)."""
+        """Video IDs linked to a sound that are currently active (up or undeleted).
+        Direct-added videos are excluded: they are absent from listings by nature."""
         with self.db.get_db() as conn:
             rows = conn.execute("""
                 SELECT v.video_id FROM videos v
                 JOIN sound_videos sv ON v.video_id = sv.video_id
                 WHERE sv.sound_id = ? AND v.status IN ('up', 'undeleted')
+                  AND v.direct_added = 0
             """, (sound_id,)).fetchall()
         return {r["video_id"] for r in rows}
 
@@ -186,8 +188,13 @@ class TikTokStore:
                 SELECT v.video_id FROM videos v
                 JOIN sound_videos sv ON v.video_id = sv.video_id
                 WHERE sv.sound_id = ? AND v.status = 'deleted' AND v.deletion_confirmed = 0
+                  AND v.direct_added = 0
             """, (sound_id,)).fetchall()
         return {r["video_id"] for r in rows}
+
+    def set_video_direct_added(self, video_id: str) -> None:
+        with self.db.get_db() as conn:
+            conn.execute("UPDATE videos SET direct_added = 1 WHERE video_id = ?", (video_id,))
 
     def set_sound_comment(self, sound_id: str, comment: str) -> None:
         with self.db.get_db() as conn:

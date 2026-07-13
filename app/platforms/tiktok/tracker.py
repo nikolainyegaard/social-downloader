@@ -880,98 +880,126 @@ async def process_single_sound(engine, sound: dict, log: Callable[[str], None]) 
             new_count += 1
             continue
 
-        # Fetch full video details (placeholder username; TikTok redirects by video ID)
-        try:
-            details = get_video_details(vid_id, "user", cookies)
-        except Exception as e:
-            log(f"Could not fetch details for {vid_id}: {e}")
-            continue
-
-        author_id       = details.get("author_id")
-        author_username = details.get("author_username") or "unknown"
-        author_sec_uid  = details.get("author_sec_uid")
-        author_display  = details.get("author_display_name") or author_username
-
-        if not author_id:
-            log(f"No author info for {vid_id}, skipping")
-            continue
-
-        # Ensure user row exists; add as enabled=0 if this is a new author
-        if store.ensure_sound_channel(author_id, author_username, author_sec_uid):
-            log(f"Discovered untracked author @{author_username} ({author_id})")
-
-        # Download
-        if details["type"] == "photo" and details.get("image_urls"):
-            log(f"Downloading photo post {vid_id} from @{author_username} "
-                f"({len(details['image_urls'])} images)...")
-            path = download_photos(
-                video_id=vid_id,
-                username=author_username,
-                image_urls=details["image_urls"],
-                upload_date=details["upload_date"],
-                platform="tiktok",
-                cookies_path=COOKIES_PATH,
-            )
-            if path:
-                thumb = generate_thumbnail(vid_id, path)
-                if not thumb:
-                    log(f"Thumbnail FAILED for {vid_id} -- see [thumb] lines above")
-            dl_result = {"file_path": path, "ytdlp_data": None} if path else None
-        else:
-            log(f"Downloading video {vid_id} from @{author_username}...")
-            dl_result = download_video(
-                video_id=vid_id,
-                username=author_username,
-                tiktok_id=author_id,
-                display_name=author_display,
-                description=details["description"],
-                upload_date=details["upload_date"],
-                download_date=int(time.time()),
-                platform="tiktok",
-                cookies_path=COOKIES_PATH,
-            )
-
-        _audio_only = isinstance(dl_result, dict) and dl_result.get("audio_only")
-        if dl_result and not _audio_only:
-            store.add_video_full(
-                vid_id, author_id, details["type"],
-                details["description"], details["upload_date"],
-                view_count=details.get("view_count"),
-                like_count=details.get("like_count"),
-                comment_count=details.get("comment_count"),
-                share_count=details.get("share_count"),
-                save_count=details.get("save_count"),
-                repost_count=details.get("repost_count"),
-                duration=details.get("duration"),
-                width=details.get("width"),
-                height=details.get("height"),
-                music_title=details.get("music_title"),
-                music_artist=details.get("music_artist"),
-                music_id=details.get("music_id"),
-            )
-            db.update_video_downloaded(vid_id, dl_result["file_path"], None)
+        result = save_video_by_id(vid_id, cookies, log)
+        if result:
             store.add_sound_video(sound_id, vid_id)
-            log(f"Saved {vid_id} from @{author_username} -> {dl_result['file_path']}")
+        if result == "saved":
             new_count += 1
-        elif _audio_only:
-            store.add_video_full(
-                vid_id, author_id, "audio",
-                details["description"], details["upload_date"],
-                view_count=details.get("view_count"),
-                like_count=details.get("like_count"),
-                comment_count=details.get("comment_count"),
-                share_count=details.get("share_count"),
-                save_count=details.get("save_count"),
-                repost_count=details.get("repost_count"),
-                duration=details.get("duration"),
-                music_title=details.get("music_title"),
-                music_artist=details.get("music_artist"),
-                music_id=details.get("music_id"),
-            )
-            store.add_sound_video(sound_id, vid_id)
-            log(f"Skipped {vid_id}: audio-only post")
-        else:
-            log(f"Failed to download {vid_id}")
 
     store.update_sound_last_checked(sound_id)
     return new_count
+
+
+def save_video_by_id(vid_id: str, cookies, log: Callable[[str], None]) -> str | None:
+    """Fetch, download, and record a single post by video ID.
+
+    Ensures the author's channel row exists (enabled=0 when new). Shared by the
+    sound loop and the direct-URL add flow. Returns 'saved' on a full download,
+    'audio' for an audio-only post (recorded without a file), None on failure.
+    """
+    # Fetch full video details (placeholder username; TikTok redirects by video ID)
+    try:
+        details = get_video_details(vid_id, "user", cookies)
+    except Exception as e:
+        log(f"Could not fetch details for {vid_id}: {e}")
+        return None
+
+    author_id       = details.get("author_id")
+    author_username = details.get("author_username") or "unknown"
+    author_sec_uid  = details.get("author_sec_uid")
+    author_display  = details.get("author_display_name") or author_username
+
+    if not author_id:
+        log(f"No author info for {vid_id}, skipping")
+        return None
+
+    # Ensure user row exists; add as enabled=0 if this is a new author
+    if store.ensure_sound_channel(author_id, author_username, author_sec_uid):
+        log(f"Discovered untracked author @{author_username} ({author_id})")
+
+    # Download
+    if details["type"] == "photo" and details.get("image_urls"):
+        log(f"Downloading photo post {vid_id} from @{author_username} "
+            f"({len(details['image_urls'])} images)...")
+        path = download_photos(
+            video_id=vid_id,
+            username=author_username,
+            image_urls=details["image_urls"],
+            upload_date=details["upload_date"],
+            platform="tiktok",
+            cookies_path=COOKIES_PATH,
+        )
+        if path:
+            thumb = generate_thumbnail(vid_id, path)
+            if not thumb:
+                log(f"Thumbnail FAILED for {vid_id} -- see [thumb] lines above")
+        dl_result = {"file_path": path, "ytdlp_data": None} if path else None
+    else:
+        log(f"Downloading video {vid_id} from @{author_username}...")
+        dl_result = download_video(
+            video_id=vid_id,
+            username=author_username,
+            tiktok_id=author_id,
+            display_name=author_display,
+            description=details["description"],
+            upload_date=details["upload_date"],
+            download_date=int(time.time()),
+            platform="tiktok",
+            cookies_path=COOKIES_PATH,
+        )
+
+    _audio_only = isinstance(dl_result, dict) and dl_result.get("audio_only")
+    if dl_result and not _audio_only:
+        store.add_video_full(
+            vid_id, author_id, details["type"],
+            details["description"], details["upload_date"],
+            view_count=details.get("view_count"),
+            like_count=details.get("like_count"),
+            comment_count=details.get("comment_count"),
+            share_count=details.get("share_count"),
+            save_count=details.get("save_count"),
+            repost_count=details.get("repost_count"),
+            duration=details.get("duration"),
+            width=details.get("width"),
+            height=details.get("height"),
+            music_title=details.get("music_title"),
+            music_artist=details.get("music_artist"),
+            music_id=details.get("music_id"),
+        )
+        db.update_video_downloaded(vid_id, dl_result["file_path"], None)
+        log(f"Saved {vid_id} from @{author_username} -> {dl_result['file_path']}")
+        return "saved"
+    elif _audio_only:
+        store.add_video_full(
+            vid_id, author_id, "audio",
+            details["description"], details["upload_date"],
+            view_count=details.get("view_count"),
+            like_count=details.get("like_count"),
+            comment_count=details.get("comment_count"),
+            share_count=details.get("share_count"),
+            save_count=details.get("save_count"),
+            repost_count=details.get("repost_count"),
+            duration=details.get("duration"),
+            music_title=details.get("music_title"),
+            music_artist=details.get("music_artist"),
+            music_id=details.get("music_id"),
+        )
+        log(f"Skipped {vid_id}: audio-only post")
+        return "audio"
+    log(f"Failed to download {vid_id}")
+    return None
+
+
+def run_direct_video(engine, vid_id: str, log: Callable[[str], None]) -> None:
+    """Entry point for the direct post URL add flow.
+
+    Saves one post that profile listings cannot surface (e.g. subscriber-only
+    videos) and flags it direct_added so listing-based deletion detection
+    leaves it alone. Ban handling still applies: bans mark videos by channel,
+    not by listing diff.
+    """
+    _bind(engine)
+    result = save_video_by_id(vid_id, get_cookies_flat(), log)
+    if result:
+        store.set_video_direct_added(vid_id)
+        log(f"Direct post {vid_id} recorded; exempt from deletion checks")

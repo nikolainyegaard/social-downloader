@@ -199,6 +199,10 @@ class ChannelDB:
             "ALTER TABLE videos   ADD COLUMN deleted_reason         TEXT",
             "ALTER TABLE videos   ADD COLUMN deletion_confirmed     INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE videos   ADD COLUMN false_positive_count   INTEGER NOT NULL DEFAULT 0",
+            # Added via a direct post URL rather than discovered in a profile
+            # listing (e.g. TikTok subscriber-only posts, invisible to scraping).
+            # Exempt from listing-based deletion detection.
+            "ALTER TABLE videos   ADD COLUMN direct_added           INTEGER NOT NULL DEFAULT 0",
         ]
         for sql in migrations:
             try:
@@ -404,15 +408,21 @@ class ChannelDB:
 
         active_ids:  status in ('up', 'undeleted'); videos we believe are currently live
         pending_ids: status='deleted' AND deletion_confirmed=0; seen missing once, not yet confirmed
+
+        Direct-added videos (saved via post URL, absent from profile listings by
+        nature) stay in known_ids but are excluded from active/pending so the
+        listing diff never flags them as deleted.
         """
         with self.get_db() as conn:
             rows = conn.execute(
-                "SELECT video_id, status, deletion_confirmed FROM videos WHERE channel_id = ?",
+                "SELECT video_id, status, deletion_confirmed, direct_added FROM videos WHERE channel_id = ?",
                 (channel_id,)
             ).fetchall()
         known   = {r["video_id"] for r in rows}
-        active  = {r["video_id"] for r in rows if r["status"] in ("up", "undeleted")}
-        pending = {r["video_id"] for r in rows if r["status"] == "deleted" and not r["deletion_confirmed"]}
+        active  = {r["video_id"] for r in rows
+                   if r["status"] in ("up", "undeleted") and not r["direct_added"]}
+        pending = {r["video_id"] for r in rows
+                   if r["status"] == "deleted" and not r["deletion_confirmed"] and not r["direct_added"]}
         return known, active, pending
 
 
