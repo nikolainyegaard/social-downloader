@@ -148,6 +148,7 @@ function initChannelApp(cfg) {
             <button class="btn-ghost" onclick="${P}ClearLog()" style="font-size:11px;padding:3px 8px;">Clear</button>
           </div>
         </div>
+        <div id="${P}LogActivityBar" class="log-activity-bar"></div>
         <div class="log-body" id="${P}LogBody"></div>
       </div>
     </div>
@@ -187,6 +188,9 @@ function initChannelApp(cfg) {
   let logLines       = [];
   let logClearIndex  = 0;
   let logClearRestored = false;
+  let sleepUntil     = null;   // Unix timestamp (ms) when current sleep ends; null = no sleep
+  let sleepNext      = null;   // Label for what runs after the sleep
+  let nextRun        = null;   // ISO string of next scheduled session
   let cleanupPoll    = null;
 
   const SORT_DIR_LABELS = {
@@ -341,6 +345,10 @@ function initChannelApp(cfg) {
     'saved':           `All Saved ${ItemsCap}`,
   };
 
+  const _nameStyle = r => r.enabled === 0 ? 'style="color:var(--text-dim)"'
+    : r.starred ? 'style="color:var(--yellow)"'
+    : r.account_status === 'banned' ? 'style="color:var(--red)"' : '';
+
   function _renderSavedRow(g, now) {
     const row = document.createElement('div');
     row.className = 'recent-entry';
@@ -348,7 +356,7 @@ function initChannelApp(cfg) {
     row.onclick = () => window[`${P}OpenModal`](g.channel_id);
     row.innerHTML = `
       <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-      <span class="recent-name">@${esc(g.handle)}</span>
+      <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
       <span class="recent-detail">${g.count}x</span>`;
     return row;
   }
@@ -361,7 +369,7 @@ function initChannelApp(cfg) {
       row.onclick = () => window[`${P}OpenModalAndHighlight`](item.channel_id, item.video_id);
       row.innerHTML = `
         <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
-        <span class="recent-name">@${esc(item.handle)}</span>
+        <span class="recent-name" ${_nameStyle(item)}>@${esc(item.handle)}</span>
         <span class="recent-detail">${esc((item.video_id || '').slice(0, 11))}</span>`;
     } else {
       const label = FIELD_LABELS[item.field] || item.field;
@@ -369,7 +377,7 @@ function initChannelApp(cfg) {
       row.onclick = () => window[`${P}OpenModalWithHistory`](item.channel_id, item.field);
       row.innerHTML = `
         <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
-        <span class="recent-name">@${esc(item.handle)}</span>
+        <span class="recent-name" ${_nameStyle(item)}>@${esc(item.handle)}</span>
         <span class="recent-detail">${esc(label)}</span>`;
     }
     return row;
@@ -400,7 +408,7 @@ function initChannelApp(cfg) {
         const onclick = `${P}OpenModalAndHighlight('${esc(d.channel_id)}','${esc(d.video_id)}')`;
         return `<div class="recent-entry" onclick="${onclick}" title="Open @${esc(d.handle)}">
           <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
-          <span class="recent-name">@${esc(d.handle)}</span>
+          <span class="recent-name" ${_nameStyle(d)}>@${esc(d.handle)}</span>
           <span class="recent-detail">${esc((d.video_id || '').slice(0, 11))}</span>
         </div>`;
       }).join('');
@@ -415,7 +423,7 @@ function initChannelApp(cfg) {
       left += data.profile_changes.map(p =>
         `<div class="recent-entry" onclick="${P}OpenModalWithHistory('${esc(p.channel_id)}','${esc(p.field)}')" title="Open @${esc(p.handle)}">
           <span class="recent-date">${_recentDate(p.changed_at, now)}</span>
-          <span class="recent-name">@${esc(p.handle)}</span>
+          <span class="recent-name" ${_nameStyle(p)}>@${esc(p.handle)}</span>
           <span class="recent-detail">${esc(FIELD_LABELS[p.field] || p.field)}</span>
         </div>`
       ).join('');
@@ -433,7 +441,7 @@ function initChannelApp(cfg) {
       right += data.saved.map(g =>
         `<div class="recent-entry" onclick="${P}OpenModal('${esc(g.channel_id)}')" title="Open @${esc(g.handle)}">
           <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-          <span class="recent-name">@${esc(g.handle)}</span>
+          <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
           <span class="recent-detail">${g.count}x</span>
         </div>`
       ).join('');
@@ -459,6 +467,9 @@ function initChannelApp(cfg) {
     currentCreator = state.loop_current_channel;
     runQueue       = state.run_queue  || [];
     runCurrent     = state.run_current || null;
+    sleepUntil     = state.loop_sleep_until != null ? state.loop_sleep_until * 1000 : null;
+    sleepNext      = state.loop_sleep_next || null;
+    nextRun        = state.loop_next || null;
 
     const meta = _el('LoopMeta');
     if (meta) {
@@ -538,6 +549,28 @@ function initChannelApp(cfg) {
     const { ok, data } = await apiJSON(`${API}/status`);
     if (ok) renderStatus(data);
   });
+
+  function _tickActivityBar() {
+    const bar = _el('LogActivityBar');
+    if (!bar) return;
+    const dur = secs => {
+      const m = Math.floor(secs / 60), s = secs % 60;
+      return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+    };
+    if (sleepUntil) {
+      const rem = Math.max(0, Math.round((sleepUntil - Date.now()) / 1000));
+      bar.innerHTML = `sleeping ${dur(rem)}`
+        + (sleepNext ? ` <span class="lab-next">-- up next: ${esc(sleepNext)}</span>` : '');
+      return;
+    }
+    const ts = nextRun ? new Date(nextRun).getTime() : 0;
+    if (ts > Date.now()) {
+      const rem = Math.max(0, Math.round((ts - Date.now()) / 1000));
+      bar.innerHTML = `waiting ${dur(rem)} <span class="lab-next">-- up next: ${esc(CREATOR)} loop</span>`;
+    } else {
+      bar.innerHTML = 'idle';
+    }
+  }
 
   X('ClearLog', () => {
     const lastLine = logLines[logLines.length - 1];
@@ -1209,6 +1242,10 @@ function initChannelApp(cfg) {
     if (grid)   grid.style.display   = view === 'creators' ? '' : 'none';
     if (logPnl) logPnl.style.display = view === 'log'      ? '' : 'none';
     if (ctrl)   ctrl.style.display   = view === 'creators' ? '' : 'none';
+    if (view === 'log') {
+      const body = _el('LogBody');
+      if (body) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+    }
     if (view === 'creators') renderCreators();
     _placeGlider(_el('TvCreators').closest('.filter-pills'));
   });
@@ -1236,6 +1273,7 @@ function initChannelApp(cfg) {
   loadQueue();
 
   setInterval(loadStatus,   5000);
+  setInterval(_tickActivityBar, 1000);
   setInterval(loadCreators, 15000);
   setInterval(loadStats,    60000);
   setInterval(loadRecent,   30000);

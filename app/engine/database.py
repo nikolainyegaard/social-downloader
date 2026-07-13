@@ -816,7 +816,8 @@ class ChannelDB:
     def get_profile_change_history(self, offset: int = 0, limit: int = 50) -> list[dict]:
         with self.get_db() as conn:
             rows = conn.execute(
-                """SELECT ph.field, ph.old_value, ph.changed_at, c.handle, c.channel_id
+                """SELECT ph.field, ph.old_value, ph.changed_at, c.handle, c.channel_id,
+                          c.starred, c.account_status
                    FROM profile_history ph JOIN channels c ON c.channel_id = ph.channel_id
                    ORDER BY ph.changed_at DESC LIMIT ? OFFSET ?""",
                 (limit, offset),
@@ -833,11 +834,13 @@ class ChannelDB:
         advance its raw-row offset by this value for the next page.
         """
         with self.get_db() as conn:
-            rows = [dict(r) for r in conn.execute(
-                """SELECT v.download_date, c.handle, c.channel_id, c.enabled, v.video_id
-                   FROM videos v JOIN channels c ON c.channel_id = v.channel_id
-                   WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
-                   ORDER BY v.download_date DESC LIMIT ? OFFSET ?""",
+            _sound = self._sound_id_select(conn)
+            rows = [dict(r) for r in conn.execute(f"""
+                SELECT v.download_date, c.handle, c.channel_id, c.enabled,
+                       c.starred, c.account_status, v.video_id, {_sound} AS sound_id
+                FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+                WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
+                ORDER BY v.download_date DESC LIMIT ? OFFSET ?""",
                 (self._GROUP_SCAN, offset),
             ).fetchall()]
         groups = self._group_consecutive_by_channel(rows, "download_date")[:limit]
