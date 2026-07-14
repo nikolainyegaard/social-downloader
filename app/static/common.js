@@ -311,15 +311,14 @@ function showToast(message, { type = 'info', duration = 5000, action = null, spi
 
 // ── Add-lookup toasts ─────────────────────────────────────────────────────────
 // Adding a creator is asynchronous: POST /channels enqueues a lookup that a
-// worker resolves seconds later. Each platform polls its /queue; this manager
-// mirrors that queue as toasts: one sticky spinner toast per pending lookup
-// (including lookups already in flight when the page loads), morphed into a
-// success or error toast when the entry resolves. Error entries are dismissed
-// server-side once their toast is shown so they do not resurface on the next
-// poll or page load.
-function _makeAddToasts(apiBase, onAdded) {
-  const active     = new Map();   // handle -> toast controller
-  const seenErrors = new Set();   // error toast shown; server DELETE in flight
+// worker resolves seconds later into the persistent add_queue table. Each
+// platform polls its /queue (newest state per handle: pending lookups plus
+// recent resolutions); this manager shows one sticky spinner toast per pending
+// lookup (including lookups already in flight when the page loads) and morphs
+// it into a success or error toast on resolution. Errors it never spun for
+// are not toasted. They stay visible in the Add history panel.
+function _makeAddToasts(onAdded) {
+  const active = new Map();   // handle -> toast controller
 
   function start(handle) {
     if (!active.has(handle)) {
@@ -329,28 +328,22 @@ function _makeAddToasts(apiBase, onAdded) {
 
   function sync(queue) {
     for (const [handle, info] of Object.entries(queue)) {
-      if (info.status === 'pending') {
-        start(handle);
-      } else if (info.status === 'error' && !seenErrors.has(handle)) {
-        seenErrors.add(handle);
-        const message = `Failed to add @${handle}: ${info.message || 'lookup failed'}`;
-        const t = active.get(handle);
-        active.delete(handle);
-        if (t) t.update(message, { type: 'error', duration: 8000 });
-        else showToast(message, { type: 'error', duration: 8000 });
-        apiJSON(`${apiBase}/queue/${encodeURIComponent(handle)}`, { method: 'DELETE' })
-          .then(() => seenErrors.delete(handle));
-      }
+      if (info.status === 'pending') start(handle);
     }
-    let resolved = false;
+    let resolvedOk = false;
     for (const [handle, t] of [...active]) {
-      if (!(handle in queue) && !seenErrors.has(handle)) {
-        active.delete(handle);
+      const info = queue[handle];
+      if (!info || info.status === 'pending') continue;
+      active.delete(handle);
+      if (info.status === 'error') {
+        t.update(`Failed to add @${handle}: ${info.message || info.kind || 'lookup failed'}`,
+                 { type: 'error', duration: 8000 });
+      } else {
         t.update(`@${handle} added.`, { type: 'success' });
-        resolved = true;
+        resolvedOk = true;
       }
     }
-    if (resolved && onAdded) onAdded();
+    if (resolvedOk && onAdded) onAdded();
   }
 
   return { start, sync };

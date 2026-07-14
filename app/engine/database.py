@@ -124,8 +124,27 @@ class ChannelDB:
 
                 CREATE INDEX IF NOT EXISTS idx_profile_history_channel_id
                     ON profile_history(channel_id);
+
+                CREATE TABLE IF NOT EXISTS add_queue (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    handle       TEXT NOT NULL,
+                    status       TEXT NOT NULL DEFAULT 'pending',
+                    error_kind   TEXT,
+                    error_detail TEXT,
+                    created_at   INTEGER NOT NULL,
+                    updated_at   INTEGER NOT NULL
+                );
             """)
             needs_vacuum = self._migrate_db(conn)
+            # One-time backfill: seed the add history from already tracked
+            # channels so the panel starts populated instead of empty. A no-op
+            # once add_queue has any rows.
+            if not conn.execute("SELECT 1 FROM add_queue LIMIT 1").fetchone():
+                conn.execute("""
+                    INSERT INTO add_queue (handle, status, created_at, updated_at)
+                    SELECT handle, 'ok', added_at, added_at FROM channels
+                    WHERE enabled = 1 ORDER BY added_at
+                """)
         if needs_vacuum:
             self.vacuum()
 
@@ -298,6 +317,88 @@ class ChannelDB:
                 WHERE channel_id = ?
             """, (handle, display_name, description, subscriber_count, video_count,
                   avatar_url, banner_url, raw_channel_data, int(time.time()), channel_id))
+
+
+    # Add queue operations
+    # One row per add attempt. The newest row per handle is its current state,
+    # and rows persist across restarts as the Add history panel's data.
+
+    def add_queue_set_pending(self, handle: str) -> int:
+        """Flip the newest unresolved row for the handle back to pending
+        (a retry), or insert a fresh row. Returns the row id."""
+        now = int(time.time())
+        with self.get_db() as conn:
+            row = conn.execute("""
+                SELECT id FROM add_queue
+                WHERE handle = ? AND status IN ('pending', 'error')
+                ORDER BY id DESC LIMIT 1
+            """, (handle,)).fetchone()
+            if row:
+                conn.execute("""
+                    UPDATE add_queue SET status = 'pending', error_kind = NULL,
+                        error_detail = NULL, updated_at = ?
+                    WHERE id = ?
+                """, (now, row["id"]))
+                return row["id"]
+            cur = conn.execute(
+                "INSERT INTO add_queue (handle, status, created_at, updated_at) VALUES (?, 'pending', ?, ?)",
+                (handle, now, now)
+            )
+            return cur.lastrowid
+
+
+    def add_queue_resolve(self, handle: str, status: str, error_kind: str | None = None,
+                          error_detail: str | None = None) -> None:
+        with self.get_db() as conn:
+            conn.execute("""
+                UPDATE add_queue SET status = ?, error_kind = ?, error_detail = ?, updated_at = ?
+                WHERE id = (SELECT id FROM add_queue
+                            WHERE handle = ? AND status = 'pending'
+                            ORDER BY id DESC LIMIT 1)
+            """, (status, error_kind, error_detail, int(time.time()), handle))
+
+
+    def add_queue_pending_handles(self) -> list[str]:
+        with self.get_db() as conn:
+            return [r["handle"] for r in conn.execute(
+                "SELECT handle FROM add_queue WHERE status = 'pending' ORDER BY id"
+            ).fetchall()]
+
+
+    def add_queue_recent(self, since: int) -> list[dict]:
+        """Newest row per handle, limited to pending lookups and rows resolved
+        after `since`. Feeds the /queue poll that drives the add toasts."""
+        with self.get_db() as conn:
+            return [dict(r) for r in conn.execute("""
+                SELECT * FROM add_queue
+                WHERE id IN (SELECT MAX(id) FROM add_queue GROUP BY handle)
+                  AND (status = 'pending' OR updated_at >= ?)
+            """, (since,)).fetchall()]
+
+
+    def add_queue_history(self, before_id: int | None, limit: int) -> list[dict]:
+        with self.get_db() as conn:
+            if before_id is not None:
+                rows = conn.execute(
+                    "SELECT * FROM add_queue WHERE id < ? ORDER BY id DESC LIMIT ?",
+                    (before_id, limit)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM add_queue ORDER BY id DESC LIMIT ?", (limit,)
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+
+    def add_queue_get(self, entry_id: int) -> dict | None:
+        with self.get_db() as conn:
+            row = conn.execute("SELECT * FROM add_queue WHERE id = ?", (entry_id,)).fetchone()
+            return dict(row) if row else None
+
+
+    def add_queue_delete(self, entry_id: int) -> None:
+        with self.get_db() as conn:
+            conn.execute("DELETE FROM add_queue WHERE id = ?", (entry_id,))
 
 
     def record_profile_change(self, channel_id: str, field: str, old_value: str | None) -> None:

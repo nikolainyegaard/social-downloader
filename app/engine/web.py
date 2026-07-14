@@ -63,25 +63,33 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     bp = Blueprint(platform, __name__, url_prefix=f"/api/{platform}")
 
-    _add_queue    = _queue_module.Queue()
-    _pending_lock = threading.Lock()
-    _pending: dict = {}  # handle -> {"status": "pending"|"error", "message": str}
+    _add_queue = _queue_module.Queue()
 
     _cleanup_lock  = threading.Lock()
     _cleanup_state: dict = {"running": False, "current": "", "steps": [], "removed": 0, "done": False}
+
+    def _classify_error(text: str) -> str:
+        """Map a lookup failure to a shorthand kind for the Add history panel.
+        Substring heuristics only. The full text lands in error_detail."""
+        t = text.lower()
+        if "rate" in t or "429" in t or "too many" in t:
+            return "rate limit"
+        if "bot" in t or "captcha" in t or "no session" in t or "login" in t or "blocked" in t:
+            return "bot detection"
+        if "not found" in t or "404" in t or "does not exist" in t:
+            return "not found"
+        return "error"
 
     def _process_add(handle: str) -> None:
         try:
             info = adapter.lookup_profile(handle)
         except Exception as e:
-            with _pending_lock:
-                _pending[handle] = {"status": "error", "message": f"Lookup error: {e}"}
+            db.add_queue_resolve(handle, "error", _classify_error(str(e)), f"Lookup error: {e}")
             return
 
         channel_id = info.get("channel_id")
         if not channel_id:
-            with _pending_lock:
-                _pending[handle] = {"status": "error", "message": f"{noun} not found"}
+            db.add_queue_resolve(handle, "error", "not found", f"{noun} not found")
             return
 
         existing = db.get_channel(channel_id)
@@ -98,11 +106,9 @@ def create_channel_blueprint(engine) -> Blueprint:
                     avatar_url=info.get("avatar_url"),
                     raw_channel_data=info.get("raw_channel_data"),
                 )
-                with _pending_lock:
-                    del _pending[handle]
+                db.add_queue_resolve(handle, "ok")
                 return
-            with _pending_lock:
-                _pending[handle] = {"status": "error", "message": f"{noun} is already being tracked"}
+            db.add_queue_resolve(handle, "error", "duplicate", f"{noun} is already being tracked")
             return
 
         db.add_channel(
@@ -121,8 +127,7 @@ def create_channel_blueprint(engine) -> Blueprint:
             verified=info.get("verified"),
             bio_link=info.get("bio_link"),
         )
-        with _pending_lock:
-            del _pending[handle]
+        db.add_queue_resolve(handle, "ok")
 
     def _add_worker() -> None:
         while True:
@@ -130,21 +135,26 @@ def create_channel_blueprint(engine) -> Blueprint:
             try:
                 _process_add(handle)
             except Exception as e:
-                with _pending_lock:
-                    _pending[handle] = {"status": "error", "message": str(e)}
+                db.add_queue_resolve(handle, "error", _classify_error(str(e)), str(e))
             finally:
                 _add_queue.task_done()
+
+    # Lookups interrupted by a restart are still pending in the DB; feed them
+    # back to the worker so they resume instead of sitting pending forever.
+    for _stale in db.add_queue_pending_handles():
+        _add_queue.put(_stale)
 
     threading.Thread(target=_add_worker, daemon=True, name=f"{adapter.prefix}-add-worker").start()
 
     def _enqueue_add(handle: str) -> bool:
         """Queue a handle for background lookup + add. Returns False if already pending.
+        A retry of a failed entry lands here too: add_queue_set_pending flips the
+        existing error row back to pending rather than growing the history.
         Exposed on the engine so platform extras (e.g. TikTok's track-author flow)
         can feed the same queue the frontend polls via /queue."""
-        with _pending_lock:
-            if _pending.get(handle, {}).get("status") == "pending":
-                return False
-            _pending[handle] = {"status": "pending"}
+        if handle in db.add_queue_pending_handles():
+            return False
+        db.add_queue_set_pending(handle)
         _add_queue.put(handle)
         return True
 
@@ -260,26 +270,35 @@ def create_channel_blueprint(engine) -> Blueprint:
         if any(c["handle"].lower() == handle.lower() for c in existing):
             return jsonify({"error": f"{noun} is already being tracked"}), 409
 
-        with _pending_lock:
-            if _pending.get(handle, {}).get("status") == "pending":
-                return jsonify({"error": "Already queued"}), 409
-            _pending[handle] = {"status": "pending"}
-
-        _add_queue.put(handle)
+        if not _enqueue_add(handle):
+            return jsonify({"error": "Already queued"}), 409
         return jsonify({"queued": True, "handle": handle}), 202
 
     @bp.route("/queue", methods=["GET"])
     def get_queue():
-        with _pending_lock:
-            return jsonify(dict(_pending))
+        # Newest state per handle: pending lookups plus resolutions from the
+        # last 10 minutes, so the frontend toasts catch changes between polls.
+        rows = db.add_queue_recent(since=int(time.time()) - 600)
+        return jsonify({
+            r["handle"]: {"status": r["status"], "kind": r["error_kind"], "message": r["error_detail"]}
+            for r in rows
+        })
 
-    @bp.route("/queue/<handle>", methods=["DELETE"])
-    def dismiss_queue_entry(handle: str):
-        with _pending_lock:
-            entry = _pending.get(handle)
-            if entry and entry.get("status") == "pending":
-                return jsonify({"error": "Cannot dismiss a pending lookup"}), 409
-            _pending.pop(handle, None)
+    @bp.route("/add-history", methods=["GET"])
+    def add_history():
+        before = request.args.get("before", type=int)
+        limit  = min(request.args.get("limit", 30, type=int), 100)
+        items  = db.add_queue_history(before, limit + 1)
+        return jsonify({"items": items[:limit], "has_more": len(items) > limit})
+
+    @bp.route("/add-history/<int:entry_id>", methods=["DELETE"])
+    def add_history_delete(entry_id: int):
+        entry = db.add_queue_get(entry_id)
+        if not entry:
+            return jsonify({"error": "Not found"}), 404
+        if entry["status"] == "pending":
+            return jsonify({"error": "Cannot discard a pending lookup"}), 409
+        db.add_queue_delete(entry_id)
         return jsonify({"ok": True})
 
     @bp.route("/channels/<channel_id>", methods=["DELETE"])

@@ -66,9 +66,9 @@ function initChannelApp(cfg) {
 
   <div class="mid-panels">
   <div class="panel-card">
-    <div class="panel-header"><span class="section-title">Activity</span></div>
-    <div class="panel-body" style="padding:12px 16px">
-      <div id="${P}ActivityChart" style="display:flex;align-items:center;justify-content:center;min-height:120px;color:var(--muted);font-size:12px">Downloads per day chart coming soon</div>
+    <div class="panel-header"><span class="section-title">Add history</span></div>
+    <div class="panel-body" style="padding:0">
+      <div class="add-history" id="${P}AddHistory"></div>
     </div>
   </div>
   <div class="panel-card loops-card">
@@ -209,7 +209,7 @@ function initChannelApp(cfg) {
   };
   let filter         = _defaultFilter();
   let search         = '';
-  const addToasts    = _makeAddToasts(API, () => loadCreators());
+  const addToasts    = _makeAddToasts(() => loadCreators());
   let runQueue       = [];
   let runCurrent     = null;
   let loopRunning    = false;
@@ -839,9 +839,84 @@ function initChannelApp(cfg) {
     handleInput.focus();
   });
 
+  let _queueSig = null;
   const loadQueue = X('LoadQueue', async () => {
     const { ok, data } = await apiJSON(`${API}/queue`);
-    if (ok) addToasts.sync(data);
+    if (!ok) return;
+    addToasts.sync(data);
+    // Any queue state change (new pending, resolution, retry) is also a
+    // change to the top of the Add history, so refresh it.
+    const sig = JSON.stringify(data);
+    if (sig !== _queueSig) {
+      if (_queueSig !== null) loadAddHistory(true);
+      _queueSig = sig;
+    }
+  });
+
+  // ── Add history panel ─────────────────────────────────────────────────────
+
+  const _ah = { items: [], hasMore: false, obs: null, loading: false };
+
+  function _ahRow(e) {
+    const status = e.status === 'pending'
+      ? '<span class="ah-status ah-pending">looking up…</span>'
+      : e.status === 'error'
+        ? `<span class="ah-status ah-error" title="${esc(e.error_detail || '')}">${esc(e.error_kind || 'error')}</span>`
+        : '<span class="ah-status ah-ok">added</span>';
+    const actions = e.status === 'error'
+      ? `<span class="ah-actions">
+           <button class="ah-btn" title="Try again" onclick="${P}AhRetry(${e.id})">${_triggerIcon}</button>
+           <button class="ah-btn ah-btn-danger" title="Discard" onclick="${P}AhDiscard(${e.id})">✕</button>
+         </span>`
+      : '';
+    return `<div class="ah-row">
+      <span class="ah-handle">@${esc(e.handle)}</span>
+      ${status}
+      <span class="ah-time">${fmt.rel(e.updated_at * 1000)}</span>
+      ${actions}
+    </div>`;
+  }
+
+  function _renderAddHistory() {
+    const el = document.getElementById(`${P}AddHistory`);
+    if (!el) return;
+    if (_ah.obs) { _ah.obs.disconnect(); _ah.obs = null; }
+    el.innerHTML = _ah.items.length
+      ? _ah.items.map(_ahRow).join('')
+      : `<div class="ah-empty">No ${CREATOR} adds yet</div>`;
+    if (_ah.hasMore) _ah.obs = _attachSentinel(el, () => loadAddHistory(false));
+  }
+
+  const loadAddHistory = X('LoadAddHistory', async (reset) => {
+    if (_ah.loading) return;
+    _ah.loading = true;
+    const last   = _ah.items[_ah.items.length - 1];
+    const before = !reset && last ? `&before=${last.id}` : '';
+    const { ok, data } = await apiJSON(`${API}/add-history?limit=30${before}`);
+    _ah.loading = false;
+    if (!ok) return;
+    if (reset) _ah.items = [];
+    _ah.items.push(...data.items);
+    _ah.hasMore = data.has_more;
+    _renderAddHistory();
+  });
+
+  X('AhRetry', async (id) => {
+    const entry = _ah.items.find(i => i.id === id);
+    if (!entry) return;
+    const { ok, data } = await apiJSON(`${API}/channels`, {
+      method: 'POST',
+      body: JSON.stringify({ handle: entry.handle }),
+    });
+    if (ok) { addToasts.start(data.handle || entry.handle); loadQueue(); }
+    else showToast(data.error || `Could not retry @${entry.handle}.`, { type: 'error' });
+  });
+
+  X('AhDiscard', async (id) => {
+    const { ok, data } = await apiJSON(`${API}/add-history/${id}`, { method: 'DELETE' });
+    if (!ok) { showToast(data.error || 'Could not discard entry.', { type: 'error' }); return; }
+    _ah.items = _ah.items.filter(i => i.id !== id);
+    _renderAddHistory();
   });
 
   // ── Filters and sort ──────────────────────────────────────────────────────
@@ -1568,6 +1643,7 @@ function initChannelApp(cfg) {
   loadStats();
   loadRecent();
   loadQueue();
+  loadAddHistory(true);
 
   setInterval(loadStatus,   5000);
   setInterval(_tickActivityBar, 1000);

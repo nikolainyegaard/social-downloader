@@ -1152,6 +1152,52 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   gap: 14px;
 }
 
+/* Add history panel: the list itself scrolls (it is the IntersectionObserver
+   root for on-demand paging), not the panel body. */
+.add-history { flex: 1; min-height: 0; overflow-y: auto; }
+@media (max-width: 600px) { .add-history { max-height: 240px; } }
+
+.ah-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.ah-row:last-child { border-bottom: none; }
+.ah-handle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ah-status  { flex-shrink: 0; font-size: 11px; }
+.ah-ok      { color: var(--green); }
+.ah-error   { color: var(--red); cursor: help; }
+.ah-pending { color: var(--muted); }
+.ah-time    { color: var(--muted); font-size: 11px; flex-shrink: 0; white-space: nowrap; }
+.ah-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.ah-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ah-btn:hover { color: var(--text); border-color: var(--muted); }
+.ah-btn-danger:hover { color: var(--red); border-color: var(--red); }
+.ah-empty { color: var(--muted); font-size: 12px; padding: 24px 16px; text-align: center; }
+
 /* Loop block */
 .loop-block { display: flex; flex-direction: column; gap: 6px; }
 
