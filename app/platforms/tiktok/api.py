@@ -362,14 +362,17 @@ def parse_story_item(item: dict) -> dict | None:
 
     expires_at = None
     story_meta = item.get("story") or {}
-    for candidate in (story_meta.get("expiredAt"), item.get("expiredAt"),
-                      item.get("storyExpiredAt")):
+    for candidate in (story_meta.get("ExpiredAt"), story_meta.get("expiredAt"),
+                      item.get("expiredAt"), item.get("storyExpiredAt")):
         try:
-            if candidate and int(candidate) > 0:
-                expires_at = int(candidate)
-                break
+            value = int(candidate) if candidate else 0
         except (ValueError, TypeError):
-            pass
+            continue
+        if value > 10**12:  # story.ExpiredAt is in milliseconds
+            value //= 1000
+        if value > 0:
+            expires_at = value
+            break
     if expires_at is None and posted_at:
         expires_at = posted_at + 24 * 3600
 

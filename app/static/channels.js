@@ -725,6 +725,7 @@ function initChannelApp(cfg) {
     _el('LoopBlockExtra').style.display = which === 'extra' ? '' : 'none';
     _el('LvMain').classList.toggle('active',  which !== 'extra');
     _el('LvExtra').classList.toggle('active', which === 'extra');
+    _placeGlider(_el('LvMain').closest('.filter-pills'));
     localStorage.setItem(`${P}-loopView`, which);
   });
   if (cfg.extraLoopHtml && localStorage.getItem(`${P}-loopView`) === 'extra') {
