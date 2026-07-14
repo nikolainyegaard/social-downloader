@@ -145,6 +145,9 @@ class ChannelDB:
                     SELECT handle, 'ok', added_at, added_at FROM channels
                     WHERE enabled = 1 ORDER BY added_at
                 """)
+            # Invariant: starred channels are always bookmarked. Cheap and
+            # idempotent, so it also repairs pre-bookmark databases on launch.
+            conn.execute("UPDATE channels SET bookmarked = 1 WHERE starred = 1 AND bookmarked = 0")
         if needs_vacuum:
             self.vacuum()
 
@@ -437,10 +440,17 @@ class ChannelDB:
 
     def set_channel_starred(self, channel_id: str, starred: bool) -> None:
         with self.get_db() as conn:
-            conn.execute(
-                "UPDATE channels SET starred = ? WHERE channel_id = ?",
-                (1 if starred else 0, channel_id)
-            )
+            if starred:
+                # Starring implies bookmarking. Unstarring leaves the bookmark.
+                conn.execute(
+                    "UPDATE channels SET starred = 1, bookmarked = 1 WHERE channel_id = ?",
+                    (channel_id,)
+                )
+            else:
+                conn.execute(
+                    "UPDATE channels SET starred = 0 WHERE channel_id = ?",
+                    (channel_id,)
+                )
 
 
     def set_channel_bookmarked(self, channel_id: str, bookmarked: bool) -> None:

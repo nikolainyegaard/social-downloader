@@ -1096,7 +1096,7 @@ function initChannelApp(cfg) {
             <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="event.stopPropagation();${P}ToggleStar('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
             <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
             <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'${ch.bookmarked ? 'Remove bookmark' : 'Bookmark'}',onclick:()=>${P}ToggleBookmark('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">&#x2022;&#x2022;&#x2022;</button>
+            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},${ch.starred ? '' : `{label:'${ch.bookmarked ? 'Remove bookmark' : 'Bookmark'}',onclick:()=>${P}ToggleBookmark('${esc(ch.channel_id)}')},`}{label:'Remove',danger:true,onclick:()=>${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">&#x2022;&#x2022;&#x2022;</button>
           </div>
         </div>
         <div class="user-card-meta-footer">
@@ -1189,13 +1189,27 @@ function initChannelApp(cfg) {
   X('RunCreatorQuick',   id => _creatorRun(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, () => { renderCreators(); updateRunStates(); }, 'quick'));
   X('RunCreatorProfile', id => _creatorRunProfile(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, renderCreators));
   X('RemoveCreator',     (id, label) => _creatorRemove(`${API}/channels`, id, label, loadCreators));
-  X('ToggleStar',        id => _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators));
+
+  // Starring implies bookmarking (the server applies the same rule)
+  function _syncStarBookmark(id) {
+    const ch = creators.find(c => c.channel_id === id);
+    if (ch && ch.starred && !ch.bookmarked) { ch.bookmarked = 1; renderCreators(); }
+  }
+
+  X('ToggleStar', async id => {
+    await _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators);
+    _syncStarBookmark(id);
+  });
 
   // Bookmark: a pure filter flag with no loop or scheduling side effects.
   // Optimistic toggle, reverted if the PATCH fails.
   X('ToggleBookmark', async id => {
     const ch = creators.find(c => c.channel_id === id);
     if (!ch) return;
+    if (ch.starred && ch.bookmarked) {
+      showToast(`Starred ${CREATORS} stay bookmarked.`);
+      return;
+    }
     const next = ch.bookmarked ? 0 : 1;
     ch.bookmarked = next;
     renderCreators();
@@ -1399,7 +1413,7 @@ function initChannelApp(cfg) {
           <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
           <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
           <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},{label:'${ch.bookmarked ? 'Remove bookmark' : 'Bookmark'}',onclick:()=>${P}ToggleBookmark('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">&#x2022;&#x2022;&#x2022;</button>
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},${ch.starred ? '' : `{label:'${ch.bookmarked ? 'Remove bookmark' : 'Bookmark'}',onclick:()=>${P}ToggleBookmark('${esc(ch.channel_id)}')},`}{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">&#x2022;&#x2022;&#x2022;</button>
         </div>
         <div id="${P}ModalNoteArea" style="display:${ch.comment ? '' : 'none'};margin-top:8px">
           <textarea placeholder="Add a note about this ${CREATOR}…"
@@ -1437,6 +1451,7 @@ function initChannelApp(cfg) {
 
   X('ToggleStarModal', async id => {
     await _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators);
+    _syncStarBookmark(id);
     if (modalCreator && modalCreator.channel_id === id) _renderModalHeader(modalCreator);
   });
 

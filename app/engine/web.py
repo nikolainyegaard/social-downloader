@@ -369,12 +369,15 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     @bp.route("/channels/<channel_id>/bookmark", methods=["PATCH"])
     def set_channel_bookmark(channel_id: str):
-        if not db.get_channel(channel_id):
+        ch = db.get_channel(channel_id)
+        if not ch:
             return jsonify({"error": f"{noun} not found"}), 404
         body       = request.get_json(silent=True) or {}
         bookmarked = body.get("bookmarked")
         if not isinstance(bookmarked, bool):
             return jsonify({"error": "bookmarked must be a boolean"}), 400
+        if not bookmarked and ch.get("starred"):
+            return jsonify({"error": f"Starred {noun}s stay bookmarked"}), 409
         db.set_channel_bookmarked(channel_id, bookmarked)
         return jsonify({"ok": True})
 
