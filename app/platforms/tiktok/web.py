@@ -702,6 +702,41 @@ def register_tiktok_routes(bp, engine) -> None:
                     data = {"error": "TikTok returned no data (None)"}
                 return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
 
+            # Probes the story/item_list endpoint for a user. Input: @handle or
+            # numeric user id of a tracked user. Validates story fetching against
+            # the live cookies before trusting the loop wiring.
+            elif source == "tiktokapi" and action == "user_stories":
+                from TikTokApi import TikTokApi as _TikTokApi
+                from platforms.tiktok.api import get_user_stories, parse_story_item
+                _needle = inp.lstrip("@").strip().lower()
+                _match  = next((c for c in db.get_all_channels()
+                                if c["handle"].lower() == _needle or c["channel_id"] == _needle), None)
+                if not _match:
+                    return jsonify({"ok": False, "output": f"Error: no tracked user matches {inp}"})
+                ms_token = get_ms_token()
+
+                async def _fetch_stories_adhoc():
+                    cookies_flat = get_cookies_flat()
+                    async with _TikTokApi() as _api:
+                        await _api.create_sessions(
+                            ms_tokens=[ms_token] if ms_token else [],
+                            num_sessions=1,
+                            sleep_after=3,
+                            executable_path=CHROME_EXECUTABLE,
+                            cookies=[cookies_flat] if cookies_flat else None,
+                        )
+                        return await get_user_stories(_api, _match["channel_id"])
+
+                items  = asyncio.run(_fetch_stories_adhoc())
+                parsed = [s for s in (parse_story_item(i) for i in items) if s]
+                out = {
+                    "user":        f"@{_match['handle']} ({_match['channel_id']})",
+                    "item_count":  len(items),
+                    "parsed":      parsed,
+                    "raw_sample":  items[:1],
+                }
+                return jsonify({"ok": True, "output": json.dumps(out, indent=2, default=str)})
+
             # Uses TikTokApi's make_request() (Playwright + X-Bogus signing) but
             # bypasses the username guard in user.info(). Tests whether TikTok
             # resolves a user by secUid alone when uniqueId is empty.

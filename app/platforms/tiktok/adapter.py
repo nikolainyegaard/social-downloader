@@ -122,6 +122,7 @@ tiktok_adapter = ChannelAdapter(
     item_noun="video",
     quick_limit=30,
     has_banner=False,
+    has_stories=True,
     normalize_handle=_normalize_handle,
     lookup_profile=_lookup_profile,
     fetch_profile=_unused,

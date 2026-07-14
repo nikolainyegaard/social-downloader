@@ -314,6 +314,102 @@ def _normalise_item_list_entry(item: dict) -> dict:
     }
 
 
+async def get_user_stories(api, author_id: str) -> list[dict]:
+    """Fetch a user's currently live stories via the story/item_list web endpoint.
+
+    Same endpoint gallery-dl's TikTok extractor uses; requires logged-in
+    cookies (the session carries them). authorId is the numeric user ID we
+    store as channel_id. Returns raw item dicts in the post/item_list shape.
+    Users without live stories return an empty list.
+    """
+    items: list[dict] = []
+    cursor = "0"
+    for _page in range(5):  # stories cap out well below 5 pages of 30
+        data = await api.make_request(
+            url="https://www.tiktok.com/api/story/item_list/",
+            params={
+                "authorId":     str(author_id),
+                "count":        "30",
+                "cursor":       cursor,
+                "loadBackward": "false",
+            },
+        )
+        if not data or not isinstance(data.get("itemList"), list):
+            break
+        items.extend(data["itemList"])
+        if not data.get("hasMore"):
+            break
+        cursor = str(data.get("cursor") or "")
+        if not cursor or cursor == "0":
+            break
+    return items
+
+
+def parse_story_item(item: dict) -> dict | None:
+    """Map a raw story item to the engine's story dict contract.
+
+    {story_id, content_type, posted_at, expires_at, media_url}; returns None
+    when the item carries no downloadable media URL. Expiry uses the item's
+    expiry field when present, otherwise post time + 24h.
+    """
+    sid = item.get("id")
+    if not sid:
+        return None
+    try:
+        posted_at = int(item.get("createTime") or 0) or None
+    except (ValueError, TypeError):
+        posted_at = None
+
+    expires_at = None
+    story_meta = item.get("story") or {}
+    for candidate in (story_meta.get("expiredAt"), item.get("expiredAt"),
+                      item.get("storyExpiredAt")):
+        try:
+            if candidate and int(candidate) > 0:
+                expires_at = int(candidate)
+                break
+        except (ValueError, TypeError):
+            pass
+    if expires_at is None and posted_at:
+        expires_at = posted_at + 24 * 3600
+
+    image_post = item.get("imagePost")
+    if image_post:
+        urls = [
+            img["imageURL"]["urlList"][0]
+            for img in image_post.get("images", [])
+            if img.get("imageURL", {}).get("urlList")
+        ]
+        if not urls:
+            return None
+        return {
+            "story_id":     str(sid),
+            "content_type": "photo",
+            "posted_at":    posted_at,
+            "expires_at":   expires_at,
+            "media_url":    urls[0],
+        }
+
+    video_meta = item.get("video") or {}
+    play_addr  = video_meta.get("playAddr") or video_meta.get("downloadAddr")
+    if not play_addr:
+        bitrates = video_meta.get("bitrateInfo") or []
+        for b in bitrates:
+            url_list = (b.get("PlayAddr") or {}).get("UrlList") or []
+            if url_list:
+                play_addr = url_list[0]
+                break
+    if not play_addr:
+        return None
+    return {
+        "story_id":     str(sid),
+        "content_type": "video",
+        "posted_at":    posted_at,
+        "expires_at":   expires_at,
+        "media_url":    play_addr,
+    }
+
+
 async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
                                 chrome_executable: str | None,
                                 cookies_flat: dict | None = None) -> list[str]:

@@ -102,6 +102,20 @@ class ChannelDB:
                     FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS stories (
+                    story_id     TEXT PRIMARY KEY,
+                    channel_id   TEXT NOT NULL,
+                    content_type TEXT DEFAULT 'video',
+                    posted_at    INTEGER,
+                    expires_at   INTEGER,
+                    saved_at     INTEGER,
+                    file_path    TEXT,
+                    FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_stories_channel_id
+                    ON stories(channel_id);
+
                 CREATE INDEX IF NOT EXISTS idx_videos_channel_id
                     ON videos(channel_id);
 
@@ -682,6 +696,78 @@ class ChannelDB:
                 UPDATE videos SET file_path = REPLACE(file_path, ?, ?)
                 WHERE channel_id = ? AND file_path IS NOT NULL
             """, (f"{self.platform}/@{old_handle}/", f"{self.platform}/@{new_handle}/", channel_id))
+            conn.execute("""
+                UPDATE stories SET file_path = REPLACE(file_path, ?, ?)
+                WHERE channel_id = ? AND file_path IS NOT NULL
+            """, (f"{self.platform}/@{old_handle}/", f"{self.platform}/@{new_handle}/", channel_id))
+
+
+    # ── Stories ───────────────────────────────────────────────────────────────
+    # Ephemeral platform stories, saved permanently. expires_at drives the
+    # "live" state in the UI; expired stories keep their files and rows.
+
+    def add_story(self, story_id: str, channel_id: str, content_type: str,
+                  posted_at: int | None, expires_at: int | None,
+                  file_path: str) -> None:
+        with self.get_db() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO stories
+                    (story_id, channel_id, content_type, posted_at, expires_at, saved_at, file_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (story_id, channel_id, content_type, posted_at, expires_at,
+                  int(time.time()), file_path))
+
+
+    def get_known_story_ids(self, channel_id: str) -> set:
+        with self.get_db() as conn:
+            rows = conn.execute(
+                "SELECT story_id FROM stories WHERE channel_id = ?", (channel_id,)
+            ).fetchall()
+        return {r[0] for r in rows}
+
+
+    def get_story(self, story_id: str) -> dict | None:
+        with self.get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM stories WHERE story_id = ?", (story_id,)
+            ).fetchone()
+        if not row:
+            return None
+        story = dict(row)
+        if story.get("file_path"):
+            story["file_path"] = os.path.abspath(story["file_path"])
+        return story
+
+
+    def get_stories_for_channel(self, channel_id: str) -> list[dict]:
+        with self.get_db() as conn:
+            rows = conn.execute("""
+                SELECT story_id, channel_id, content_type, posted_at, expires_at, saved_at
+                FROM stories WHERE channel_id = ?
+                ORDER BY posted_at DESC, story_id DESC
+            """, (channel_id,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+    def get_live_story_counts(self) -> dict:
+        """{channel_id: live story count} for stories whose expiry is in the future."""
+        with self.get_db() as conn:
+            rows = conn.execute("""
+                SELECT channel_id, COUNT(*) FROM stories
+                WHERE expires_at > ? GROUP BY channel_id
+            """, (int(time.time()),)).fetchall()
+        return {r[0]: r[1] for r in rows}
+
+
+    def get_story_day_counts(self, channel_id: str) -> dict:
+        """{'YYYY-MM-DD': story count} across all saved stories of a channel."""
+        with self.get_db() as conn:
+            rows = conn.execute("""
+                SELECT date(posted_at, 'unixepoch', 'localtime') AS day, COUNT(*)
+                FROM stories WHERE channel_id = ? AND posted_at IS NOT NULL
+                GROUP BY day
+            """, (channel_id,)).fetchall()
+        return {r[0]: r[1] for r in rows}
 
 
     def count_downloaded_videos(self) -> int:

@@ -23,6 +23,38 @@ _CONFIRM_THRESHOLD    = 2
 _ABORT_AFTER_FAILURES = 3  # consecutive channel failures that abort the session (rate limit or auth wall)
 
 
+def save_new_stories(db, platform: str, channel_id: str, handle: str,
+                     stories: list[dict], log: Callable[[str], None],
+                     cookies_path: str | None = None) -> int:
+    """Download and record stories not yet in the DB. Returns the saved count.
+
+    Story dicts: {story_id, content_type 'video'|'photo', posted_at,
+    expires_at, media_url, headers?}. Used by the generic tracker below and by
+    platform trackers with a session override (TikTok).
+    """
+    from downloader import download_story
+
+    known = db.get_known_story_ids(channel_id)
+    fresh = [s for s in stories if s["story_id"] not in known]
+    saved = 0
+    for s in fresh:
+        path = download_story(
+            story_id=s["story_id"], username=handle, platform=platform,
+            media_url=s["media_url"], content_type=s.get("content_type", "video"),
+            posted_at=s.get("posted_at"), cookies_path=cookies_path,
+            headers=s.get("headers"),
+        )
+        if not path:
+            log(f"  Story {s['story_id']} download failed")
+            continue
+        db.add_story(s["story_id"], channel_id, s.get("content_type", "video"),
+                     s.get("posted_at"), s.get("expires_at"), path)
+        saved += 1
+    if saved:
+        log(f"  {saved} new {'story' if saved == 1 else 'stories'} saved")
+    return saved
+
+
 def process_all_channels(
     engine,
     channels: list[dict],
@@ -138,6 +170,14 @@ def process_single_channel(
         if not channel.get("tracking_enabled", 1):
             log(f"  {noun.capitalize()} fetch skipped (tracking disabled for @{handle})")
             return "ok"
+
+        if adapter.fetch_stories:
+            try:
+                stories = adapter.fetch_stories(engine, channel)
+                if stories:
+                    save_new_stories(db, engine.platform, channel_id, handle, stories, log)
+            except Exception as e:
+                log(f"  Story fetch failed: {e}")
 
         try:
             remote_posts: dict[str, dict]   = {}

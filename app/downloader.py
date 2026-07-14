@@ -213,6 +213,57 @@ def download_photos(*, video_id: str, username: str,
     return first_path
 
 
+def download_story(*, story_id: str, username: str, platform: str,
+                   media_url: str, content_type: str, posted_at: int | None,
+                   cookies_path: str | None = None,
+                   headers: dict | None = None) -> str | None:
+    """
+    Download one story item (video or image) into the creator's stories folder.
+
+    Stories live on expiring CDN URLs that yt-dlp cannot resolve (story pages
+    404 for logged-out clients), so this is a direct GET like photo posts.
+    Files are named {YYYYMMDD_HHMMSS}_{story_id}.{ext} from the post time.
+    Returns the saved path, or None on failure.
+    """
+    stories_dir = os.path.join(MEDIA_DIR, platform, f"@{username}", "stories")
+    os.makedirs(stories_dir, exist_ok=True)
+
+    stamp   = (datetime.fromtimestamp(posted_at).strftime("%Y%m%d_%H%M%S")
+               if posted_at else datetime.now().strftime("%Y%m%d_%H%M%S"))
+    cookies = _load_cookies(cookies_path) if cookies_path else {}
+
+    try:
+        resp = requests.get(media_url, cookies=cookies, headers=headers or {}, timeout=60)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"[{_ts()}] Failed to download story {story_id}: {e}")
+        return None
+
+    if content_type == "photo":
+        jpg_path  = os.path.join(stories_dir, f"{stamp}_{story_id}.jpg")
+        avif_path = os.path.join(stories_dir, f"{stamp}_{story_id}.avif")
+        with open(jpg_path, "wb") as f:
+            f.write(resp.content)
+        if posted_at:
+            os.utime(jpg_path, (posted_at, posted_at))
+        if encode_avif(jpg_path, avif_path, CRF_PHOTO):
+            if posted_at:
+                os.utime(avif_path, (posted_at, posted_at))
+            try:
+                os.remove(jpg_path)
+            except OSError:
+                pass
+            return avif_path
+        return jpg_path  # keep JPEG; photo_converter will retry later
+
+    path = os.path.join(stories_dir, f"{stamp}_{story_id}.mp4")
+    with open(path, "wb") as f:
+        f.write(resp.content)
+    if posted_at:
+        os.utime(path, (posted_at, posted_at))
+    return path
+
+
 def _get_video_files(folder: str, video_id: str) -> list[str]:
     """Return paths of all files in folder whose name starts with video_id."""
     return [

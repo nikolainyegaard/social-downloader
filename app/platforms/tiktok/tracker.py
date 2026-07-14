@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import random
 import threading
 import time
@@ -17,10 +18,11 @@ from platforms.tiktok.store import TikTokStore
 from scheduling import set_channel_next_check, set_channel_last_full
 from platforms.tiktok.api import (
     get_user_info, get_user_videos, get_user_videos_with_stats,
-    fetch_sound_video_ids, get_video_details,
+    fetch_sound_video_ids, get_video_details, get_user_stories, parse_story_item,
     UserBannedException, UserPrivateException, UserBlockedException,
 )
 from downloader import download_video, download_photos, rename_creator_folder
+from engine.tracker import save_new_stories
 from thumbnailer import cache_avatar, generate_thumbnail
 
 # Bound from the engine instance by the entry points below; module-level so the
@@ -64,6 +66,29 @@ def _npost(n: int) -> str:
 
 
 # ── User tracking ─────────────────────────────────────────────────────────────
+
+async def _check_user_stories(user: dict, api, username: str,
+                              log, logd) -> None:
+    """Fetch and save any live stories for a user. Never raises: the story
+    endpoint is newer and less proven than item_list, so a failure here must
+    not fail the user's whole check or trip the bot-detection recovery."""
+    channel_id = user["channel_id"]
+    try:
+        items = await get_user_stories(api, channel_id)
+    except Exception as e:
+        logd(f"  [{channel_id}] story fetch error: {e}")
+        return
+    if not items:
+        return
+    stories = [s for s in (parse_story_item(i) for i in items) if s]
+    if not stories:
+        return
+    try:
+        save_new_stories(db, "tiktok", channel_id, username, stories, log,
+                         cookies_path=COOKIES_PATH if os.path.exists(COOKIES_PATH) else None)
+    except Exception as e:
+        logd(f"  [{channel_id}] story save error: {e}")
+
 
 async def process_single_user(
     user: dict,
@@ -231,6 +256,9 @@ async def process_single_user(
         if not fetch_videos:
             log(f"  Video fetch skipped (tracking disabled for @{username})")
             return _profile_ok, _deletion_detected
+
+        # ── Stories: fetch any currently live stories, save new ones ─────────
+        await _check_user_stories(user, api, username, log, logd)
 
         # ── Primary: item_list (has stats, paginated with inter-page delay) ──
         # sec_uid is required: without it the library calls self.info() to

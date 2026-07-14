@@ -223,9 +223,11 @@ def create_channel_blueprint(engine) -> Blueprint:
         all_stats     = db.get_all_video_stats()
         all_ph_counts = db.get_all_profile_history_counts()
         all_ph        = db.get_all_profile_history_for_search()
+        live_stories  = db.get_live_story_counts() if adapter.has_stories else {}
         for ch in channels:
             cid   = ch["channel_id"]
             stats = all_stats.get(cid, {})
+            ch["live_stories"]          = live_stories.get(cid, 0)
             ch["video_total"]           = stats.get("video_total",      0)
             ch["video_downloaded"]      = stats.get("video_downloaded",  0)
             ch["video_deleted"]         = stats.get("video_deleted",     0)
@@ -453,6 +455,29 @@ def create_channel_blueprint(engine) -> Blueprint:
             return ("", 404)
         ext = os.path.splitext(files[n])[1].lower()
         return send_file(files[n], mimetype=_VIDEO_MIME.get(ext, "video/mp4"), conditional=True)
+
+    # ── Stories ───────────────────────────────────────────────────────────────
+
+    @bp.route("/channels/<channel_id>/stories", methods=["GET"])
+    def channel_stories(channel_id: str):
+        now  = int(time.time())
+        rows = db.get_stories_for_channel(channel_id)
+        for s in rows:
+            s["live"] = bool(s.get("expires_at") and s["expires_at"] > now)
+            s["url"]  = f"/api/{platform}/stories/{s['story_id']}/file"
+        return jsonify(rows)
+
+    @bp.route("/channels/<channel_id>/stories/calendar", methods=["GET"])
+    def channel_stories_calendar(channel_id: str):
+        return jsonify(db.get_story_day_counts(channel_id))
+
+    @bp.route("/stories/<story_id>/file", methods=["GET"])
+    def story_file(story_id: str):
+        story = db.get_story(story_id)
+        if not story or not story.get("file_path") or not os.path.exists(story["file_path"]):
+            return ("", 404)
+        ext = os.path.splitext(story["file_path"])[1].lower()
+        return send_file(story["file_path"], mimetype=_VIDEO_MIME.get(ext, "video/mp4"), conditional=True)
 
     # ── Diagnostics ───────────────────────────────────────────────────────────
 

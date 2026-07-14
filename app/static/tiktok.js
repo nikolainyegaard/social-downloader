@@ -1135,6 +1135,7 @@ const _DIAG_ACTIONS = {
                      { value: "item_list_username",  label: "item_list by username (library resolves sec_uid)" },
                      { value: "item_list_by_id",     label: "item_list by channel_id:sec_uid" },
                      { value: "item_list_from_db",   label: "item_list from DB (mirrors loop -- paste @username)" },
+                     { value: "user_stories",        label: "Live stories for a tracked user (paste @username)" },
                      { value: "sound_raw",           label: "Sound raw API output (paste sound_id or URL)" }],
 };
 
@@ -1159,6 +1160,7 @@ function diagActionChanged() {
     'tiktokapi:item_list_username':     '@username or username',
     'tiktokapi:item_list_by_id':        'channel_id:sec_uid',
     'tiktokapi:item_list_from_db':      '@username (must exist in DB)',
+    'tiktokapi:user_stories':           '@username of a tracked user',
     'tiktokapi:sound_raw':              'sound_id (numeric) or TikTok sound URL',
   };
   document.getElementById('diagInput').placeholder =

@@ -43,6 +43,14 @@ class ChannelAdapter:
     process_session: Callable | None = None
     process_single: Callable | None = None
 
+    # Stories: platforms with ephemeral stories set has_stories and, when they
+    # use the generic tracker, implement fetch_stories returning story dicts
+    # {story_id, content_type 'video'|'photo', posted_at, expires_at, media_url,
+    # headers?}. Platforms with a process_session override (TikTok) fetch
+    # stories inside their own tracker and call engine.tracker.save_new_stories.
+    has_stories: bool = False
+    fetch_stories: Callable | None = None           # (engine, channel) -> list[dict]
+
     # Extra DB setup after ChannelDB.init_db (platform-only tables, e.g. TikTok sounds).
     init_db_extra: Callable | None = None           # (engine) -> None
 
