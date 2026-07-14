@@ -159,7 +159,7 @@ function initChannelApp(cfg) {
       ${EXTRA_VIEWS.map(v => `<div id="${P}Controls_${v.key}" class="filter-control-group" style="display:none">${v.controlsHtml || ''}</div>`).join('')}
     </div>
     <div class="users-grid" id="${P}Grid">
-      <div class="empty-state">No ${CREATORS} tracked yet.</div>
+      ${Array(6).fill('<div class="user-card skeleton-card" aria-hidden="true"></div>').join('')}
     </div>
     ${EXTRA_VIEWS.map(v => `<div class="users-grid" id="${P}Grid_${v.key}" style="display:none"><div class="empty-state">${v.emptyLabel || ''}</div></div>`).join('')}
     <div id="${P}LogPanel" style="display:none">
@@ -1024,6 +1024,7 @@ function initChannelApp(cfg) {
   let gridObs        = null;
   let renderedCount  = 0;
   let sortedCache    = [];
+  let gridAnimated   = false;   // staggered card entrance runs once, on first populate
 
   // Relation and privacy pill; only rendered when the platform's adapter
   // populates the fields (engine schema has them for every platform)
@@ -1165,6 +1166,11 @@ function initChannelApp(cfg) {
     grid.innerHTML = slice.map(_renderCreatorCard).join('')
       + (toShow < CARD_BATCH ? _ghostCards(CARD_BATCH - toShow) : '');
     renderedCount = slice.length;
+    if (!gridAnimated) {
+      gridAnimated = true;
+      grid.classList.add('grid-anim');
+      setTimeout(() => grid.classList.remove('grid-anim'), 700);
+    }
 
     if (sortedCache.length > renderedCount) {
       gridObs = _attachGridSentinel(grid, _appendCreatorCards);

@@ -1,12 +1,12 @@
 :root {
-  /* Base palette */
-  --bg:           #111214;
-  --surface:      #1c1e21;
-  --surface1:     #1c1e21;   /* alias; some components use surface1 */
-  --surface2:     #252830;
-  --bg-hover:     #252830;   /* hover states and overlay buttons */
-  --bg-card:      #252830;   /* code / textarea inset backgrounds */
-  --border:       #2e3138;
+  /* Base palette: deep blue-tinted darks, layered by elevation */
+  --bg:           #0d1015;
+  --surface:      #161a21;
+  --surface1:     #161a21;   /* alias; some components use surface1 */
+  --surface2:     #20252e;
+  --bg-hover:     #20252e;   /* hover states and overlay buttons */
+  --bg-card:      #20252e;   /* code / textarea inset backgrounds */
+  --border:       #2a303b;
   --accent:       #4f8ef7;
   --accent-h:     #3a78e8;
   --red:          #e05252;
@@ -18,7 +18,7 @@
   --text-dim:     #9499a5;
   --scrollbar:    #3d434f;
 
-  /* Alpha tints — semantic colour at common opacities */
+  /* Alpha tints: semantic colour at common opacities */
   --accent-bg:    rgba(79,142,247,.15);
   --accent-bg-h:  rgba(79,142,247,.28);
   --red-bg:       rgba(224,82,82,.15);
@@ -29,11 +29,13 @@
   --yellow-bg-h:  rgba(224,168,58,.28);
 
   /* Geometry */
-  --radius:       8px;
-  --radius-lg:    12px;
+  --radius:       10px;
+  --radius-lg:    14px;
   --radius-pill:  99px;
 
   /* Elevation */
+  --shadow-1:     0 1px 2px rgba(0,0,0,.25);
+  --shadow-2:     0 10px 28px rgba(0,0,0,.4);
   --shadow-modal: 0 24px 64px rgba(0,0,0,.5);
 
   /* Typography */
@@ -46,15 +48,19 @@
    Chrome 121+, Firefox, and Edge. Safari keeps its overlay scrollbars. */
 * { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
 
-html { overflow-x: hidden; overflow-y: scroll; overscroll-behavior-x: none; }
+/* Page background lives on html so the .app ambient glow (a fixed,
+   z-index -1 pseudo-element) can paint on top of it, behind all content. */
+html { background: var(--bg); overflow-x: hidden; overflow-y: scroll; overscroll-behavior-x: none; }
 html.modal-open { overflow: hidden; }
 
 body {
-  background: var(--bg);
+  background: transparent;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
   line-height: 1.5;
+  /* Fixed-width digits keep countdowns, stats, and timestamps from jittering */
+  font-variant-numeric: tabular-nums;
   min-height: 100dvh;
   overflow-x: clip;
 }
@@ -84,7 +90,9 @@ body {
   line-height: 1.5;
   pointer-events: all;
   box-shadow: 0 4px 16px rgba(0,0,0,.35);
-  background: var(--surface2);
+  background: color-mix(in srgb, var(--surface2) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-left-width: 3px;
   color: var(--text);
@@ -138,6 +146,17 @@ body {
   padding: 24px 20px 60px;
   display: grid;
   gap: 24px;
+}
+/* Ambient glow at the top of the page in the active platform's accent color.
+   Lives on .app so the per-platform theme classes recolor it automatically. */
+.app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(720px 420px at 50% -120px,
+    color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%);
 }
 /* Cap the grid tracks at the available width: without this, any child's
    min-content (a nowrap toolbar, a long add-bar input) widens the track and
@@ -205,8 +224,15 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
 }
 .tracking-search:focus, .modal-video-search:focus { outline: none; border-color: var(--accent); }
 
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+.btn-primary {
+  background: linear-gradient(180deg, var(--accent), var(--accent-h));
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, white), var(--accent));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+}
 
 .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 5px 10px; font-size: 12px; }
 .btn-danger:hover:not(:disabled) { background: var(--red-bg-h); }
@@ -323,7 +349,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
 .text-input:focus { border-color: var(--accent); }
 .text-input::placeholder { color: var(--muted); opacity: 1; }
 
-/* Hide number input spinners — values like 180 are typed, not incremented */
+/* Hide number input spinners. Values like 180 are typed, not incremented */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
@@ -371,6 +397,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* ── Unified add bar: one field per app, desktop and mobile ──────────────── */
 
 .add-bar { display: flex; gap: 8px; align-items: center; }
+.add-bar .btn-primary { padding: 9px 18px; }
 .add-bar-input-row {
   flex: 1;
   min-width: 0;
@@ -382,11 +409,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   overflow: hidden;
   transition: border-color 0.15s;
 }
-.add-bar-input-row:focus-within { border-color: var(--accent); }
+.add-bar-input-row:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
 .add-bar-input {
   flex: 1;
   min-width: 0;
-  padding: 7px 10px;
+  padding: 9px 12px;
   background: transparent;
   border: none;
   color: var(--text);
@@ -433,13 +463,37 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 
 .user-card {
-  background: var(--surface);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface2) 25%, var(--surface)), var(--surface));
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* Staggered entrance on first load. The grid-anim class is added by
+   renderCreators only for the initial populate, so poll rebuilds never replay it. */
+@keyframes card-in { from { opacity: 0; transform: translateY(10px); } }
+.grid-anim .user-card { animation: card-in .3s ease backwards; }
+.grid-anim .user-card:nth-child(2) { animation-delay: .04s; }
+.grid-anim .user-card:nth-child(3) { animation-delay: .08s; }
+.grid-anim .user-card:nth-child(4) { animation-delay: .12s; }
+.grid-anim .user-card:nth-child(5) { animation-delay: .16s; }
+.grid-anim .user-card:nth-child(6) { animation-delay: .20s; }
+.grid-anim .user-card:nth-child(7) { animation-delay: .24s; }
+.grid-anim .user-card:nth-child(8) { animation-delay: .28s; }
+.grid-anim .user-card:nth-child(9) { animation-delay: .32s; }
+
+/* Shimmer placeholders shown in the grid until the first channel fetch lands */
+@keyframes shimmer { to { background-position: -200% 0; } }
+.user-card.skeleton-card {
+  min-height: 220px;
+  background: linear-gradient(100deg, var(--surface) 40%, var(--surface2) 50%, var(--surface) 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+  pointer-events: none;
 }
 
 .user-card-top {
@@ -454,6 +508,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--surface2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
   display: flex; align-items: center; justify-content: center;
 }
 .avatar-wrap .avatar-letter {
@@ -469,9 +524,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-radius: 50%;
   object-fit: cover;
   cursor: pointer;
-  transition: opacity .15s;
+  transition: opacity .15s, transform .15s;
 }
-.user-avatar:hover { opacity: .75; }
+.user-avatar:hover { opacity: .9; transform: scale(1.06); }
 
 .user-identity { min-width: 0; flex: 1; }
 .user-display-name { font-weight: 700; font-size: 15px; line-height: 1.3; word-break: break-word; }
@@ -501,7 +556,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .privacy-status.blocked            { background: var(--orange-bg); color: var(--orange); }
 .privacy-status.banned             { background: var(--red-bg);    color: var(--red); }
 
-/* Inactive card — dim content, leave footer/pills/buttons unchanged */
+/* Inactive card: dim content, leave footer/pills/buttons unchanged */
 .user-card-inactive .user-card-top,
 .user-card-inactive .user-bio-area,
 .user-card-inactive .user-stats { opacity: 0.4; }
@@ -526,7 +581,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   height: 52px;
   background-size: cover;
   background-position: center;
-  border-radius: var(--radius) var(--radius) 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   opacity: 0.3;
   flex-shrink: 0;
 }
@@ -596,34 +651,48 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .user-card-meta-item .meta-value { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .user-card-current { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
 
-.empty-state { color: var(--muted); padding: 32px 0; text-align: center; }
+.empty-state {
+  color: var(--muted);
+  padding: 48px 16px;
+  text-align: center;
+  font-size: 13px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+}
 
-/* ── User card — clickable ───────────────────────────────────────────────── */
+/* ── User card: clickable ───────────────────────────────────────────────── */
 
 .user-card {
   cursor: pointer;
   /* 50ms delay on fade-out so a DOM rebuild that briefly drops hover is invisible */
-  transition: border-color .15s 50ms, box-shadow .15s 50ms;
+  transition: border-color .15s 50ms, box-shadow .15s 50ms, transform .18s ease;
 }
 .user-card:hover {
-  border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent);
-  transition: border-color .15s, box-shadow .15s; /* hover-in: no delay */
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+  box-shadow: var(--shadow-2), 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  transform: translateY(-2px);
+  transition: border-color .15s, box-shadow .15s, transform .18s ease; /* hover-in: no delay */
 }
-.user-card-current:hover { box-shadow: 0 0 0 2px var(--green); }
+.user-card-current:hover { box-shadow: var(--shadow-2), 0 0 0 2px var(--green); }
 
 /* ── Modal ───────────────────────────────────────────────────────────────── */
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.65);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: rgba(4,6,10,.7);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Replays each time the backdrop flips from display none */
+  animation: overlay-in .15s ease;
 }
+@keyframes overlay-in { from { opacity: 0; } }
+@keyframes modal-in   { from { opacity: 0; transform: scale(.975) translateY(8px); } }
+.modal-backdrop .modal-base { animation: modal-in .18s ease; }
 
 .modal-base {
   background: var(--surface);
@@ -844,7 +913,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .filter-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .filter-pill:hover:not(.active) { background: var(--border); color: var(--text); }
-/* Pills inside a grouped container — glider provides the active highlight */
+/* Pills inside a grouped container: glider provides the active highlight */
 .filter-pills .filter-pill { background: transparent; border-color: transparent; }
 .filter-pills .filter-pill.active { background: transparent; border-color: transparent; color: #fff; }
 .filter-pills .filter-pill:hover:not(.active) { background: rgba(255,255,255,.06); border-color: transparent; color: var(--text); }
@@ -1144,12 +1213,24 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 
 .panel-card {
-  background: var(--surface);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface2) 30%, var(--surface)), var(--surface));
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255,255,255,.03);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Accent dot in front of every panel title, tying the platform color through
+   the dashboard */
+.panel-header .section-title { display: inline-flex; align-items: center; gap: 7px; }
+.panel-header .section-title::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
 .panel-header {
@@ -1266,27 +1347,31 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .loop-session-pill.next    { color: var(--accent); border-color: var(--accent); }
 .loop-session-pill.running { color: var(--green);  border-color: var(--green); }
 
-/* Stats grid */
+/* Stats grid. The tile rules are scoped to .stat-grid because .stat-item is
+   also the class for the plain inline stats on creator cards. */
 .stat-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 2px;
+  gap: 6px;
   flex: 1;
 }
 
-.stat-item {
-  padding: 8px 10px;
-  border-radius: 6px;
+.stat-grid .stat-item {
+  padding: 10px 12px;
+  border-radius: calc(var(--radius) - 2px);
+  background: color-mix(in srgb, var(--surface2) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transition: background .1s;
+  transition: background .1s, border-color .1s;
 }
-.stat-item:hover { background: var(--surface2); }
+.stat-grid .stat-item:hover { background: var(--surface2); border-color: var(--border); }
 
 .stat-value {
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 700;
+  letter-spacing: -.02em;
   color: var(--text);
   line-height: 1.2;
 }
@@ -1671,7 +1756,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .tracking-tab-row { flex-wrap: wrap; }
   .tracking-search { width: 100% !important; box-sizing: border-box; }
 
-  /* Full-screen modals — no space to waste on a blurred backdrop */
+  /* Full-screen modals: no space to waste on a blurred backdrop */
   .modal-backdrop {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -1724,34 +1809,51 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* ── Platform tabs ────────────────────────────────────────────────────────── */
 
+/* Sticky glass tab bar: stays pinned while scrolling with the page blurring
+   through behind it */
 .platform-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   display: flex;
-  gap: 0;
+  gap: 2px;
   border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .platform-tab {
-  padding: 7px 18px;
+  padding: 9px 18px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-dim);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
+  border-radius: 0;
   margin-bottom: -1px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
 
 .platform-tab:hover { color: var(--text); }
-.platform-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.platform-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent);
+}
 
 /* ── Platform sections ────────────────────────────────────────────────────── */
 
 .platform-section {
   display: grid;
   gap: 24px;
+  /* Replays whenever the section flips from display none, so switching tabs
+     gets a soft fade-and-rise */
+  animation: section-in .22s ease;
 }
+@keyframes section-in { from { opacity: 0; transform: translateY(6px); } }
 
 /* ── Per-platform theme overrides ─────────────────────────────────────────── */
 

@@ -9,6 +9,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ### Changed
 - Google Chrome is back in the amd64 image for TikTok bot detection resistance (its removal in the image slimming caused noticeably more aggressive bot detection); amd64 now ships Chrome instead of Playwright Chromium, arm64 keeps Playwright Chromium since Google publishes no arm64 Chrome build
 - Front-end polish pass: keyboard focus rings on all buttons, links, and creator cards (cards now open with Enter or Space), a slash shortcut that jumps to the search box, slim dark scrollbars everywhere, subtle press feedback on buttons, and slightly brighter muted text for readability
+- Front-end redesign: a deeper blue-tinted dark palette with an ambient glow at the top of the page in the active platform's color, a sticky frosted-glass tab bar, elevated creator cards that lift on hover with accent-ringed avatars and a staggered entrance on first load, shimmer skeleton placeholders while the creator list loads (replaces the "No creators tracked yet" flash), stat tiles in the Statistics panel, accent dots on panel titles, softer rounded corners throughout, animated modal and tab transitions, frosted toasts, gradient primary buttons, a larger add bar with a focus glow, and fixed-width digits so countdowns and stats stop jittering
 - The creator grid no longer rebuilds on every 15 second poll when nothing changed, which removes avatar and hover flicker; typing in the search box is debounced so fast typing filters once instead of per keystroke
 
 ### Added
