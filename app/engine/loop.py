@@ -217,6 +217,7 @@ class ChannelLoop:
                 "logs":                        list(self.loop_state["logs"]),
                 "log_seq":                     self._log_seq,
             }
+        state["loop_paused"] = str(self.db.get_setting("loop_paused", "0")) == "1"
         with self._run_state_lock:
             state["run_current"] = self._run_state["current"]
             state["run_queue"]   = list(self._run_state["queue"])

@@ -664,6 +664,20 @@ function _fmtBytes(n) {
   return _fmtSuffix(n, 1024 ** 2, ' MB');
 }
 
+// Loop pause toggle icons (loop panel headers)
+const _pauseIcon  = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>`;
+const _resumeIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l14 8-14 8z"/></svg>`;
+
+// Shared pause-button render: swaps icon and title, dims the Next label
+function _renderPauseState(btn, nextEl, paused) {
+  if (btn) {
+    btn.innerHTML = paused ? _resumeIcon : _pauseIcon;
+    btn.title     = paused ? 'Resume scheduled sessions' : 'Pause scheduled sessions';
+    btn.classList.toggle('paused', paused);
+  }
+  if (nextEl) nextEl.classList.toggle('loop-next-paused', paused);
+}
+
 function fmtCount(n) {
   if (n == null) return '—';
   if (n >= 1_000_000) return _fmtSuffix(n, 1_000_000, 'M');

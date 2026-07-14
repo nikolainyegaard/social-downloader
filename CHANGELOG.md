@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Added
+- A pause toggle in every Loops panel header next to the next-session time: paused loops skip their scheduled sessions (the schedule keeps ticking, so resuming falls back into the normal cadence) while manual triggers and per-creator runs still work; the state survives restarts and the TikTok sound loop has its own toggle
 - Story saving: the engine gains a stories pipeline every platform can hook into; TikTok fetches each user's live stories during regular checks (via the same web endpoint gallery-dl uses, logged-in cookies required) and saves new ones permanently under the user's stories folder, named by post timestamp; saved stories and a per-day calendar count are served by new API routes, and the channel list reports each user's live story count; a Diagnostics probe (TikTokApi > Live stories) tests story fetching against your cookies without waiting for a loop
 - Channel databases gain account availability, privacy status, and viewer relations columns: groundwork for tracking bans, private accounts, and follow relations on every cookie-authenticated platform
 - Twitter and Instagram creator modals get the Videos/Photos type filter and per-type thumbnail markers (photo grid glyph vs play glyph) in both list and grid view, matching TikTok

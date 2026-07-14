@@ -262,6 +262,13 @@ def run_session_scheduler(platform: str, db, loop_mod,
             # consume a slot so the next scheduled session still fires as planned.
             session_times = session_times[1:]
 
+        # Paused: scheduled sessions are skipped (their slot is still consumed,
+        # so unpausing resumes the normal cadence). Manual triggers run anyway
+        # since the user asked explicitly.
+        if not triggered and str(db.get_setting("loop_paused", "0")) == "1":
+            print(f"{_ts()} {label} loop: session skipped (paused).")
+            continue
+
         loop_mod.set_next_run(None)
 
         if pre_session:

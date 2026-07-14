@@ -83,7 +83,10 @@ function initChannelApp(cfg) {
       <div class="loop-block" id="${P}LoopBlockMain">
         <div class="loop-block-header">
           <span class="loop-section-label">${cfg.loopLabel}</span>
-          <span id="${P}LoopNext" class="loop-next"></span>
+          <span style="display:flex;align-items:center;gap:6px">
+            <span id="${P}LoopNext" class="loop-next"></span>
+            <button class="loop-pause-btn" id="${P}PauseBtn" onclick="${P}TogglePause()" title="Pause scheduled sessions">${_pauseIcon}</button>
+          </span>
         </div>
         <div id="${P}LoopMeta" class="loop-meta">Never run</div>
         <div id="${P}LoopSessions" class="loop-sessions"></div>
@@ -210,6 +213,7 @@ function initChannelApp(cfg) {
   let runQueue       = [];
   let runCurrent     = null;
   let loopRunning    = false;
+  let loopPaused     = false;
   let currentCreator = null;
   let pendingRescans = {};     // {channel_id: fires_at_unix_secs} for large-spike midpoint re-scans
   let logSeq           = 0;    // log_seq from last server response (monotonic, resets on app restart)
@@ -584,10 +588,14 @@ function initChannelApp(cfg) {
       if (state.loop_last_duration_secs != null) parts.push(fmt.dur(state.loop_last_duration_secs));
       meta.textContent = parts.join(' · ');
     }
+    loopPaused = !!state.loop_paused;
     const next = _el('LoopNext');
     if (next) next.textContent = loopRunning
       ? 'Running…'
-      : (state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '');
+      : loopPaused
+        ? 'Paused'
+        : (state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '');
+    _renderPauseState(_el('PauseBtn'), next, loopPaused);
     _renderSessionPills(_el('LoopSessions'), state.loop_sessions_today || [], loopRunning, state.loop_manual_run);
     for (const id of ['TriggerNextBtn', 'TriggerStarredBtn', 'TriggerHalfBtn', 'TriggerAllBtn']) {
       const btn = _el(id);
@@ -706,6 +714,19 @@ function initChannelApp(cfg) {
   X('TriggerStarred', () => _triggerLoop(`${P}TriggerStarredBtn`, `${API}/trigger`,      'Could not trigger loop', _triggerToast));
   X('TriggerHalf',    () => _triggerLoop(`${P}TriggerHalfBtn`,    `${API}/trigger/half`, 'Could not trigger loop', _triggerToast));
   X('TriggerAll',     () => _triggerLoop(`${P}TriggerAllBtn`,     `${API}/trigger/all`,  'Could not trigger loop', _triggerToast));
+
+  X('TogglePause', async () => {
+    const paused = !loopPaused;
+    const { ok } = await apiJSON(`${API}/pause`, {
+      method: 'POST',
+      body: JSON.stringify({ paused }),
+    });
+    if (!ok) { showToast('Could not update pause state.', { type: 'error' }); return; }
+    loopPaused = paused;
+    _renderPauseState(_el('PauseBtn'), _el('LoopNext'), paused);
+    showToast(paused ? `${cfg.loopLabel} paused: scheduled sessions will be skipped.` : `${cfg.loopLabel} resumed.`);
+    loadStatus();
+  });
 
   X('StopLoop', async () => {
     const btn = _el('StopBtn');

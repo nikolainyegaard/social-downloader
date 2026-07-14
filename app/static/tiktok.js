@@ -60,7 +60,10 @@ const _TT_SOUND_LOOP_HTML = `
   <div class="loop-block">
     <div class="loop-block-header">
       <span class="loop-section-label">Sound Loop</span>
-      <span id="soundLoopNext" class="loop-next"></span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span id="soundLoopNext" class="loop-next"></span>
+        <button class="loop-pause-btn" id="soundPauseBtn" onclick="toggleSoundPause()" title="Pause scheduled sessions">${_pauseIcon}</button>
+      </span>
     </div>
     <div id="soundLoopMeta" class="loop-meta">Never run</div>
     <div id="soundLoopSessions" class="loop-sessions"></div>
@@ -158,10 +161,14 @@ function _ttOnStatus(state) {
     if (state.sound_loop_last_duration_secs != null) parts.push(fmt.dur(state.sound_loop_last_duration_secs));
     sMeta.textContent = parts.join(' · ');
   }
+  _soundLoopPaused = !!state.sound_loop_paused;
   const sNext = el('soundLoopNext');
   if (sNext) sNext.textContent = state.sound_loop_running
     ? 'Running…'
-    : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');
+    : _soundLoopPaused
+      ? 'Paused'
+      : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');
+  _renderPauseState(el('soundPauseBtn'), sNext, _soundLoopPaused);
 
   const sSessions = el('soundLoopSessions');
   if (sSessions) {
@@ -308,6 +315,21 @@ const tt = initChannelApp({
 // ── Sound loop triggers ───────────────────────────────────────────────────────
 
 function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/tiktok/trigger/sounds', 'Could not trigger sound loop'); }
+
+let _soundLoopPaused = false;
+
+async function toggleSoundPause() {
+  const paused = !_soundLoopPaused;
+  const { ok } = await apiJSON('/api/tiktok/pause/sounds', {
+    method: 'POST',
+    body: JSON.stringify({ paused }),
+  });
+  if (!ok) { showToast('Could not update pause state.', { type: 'error' }); return; }
+  _soundLoopPaused = paused;
+  _renderPauseState(document.getElementById('soundPauseBtn'),
+                    document.getElementById('soundLoopNext'), paused);
+  showToast(paused ? 'Sound loop paused: scheduled runs will be skipped.' : 'Sound loop resumed.');
+}
 
 async function stopSoundLoop() {
   const btn = document.getElementById('stopSoundBtn');

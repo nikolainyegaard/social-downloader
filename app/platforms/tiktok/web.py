@@ -541,6 +541,14 @@ def register_tiktok_routes(bp, engine) -> None:
         sounds_loop.request_stop()
         return jsonify({"ok": True})
 
+    @bp.route("/pause/sounds", methods=["POST"])
+    def set_sound_pause():
+        # Paused skips scheduled sound runs; manual triggers still work.
+        body   = request.get_json(silent=True) or {}
+        paused = bool(body.get("paused"))
+        db.set_setting("sound_loop_paused", "1" if paused else "0")
+        return jsonify({"paused": paused})
+
     # ── Jobs API ──────────────────────────────────────────────────────────────
 
     @bp.route("/jobs/photo-converter/status", methods=["GET"])

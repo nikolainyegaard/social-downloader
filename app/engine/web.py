@@ -653,6 +653,14 @@ def create_channel_blueprint(engine) -> Blueprint:
         loop.request_stop()
         return jsonify({"ok": True})
 
+    @bp.route("/pause", methods=["POST"])
+    def set_pause():
+        # Paused skips scheduled sessions; manual triggers and runs still work.
+        body   = request.get_json(silent=True) or {}
+        paused = bool(body.get("paused"))
+        db.set_setting("loop_paused", "1" if paused else "0")
+        return jsonify({"paused": paused})
+
     # ── Settings ──────────────────────────────────────────────────────────────
 
     @bp.route("/settings", methods=["GET"])

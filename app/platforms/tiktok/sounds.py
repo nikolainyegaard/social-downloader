@@ -175,6 +175,7 @@ class SoundLoop:
             }
         state["sound_loop_interval_minutes"] = int(
             self.db.get_setting("sound_loop_interval_minutes", SOUND_LOOP_INTERVAL_MINUTES))
+        state["sound_loop_paused"] = str(self.db.get_setting("sound_loop_paused", "0")) == "1"
         with self._run_state_lock:
             state["sound_run_current"] = self._run_state["current"]
             state["sound_run_queue"]   = list(self._run_state["queue"])
@@ -270,6 +271,11 @@ class SoundLoop:
 
             if triggered:
                 print(f"{_ts()} Sound loop: manual trigger received.")
+
+            # Paused: skip scheduled runs; manual triggers run anyway.
+            if not triggered and str(self.db.get_setting("sound_loop_paused", "0")) == "1":
+                print(f"{_ts()} Sound loop: run skipped (paused).")
+                continue
 
             self.set_next_run(None)
 
