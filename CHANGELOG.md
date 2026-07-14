@@ -6,6 +6,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Changed
+- Google Chrome is back in the amd64 image for TikTok bot detection resistance (its removal in the image slimming caused noticeably more aggressive bot detection); amd64 now ships Chrome instead of Playwright Chromium, arm64 keeps Playwright Chromium since Google publishes no arm64 Chrome build
+
 ### Added
 - The Activity panel placeholder is now an Add history panel: every add attempt is stored permanently per platform and listed newest first with its status (looking up, added, or a failure shorthand like rate limit, bot detection, or not found; hover shows the full error), the list loads more entries on demand as you scroll, and existing tracked creators are backfilled into the history by their added date
 - Failed adds persist across restarts and can be retried (re-runs the normal add flow, reusing the same history entry) or discarded via the retry and discard buttons on the row; lookups interrupted by a restart resume automatically on startup
