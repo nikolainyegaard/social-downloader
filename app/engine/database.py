@@ -155,6 +155,8 @@ class ChannelDB:
             "ALTER TABLE channels ADD COLUMN banner_url             TEXT",
             "ALTER TABLE channels ADD COLUMN banner_cached          INTEGER DEFAULT 0",
             "ALTER TABLE channels ADD COLUMN raw_channel_data       TEXT",
+            # Pure filter flag: no loop or scheduling logic reads it
+            "ALTER TABLE channels ADD COLUMN bookmarked             INTEGER DEFAULT 0",
             "ALTER TABLE videos   ADD COLUMN content_type           TEXT DEFAULT 'video'",
             "ALTER TABLE videos   ADD COLUMN raw_video_data         TEXT",
             "ALTER TABLE videos   ADD COLUMN ytdlp_data             TEXT",
@@ -438,6 +440,14 @@ class ChannelDB:
             conn.execute(
                 "UPDATE channels SET starred = ? WHERE channel_id = ?",
                 (1 if starred else 0, channel_id)
+            )
+
+
+    def set_channel_bookmarked(self, channel_id: str, bookmarked: bool) -> None:
+        with self.get_db() as conn:
+            conn.execute(
+                "UPDATE channels SET bookmarked = ? WHERE channel_id = ?",
+                (1 if bookmarked else 0, channel_id)
             )
 
 

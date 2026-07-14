@@ -34,6 +34,8 @@ function initChannelApp(cfg) {
   // ── Section HTML ──────────────────────────────────────────────────────────
 
   const _triggerIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12C21 16.9706 16.9706 21 12 21C9.69494 21 7.59227 20.1334 6 18.7083L3 16M3 12C3 7.02944 7.02944 3 12 3C14.3051 3 16.4077 3.86656 18 5.29168L21 8M3 21V16M3 16H8M21 3V8M21 8H16"/></svg>`;
+  const _bookmarkIcon = `<svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 0 1 1 1v19l-7-5.5L5 22V3a1 1 0 0 1 1-1z"/></svg>`;
+  const _bookmarkBadge = `<span class="account-status bookmark" title="Bookmarked">${_bookmarkIcon}</span>`;
 
   function _sectionHtml() {
     return `
@@ -130,9 +132,10 @@ function initChannelApp(cfg) {
           </div>
         </div>
         <div class="filter-row">
-          <span class="filter-row-label">Starred</span>
+          <span class="filter-row-label">Flags</span>
           <div class="filter-pills multi">
             <button class="filter-pill" id="${P}fStarStarred" onclick="${P}SetFilter('star','starred')">Starred</button>
+            <button class="filter-pill" id="${P}fBookBookmarked" onclick="${P}SetFilter('book','bookmarked')">Bookmarked</button>
           </div>
         </div>
         <div class="filter-row">
@@ -198,9 +201,9 @@ function initChannelApp(cfg) {
 
   let creators       = [];
   let sort           = { field: 'handle', dir: 'asc' };
-  // Default filter: hide inactive creators; Starred stays off
+  // Default filter: hide inactive creators; Starred and Bookmarked stay off
   const _defaultFilter = () => {
-    const f = { stat: new Set(['active']), star: new Set() };
+    const f = { stat: new Set(['active']), star: new Set(), book: new Set() };
     EXTRA_FILTER_GROUPS.forEach(g => { f[g.key] = new Set(g.defaults || []); });
     return f;
   };
@@ -494,7 +497,7 @@ function initChannelApp(cfg) {
         : `${P}OpenModal('${esc(it.channel_id)}')`;
     return `<div class="rf-row" onclick="${onclick}" title="Open @${esc(it.handle)}">
       <span class="rf-icon rf-${ev.kind}">${_RF_ICONS[ev.kind]}</span>
-      <span class="rf-avatar-wrap"><img class="rf-avatar" src="${API}/channels/${esc(it.channel_id)}/avatar" loading="lazy" alt="" onerror="this.remove()"></span>
+      <span class="rf-avatar-wrap"><img class="rf-avatar" src="${API}/channels/${esc(it.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>
       <span class="rf-name" ${_nameStyle(it)}>@${esc(it.handle)}</span>
       <span class="rf-detail rf-${ev.kind}">${detail}</span>
       <span class="rf-time">${_recentDate(ev.ts, now)}</span>
@@ -906,16 +909,18 @@ function initChannelApp(cfg) {
 
   const STAT_IDS = { active: `${P}fStatActive`, inactive: `${P}fStatInactive` };
   const STAR_IDS = { starred: `${P}fStarStarred` };
+  const BOOK_IDS = { bookmarked: `${P}fBookBookmarked` };
 
   function _filterPillIds(group) {
     if (group === 'stat') return STAT_IDS;
     if (group === 'star') return STAR_IDS;
+    if (group === 'book') return BOOK_IDS;
     const g = EXTRA_FILTER_GROUPS.find(g => g.key === group);
     return g ? Object.fromEntries(g.options.map(o => [o.key, `${P}f_${g.key}_${o.key}`])) : {};
   }
 
   function _syncFilterPills() {
-    for (const group of ['stat', 'star', ...EXTRA_FILTER_GROUPS.map(g => g.key)]) {
+    for (const group of ['stat', 'star', 'book', ...EXTRA_FILTER_GROUPS.map(g => g.key)]) {
       Object.entries(_filterPillIds(group)).forEach(([v, id]) => {
         document.getElementById(id)?.classList.toggle('active', filter[group].has(v));
       });
@@ -982,6 +987,7 @@ function initChannelApp(cfg) {
       }
       if (filter.stat.size && !filter.stat.has(ch.tracking_enabled === 0 ? 'inactive' : 'active')) return false;
       if (filter.star.has('starred') && !ch.starred) return false;
+      if (filter.book.has('bookmarked') && !ch.bookmarked) return false;
       if (q) {
         const hay = [ch.handle, ch.display_name, ch.channel_id, ch.description,
                      ...(ch.old_handles || []), ...(ch.old_display_names || []), ...(ch.old_descriptions || [])]
@@ -1054,7 +1060,7 @@ function initChannelApp(cfg) {
         <div class="user-card-top">
           <div class="avatar-wrap">
             <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
-            ${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar" alt=""
+            ${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" alt=""
                  onerror="this.style.display='none'"
                  onclick="event.stopPropagation();openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')">` : ''}
           </div>
@@ -1067,6 +1073,7 @@ function initChannelApp(cfg) {
             <span class="account-status ${trackingCls}">${trackingLabel}</span>
             ${_relationPill(ch)}
             ${ch.starred ? '<span class="account-status priority" title="Starred: checked on the high-priority interval">★ Priority</span>' : ''}
+            ${ch.bookmarked ? _bookmarkBadge : ''}
           </div>
         </div>
 
@@ -1089,7 +1096,7 @@ function initChannelApp(cfg) {
             <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="event.stopPropagation();${P}ToggleStar('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
             <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
             <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">&#x2022;&#x2022;&#x2022;</button>
+            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'${ch.bookmarked ? 'Remove bookmark' : 'Bookmark'}',onclick:()=>${P}ToggleBookmark('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">&#x2022;&#x2022;&#x2022;</button>
           </div>
         </div>
         <div class="user-card-meta-footer">
@@ -1127,7 +1134,7 @@ function initChannelApp(cfg) {
     const grid = _el('Grid');
     if (!grid) return;
     const filtered   = _filteredCreators();
-    const isFiltered = filter.stat.size > 0 || filter.star.size > 0 || !!search;
+    const isFiltered = filter.stat.size > 0 || filter.star.size > 0 || filter.book.size > 0 || !!search;
     const countEl    = _el('Count');
     if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${creators.length}` : creators.length;
 
@@ -1183,6 +1190,29 @@ function initChannelApp(cfg) {
   X('RunCreatorProfile', id => _creatorRunProfile(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, renderCreators));
   X('RemoveCreator',     (id, label) => _creatorRemove(`${API}/channels`, id, label, loadCreators));
   X('ToggleStar',        id => _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators));
+
+  // Bookmark: a pure filter flag with no loop or scheduling side effects.
+  // Optimistic toggle, reverted if the PATCH fails.
+  X('ToggleBookmark', async id => {
+    const ch = creators.find(c => c.channel_id === id);
+    if (!ch) return;
+    const next = ch.bookmarked ? 0 : 1;
+    ch.bookmarked = next;
+    renderCreators();
+    if (modalCreator && modalCreator.channel_id === id) {
+      modalCreator.bookmarked = next;
+      _renderModalHeader(modalCreator);
+    }
+    const { ok, data } = await apiJSON(`${API}/channels/${id}/bookmark`, {
+      method: 'PATCH',
+      body: JSON.stringify({ bookmarked: !!next }),
+    });
+    if (!ok) {
+      ch.bookmarked = next ? 0 : 1;
+      renderCreators();
+      showToast(data.error || 'Could not update bookmark', { type: 'error' });
+    }
+  });
 
   // ── Tracking toggle ───────────────────────────────────────────────────────
 
@@ -1341,6 +1371,7 @@ function initChannelApp(cfg) {
           ${ch.verified ? '<span class="modal-verified">✓ Verified</span>' : ''}
           <span class="account-status ${trackingCls}">${trackingLbl}</span>
           ${_relationPill(ch)}
+          ${ch.bookmarked ? _bookmarkBadge : ''}
           <label class="tracking-toggle" title="${isInactive ? `${ItemsCap} tracking off (profile changes still tracked)` : `${ItemsCap} tracking on`}">
             <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="${P}SetTracking('${esc(ch.channel_id)}', this.checked)">
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -1368,7 +1399,7 @@ function initChannelApp(cfg) {
           <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
           <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
           <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">&#x2022;&#x2022;&#x2022;</button>
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},{label:'${ch.bookmarked ? 'Remove bookmark' : 'Bookmark'}',onclick:()=>${P}ToggleBookmark('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">&#x2022;&#x2022;&#x2022;</button>
         </div>
         <div id="${P}ModalNoteArea" style="display:${ch.comment ? '' : 'none'};margin-top:8px">
           <textarea placeholder="Add a note about this ${CREATOR}…"

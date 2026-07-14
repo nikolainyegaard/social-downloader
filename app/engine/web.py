@@ -367,6 +367,17 @@ def create_channel_blueprint(engine) -> Blueprint:
         db.set_channel_starred(channel_id, starred)
         return jsonify({"ok": True})
 
+    @bp.route("/channels/<channel_id>/bookmark", methods=["PATCH"])
+    def set_channel_bookmark(channel_id: str):
+        if not db.get_channel(channel_id):
+            return jsonify({"error": f"{noun} not found"}), 404
+        body       = request.get_json(silent=True) or {}
+        bookmarked = body.get("bookmarked")
+        if not isinstance(bookmarked, bool):
+            return jsonify({"error": "bookmarked must be a boolean"}), 400
+        db.set_channel_bookmarked(channel_id, bookmarked)
+        return jsonify({"ok": True})
+
     @bp.route("/channels/<channel_id>/comment", methods=["PATCH"])
     def set_channel_comment(channel_id: str):
         if not db.get_channel(channel_id):
@@ -386,6 +397,13 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     @bp.route("/channels/<channel_id>/avatar", methods=["GET"])
     def channel_avatar(channel_id: str):
+        # ?size=thumb serves a small cached variant, generated lazily. The
+        # full-size originals are wasteful for the 20 to 48 px UI avatars.
+        if request.args.get("size") == "thumb":
+            from thumbnailer import avatar_thumb
+            thumb = avatar_thumb(platform, channel_id)
+            if thumb:
+                return send_file(thumb, mimetype="image/avif", max_age=300)
         path = os.path.join(DATA_DIR, platform, "avatars", f"{channel_id}.avif")
         if os.path.exists(path):
             return send_file(path, mimetype="image/avif", max_age=300)

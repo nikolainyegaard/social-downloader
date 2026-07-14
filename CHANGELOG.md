@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Changed
+- UI avatars (activity feed rows, creator cards) are served as small cached thumbnails generated on first request instead of the full-size originals, cutting avatar transfer size by orders of magnitude. Clicking an avatar still opens the full image
 - Google Chrome is back in the amd64 image for TikTok bot detection resistance (its removal in the image slimming caused noticeably more aggressive bot detection); amd64 now ships Chrome instead of Playwright Chromium, arm64 keeps Playwright Chromium since Google publishes no arm64 Chrome build
 - Front-end polish pass: keyboard focus rings on all buttons, links, and creator cards (cards now open with Enter or Space), a slash shortcut that jumps to the search box, slim dark scrollbars everywhere, subtle press feedback on buttons, and slightly brighter muted text for readability
 - Dashboard rework: the Statistics panel is gone in favor of a full-width strip of stat tiles, the Recent panel is now a single chronological activity feed mixing saves, deletions, profile changes, and bans with type icons, creator avatars, and filter pills in the header (a Log button opens the expanded per-type history), and the loop and Add history panels stack in a column beside the feed. Panel headers are half as tall and the Statistics overflow scrollbar is gone
@@ -14,6 +15,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The creator grid no longer rebuilds on every 15 second poll when nothing changed, which removes avatar and hover flicker; typing in the search box is debounced so fast typing filters once instead of per keystroke
 
 ### Added
+- Bookmark flag on creators: toggled from the card and modal overflow menus, shown as a small bookmark badge, and filterable via a new Bookmarked pill next to Starred. Unlike starring it has no effect on loops or check scheduling
 - The Activity panel placeholder is now an Add history panel: every add attempt is stored permanently per platform and listed newest first with its status (looking up, added, or a failure shorthand like rate limit, bot detection, or not found; hover shows the full error), the list loads more entries on demand as you scroll, and existing tracked creators are backfilled into the history by their added date
 - Failed adds persist across restarts and can be retried (re-runs the normal add flow, reusing the same history entry) or discarded via the retry and discard buttons on the row; lookups interrupted by a restart resume automatically on startup
 - A pause toggle in every Loops panel header next to the next-session time: paused loops skip their scheduled sessions (the schedule keeps ticking, so resuming falls back into the normal cadence) while manual triggers and per-creator runs still work; the state survives restarts and the TikTok sound loop has its own toggle
