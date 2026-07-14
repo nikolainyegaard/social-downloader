@@ -256,6 +256,12 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
 .btn-star:hover { color: #f5a623; border-color: #f5a623; }
 .btn-star.starred { color: #f5a623; border-color: #f5a623; }
 
+/* Bookmark toggle, same dimensions as the star button */
+.btn-bookmark { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; line-height: 1; display: inline-flex; align-items: center; }
+.btn-bookmark svg { width: 13px; height: 14px; display: block; }
+.btn-bookmark:hover { color: var(--accent); border-color: var(--accent); }
+.btn-bookmark.bookmarked { color: var(--accent); border-color: var(--accent); }
+
 .btn-ghost { background: var(--surface2); color: var(--text); }
 .btn-ghost:hover:not(:disabled) { background: var(--border); }
 
