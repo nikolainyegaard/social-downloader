@@ -13,9 +13,10 @@
   --orange:       #e07832;
   --green:        #4caf7d;
   --yellow:       #e0a83a;
-  --muted:        #6b717f;
+  --muted:        #7a8190;
   --text:         #dde1ea;
   --text-dim:     #9499a5;
+  --scrollbar:    #3d434f;
 
   /* Alpha tints — semantic colour at common opacities */
   --accent-bg:    rgba(79,142,247,.15);
@@ -40,6 +41,10 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Slim dark scrollbars everywhere. Standard properties only, honored by
+   Chrome 121+, Firefox, and Edge. Safari keeps its overlay scrollbars. */
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
 
 html { overflow-x: hidden; overflow-y: scroll; overscroll-behavior-x: none; }
 html.modal-open { overflow: hidden; }
@@ -190,6 +195,15 @@ button {
   transition: background 0.15s, opacity 0.15s;
 }
 button:disabled { opacity: 0.45; cursor: default; }
+button:not(:disabled):active { transform: translateY(1px); }
+
+/* Keyboard focus ring on anything clickable. Text fields keep their
+   border-color focus treatment instead of a ring. */
+button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.tracking-search:focus, .modal-video-search:focus { outline: none; border-color: var(--accent); }
 
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
@@ -245,7 +259,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 .label-caps,
 .section-title, .col-hdr,
-.loop-section-label, .ctrl-section-title,
+.loop-section-label,
 .stat-label, .filter-row-label,
 .phist-avatar-col .phist-side-label {
   font-weight: 700;
@@ -825,7 +839,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-radius: var(--radius-pill);
   cursor: pointer;
   white-space: nowrap;
-  transition: background .1s, color .1s, border-color .1s;
+  transition: background .1s, color .1s, border-color .1s, box-shadow .15s;
   position: relative; z-index: 2;
 }
 .filter-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -1397,32 +1411,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   align-content: start;
 }
 
-/* Control sections */
-.ctrl-section {
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-}
-.ctrl-section:last-child { padding-bottom: 0; border-bottom: none; }
-
-.ctrl-section-title {
-  font-size: 10px;
-  margin-bottom: 10px;
-}
-
-.ctrl-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.ctrl-cookie-warning {
-  font-size: 12px;
-  color: var(--red);
-  margin-top: 8px;
-  line-height: 1.4;
-}
-
 /* ── Settings modal ───────────────────────────────────────────────────────── */
 
 .settings-modal {
@@ -1763,27 +1751,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .platform-section {
   display: grid;
   gap: 24px;
-}
-
-.platform-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 80px 20px;
-  text-align: center;
-}
-
-.platform-placeholder-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-dim);
-}
-
-.platform-placeholder-body {
-  font-size: 13px;
-  color: var(--muted);
 }
 
 /* ── Per-platform theme overrides ─────────────────────────────────────────── */

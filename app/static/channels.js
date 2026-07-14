@@ -979,11 +979,16 @@ function initChannelApp(cfg) {
     renderCreators();
   });
 
+  // Debounced so fast typing coalesces into one grid rebuild
+  let _searchTimer = null;
   X('OnSearch', val => {
-    search = val.trim();
-    if (trackingView === 'creators') { renderCreators(); return; }
-    const extra = EXTRA_VIEWS.find(v => v.key === trackingView);
-    if (extra) extra.show(search);
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => {
+      search = val.trim();
+      if (trackingView === 'creators') { renderCreators(); return; }
+      const extra = EXTRA_VIEWS.find(v => v.key === trackingView);
+      if (extra) extra.show(search);
+    }, 150);
   });
 
   function _filteredCreators() {
@@ -1166,9 +1171,20 @@ function initChannelApp(cfg) {
     }
   }
 
+  let _creatorsSig    = null;
+  let _lastGridRender = 0;
   const loadCreators = X('LoadCreators', async () => {
     const { ok, data } = await apiJSON(`${API}/channels`);
-    if (ok) { creators = data; renderCreators(); }
+    if (!ok) return;
+    // Skip the full grid rebuild when nothing changed, to avoid avatar reflow
+    // and hover flicker on the 15 s poll. Rebuild once a minute regardless so
+    // the relative timestamps on cards stay current.
+    const sig = JSON.stringify(data);
+    if (sig === _creatorsSig && Date.now() - _lastGridRender < 60000) return;
+    _creatorsSig    = sig;
+    _lastGridRender = Date.now();
+    creators = data;
+    renderCreators();
   });
 
   X('GetCreators', () => creators);
@@ -1621,7 +1637,28 @@ function initChannelApp(cfg) {
     if (activeCtrl) activeCtrl.querySelectorAll('.filter-pills').forEach(_placeGlider);
   });
 
-  // ── Keyboard handler (Escape) ─────────────────────────────────────────────
+  // ── Keyboard handlers ─────────────────────────────────────────────────────
+
+  // Cards are focusable (role=button tabindex=0), so Enter and Space open them
+  _el('Grid')?.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('user-card')) {
+      e.preventDefault();
+      e.target.click();
+    }
+  });
+
+  // Slash focuses the search box on the active platform tab
+  document.addEventListener('keydown', e => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = document.activeElement;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if ([...document.querySelectorAll('.modal-backdrop')].some(el => el.style.display !== 'none')) return;
+    const searchEl = _el('Search');
+    // offsetParent is null while this platform's tab or the search box is hidden
+    if (!searchEl || !searchEl.offsetParent) return;
+    e.preventDefault();
+    searchEl.focus();
+  });
 
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
