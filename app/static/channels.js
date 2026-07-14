@@ -46,31 +46,24 @@ function initChannelApp(cfg) {
     <button class="btn-primary" onclick="${P}AddCreator()">Add</button>
   </div>
 
-  <div class="top-panels">
-    <div class="panel-card">
-      <div class="panel-header"><span class="section-title">Statistics</span></div>
-      <div class="panel-body" style="padding:8px">
-        <div class="stat-grid" id="${P}StatsGrid"></div>
-      </div>
-    </div>
-    <div class="panel-card">
-      <div class="panel-header"><span class="section-title">Recent</span></div>
-      <div class="panel-body" style="padding:12px 16px">
-        <div class="recent-split">
-          <div class="recent-col" id="${P}RecentLeft"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
-          <div class="recent-col" id="${P}RecentRight"></div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div class="stat-strip" id="${P}StatsGrid"></div>
 
-  <div class="mid-panels">
-  <div class="panel-card">
-    <div class="panel-header"><span class="section-title">Add history</span></div>
-    <div class="panel-body" style="padding:0">
-      <div class="add-history" id="${P}AddHistory"></div>
+  <div class="dash-row">
+  <div class="panel-card recent-card">
+    <div class="panel-header">
+      <span class="section-title">Recent activity</span>
+      <div class="filter-pills multi hdr-pills">
+        <button class="filter-pill active" id="${P}Rf_all"     onclick="${P}SetRecentFilter('all')">All</button>
+        <button class="filter-pill"        id="${P}Rf_saved"   onclick="${P}SetRecentFilter('saved')">Saved</button>
+        <button class="filter-pill"        id="${P}Rf_deleted" onclick="${P}SetRecentFilter('deleted')">Deleted</button>
+        <button class="filter-pill"        id="${P}Rf_changed" onclick="${P}SetRecentFilter('changed')">Changes</button>
+        ${cfg.hasBans ? `<button class="filter-pill" id="${P}Rf_banned" onclick="${P}SetRecentFilter('banned')">Bans</button>` : ''}
+      </div>
+      <button class="panel-hdr-btn" onclick="${P}OpenRecentLogCurrent()" title="Open the full log for the selected activity type">Log</button>
     </div>
+    <div class="recent-feed" id="${P}RecentFeed"><div class="rf-empty">Loading…</div></div>
   </div>
+  <div class="dash-col">
   <div class="panel-card loops-card">
     <div class="panel-header" style="position:relative">
       <span class="section-title">${cfg.loopsTitle || 'Loop'}</span>
@@ -103,6 +96,11 @@ function initChannelApp(cfg) {
       ${cfg.extraLoopHtml ? `<div id="${P}LoopBlockExtra" style="display:none">${cfg.extraLoopHtml}</div>` : ''}
     </div>
   </div>
+  <div class="panel-card ah-card">
+    <div class="panel-header"><span class="section-title">Add history</span></div>
+    <div class="add-history" id="${P}AddHistory"></div>
+  </div>
+  </div>
   </div>
 
   <section>
@@ -114,8 +112,7 @@ function initChannelApp(cfg) {
           <button class="filter-pill"        id="${P}TvLog"      onclick="${P}SetTrackingView('log')">Log</button>
         </div>
         <span id="${P}Count" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
-        <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)"
-               style="width:160px;font-size:12px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
+        <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)">
       </div>
       <div id="${P}Controls" class="filter-control-group">
         ${EXTRA_FILTER_GROUPS.map(g => `
@@ -470,85 +467,71 @@ function initChannelApp(cfg) {
     });
   });
 
-  function renderRecent(data) {
-    const leftEl  = document.getElementById(`${P}RecentLeft`);
-    const rightEl = document.getElementById(`${P}RecentRight`);
-    if (!leftEl || !rightEl) return;
-    const now = new Date();
+  // One chronological feed mixing every activity type, filterable from the
+  // panel header. The per-type expanded logs stay behind the Log button.
 
-    let left = '';
+  const _RF_ICONS = {
+    saved:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16"/></svg>',
+    deleted: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+    changed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L7 21H3v-4L17 3z"/></svg>',
+    banned:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.7 5.7l12.6 12.6"/></svg>',
+  };
+  const _RF_LOG_TYPE = { all: 'saved', saved: 'saved', deleted: 'deletions', changed: 'profile-changes', banned: 'bans' };
 
-    left += `<div class="recent-section">`;
-    left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('deletions')" title="View all deleted ${ITEMS}">Recently deleted</div>`;
-    if (data.deletions && data.deletions.length) {
-      left += data.deletions.map(d =>
-        `<div class="recent-entry" onclick="${_recentOnclick(d, 'deleted')}" title="Open @${esc(d.handle)}">
-          <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
-          <span class="recent-name" ${_nameStyle(d)}>@${esc(d.handle)}</span>
-          <span class="recent-detail">${d.count}x</span>
-        </div>`
-      ).join('');
-    } else {
-      left += `<div class="recent-empty">No deleted ${ITEMS} yet</div>`;
-    }
-    left += `</div>`;
+  let _recentData   = null;
+  let _recentFilter = 'all';
 
-    left += `<div class="recent-section">`;
-    left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('profile-changes')" title="View all profile changes">Recently changed profile</div>`;
-    if (data.profile_changes && data.profile_changes.length) {
-      left += data.profile_changes.map(p =>
-        `<div class="recent-entry" onclick="${P}OpenModalWithHistory('${esc(p.channel_id)}','${esc(p.field)}')" title="Open @${esc(p.handle)}">
-          <span class="recent-date">${_recentDate(p.changed_at, now)}</span>
-          <span class="recent-name" ${_nameStyle(p)}>@${esc(p.handle)}</span>
-          <span class="recent-detail">${esc(FIELD_LABELS[p.field] || p.field)}</span>
-        </div>`
-      ).join('');
-    } else {
-      left += `<div class="recent-empty">No profile changes recorded yet</div>`;
-    }
-    left += `</div>`;
-
-    if (cfg.hasBans) {
-      left += `<div class="recent-section">`;
-      left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('bans')" title="View all banned accounts">Recently banned</div>`;
-      if (data.bans && data.bans.length) {
-        const b = data.bans[0];
-        left += `<div class="recent-entry" onclick="${P}OpenModal('${esc(b.channel_id)}')" title="Open @${esc(b.handle)}">
-          <span class="recent-date">${_recentDate(b.banned_at, now)}</span>
-          <span class="recent-name" ${b.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(b.handle)}</span>
-          <span class="recent-detail" style="color:var(--red)">Banned</span>
-        </div>`;
-      } else {
-        left += `<div class="recent-empty">No banned accounts</div>`;
-      }
-      left += `</div>`;
-    }
-
-    leftEl.innerHTML = left;
-
-    let right = '';
-    right += `<div class="recent-section">`;
-    right += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('saved')" title="View all saved ${ITEMS}">Recently saved</div>`;
-    if (data.saved && data.saved.length) {
-      right += data.saved.map(g =>
-        `<div class="recent-entry" onclick="${_recentOnclick(g, 'saved')}" title="Open @${esc(g.handle)}">
-          <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-          <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
-          <span class="recent-detail">${g.count}x</span>
-        </div>`
-      ).join('');
-    } else {
-      right += `<div class="recent-empty">No ${ITEMS} saved yet</div>`;
-    }
-    right += `</div>`;
-
-    rightEl.innerHTML = right;
+  function _rfRow(ev, now) {
+    const it = ev.item;
+    const detail = ev.kind === 'saved'   ? `${it.count} saved`
+                 : ev.kind === 'deleted' ? `${it.count} deleted`
+                 : ev.kind === 'changed' ? esc(FIELD_LABELS[it.field] || it.field)
+                 : 'Banned';
+    const onclick = ev.kind === 'saved' || ev.kind === 'deleted'
+      ? _recentOnclick(it, ev.kind)
+      : ev.kind === 'changed'
+        ? `${P}OpenModalWithHistory('${esc(it.channel_id)}','${esc(it.field)}')`
+        : `${P}OpenModal('${esc(it.channel_id)}')`;
+    return `<div class="rf-row" onclick="${onclick}" title="Open @${esc(it.handle)}">
+      <span class="rf-icon rf-${ev.kind}">${_RF_ICONS[ev.kind]}</span>
+      <span class="rf-avatar-wrap"><img class="rf-avatar" src="${API}/channels/${esc(it.channel_id)}/avatar" loading="lazy" alt="" onerror="this.remove()"></span>
+      <span class="rf-name" ${_nameStyle(it)}>@${esc(it.handle)}</span>
+      <span class="rf-detail rf-${ev.kind}">${detail}</span>
+      <span class="rf-time">${_recentDate(ev.ts, now)}</span>
+    </div>`;
   }
+
+  function renderRecent(data) {
+    const el = document.getElementById(`${P}RecentFeed`);
+    if (!el) return;
+    const now = new Date();
+    const events = [
+      ...(data.saved           || []).map(g => ({ ts: g.download_date, kind: 'saved',   item: g })),
+      ...(data.deletions       || []).map(d => ({ ts: d.deleted_at,    kind: 'deleted', item: d })),
+      ...(data.profile_changes || []).map(p => ({ ts: p.changed_at,    kind: 'changed', item: p })),
+      ...(data.bans            || []).map(b => ({ ts: b.banned_at,     kind: 'banned',  item: b })),
+    ].filter(e => e.ts).sort((a, b) => b.ts - a.ts);
+    const shown = _recentFilter === 'all' ? events : events.filter(e => e.kind === _recentFilter);
+    el.innerHTML = shown.length
+      ? shown.map(e => _rfRow(e, now)).join('')
+      : '<div class="rf-empty">No activity yet</div>';
+  }
+
+  X('SetRecentFilter', f => {
+    _recentFilter = f;
+    ['all', 'saved', 'deleted', 'changed', 'banned'].forEach(k => {
+      document.getElementById(`${P}Rf_${k}`)?.classList.toggle('active', k === f);
+    });
+    if (_recentData) renderRecent(_recentData);
+  });
+
+  X('OpenRecentLogCurrent', () => window[`${P}OpenRecentLog`](_RF_LOG_TYPE[_recentFilter]));
 
   let _lastRecentJson = null;
   const loadRecent = X('LoadRecent', async () => {
     const { ok, data } = await apiJSON(`${API}/recent`);
     if (!ok) return;
+    _recentData = data;
     renderRecent(data);
     // Warm the recent-log modal cache so the expanded lists open instantly;
     // refresh only when the panel data actually changed

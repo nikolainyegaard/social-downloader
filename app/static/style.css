@@ -223,6 +223,17 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
   outline-offset: 2px;
 }
 .tracking-search:focus, .modal-video-search:focus { outline: none; border-color: var(--accent); }
+.tracking-search {
+  width: 200px;
+  font-size: 12px;
+  padding: 5px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s;
+}
 
 .btn-primary {
   background: linear-gradient(180deg, var(--accent), var(--accent-h));
@@ -1156,61 +1167,71 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   pointer-events: none;
 }
 
-/* ── Top panels (stats + recent) ────────────────────────────────────────── */
+/* ── Dashboard: stat strip, then recent feed beside loop + add history ───── */
 
-.top-panels {
+.stat-strip {
   display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+  gap: 8px;
 }
-@media (max-width: 900px) { .top-panels { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 600px) { .top-panels { grid-template-columns: 1fr; } }
 
-/* Activity chart (2/3) + Loops (1/3) */
-.mid-panels {
+.dash-row {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 24px;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+  align-items: stretch;
 }
-@media (max-width: 900px) { .mid-panels { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 600px) { .mid-panels { grid-template-columns: 1fr; } }
-
-/* Uniform dashboard panel heights across all apps. Fixed heights only where
-   panels sit side by side; stacked single-column mobile keeps natural height.
-   Content taller than the card scrolls inside the panel body. */
-@media (min-width: 601px) {
-  .top-panels .panel-card { height: 320px; }
-  .mid-panels .panel-card { height: 190px; }
-  .top-panels .panel-body, .mid-panels .panel-body { overflow-y: auto; }
-}
-
-/* Recent panel two-column split */
-.recent-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 12px;
-  flex: 1;
-}
-@media (max-width: 700px) { .recent-split { grid-template-columns: 1fr; } }
-
-.recent-col {
+.dash-col {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
+  min-width: 0;
 }
 
-.recent-col + .recent-col {
-  border-left: 1px solid var(--border);
-  padding-left: 12px;
+/* The recent card sets the row height. In the right column the loop card
+   takes its natural height and the add history card flexes into the rest. */
+.recent-card { height: 360px; }
+.ah-card { flex: 1; min-height: 0; }
+
+@media (max-width: 800px) {
+  .dash-row { grid-template-columns: 1fr; }
+  .recent-card { height: 320px; }
+  /* Stacked columns have no fixed height, so cap the add history list or its
+     scroll sentinel would page in the entire history */
+  .add-history { max-height: 260px; }
 }
-@media (max-width: 700px) {
-  .recent-col + .recent-col {
-    border-left: none;
-    padding-left: 0;
-    border-top: 1px solid var(--border);
-    padding-top: 10px;
-  }
+
+/* Recent activity feed */
+.recent-feed { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 8px; }
+.rf-row {
+  display: grid;
+  grid-template-columns: 16px 20px minmax(0, 1fr) auto max-content;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
 }
+.rf-row:hover { background: var(--surface2); }
+.rf-icon { display: inline-flex; align-items: center; justify-content: center; }
+.rf-icon svg { width: 13px; height: 13px; }
+.rf-saved   { color: var(--green); }
+.rf-deleted { color: var(--red); }
+.rf-changed { color: var(--accent); }
+.rf-banned  { color: var(--orange); }
+.rf-avatar-wrap {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--surface2);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.rf-avatar { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rf-name { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rf-detail { font-size: 11px; white-space: nowrap; }
+.rf-time { font-size: 11px; color: var(--muted); white-space: nowrap; text-align: right; }
+.rf-empty { color: var(--muted); font-size: 12px; padding: 24px 16px; text-align: center; }
 
 .panel-card {
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface2) 30%, var(--surface)), var(--surface));
@@ -1234,10 +1255,31 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 
 .panel-header {
-  padding: 10px 16px;
+  min-height: 33px;
+  padding: 4px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+
+/* Compact pill group and text button variants for panel headers */
+.panel-header .hdr-pills { margin-left: auto; }
+.hdr-pills .filter-pill { height: 20px; padding: 0 9px; font-size: 10px; }
+.panel-hdr-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.panel-hdr-btn:hover { color: var(--text); background: var(--surface2); }
 
 .panel-body {
   flex: 1;
@@ -1250,7 +1292,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Add history panel: the list itself scrolls (it is the IntersectionObserver
    root for on-demand paging), not the panel body. */
 .add-history { flex: 1; min-height: 0; overflow-y: auto; }
-@media (max-width: 600px) { .add-history { max-height: 240px; } }
 
 .ah-row {
   display: flex;
@@ -1347,26 +1388,23 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .loop-session-pill.next    { color: var(--accent); border-color: var(--accent); }
 .loop-session-pill.running { color: var(--green);  border-color: var(--green); }
 
-/* Stats grid. The tile rules are scoped to .stat-grid because .stat-item is
-   also the class for the plain inline stats on creator cards. */
-.stat-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  flex: 1;
-}
-
-.stat-grid .stat-item {
-  padding: 10px 12px;
-  border-radius: calc(var(--radius) - 2px);
-  background: color-mix(in srgb, var(--surface2) 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+/* Stat strip tiles. Scoped to .stat-strip because .stat-item is also the
+   class for the plain inline stats on creator cards. */
+.stat-strip .stat-item {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface2) 35%, var(--surface)), var(--surface));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transition: background .1s, border-color .1s;
+  transition: border-color .15s, background .15s;
 }
-.stat-grid .stat-item:hover { background: var(--surface2); border-color: var(--border); }
+.stat-strip .stat-item:hover {
+  background: var(--surface2);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
 
 .stat-value {
   font-size: 20px;
@@ -1381,12 +1419,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   letter-spacing: .06em;
 }
 
-/* Recent panel entries */
-.recent-section {
-  display: grid;
-  grid-template-columns: 33% 1fr max-content;
-  column-gap: 6px;
-}
+/* Recent log modal entries. The dashboard panel uses the .rf-* feed rows,
+   so these grid rows are rendered only inside the expanded log modal. */
 .recent-entry {
   display: grid;
   grid-column: 1 / -1;
@@ -1401,15 +1435,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .recent-date   { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; }
 .recent-name   { color: var(--accent); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-detail { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); text-align: right; }
-.recent-empty  { font-size: 11px; color: var(--muted); padding: 2px 6px; grid-column: 1 / -1; }
-.recent-section-hdr {
-  grid-column: 1 / -1;
-  font-size: 10px; font-weight: 700; letter-spacing: .07em;
-  text-transform: uppercase; color: var(--muted);
-  cursor: pointer; padding: 2px 6px; border-radius: 4px;
-  transition: color .15s;
-}
-.recent-section-hdr:hover { color: var(--text); }
 
 /* Report view modal */
 .report-view-modal {
@@ -1747,9 +1772,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   header { gap: 6px 12px; }
   .header-meta { margin-left: 0; width: 100%; }
 
-  /* Recent entries: give detail column a bounded max-width so it truncates
-     cleanly instead of overflowing the panel. */
-  .recent-section,
+  /* Recent log entries: give detail column a bounded max-width so it
+     truncates cleanly instead of overflowing the modal. */
   .recent-log-modal-body { grid-template-columns: 33% 1fr max-content; }
 
   /* Filter tabs + search: wrap so search drops to its own full-width row. */
