@@ -126,7 +126,7 @@ function _viewerFlush() {
   if (!_viewerQueue.length) return;
   const events = _viewerQueue;
   _viewerQueue = [];
-  apiJSON('/api/tiktok/screen/input', { method: 'POST', body: { events } });
+  apiJSON('/api/tiktok/screen/input', { method: 'POST', body: JSON.stringify({ events }) });
 }
 
 function _viewerSend(type, ev, immediate) {
