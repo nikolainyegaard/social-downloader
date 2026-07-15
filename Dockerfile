@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
       libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
       libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
-      fonts-liberation xvfb x11vnc novnc \
+      fonts-liberation xvfb xdotool \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -45,7 +45,7 @@ ENV PYTHONUNBUFFERED=1 \
     DISPLAY=:99 \
     APP_VERSION=${BUILD_VERSION}
 
-EXPOSE 5000 6080
+EXPOSE 5000
 
 # Xvfb gives the app a virtual X display so the TikTok browser can run headed
 # (a realistic 1920x1080 screen), dropping the headless fingerprint class.
@@ -54,8 +54,6 @@ EXPOSE 5000 6080
 # python as PID 1, same as before. The app falls back to headless without
 # DISPLAY, so a failed Xvfb degrades instead of breaking.
 #
-# x11vnc + noVNC expose that display in a browser (port 6080) so the user can
-# watch the TikTok browser live and solve captchas or verification walls with
-# native mouse input. -loop5 retries until Xvfb is up, and -localhost keeps
-# the raw VNC port internal so only the noVNC port leaves the container.
-CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & x11vnc -display :99 -forever -shared -localhost -nopw -quiet -loop5 & websockify --web /usr/share/novnc 6080 localhost:5900 & exec python app/main.py"]
+# xdotool injects mouse input into that display at the X server level, which
+# backs the in-app browser viewer (Settings > TikTok) used to solve captchas.
+CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & exec python app/main.py"]

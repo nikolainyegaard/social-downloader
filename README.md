@@ -101,15 +101,9 @@ TikTok signs in with a QR code in **Settings > Accounts > TikTok**: generate a c
 
 ### Watching the TikTok browser (captchas)
 
-The container serves its virtual display over noVNC on port 6080. Open it in a browser to watch the TikTok browser live and interact with it using your own mouse, which is how you solve a rotate captcha or verification wall if TikTok serves one: trigger a run (or start a QR login), watch the session, and complete the challenge when it appears. The display is black while no session is running, since the browser only exists during checks, lookups, and logins.
+If TikTok serves a rotate captcha or a verification wall, you can solve it by hand from the UI. Open **Settings > Accounts > TikTok** and click **Open browser view**. It shows a live view of the app's TikTok browser and forwards your mouse to it, so you can complete the challenge as if you were sitting at the machine. The view is black unless a session is running, since the browser only exists during checks, lookups, and logins: start a QR login or trigger a check first, then watch and interact.
 
-The viewer has no authentication of its own, so it is bound to `127.0.0.1:6080` in docker-compose.yml. Reach it with an SSH tunnel:
-
-```
-ssh -L 6080:localhost:6080 your-server
-```
-
-Then open [http://localhost:6080/vnc.html](http://localhost:6080/vnc.html). Alternatively put it behind your reverse proxy with authentication (in Caddy: a `basic_auth` block in front of `reverse_proxy localhost:6080`). Do not publish the port unprotected: anyone who reaches it controls the signed-in TikTok browser.
+The viewer rides the app's own web interface, so it needs no extra port and is protected by whatever authentication you already have in front of the app. It refreshes a few times a second rather than at full video rate, which is fine for the slow deliberate drag a captcha needs.
 
 X/Twitter requires a `cookies.txt` from a logged-in x.com session (must include `auth_token` and `ct0`), uploaded from the **Settings > Twitter** cookies panel. Profile lookups work without it, but timelines and downloads do not.
 

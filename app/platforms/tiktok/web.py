@@ -19,7 +19,7 @@ import threading
 import time
 import traceback
 import zipfile
-from flask import jsonify, request, send_file
+from flask import jsonify, request, send_file, Response
 
 from config import DATA_DIR, MEDIA_DIR
 from platforms.tiktok.config import get_ms_token, get_cookies_flat, COOKIES_PATH
@@ -91,6 +91,28 @@ def register_tiktok_routes(bp, engine) -> None:
         if not ok:
             return jsonify({"error": msg}), 409
         return jsonify({"ok": True, "message": msg})
+
+    # Live view of the headed browser display: grab frames and inject mouse
+    # input so the user can solve a captcha or verification wall in the UI
+    from platforms.tiktok import screen as browser_screen
+
+    @bp.route("/screen", methods=["GET"])
+    def tiktok_screen_frame():
+        if not browser_screen.available():
+            return jsonify({"error": "No display: the browser runs headless here"}), 503
+        frame = browser_screen.grab_frame()
+        if not frame:
+            return jsonify({"error": "Could not capture the display"}), 503
+        return Response(frame, mimetype="image/jpeg",
+                        headers={"Cache-Control": "no-store"})
+
+    @bp.route("/screen/input", methods=["POST"])
+    def tiktok_screen_input():
+        events = (request.get_json(silent=True) or {}).get("events", [])
+        if not isinstance(events, list):
+            return jsonify({"error": "events must be a list"}), 400
+        browser_screen.send_input(events)
+        return jsonify({"ok": True})
 
     # Stats backfill state
     _backfill_lock  = threading.Lock()

@@ -67,6 +67,88 @@ function _qrRender(state) {
   }
 }
 
+// ── Live browser viewer ────────────────────────────────────────────────────────
+// Streams JPEG frames of the headed TikTok browser display and forwards mouse
+// input to it, so a captcha or verification wall can be solved by hand. The
+// display is a fixed 1920x1080 (matches the container Xvfb), so pointer
+// coordinates map from the rendered image rect onto that space directly.
+
+const _VIEWER_W = 1920, _VIEWER_H = 1080;
+let _viewerOn = false;
+let _viewerQueue = [];
+let _viewerFlushTimer = null;
+let _viewerDown = false;
+
+function ttViewerOpen() {
+  const modal = document.getElementById('ttViewer');
+  modal.style.display = 'flex';
+  _lockScroll();
+  _viewerOn = true;
+  _viewerNextFrame();
+}
+
+function ttViewerClose() {
+  _viewerOn = false;
+  _viewerDown = false;
+  document.getElementById('ttViewer').style.display = 'none';
+  _unlockScroll();
+}
+
+function _viewerNextFrame() {
+  if (!_viewerOn) return;
+  const img    = document.getElementById('ttViewerImg');
+  const status = document.getElementById('ttViewerStatus');
+  const next = new Image();
+  next.onload = () => {
+    if (!_viewerOn) return;
+    img.src = next.src;
+    status.textContent = '';
+    setTimeout(_viewerNextFrame, 300);
+  };
+  next.onerror = () => {
+    if (!_viewerOn) return;
+    status.textContent = 'No live session running. Start a QR login or trigger a check, then it appears here.';
+    setTimeout(_viewerNextFrame, 1500);
+  };
+  next.src = '/api/tiktok/screen?t=' + Date.now();
+}
+
+function _viewerCoords(ev) {
+  const r = document.getElementById('ttViewerImg').getBoundingClientRect();
+  return {
+    x: Math.round((ev.clientX - r.left) / r.width  * _VIEWER_W),
+    y: Math.round((ev.clientY - r.top)  / r.height * _VIEWER_H),
+  };
+}
+
+function _viewerFlush() {
+  _viewerFlushTimer = null;
+  if (!_viewerQueue.length) return;
+  const events = _viewerQueue;
+  _viewerQueue = [];
+  apiJSON('/api/tiktok/screen/input', { method: 'POST', body: { events } });
+}
+
+function _viewerSend(type, ev, immediate) {
+  const { x, y } = _viewerCoords(ev);
+  _viewerQueue.push({ type, x, y });
+  if (immediate) { if (_viewerFlushTimer) { clearTimeout(_viewerFlushTimer); } _viewerFlush(); }
+  else if (!_viewerFlushTimer) { _viewerFlushTimer = setTimeout(_viewerFlush, 60); }
+}
+
+// Wired once the DOM is ready (the viewer img is static markup)
+document.addEventListener('DOMContentLoaded', () => {
+  const img = document.getElementById('ttViewerImg');
+  if (!img) return;
+  img.addEventListener('pointerdown', (ev) => { ev.preventDefault(); _viewerDown = true; _viewerSend('down', ev, true); });
+  img.addEventListener('pointermove', (ev) => { if (_viewerDown) _viewerSend('move', ev, false); });
+  window.addEventListener('pointerup', (ev) => { if (_viewerDown) { _viewerDown = false; _viewerSend('up', ev, true); } });
+  // Escape closes the viewer first (capture, before the shared overlay handlers)
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && _viewerOn) { ev.stopPropagation(); ttViewerClose(); }
+  }, true);
+});
+
 // ── Sounds state ──────────────────────────────────────────────────────────────
 
 let sounds          = [];

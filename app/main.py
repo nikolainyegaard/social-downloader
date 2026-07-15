@@ -149,6 +149,8 @@ sys.stderr = _Tee(sys.__stderr__)
 
 _POLLING_ENDPOINTS = (
     '"GET /api/tiktok/login/qr HTTP',
+    '"GET /api/tiktok/screen HTTP',
+    '"POST /api/tiktok/screen/input HTTP',
     '"GET /api/tiktok/status HTTP',
     '"GET /api/tiktok/queue HTTP',
     '"GET /api/tiktok/channels HTTP',

@@ -92,6 +92,15 @@
             <div class="settings-note" id="ttQrStatus" style="display:none"></div>
             <img id="ttQrImg" style="display:none;width:220px;border-radius:var(--radius);margin-top:8px" alt="TikTok login QR code">
           </div>
+          <div class="settings-group">
+            <span class="settings-label">Live browser view</span>
+            <div class="settings-note">
+              Opens a live view of the app's TikTok browser so you can solve a captcha or
+              verification wall by hand. The view is black unless a session is running:
+              start a QR login or trigger a check first, then watch and interact here.
+            </div>
+            <button class="btn-sm" id="ttViewerBtn" onclick="ttViewerOpen()">Open browser view</button>
+          </div>
         </div>
 
         <div id="accounts-twitter" style="display:none">
@@ -794,6 +803,16 @@
   <div class="media-modal-inner">
     <button class="media-modal-close" onclick="closeImgModal()"></button>
     <img id="imgModalImg" src="" alt="">
+  </div>
+</div>
+
+<!-- TikTok live browser viewer: streams display frames, forwards mouse input -->
+<div id="ttViewer" class="media-modal" style="display:none" onclick="if(event.target===this)ttViewerClose()">
+  <div class="media-modal-inner">
+    <button class="media-modal-close" onclick="ttViewerClose()"></button>
+    <div id="ttViewerStatus" class="settings-note" style="color:#fff;margin-bottom:6px"></div>
+    <img id="ttViewerImg" src="" alt="TikTok browser" draggable="false"
+         style="cursor:crosshair;touch-action:none;user-select:none">
   </div>
 </div>
 
