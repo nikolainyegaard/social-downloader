@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import os
+import random
 import re
 import sys
 import threading
@@ -123,6 +125,28 @@ async def create_tiktok_session(api, ms_token: str | None = None,
         if release:
             release()
         raise
+    await _warmup(api)
+
+
+async def _warmup(api):
+    """A few seconds of human-shaped activity on the loaded TikTok page before
+    the first API call of the session: dwell, mouse drift, scrolling.
+
+    A human loads the page, looks at it, and scrolls. A cold start straight
+    into the item_list API is a behavioral tell no fingerprint work covers.
+    Best-effort by design: a warmup failure never fails the session.
+    """
+    try:
+        page = api.sessions[0].page
+        await asyncio.sleep(random.uniform(1.0, 2.5))
+        for _ in range(random.randint(2, 4)):
+            await page.mouse.move(random.randint(60, 1200), random.randint(60, 660),
+                                  steps=random.randint(5, 15))
+            await asyncio.sleep(random.uniform(0.2, 0.6))
+            await page.mouse.wheel(0, random.randint(250, 900))
+            await asyncio.sleep(random.uniform(0.4, 1.2))
+    except Exception:
+        pass
 
 
 class UserBannedException(Exception):
