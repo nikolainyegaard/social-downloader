@@ -64,12 +64,18 @@ def _profile_context_factory():
 
 
 def _headed() -> bool:
-    """Run the browser headed when an X display exists (in Docker that is the
-    Xvfb the container starts under). Headed Chrome drops the entire headless
-    fingerprint class."""
-    # ponytail: DISPLAY presence is the whole check. Local dev on a Linux
-    # desktop gets visible Chrome windows, add an env opt-out if that annoys
-    return bool(os.environ.get("DISPLAY"))
+    """Run the browser headed when a working X display exists (in Docker that
+    is the Xvfb the container starts). Headed Chrome drops the entire headless
+    fingerprint class. Checks the X socket, not just DISPLAY: the env var is
+    baked into the image, so a dead Xvfb must degrade to headless instead of
+    launching Chrome at a display that is not there."""
+    # ponytail: local dev on a Linux desktop gets visible Chrome windows, add
+    # an env opt-out if that annoys
+    display = os.environ.get("DISPLAY", "")
+    if not display.startswith(":"):
+        return bool(display)  # remote display forms: trust the env var
+    num = display[1:].split(".")[0]
+    return os.path.exists(f"/tmp/.X11-unix/X{num}")
 
 
 def _patchright_active() -> bool:

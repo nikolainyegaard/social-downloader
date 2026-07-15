@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
       libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
       libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
-      fonts-liberation xvfb xauth \
+      fonts-liberation xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -42,11 +42,15 @@ ENV PYTHONUNBUFFERED=1 \
     DATA_DIR=/app/data \
     MEDIA_DIR=/app/media \
     WEB_PORT=5000 \
+    DISPLAY=:99 \
     APP_VERSION=${BUILD_VERSION}
 
 EXPOSE 5000
 
-# xvfb-run gives the app a virtual X display so the TikTok browser can run
-# headed (a realistic 1920x1080 screen), dropping the headless fingerprint
-# class entirely. The app falls back to headless when DISPLAY is absent.
-CMD ["xvfb-run", "-a", "-s", "-screen 0 1920x1080x24", "python", "app/main.py"]
+# Xvfb gives the app a virtual X display so the TikTok browser can run headed
+# (a realistic 1920x1080 screen), dropping the headless fingerprint class.
+# Started directly instead of via xvfb-run: as PID 1 xvfb-run never receives
+# Xvfb's readiness signal and hangs before launching the app. exec keeps
+# python as PID 1, same as before. The app falls back to headless without
+# DISPLAY, so a failed Xvfb degrades instead of breaking.
+CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & exec python app/main.py"]
