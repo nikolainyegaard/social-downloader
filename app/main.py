@@ -135,6 +135,7 @@ sys.stderr = _Tee(sys.__stderr__)
 # logger so only meaningful HTTP activity reaches the transcript.
 
 _POLLING_ENDPOINTS = (
+    '"GET /api/tiktok/login/qr HTTP',
     '"GET /api/tiktok/status HTTP',
     '"GET /api/tiktok/queue HTTP',
     '"GET /api/tiktok/channels HTTP',

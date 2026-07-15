@@ -70,6 +70,20 @@ def register_tiktok_routes(bp, engine) -> None:
     from cookies import register_cookie_routes
     register_cookie_routes(bp, "tiktok")
 
+    # QR login: signs in inside the persistent browser profile
+    from platforms.tiktok import login as qr_login
+
+    @bp.route("/login/qr", methods=["POST"])
+    def tiktok_qr_start():
+        ok, msg = qr_login.start_qr_login()
+        if not ok:
+            return jsonify({"error": msg}), 409
+        return jsonify({"ok": True})
+
+    @bp.route("/login/qr", methods=["GET"])
+    def tiktok_qr_status():
+        return jsonify(qr_login.get_state())
+
     # Stats backfill state
     _backfill_lock  = threading.Lock()
     _backfill_state: dict = {"running": False, "done": 0, "total": 0, "errors": 0}

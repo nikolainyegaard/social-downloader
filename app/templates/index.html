@@ -108,6 +108,19 @@
             The file must be in Netscape format and include the <code>msToken</code> cookie.
             Cookies are stored server-side. Uploading once applies everywhere.
           </div>
+          <div class="hr-divider"></div>
+          <div class="settings-group">
+            <span class="settings-label">Sign in with QR code</span>
+            <div class="settings-note">
+              Signs in inside the app's own browser, so the session is created with the
+              fingerprint that will use it. Preferred over uploading cookies.
+              Open TikTok on your phone, tap the scan icon in the top bar of your Profile tab,
+              and scan the code. The cookies file is saved automatically on success.
+            </div>
+            <button class="btn-sm" id="ttQrBtn" onclick="ttQrStart()">Generate QR code</button>
+            <div class="settings-note" id="ttQrStatus" style="display:none"></div>
+            <img id="ttQrImg" style="display:none;width:220px;border-radius:var(--radius);margin-top:8px" alt="TikTok login QR code">
+          </div>
         </div>
 
         <div id="accounts-twitter" style="display:none">

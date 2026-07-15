@@ -49,6 +49,30 @@ def save_cookies(platform: str, file_storage) -> None:
         f.write(str(int(time.time())))
 
 
+def save_cookies_netscape(platform: str, cookies: list[dict]) -> None:
+    """Write browser cookie dicts (Playwright context.cookies() shape) as a
+    Netscape cookies.txt and stamp the update time."""
+    path = cookies_path(platform)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    lines = ["# Netscape HTTP Cookie File"]
+    for c in cookies:
+        domain = c.get("domain") or ""
+        expires = c.get("expires") or 0
+        lines.append("\t".join([
+            domain,
+            "TRUE" if domain.startswith(".") else "FALSE",
+            c.get("path") or "/",
+            "TRUE" if c.get("secure") else "FALSE",
+            str(int(expires) if expires > 0 else 0),
+            c.get("name") or "",
+            c.get("value") or "",
+        ]))
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    with open(_timestamp_path(platform), "w", encoding="utf-8") as f:
+        f.write(str(int(time.time())))
+
+
 def delete_cookies(platform: str) -> None:
     for path in (cookies_path(platform), _timestamp_path(platform)):
         if os.path.exists(path):

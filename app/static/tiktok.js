@@ -11,6 +11,54 @@ async function uploadCookies(input) { return _cookiesUpload('tiktok', 'cookie', 
 async function deleteCookies()      { return _cookiesDelete('tiktok', 'cookie'); }
 async function loadCookies()        { return _cookiesLoad('tiktok', 'cookie'); }
 
+// ── QR login ──────────────────────────────────────────────────────────────────
+// Signs in inside the persistent browser profile. The backend streams the QR
+// page as screenshots and this poll shows them until a terminal state.
+
+let _qrTimer = null;
+
+async function ttQrStart() {
+  const btn = document.getElementById('ttQrBtn');
+  btn.disabled = true;
+  const { ok, data } = await apiJSON('/api/tiktok/login/qr', { method: 'POST' });
+  if (!ok) {
+    btn.disabled = false;
+    _qrRender({ status: 'error', message: (data && data.error) || 'Could not start QR login' });
+    return;
+  }
+  if (_qrTimer) clearInterval(_qrTimer);
+  _qrTimer = setInterval(ttQrPoll, 2000);
+  ttQrPoll();
+}
+
+async function ttQrPoll() {
+  const { ok, data } = await apiJSON('/api/tiktok/login/qr');
+  if (ok && data) _qrRender(data);
+}
+
+function _qrRender(state) {
+  const img    = document.getElementById('ttQrImg');
+  const status = document.getElementById('ttQrStatus');
+  const labels = {
+    starting: 'Opening the browser…',
+    waiting:  'Scan the code with the TikTok app on your phone',
+    success:  state.message || 'Signed in',
+    expired:  state.message || 'Login window timed out. Generate a new code to retry',
+    error:    state.message || 'QR login failed',
+  };
+  status.style.display = '';
+  status.textContent   = labels[state.status] || '';
+  status.style.color   = state.status === 'success' ? 'var(--green)'
+                       : (state.status === 'error' || state.status === 'expired') ? 'var(--red)' : '';
+  img.style.display = state.qr ? '' : 'none';
+  if (state.qr) img.src = state.qr;
+  if (['success', 'expired', 'error', 'idle'].includes(state.status)) {
+    if (_qrTimer) { clearInterval(_qrTimer); _qrTimer = null; }
+    document.getElementById('ttQrBtn').disabled = false;
+    if (state.status === 'success') loadCookies();
+  }
+}
+
 // ── Sounds state ──────────────────────────────────────────────────────────────
 
 let sounds          = [];

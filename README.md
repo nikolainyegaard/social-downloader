@@ -97,7 +97,7 @@ If the old docker-compose used `LOOP_INTERVAL_MINUTES`, the app still accepts it
 
 ## Cookies
 
-TikTok requires a valid session cookie. Upload `cookies.txt` from the **Settings > TikTok** cookies panel. Export using the [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) extension (Netscape format, must include `msToken`). Refresh cookies regularly; stale cookies are the primary cause of bot detection.
+TikTok requires a valid session. The preferred way to sign in is the QR code login in **Settings > Accounts > TikTok**: generate a code, scan it with the TikTok app on your phone, and the session is created inside the app's own browser with the matching cookies file saved automatically. Alternatively, upload `cookies.txt` exported with the [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) extension (Netscape format, must include `msToken`). A session from your desktop browser carries a different fingerprint than the app's browser, so the QR login is more resistant to bot detection.
 
 X/Twitter requires a `cookies.txt` from a logged-in x.com session (must include `auth_token` and `ct0`), uploaded from the **Settings > Twitter** cookies panel. Profile lookups work without it, but timelines and downloads do not.
 
