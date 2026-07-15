@@ -6,7 +6,12 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Added
+- Live status over Server-Sent Events: each platform exposes /api/{platform}/events, and the active platform tab holds one stream instead of polling status every 5 seconds and the add queue every 3 seconds. Loop state, log lines, and add toasts now update the moment they change on the server; hidden tabs fall back to a slow 15 second poll
+- The frontend JS is now type-checked with tsc --checkJs (jsconfig.json plus JSDoc annotations, no build step or runtime change); the initChannelApp config contract is a typed JSDoc typedef, so a wrong or misspelled key in a platform config fails the check
+
 ### Changed
+- The 1 second activity-bar countdown only renders while the Log view is actually visible, and the TikTok cookies and sounds polls only run while the TikTok tab is active instead of firing from every tab
 - When a TikTok run cancels on repeated bot detection (or the session is unrecoverable), the loop now backs off for 6 hours (configurable via the bot_cooldown_hours setting) instead of retrying the flagged identity at the next scheduled session, which only kept the flag fresh. Manual triggers still run during the cooldown, and a run that completes normally ends it early
 - The QR code login replaces the cookies.txt upload in the TikTok settings: exported desktop cookies carry the wrong browser fingerprint, exactly the mismatch the QR login exists to avoid. The status pill and Remove button remain, and the upload API route still exists as a manual fallback
 - Every TikTok browser session now warms up like a person before its first API call: a few seconds on the loaded page with randomized mouse movement and scrolling, instead of cold-starting straight into the API

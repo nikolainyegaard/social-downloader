@@ -153,6 +153,11 @@ _POLLING_ENDPOINTS = (
     '"POST /api/tiktok/screen/input HTTP',
     '"GET /api/tiktok/status HTTP',
     '"GET /api/tiktok/queue HTTP',
+    # SSE streams reconnect on every tab switch
+    '"GET /api/tiktok/events HTTP',
+    '"GET /api/youtube/events HTTP',
+    '"GET /api/instagram/events HTTP',
+    '"GET /api/twitter/events HTTP',
     '"GET /api/tiktok/channels HTTP',
     '"GET /api/tiktok/sounds HTTP',
     '"GET /api/youtube/status HTTP',

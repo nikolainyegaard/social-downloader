@@ -607,7 +607,7 @@ async function saveAuthSettings() {
 const fmt = {
   rel: ts => {
     if (!ts) return '—';
-    const diff = Math.round((Date.now() - new Date(ts)) / 1000);
+    const diff = Math.round((Date.now() - new Date(ts).getTime()) / 1000);
     if (diff < 60)       return `${diff}s ago`;
     if (diff < 3600)     return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400)  { const h = Math.floor(diff / 3600),   m = Math.floor((diff % 3600) / 60);          return m > 0 ? `${h}h ${m}m ago`   : `${h}h ago`;   }
@@ -617,7 +617,7 @@ const fmt = {
   },
   relFuture: ts => {
     if (!ts) return '—';
-    const diff = Math.round((new Date(ts) - Date.now()) / 1000);
+    const diff = Math.round((new Date(ts).getTime() - Date.now()) / 1000);
     if (diff <= 0)       return 'soon';
     if (diff < 60)       return `in ${diff}s`;
     if (diff < 3600)     return `in ${Math.floor(diff / 60)}m`;
@@ -911,6 +911,7 @@ function _makeJobWidget(id) {
   const textEl   = document.getElementById(`job-${id}-text`);
   const stepsEl  = document.getElementById(`job-${id}-steps`);
   return {
+    /** @param {{barPct?: number, label?: string, steps?: string[]}} [state] */
     update({ barPct, label, steps } = {}) {
       statusEl.style.display = '';
       const hasBar = barPct !== undefined;
@@ -1385,7 +1386,7 @@ function _recentDate(ts, now = new Date()) {
   const d        = new Date(ts * 1000);
   const today    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dDay     = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diffDays = Math.round((today - dDay) / 86400000);
+  const diffDays = Math.round((today.getTime() - dDay.getTime()) / 86400000);
   const timeStr  = _dtFmtTime.format(d);
   if (diffDays === 0) return `Today, ${timeStr}`;
   if (diffDays === 1) return `Yesterday, ${timeStr}`;

@@ -536,7 +536,7 @@ function renderSounds() {
   const isFiltered = soundFilter.stat.size > 0 || soundFilter.star.size > 0 || !!_soundSearch;
   if (tt.getTrackingView() === 'sounds') {
     const countEl = tt.el('Count');
-    if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${sounds.length}` : sounds.length;
+    if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${sounds.length}` : `${sounds.length}`;
   }
   const { field, dir } = soundSort;
   filtered = [...filtered].sort((a, b) => {
@@ -1525,8 +1525,12 @@ function resetBackfillStep() {
 
 loadCookies();
 loadSounds();
-setInterval(loadCookies, 30000);
-setInterval(loadSounds,  60000);
+// These live at module level (outside the initChannelApp closure), so gate
+// them on the TikTok tab being active instead of polling from every tab
+const _ttTabActive = () => (location.hash.slice(1) || 'tiktok') === 'tiktok';
+setInterval(() => { if (_ttTabActive()) loadCookies(); }, 30000);
+setInterval(() => { if (_ttTabActive()) loadSounds();  }, 60000);
+window.addEventListener('hashchange', () => { if (_ttTabActive()) { loadCookies(); loadSounds(); } });
 _initAllGliders();
 
 // Global settings platform selector

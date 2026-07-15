@@ -8,12 +8,13 @@ debug) are added by the adapter's register_extra_routes hook.
 from __future__ import annotations
 
 import glob as _glob
+import json as _json
 import os
 import queue as _queue_module
 import re as _re
 import threading
 import time
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, Response, jsonify, request, send_file
 
 from config import DATA_DIR, MEDIA_DIR
 from thumbnailer import thumb_path_for
@@ -274,15 +275,18 @@ def create_channel_blueprint(engine) -> Blueprint:
             return jsonify({"error": "Already queued"}), 409
         return jsonify({"queued": True, "handle": handle}), 202
 
-    @bp.route("/queue", methods=["GET"])
-    def get_queue():
+    def _queue_snapshot() -> dict:
         # Newest state per handle: pending lookups plus resolutions from the
         # last 10 minutes, so the frontend toasts catch changes between polls.
         rows = db.add_queue_recent(since=int(time.time()) - 600)
-        return jsonify({
+        return {
             r["handle"]: {"status": r["status"], "kind": r["error_kind"], "message": r["error_detail"]}
             for r in rows
-        })
+        }
+
+    @bp.route("/queue", methods=["GET"])
+    def get_queue():
+        return jsonify(_queue_snapshot())
 
     @bp.route("/add-history", methods=["GET"])
     def add_history():
@@ -632,12 +636,43 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     # ── Loop API ──────────────────────────────────────────────────────────────
 
-    @bp.route("/status", methods=["GET"])
-    def get_status():
+    def _status_snapshot() -> dict:
         state = loop.get_state_snapshot()
         if adapter.extend_status:
             adapter.extend_status(engine, state)
-        return jsonify(state)
+        return state
+
+    @bp.route("/status", methods=["GET"])
+    def get_status():
+        return jsonify(_status_snapshot())
+
+    @bp.route("/events", methods=["GET"])
+    def events():
+        """SSE stream: pushes 'status' and 'queue' events whenever their
+        snapshots change, checked server-side once a second. The frontend
+        keeps one stream open for the active platform tab and falls back to
+        slow polling on hidden tabs, so at most one stream runs per browser
+        tab and the werkzeug thread it holds is bounded."""
+        def _gen():
+            last: dict[str, str | None] = {"status": None, "queue": None}
+            ticks = 0
+            yield "retry: 3000\n\n"
+            while True:
+                for name, snap in (("status", _status_snapshot), ("queue", _queue_snapshot)):
+                    data = _json.dumps(snap(), default=str)
+                    if data != last[name]:
+                        last[name] = data
+                        yield f"event: {name}\ndata: {data}\n\n"
+                ticks += 1
+                if ticks % 15 == 0:
+                    # Comment frame: keeps proxies from idling the connection
+                    # out and makes a vanished client fail the write, which
+                    # ends this generator and frees the thread.
+                    yield ": ping\n\n"
+                time.sleep(1)
+
+        return Response(_gen(), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     def _check_trigger_preconditions():
         """Return (issues, is_running) for the loop trigger endpoints."""

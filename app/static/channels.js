@@ -2,16 +2,54 @@
 //
 // One implementation of the creator cards, detail modal, filter bar, add form,
 // recent panel, loop panel, and log view, shared by every channel platform
-// (Twitter, Instagram, YouTube). Each platform calls initChannelApp(cfg) with
-// its nouns, API base, and hooks; the engine generates the platform section
+// (TikTok, Twitter, Instagram, YouTube). Each platform calls initChannelApp(cfg)
+// with its nouns, API base, and hooks; the engine generates the platform section
 // and detail modal HTML and exposes its public functions on window with the
 // platform prefix (e.g. twOpenModal) so generated onclick strings and the
-// static settings/jobs markup can reference them.
-//
-// TikTok keeps its own implementation (sounds catalog plus TikTok-specific
-// domain features) but shares the same building blocks from common.js, so the
-// UI stays identical.
+// static settings/jobs markup can reference them. TikTok layers its extras
+// (sounds catalog, jobs, QR login) on top in tiktok.js.
 
+/**
+ * @typedef {Object} ChannelAppConfig
+ * @property {string} id                 Platform id, also the tab hash ('tiktok' | 'twitter' | 'instagram' | 'youtube')
+ * @property {string} prefix             Global-function prefix ('tt' | 'tw' | 'ig' | 'yt')
+ * @property {string} api                API base, e.g. '/api/twitter'
+ * @property {string} creatorNoun        'user' | 'account' | 'profile' | 'channel'
+ * @property {string} creatorNounPlural
+ * @property {string} itemNoun           'video' | 'tweet' | 'post'
+ * @property {string} itemNounPlural
+ * @property {string} addAriaLabel
+ * @property {string} addPlaceholder
+ * @property {(ch: Object) => string} profileUrl        Public URL of a creator on the platform
+ * @property {string} loopLabel          Loop name in pause toasts and the loop panel
+ * @property {string} [loopsTitle]       Loops panel header (default 'Loop')
+ * @property {string} [extraLoopHtml]    Second loop block markup (TikTok sounds)
+ * @property {string} [extraLoopLabel]   Toggle label for the extra loop block
+ * @property {string} [subLabelCard]     Follower-count label on cards
+ * @property {string} [subLabelModal]    Follower-count label in the detail modal
+ * @property {string} [subLabelSort]     Follower-count label in the sort dropdown
+ * @property {string} [titleColLabel]    Video table title column (default 'Title')
+ * @property {string} [uploadDateLabel]  Video table date column
+ * @property {boolean} [uploadDateOnly]  Render dates without time (YouTube)
+ * @property {boolean} [hasBanner]       Show the banner slot in the detail modal
+ * @property {Object<string, string>} [fieldLabels]     profile_history field -> label
+ * @property {{key: string, label: string, defaults?: string[], options: {key: string, label: string}[], test: (ch: Object, active: Set<string>) => boolean}[]} [extraFilterGroups]
+ * @property {{key: string, label: string, controlsHtml?: string, emptyLabel?: string, show: (search: string) => void}[]} [extraViews]
+ * @property {{key: string, icon: string, title: string}[]} [viewKeys]  Video-type filter tabs in the detail modal
+ * @property {(view: string, vids: Object[]) => Object[]} [viewVideoFilter]
+ * @property {(raw: string, addToasts: Object) => (boolean|Promise<boolean>)} [addHandler]  Return true when fully handled
+ * @property {(state: Object) => void} [onStatus]       Called after every status render
+ * @property {(state: Object) => boolean} [statusActive]  Extra 'running' signal for the header badge
+ * @property {(state: Object) => {iso: string, label: string}[]} [nextRunCandidates]
+ * @property {(s: Object) => Object[]} [statsRows]      Rows for the stat strip
+ * @property {(item: Object) => string} [recentFallback]  Recent-feed line for disabled creators
+ * @property {(ch: Object) => string} [gridClassFn]
+ * @property {(v: Object) => string} [typeIconFn]
+ * @property {(v: Object) => string} [thumbBadge]
+ * @property {Function} [videoActionBtnsFn]
+ */
+
+/** @param {ChannelAppConfig} cfg */
 function initChannelApp(cfg) {
   const P    = cfg.prefix;                 // 'tw' | 'ig' | 'yt'
   const API  = cfg.api;                    // '/api/twitter'
@@ -650,7 +688,9 @@ function initChannelApp(cfg) {
 
   function _tickActivityBar() {
     const bar = _el('LogActivityBar');
-    if (!bar) return;
+    // offsetParent is null while the bar is hidden (platform tab not active,
+    // or the Log view not selected); skip the countdown render entirely then
+    if (!bar || bar.offsetParent === null) return;
     const dur = secs => {
       const m = Math.floor(secs / 60), s = secs % 60;
       return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
@@ -814,9 +854,7 @@ function initChannelApp(cfg) {
   });
 
   let _queueSig = null;
-  const loadQueue = X('LoadQueue', async () => {
-    const { ok, data } = await apiJSON(`${API}/queue`);
-    if (!ok) return;
+  function _syncQueue(data) {
     addToasts.sync(data);
     // Any queue state change (new pending, resolution, retry) is also a
     // change to the top of the Add history, so refresh it.
@@ -825,6 +863,11 @@ function initChannelApp(cfg) {
       if (_queueSig !== null) loadAddHistory(true);
       _queueSig = sig;
     }
+  }
+
+  const loadQueue = X('LoadQueue', async () => {
+    const { ok, data } = await apiJSON(`${API}/queue`);
+    if (ok) _syncQueue(data);
   });
 
   // ── Add history panel ─────────────────────────────────────────────────────
@@ -1130,7 +1173,7 @@ function initChannelApp(cfg) {
     const filtered   = _filteredCreators();
     const isFiltered = filter.stat.size > 0 || filter.star.size > 0 || filter.book.size > 0 || !!search;
     const countEl    = _el('Count');
-    if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${creators.length}` : creators.length;
+    if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${creators.length}` : `${creators.length}`;
 
     if (!creators.length) {
       grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">No ${CREATORS} tracked yet.</div>`;
@@ -1704,6 +1747,31 @@ function initChannelApp(cfg) {
     }
   }, true);
 
+  // ── Live events (SSE) ─────────────────────────────────────────────────────
+  //
+  // The active platform tab holds one EventSource on /events; the server
+  // pushes status and queue snapshots the moment they change. Hidden tabs
+  // close their stream (browsers cap concurrent HTTP/1.1 connections per
+  // origin, and four idle streams would crowd out normal fetches) and fall
+  // back to the slow polls below. EventSource reconnects on its own after
+  // a dropped connection and re-sends full snapshots on connect.
+
+  let _es = null;
+  const _isActiveTab = () => (location.hash.slice(1) || 'tiktok') === cfg.id;
+
+  function _syncEvents() {
+    if (_isActiveTab() && !_es && window.EventSource) {
+      _es = new EventSource(`${API}/events`);
+      _es.addEventListener('status', e => renderStatus(JSON.parse(e.data)));
+      _es.addEventListener('queue',  e => _syncQueue(JSON.parse(e.data)));
+    } else if (!_isActiveTab() && _es) {
+      _es.close();
+      _es = null;
+    }
+  }
+
+  window.addEventListener('hashchange', _syncEvents);
+
   // ── Init ──────────────────────────────────────────────────────────────────
 
   loadCreators();
@@ -1712,16 +1780,19 @@ function initChannelApp(cfg) {
   loadRecent();
   loadQueue();
   loadAddHistory(true);
+  _syncEvents();
 
   _attachEdgeFade(_el('Controls'));
   EXTRA_VIEWS.forEach(v => _attachEdgeFade(_el(`Controls_${v.key}`)));
 
-  setInterval(loadStatus,   5000);
+  // Status and queue arrive over SSE while this tab is active; the polls
+  // only cover hidden tabs and the no-EventSource fallback.
+  setInterval(() => { if (!_es) loadStatus(); }, 15000);
+  setInterval(() => { if (!_es) loadQueue();  }, 15000);
   setInterval(_tickActivityBar, 1000);
   setInterval(loadCreators, 15000);
   setInterval(loadStats,    60000);
   setInterval(loadRecent,   30000);
-  setInterval(loadQueue,     3000);
 
   // App handle for platform extras (e.g. the TikTok sounds catalog and
   // untracked-user modal) that need to drive the engine-generated UI.
