@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Changed
+- TikTok browser sessions now run on one persistent Chrome profile stored under the data folder, so TikTok sees the same device across restarts instead of a brand-new device carrying your account cookie on every browser launch (the classic stolen-session pattern its bot detection scores hardest). If two sessions overlap, the extra one falls back to the old throwaway browser instead of failing. Requires TikTokApi 7.3 or newer, now pinned
 - The settings modal has one global platform selector at the top instead of a selector inside each section, so the chosen platform follows you between Accounts, Schedules, Jobs, Diagnostics, and Database. The gear button now opens settings for the app you are currently on
 - The expanded per-type recent history modals and the feed's Log button are gone. The infinitely scrolling activity feed replaces them and gains starred and bookmarked filter toggles, using the same star and bookmark buttons as the creator cards
 - Switching activity feed filters is instant: each filter combination renders from a cache and revalidates in the background, and hovering the filter pills pre-warms the per-type caches

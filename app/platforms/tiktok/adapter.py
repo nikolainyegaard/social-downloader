@@ -31,19 +31,13 @@ def _normalize_handle(raw: str) -> str:
 
 async def _api_lookup(handle: str, sec_uid: str | None):
     from TikTokApi import TikTokApi
-    from platforms.tiktok.config import get_ms_token, get_cookies_flat, CHROME_EXECUTABLE
-    from platforms.tiktok.api import get_user_info
+    from platforms.tiktok.config import get_ms_token, get_cookies_flat
+    from platforms.tiktok.api import create_tiktok_session, get_user_info
 
     ms_token = get_ms_token()
     cookies  = get_cookies_flat()
     async with TikTokApi() as api:
-        await api.create_sessions(
-            ms_tokens=[ms_token] if ms_token else [],
-            num_sessions=1,
-            sleep_after=3,
-            executable_path=CHROME_EXECUTABLE,
-            cookies=[cookies] if cookies else None,
-        )
+        await create_tiktok_session(api, ms_token, cookies)
         if sec_uid:
             return await get_user_info(api, sec_uid=sec_uid)
         return await get_user_info(api, username=handle)

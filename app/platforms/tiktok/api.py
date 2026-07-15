@@ -4,7 +4,94 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
+import threading
+
+# One persistent Chrome profile shared by every TikTok browser session, so
+# TikTok sees the same device identity across runs. A fresh Playwright context
+# per launch reads as a brand-new device carrying the same account cookie,
+# which is exactly the pattern bot detection scores hardest.
+_PROFILE_LOCK = threading.Lock()
+
+
+def _profile_dir() -> str:
+    from platforms.tiktok.config import TIKTOK_DATA_DIR
+    return os.path.join(TIKTOK_DATA_DIR, "browser_profile")
+
+
+_RELEASE_GUARD = threading.Lock()
+
+
+def _profile_context_factory():
+    """Claim the persistent profile and return (browser_context_factory, release),
+    or (None, None) when another browser currently holds the profile (Chrome
+    cannot run two processes on one user-data-dir). release() is idempotent and
+    frees the profile from whichever thread calls it: normally the context close
+    event, or the caller when create_sessions fails before the context exists."""
+    from platforms.tiktok.config import CHROME_EXECUTABLE
+
+    if not _PROFILE_LOCK.acquire(blocking=False):
+        return None, None
+
+    released = [False]
+
+    def release():
+        with _RELEASE_GUARD:
+            if released[0]:
+                return
+            released[0] = True
+        _PROFILE_LOCK.release()
+
+    async def factory(playwright):
+        profile = _profile_dir()
+        os.makedirs(profile, exist_ok=True)
+        context = await playwright.chromium.launch_persistent_context(
+            profile,
+            # Mirror TikTokApi's own headless handling: Chrome's new headless
+            # mode via arg, with the Playwright flag off
+            headless=False,
+            args=["--headless=new"],
+            executable_path=CHROME_EXECUTABLE,
+        )
+        context.on("close", lambda _ctx: release())
+        return context
+
+    return factory, release
+
+
+async def create_tiktok_session(api, ms_token: str | None = None,
+                                cookies: dict | None = None, **overrides):
+    """The one create_sessions call every TikTok browser session goes through.
+
+    Uses the persistent browser profile when it is free. Concurrent sessions
+    (an add lookup or diagnostics probe while a loop runs) fall back to the old
+    ephemeral context so they never fail on the profile lock.
+    """
+    from platforms.tiktok.config import CHROME_EXECUTABLE
+
+    factory, release = _profile_context_factory()
+    kwargs = dict(
+        ms_tokens=[ms_token] if ms_token else [],
+        num_sessions=1,
+        sleep_after=3,
+        cookies=[cookies] if cookies else None,
+    )
+    if factory:
+        kwargs["browser_context_factory"] = factory
+    else:
+        kwargs["executable_path"] = CHROME_EXECUTABLE
+    kwargs.update(overrides)
+    try:
+        await api.create_sessions(**kwargs)
+    except Exception:
+        # A context that launched gets released by its close event (TikTokApi
+        # closes partially created contexts on failure). This covers failures
+        # before the factory ever ran. release() is idempotent so both paths
+        # firing is harmless.
+        if release:
+            release()
+        raise
 
 
 class UserBannedException(Exception):
@@ -414,7 +501,6 @@ def parse_story_item(item: dict) -> dict | None:
 
 
 async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
-                                chrome_executable: str | None,
                                 cookies_flat: dict | None = None) -> list[str]:
     """Fetch all video IDs that use a given TikTok sound.
     Returns a list of video ID strings (up to ~3000).
@@ -424,13 +510,7 @@ async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
 
     video_ids: list[str] = []
     async with TikTokApi() as api:
-        await api.create_sessions(
-            ms_tokens=[ms_token] if ms_token else [],
-            num_sessions=1,
-            sleep_after=3,
-            executable_path=chrome_executable,
-            cookies=[cookies_flat] if cookies_flat else None,
-        )
+        await create_tiktok_session(api, ms_token, cookies_flat)
         async for video in api.sound(id=sound_id).videos(count=3000):
             video_ids.append(str(video.id))
     return video_ids

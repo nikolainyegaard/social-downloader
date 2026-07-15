@@ -21,9 +21,9 @@ import traceback
 import zipfile
 from flask import jsonify, request, send_file
 
-from config import DATA_DIR, MEDIA_DIR, CHROME_EXECUTABLE
+from config import DATA_DIR, MEDIA_DIR
 from platforms.tiktok.config import get_ms_token, get_cookies_flat, COOKIES_PATH
-from platforms.tiktok.api import get_video_details
+from platforms.tiktok.api import create_tiktok_session, get_video_details
 from platforms.tiktok.store import TikTokStore
 from platforms.tiktok.sounds import get_sound_loop
 from thumbnailer import AVATARS_DIR
@@ -693,13 +693,7 @@ def register_tiktok_routes(bp, engine) -> None:
                 async def _fetch_user_info_adhoc():
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         return await _api.make_request(
                             url="https://www.tiktok.com/api/user/detail/",
                             params={"uniqueId": handle, "secUid": ""},
@@ -726,13 +720,7 @@ def register_tiktok_routes(bp, engine) -> None:
                 async def _fetch_stories_adhoc():
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         return await get_user_stories(_api, _match["channel_id"])
 
                 items  = asyncio.run(_fetch_stories_adhoc())
@@ -760,13 +748,7 @@ def register_tiktok_routes(bp, engine) -> None:
                 async def _fetch_by_sec_uid():
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         return await _api.make_request(
                             url="https://www.tiktok.com/api/user/detail/",
                             params={"secUid": sec_uid, "uniqueId": ""},
@@ -790,13 +772,7 @@ def register_tiktok_routes(bp, engine) -> None:
                 async def _resolve_handle():
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         return await _api.make_request(
                             url="https://www.tiktok.com/api/user/detail/",
                             params={"uniqueId": handle, "secUid": ""},
@@ -816,13 +792,7 @@ def register_tiktok_routes(bp, engine) -> None:
                     ms_token     = get_ms_token()
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         await asyncio.sleep(3)
                         user_obj = _api.user(username=handle)
                         await user_obj.info()  # resolve sec_uid
@@ -846,13 +816,7 @@ def register_tiktok_routes(bp, engine) -> None:
                     ms_token     = get_ms_token()
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         await asyncio.sleep(3)
                         results = await _get_vws(_api, sec_uid=sec_uid)
                         return {"channel_id": channel_id, "sec_uid": sec_uid,
@@ -880,13 +844,7 @@ def register_tiktok_routes(bp, engine) -> None:
                     ms_token     = get_ms_token()
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         await asyncio.sleep(3)
                         results = await _get_vws(_api, sec_uid=sec_uid)
                         return {"channel_id": channel_id, "handle": handle,
@@ -905,13 +863,7 @@ def register_tiktok_routes(bp, engine) -> None:
                     ms_token     = get_ms_token()
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         raw_items = []
                         total = 0
                         async for video in _api.sound(id=sound_id).videos(count=3000):

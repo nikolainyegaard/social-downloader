@@ -10,13 +10,14 @@ import time
 from typing import Callable
 
 from platforms.tiktok.config import (
-    get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE,
+    get_ms_token, get_cookies_flat, COOKIES_PATH,
     SESSION_GAP_MEAN_SECS,
     HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
 )
 from platforms.tiktok.store import TikTokStore
 from scheduling import set_channel_next_check, set_channel_last_full
 from platforms.tiktok.api import (
+    create_tiktok_session,
     get_user_info, get_user_videos, get_user_videos_with_stats,
     fetch_sound_video_ids, get_video_details, get_user_stories, parse_story_item,
     UserBannedException, UserPrivateException, UserBlockedException,
@@ -612,13 +613,7 @@ async def process_user_session(
         _last_exc: Exception | None = None
         for _attempt in range(2):
             try:
-                await api.create_sessions(
-                    ms_tokens=[ms_token] if ms_token else [],
-                    num_sessions=1,
-                    sleep_after=3,
-                    executable_path=CHROME_EXECUTABLE,
-                    cookies=[cookies] if cookies else None,
-                )
+                await create_tiktok_session(api, ms_token, cookies)
                 await asyncio.sleep(3)
                 # Verify the session is actually usable: TikTok sometimes completes the
                 # browser handshake but returns empty sessions when it detects automation.
@@ -789,13 +784,7 @@ async def run_single_user_with_session(
     async with TikTokApi() as api:
         for _attempt in range(2):
             try:
-                await api.create_sessions(
-                    ms_tokens=[ms_token] if ms_token else [],
-                    num_sessions=1,
-                    sleep_after=3,
-                    executable_path=CHROME_EXECUTABLE,
-                    cookies=[cookies] if cookies else None,
-                )
+                await create_tiktok_session(api, ms_token, cookies)
                 break
             except Exception as e:
                 logd(f"  [{user['channel_id']}] create_sessions attempt {_attempt + 1} error: {e}")
@@ -853,8 +842,8 @@ async def process_single_sound(engine, sound: dict, log: Callable[[str], None]) 
     for _attempt in range(2):
         try:
             ms_token   = get_ms_token()
-            remote_ids = await fetch_sound_video_ids(sound_id, ms_token, CHROME_EXECUTABLE,
-                                                      cookies_flat=get_cookies_flat())
+            remote_ids = await fetch_sound_video_ids(sound_id, ms_token,
+                                                     cookies_flat=get_cookies_flat())
             break
         except Exception as e:
             if _attempt == 0:
