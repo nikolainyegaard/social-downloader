@@ -44,8 +44,21 @@ _BOT_SLEEP_2                  = 600  # seconds after second bot detection (10 mi
 _PROFILE_FAIL_QUIET_THRESHOLD = 5
 _PROFILE_FAIL_SLEEP           = 30   # seconds to sleep before retrying a failed profile fetch
 _BOT_COOLDOWN_SLEEP           = 600  # seconds for full browser restart on session creation failure
+_BOT_COOLDOWN_HOURS           = 6    # hours of skipped scheduled sessions after a run cancels on bot detection
 _SESSION_GAP_MIN_SECS         = 15   # minimum inter-user gap within a session (seconds)
 _LARGE_DELETION_THRESHOLD     = 10   # first-pass missing count that triggers an isolated full re-scan
+
+
+def _start_bot_cooldown() -> int:
+    """Stamp bot_cooldown_until so the scheduler skips upcoming sessions.
+
+    Once TikTok flags the identity, retrying at the next slot only refreshes
+    the flag. The stamp is cleared when a run later completes normally.
+    Returns the cooldown length in hours for the log line.
+    """
+    hours = int(db.get_setting("bot_cooldown_hours", _BOT_COOLDOWN_HOURS))
+    db.set_setting("bot_cooldown_until", str(int(time.time()) + hours * 3600))
+    return hours
 
 
 class _BotDetectedError(Exception):
@@ -676,7 +689,11 @@ async def process_user_session(
                         f" then restarting ({total_completed}/{total} users so far)"
                     )
                     continue
-                log(f"Aborting loop -- session unrecoverable ({total_completed}/{total} users)")
+                _hours = _start_bot_cooldown()
+                log(
+                    f"Aborting loop -- session unrecoverable, backing off {_hours}h"
+                    f" ({total_completed}/{total} users)"
+                )
                 return total_completed
 
             session_create_failed = False
@@ -735,9 +752,11 @@ async def process_user_session(
                         )
                         break
                     else:
+                        _hours = _start_bot_cooldown()
                         log(
-                            f"  Bot detected a 3rd time after 15 min total sleep;"
-                            f" cancelling loop, cooldown restarting"
+                            f"  Bot detected a 3rd time after 15 min total sleep --"
+                            f" cancelling loop, backing off {_hours}h"
+                            f" (scheduled sessions skipped, manual triggers still run)"
                         )
                         total_completed += completed
                         return total_completed
@@ -763,6 +782,11 @@ async def process_user_session(
                 total_completed += completed
                 start_idx = total  # all users processed; exit outer while
 
+    # A run that made it here worked end to end, so the identity is not (or no
+    # longer) flagged and any active cooldown can end early
+    if str(db.get_setting("bot_cooldown_until", "0")) not in ("", "0"):
+        db.set_setting("bot_cooldown_until", "0")
+        log("Bot cooldown cleared -- run completed normally")
     return total_completed
 
 

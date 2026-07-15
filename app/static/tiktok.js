@@ -6,8 +6,6 @@
 // ── Cookie management ─────────────────────────────────────────────────────────
 // The static settings markup references these by name (see index.html).
 
-function renderCookies(info)        { _cookiesRender('tiktok', 'cookie', info); }
-async function uploadCookies(input) { return _cookiesUpload('tiktok', 'cookie', input); }
 async function deleteCookies()      { return _cookiesDelete('tiktok', 'cookie'); }
 async function loadCookies()        { return _cookiesLoad('tiktok', 'cookie'); }
 

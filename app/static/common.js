@@ -82,7 +82,7 @@ function switchSettingsPlatform(platformId) {
 
 function _cookiesRender(platform, idPrefix, info) {
   const timeStr = (info.present && info.updated_at)
-    ? `Uploaded ${(() => { const h = Math.round((Date.now() - info.updated_at * 1000) / 3600000); return h < 24 ? `${h}h ago` : `${Math.round(h/24)}d ago`; })()}`
+    ? `Updated ${(() => { const h = Math.round((Date.now() - info.updated_at * 1000) / 3600000); return h < 24 ? `${h}h ago` : `${Math.round(h/24)}d ago`; })()}`
     : '';
   const metaStr = info.present
     ? [timeStr, `${(info.size_bytes / 1024).toFixed(1)} KB`].filter(Boolean).join('  ·  ')

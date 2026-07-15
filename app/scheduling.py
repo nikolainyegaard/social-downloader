@@ -269,6 +269,16 @@ def run_session_scheduler(platform: str, db, loop_mod,
             print(f"{_ts()} {label} loop: session skipped (paused).")
             continue
 
+        # Bot cooldown: after a run cancels on repeated bot detection the
+        # tracker stamps bot_cooldown_until, and retrying a burned identity at
+        # the next slot only refreshes the flag. Skipped like a pause, and
+        # manual triggers run anyway.
+        _cooldown = float(db.get_setting("bot_cooldown_until", 0) or 0)
+        if not triggered and _cooldown > time.time():
+            _until = datetime.fromtimestamp(_cooldown).strftime("%H:%M")
+            print(f"{_ts()} {label} loop: session skipped (bot cooldown until {_until}).")
+            continue
+
         loop_mod.set_next_run(None)
 
         if pre_session:

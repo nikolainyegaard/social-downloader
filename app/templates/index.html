@@ -78,44 +78,15 @@
               <span id="cookiePillText">No cookies file</span>
             </span>
             <span class="cookie-meta" id="cookieMeta"></span>
-            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <label class="cookie-upload-label">
-                <input type="file" id="cookieFileInput" accept=".txt,text/plain" style="display:none" onchange="uploadCookies(this)">
-                Upload cookies.txt
-              </label>
-              <button class="btn-danger" id="cookieDeleteBtn" onclick="deleteCookies()" style="display:none">Remove</button>
-            </div>
+            <button class="btn-danger" id="cookieDeleteBtn" onclick="deleteCookies()" style="display:none;margin-left:auto">Remove</button>
           </div>
-          <div class="cookie-note">
-            Export your TikTok cookies using the <strong>Get cookies.txt LOCALLY</strong> extension:
-            <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
-              <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
-                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
-                <img src="/static/icons/chrome.svg" width="16" height="16" alt="">
-                Chrome
-              </a>
-              <a href="https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp"
-                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
-                <img src="/static/icons/edge.svg" width="16" height="16" alt="">
-                Edge
-              </a>
-              <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/"
-                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
-                <img src="/static/icons/firefox.svg" width="16" height="16" alt="">
-                Firefox
-              </a>
-            </div>
-            The file must be in Netscape format and include the <code>msToken</code> cookie.
-            Cookies are stored server-side. Uploading once applies everywhere.
-          </div>
-          <div class="hr-divider"></div>
           <div class="settings-group">
             <span class="settings-label">Sign in with QR code</span>
             <div class="settings-note">
               Signs in inside the app's own browser, so the session is created with the
-              fingerprint that will use it. Preferred over uploading cookies.
-              Open TikTok on your phone, tap the scan icon in the top bar of your Profile tab,
-              and scan the code. The cookies file is saved automatically on success.
+              fingerprint that will use it. Open TikTok on your phone, tap the scan icon
+              in the top bar of your Profile tab, and scan the code.
+              The session cookies are stored server-side on success.
             </div>
             <button class="btn-sm" id="ttQrBtn" onclick="ttQrStart()">Generate QR code</button>
             <div class="settings-note" id="ttQrStatus" style="display:none"></div>

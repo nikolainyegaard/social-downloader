@@ -7,6 +7,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Changed
+- When a TikTok run cancels on repeated bot detection (or the session is unrecoverable), the loop now backs off for 6 hours (configurable via the bot_cooldown_hours setting) instead of retrying the flagged identity at the next scheduled session, which only kept the flag fresh. Manual triggers still run during the cooldown, and a run that completes normally ends it early
+- The QR code login replaces the cookies.txt upload in the TikTok settings: exported desktop cookies carry the wrong browser fingerprint, exactly the mismatch the QR login exists to avoid. The status pill and Remove button remain, and the upload API route still exists as a manual fallback
 - Every TikTok browser session now warms up like a person before its first API call: a few seconds on the loaded page with randomized mouse movement and scrolling, instead of cold-starting straight into the API
 - The TikTok browser now runs headed on a virtual display inside the container instead of headless. Headless Chrome carries a whole class of detectable markers no matter how new the headless mode is, and a real windowed Chrome on a standard 1920x1080 screen drops them all
 - The TikTok browser is now driven by patchright, a Playwright fork that closes the DevTools protocol leaks TikTok's bot detection probes for. TikTokApi's built-in stealth scripts are skipped when it is active, since those JS patches are themselves detectable and patchright covers the real leak at the protocol layer
