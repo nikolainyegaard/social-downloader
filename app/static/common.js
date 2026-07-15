@@ -1318,6 +1318,7 @@ function _renderStatGrid(gridId, items) {
     `<div class="stat-item">
        <span class="stat-value">${esc(it.value)}</span>
        <span class="stat-label">${esc(it.label)}</span>
+       ${it.sub ? `<span class="stat-sub">${esc(it.sub)}</span>` : ''}
      </div>`
   ).join('');
 }

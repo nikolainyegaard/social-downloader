@@ -266,12 +266,10 @@ const tt = initChannelApp({
   hasBans: true,
   statsRows: s => [
     { label: 'Tracked users', value: (s.channel_count || 0).toLocaleString() },
-    { label: 'Saved videos',  value: (s.saved_count   || 0).toLocaleString() },
-    { label: 'Video posts',   value: (s.video_count   || 0).toLocaleString() },
-    { label: 'Photo posts',   value: (s.photo_count   || 0).toLocaleString() },
+    { label: 'Saved posts',   value: (s.saved_count   || 0).toLocaleString(),
+      sub: `${(s.video_count || 0).toLocaleString()} videos · ${(s.photo_count || 0).toLocaleString()} photos` },
     { label: 'Deleted',       value: (s.deleted_count || 0).toLocaleString() },
     { label: 'Latest saved',  value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
-    { label: 'Total views',   value: _fmtLarge(s.total_views || 0) },
     { label: 'Storage',       value: _fmtBytes(s.media_size_bytes || 0) },
   ],
   extraFilterGroups: [{
@@ -806,11 +804,18 @@ function _pollUntilTracked(tiktokId, username, overlay) {
 
 // ── Settings modal ────────────────────────────────────────────────────────────
 
-let _settingsSection = 'tiktok';
+let _settingsSection = 'accounts';
 
 function openSettings(section) {
-  const _OLD_TO_NEW = { cookies: 'tiktok', loops: 'tiktok', backfill: 'tiktok', utils: 'tiktok', migrate: 'tiktok' };
-  switchSettingsSection(_OLD_TO_NEW[section] || section || _settingsSection);
+  const _OLD_TO_NEW = { cookies: 'accounts', loops: 'schedules', backfill: 'jobs', utils: 'jobs', migrate: 'jobs', auth: 'access' };
+  const target = _OLD_TO_NEW[section] || section || _settingsSection;
+  if (PLATFORMS.some(p => p.id === target)) {
+    // A platform id (header auth pill) opens that platform's Accounts tab
+    switchSettingsSection('accounts');
+    switchSettingsPlatformTab('accounts', target);
+  } else {
+    switchSettingsSection(target);
+  }
   document.getElementById('settingsBackdrop').style.display = 'flex';
   _lockScroll();
 }
@@ -833,15 +838,17 @@ function switchSettingsSection(name) {
   _settingsSection = name;
   // Every settings section needs an entry here or its ssec-* div will never be shown.
   // When adding a new section: add the id to this list AND add ssec-*/snav-* elements in index.html.
-  ['tiktok', 'youtube', 'instagram', 'twitter', 'jobs', 'diag', 'database', 'auth'].forEach(s => {
+  ['accounts', 'schedules', 'jobs', 'diag', 'database', 'access'].forEach(s => {
     document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
     document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
   });
   document.querySelector('.settings-content').classList.toggle('diag-fill', name === 'diag');
-  if (name === 'tiktok') { loadSettings(); }
-  if (name === 'jobs')   { _avifLoadStatus(); _startJobsPoll(); }
-  else                   { _stopJobsPoll(); }
-  if (name === 'diag')   { diagSourceChanged(); }
+  if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); }
+  if (name === 'schedules') { loadSettings(); loadYtSettings(); _scheduleSettingsLoad('twitter', 'twSettings'); _scheduleSettingsLoad('instagram', 'igSettings'); }
+  if (name === 'access')    { loadAuthSettings(); }
+  if (name === 'jobs')      { _avifLoadStatus(); _startJobsPoll(); }
+  else                      { _stopJobsPoll(); }
+  if (name === 'diag')      { diagSourceChanged(); }
 }
 
 async function loadSettings() {
@@ -1377,7 +1384,7 @@ setInterval(loadSounds,  60000);
 _initAllGliders();
 
 // Settings platform tabs
-['jobs', 'diag', 'database'].forEach(s => initSettingsPlatformTabs(s));
+['accounts', 'schedules', 'jobs', 'diag', 'database'].forEach(s => initSettingsPlatformTabs(s));
 PLATFORMS.forEach(p => initDbQueryPane(p.id));
 
 // Resume backfill poll if it was running before page load
@@ -1402,7 +1409,7 @@ PLATFORMS.forEach(p => initDbQueryPane(p.id));
       {
         type: 'warning',
         duration: 0,
-        action: { label: 'Open Migration Settings', onclick: () => openSettings('tiktok') },
+        action: { label: 'Open Migration Settings', onclick: () => openSettings('migrate') },
       }
     );
   } catch (_) {}

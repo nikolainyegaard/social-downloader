@@ -7,6 +7,10 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Changed
+- Settings modal rebuilt around function-first navigation with grouped sections: Accounts (per-platform login and cookies), Schedules (per-platform loop settings), Jobs, Diagnostics, Database, and Access (the app's own OAuth login, formerly named Authentication). Every section that varies by platform uses the same platform sub-tabs, and TikTok's stats backfill, cleanup utilities, and path migration moved into Jobs as regular job cards
+- The Recent activity and Add history panels now share one list design: identical row anatomy with a leading status or type icon, fixed-width detail and time columns so rows line up instead of flexing per row, and the same date format in both lists
+- The stat strip is more compact and drops Total views. On TikTok the separate Video posts and Photo posts tiles became a breakdown line under Saved posts
+- The add bar input and button are pill-shaped, matching the search field and filter pills
 - UI avatars (activity feed rows, creator cards) are served as small cached thumbnails generated on first request instead of the full-size originals, cutting avatar transfer size by orders of magnitude. Clicking an avatar still opens the full image
 - Google Chrome is back in the amd64 image for TikTok bot detection resistance (its removal in the image slimming caused noticeably more aggressive bot detection); amd64 now ships Chrome instead of Playwright Chromium, arm64 keeps Playwright Chromium since Google publishes no arm64 Chrome build
 - Front-end polish pass: keyboard focus rings on all buttons, links, and creator cards (cards now open with Enter or Space), a slash shortcut that jumps to the search box, slim dark scrollbars everywhere, subtle press feedback on buttons, and slightly brighter muted text for readability

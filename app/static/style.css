@@ -417,17 +417,17 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* ── Unified add bar: one field per app, desktop and mobile ──────────────── */
 
 .add-bar { display: flex; gap: 8px; align-items: center; }
-.add-bar .btn-primary { padding: 9px 18px; }
+.add-bar .btn-primary { padding: 9px 20px; border-radius: var(--radius-pill); }
 .add-bar-input-row {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: stretch;
-  background: var(--surface2);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   overflow: hidden;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 .add-bar-input-row:focus-within {
   border-color: var(--accent);
@@ -436,7 +436,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .add-bar-input {
   flex: 1;
   min-width: 0;
-  padding: 9px 12px;
+  padding: 9px 16px;
   background: transparent;
   border: none;
   color: var(--text);
@@ -1213,19 +1213,21 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* Recent activity feed */
 .recent-feed { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 8px; }
-.rf-row {
+/* Shared row anatomy for the dashboard lists (activity feed + add history).
+   Fixed-width detail and time columns keep every row aligned. */
+.rf-row, .ah-row {
   display: grid;
-  grid-template-columns: 16px 20px minmax(0, 1fr) auto max-content;
   gap: 8px;
   align-items: center;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
   font-size: 12px;
-  cursor: pointer;
 }
-.rf-row:hover { background: var(--surface2); }
-.rf-icon { display: inline-flex; align-items: center; justify-content: center; }
-.rf-icon svg { width: 13px; height: 13px; }
+.rf-row { grid-template-columns: 16px 20px minmax(0, 1fr) 96px 92px; cursor: pointer; }
+.ah-row { grid-template-columns: 16px minmax(0, 1fr) 96px 92px 48px; }
+.rf-row:hover, .ah-row:hover { background: var(--surface2); }
+.rf-icon, .ah-icon { display: inline-flex; align-items: center; justify-content: center; }
+.rf-icon svg, .ah-icon svg { width: 13px; height: 13px; }
 .rf-saved   { color: var(--green); }
 .rf-deleted { color: var(--red); }
 .rf-changed { color: var(--accent); }
@@ -1239,9 +1241,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .rf-avatar { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rf-name { font-weight: 600; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rf-detail { font-size: 11px; white-space: nowrap; }
-.rf-time { font-size: 11px; color: var(--muted); white-space: nowrap; text-align: right; }
-.rf-empty { color: var(--muted); font-size: 12px; padding: 24px 16px; text-align: center; }
+.rf-detail, .ah-status { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.rf-time, .ah-time { font-size: 11px; color: var(--muted); white-space: nowrap; text-align: right; }
+.rf-empty, .ah-empty { color: var(--muted); font-size: 12px; padding: 24px 16px; text-align: center; }
 
 .panel-card {
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface2) 30%, var(--surface)), var(--surface));
@@ -1301,30 +1303,20 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* Add history panel: the list itself scrolls (it is the IntersectionObserver
    root for on-demand paging), not the panel body. */
-.add-history { flex: 1; min-height: 0; overflow-y: auto; }
+.add-history { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 8px; }
 
-.ah-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 16px;
-  font-size: 12px;
-  border-bottom: 1px solid var(--border);
-}
-.ah-row:last-child { border-bottom: none; }
 .ah-handle {
-  flex: 1;
   min-width: 0;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ah-status  { flex-shrink: 0; font-size: 11px; }
 .ah-ok      { color: var(--green); }
-.ah-error   { color: var(--red); cursor: help; }
+.ah-error   { color: var(--red); }
+.ah-status.ah-error { cursor: help; }
 .ah-pending { color: var(--muted); }
-.ah-time    { color: var(--muted); font-size: 11px; flex-shrink: 0; white-space: nowrap; }
-.ah-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.ah-actions { display: flex; gap: 4px; justify-content: flex-end; }
 .ah-btn {
   display: inline-flex;
   align-items: center;
@@ -1342,7 +1334,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .ah-btn:hover { color: var(--text); border-color: var(--muted); }
 .ah-btn-danger:hover { color: var(--red); border-color: var(--red); }
-.ah-empty { color: var(--muted); font-size: 12px; padding: 24px 16px; text-align: center; }
 
 /* Loop block */
 .loop-block { display: flex; flex-direction: column; gap: 6px; }
@@ -1401,7 +1392,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Stat strip tiles. Scoped to .stat-strip because .stat-item is also the
    class for the plain inline stats on creator cards. */
 .stat-strip .stat-item {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-radius: var(--radius);
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface2) 35%, var(--surface)), var(--surface));
   border: 1px solid var(--border);
@@ -1417,7 +1408,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 700;
   letter-spacing: -.02em;
   color: var(--text);
@@ -1428,6 +1419,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   font-size: 10px;
   letter-spacing: .06em;
 }
+
+.stat-sub { font-size: 10px; color: var(--muted); }
 
 /* Recent log modal entries. The dashboard panel uses the .rf-* feed rows,
    so these grid rows are rendered only inside the expanded log modal. */
@@ -1555,6 +1548,16 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   transition: background .1s, color .1s;
 }
 .settings-nav-item:hover { background: var(--surface2); color: var(--text); }
+.settings-nav-group {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 14px 12px 4px;
+  user-select: none;
+}
+.settings-nav-group:first-child { padding-top: 0; }
 .settings-nav-item.active { background: var(--accent-bg); color: var(--accent); }
 
 .settings-content { flex: 1; overflow-y: auto; padding: 28px 24px; }

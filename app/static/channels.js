@@ -373,7 +373,6 @@ function initChannelApp(cfg) {
     { label: `Saved ${ITEMS}`,      value: (s.saved_count   || 0).toLocaleString() },
     { label: 'Deleted',             value: (s.deleted_count || 0).toLocaleString() },
     { label: 'Latest saved',        value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
-    { label: 'Total views',         value: _fmtLarge(s.total_views || 0) },
     { label: 'Storage',             value: _fmtBytes(s.media_size_bytes || 0) },
   ]);
 
@@ -849,23 +848,30 @@ function initChannelApp(cfg) {
 
   const _ah = { items: [], hasMore: false, obs: null, loading: false };
 
+  const _AH_ICONS = {
+    ok:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>',
+    error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V13m0 3.5v.1"/></svg>',
+  };
+
   function _ahRow(e) {
+    const icon = e.status === 'pending'
+      ? '<span class="spinner"></span>'
+      : _AH_ICONS[e.status === 'error' ? 'error' : 'ok'];
     const status = e.status === 'pending'
       ? '<span class="ah-status ah-pending">looking up…</span>'
       : e.status === 'error'
         ? `<span class="ah-status ah-error" title="${esc(e.error_detail || '')}">${esc(e.error_kind || 'error')}</span>`
         : '<span class="ah-status ah-ok">added</span>';
     const actions = e.status === 'error'
-      ? `<span class="ah-actions">
-           <button class="ah-btn" title="Try again" onclick="${P}AhRetry(${e.id})">${_triggerIcon}</button>
-           <button class="ah-btn ah-btn-danger" title="Discard" onclick="${P}AhDiscard(${e.id})">✕</button>
-         </span>`
+      ? `<button class="ah-btn" title="Try again" onclick="${P}AhRetry(${e.id})">${_triggerIcon}</button>
+         <button class="ah-btn ah-btn-danger" title="Discard" onclick="${P}AhDiscard(${e.id})">✕</button>`
       : '';
     return `<div class="ah-row">
+      <span class="ah-icon ah-${esc(e.status)}">${icon}</span>
       <span class="ah-handle">@${esc(e.handle)}</span>
       ${status}
-      <span class="ah-time">${fmt.rel(e.updated_at * 1000)}</span>
-      ${actions}
+      <span class="ah-time">${_recentDate(e.updated_at)}</span>
+      <span class="ah-actions">${actions}</span>
     </div>`;
   }
 

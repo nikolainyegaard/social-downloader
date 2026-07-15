@@ -53,456 +53,363 @@
   <div class="modal-base settings-modal">
     <button class="modal-close" onclick="closeSettings()"></button>
     <nav class="settings-nav">
-      <div class="settings-nav-item active" id="snav-tiktok"    onclick="switchSettingsSection('tiktok')">TikTok</div>
-      <div class="settings-nav-item"        id="snav-twitter"   onclick="switchSettingsSection('twitter');loadTwSettings()">Twitter</div>
-      <div class="settings-nav-item"        id="snav-instagram" onclick="switchSettingsSection('instagram');loadIgSettings()">Instagram</div>
-      <div class="settings-nav-item"        id="snav-youtube"   onclick="switchSettingsSection('youtube');loadYtSettings()">YouTube</div>
-      <div class="settings-nav-item"        id="snav-jobs"      onclick="switchSettingsSection('jobs')">Jobs</div>
-      <div class="settings-nav-item"        id="snav-diag"      onclick="switchSettingsSection('diag')">Diagnostics</div>
-      <div class="settings-nav-item"        id="snav-database"  onclick="switchSettingsSection('database')">Database</div>
-      <div class="settings-nav-item"        id="snav-auth"      onclick="switchSettingsSection('auth');loadAuthSettings()">Authentication</div>
+      <div class="settings-nav-group">Platforms</div>
+      <div class="settings-nav-item active" id="snav-accounts"  onclick="switchSettingsSection('accounts')">Accounts</div>
+      <div class="settings-nav-item"        id="snav-schedules" onclick="switchSettingsSection('schedules')">Schedules</div>
+      <div class="settings-nav-group">Tools</div>
+      <div class="settings-nav-item" id="snav-jobs"     onclick="switchSettingsSection('jobs')">Jobs</div>
+      <div class="settings-nav-item" id="snav-diag"     onclick="switchSettingsSection('diag')">Diagnostics</div>
+      <div class="settings-nav-item" id="snav-database" onclick="switchSettingsSection('database')">Database</div>
+      <div class="settings-nav-group">App</div>
+      <div class="settings-nav-item" id="snav-access"   onclick="switchSettingsSection('access')">Access</div>
     </nav>
     <div class="settings-content">
 
-      <!-- TikTok section -->
-      <div id="ssec-tiktok">
+      <!-- Accounts: per-platform authentication -->
+      <div id="ssec-accounts">
+        <div class="settings-section-title">Accounts</div>
+        <p class="settings-note">Authentication each platform uses when fetching content.</p>
+        <div id="accounts-tabs" class="settings-sub-tabs"></div>
 
-        <div class="settings-section-title">Authentication</div>
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
-          <span class="cookie-pill absent" id="cookiePill">
-            <span class="dot"></span>
-            <span id="cookiePillText">No cookies file</span>
-          </span>
-          <span class="cookie-meta" id="cookieMeta"></span>
-          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <label class="cookie-upload-label">
-              <input type="file" id="cookieFileInput" accept=".txt,text/plain" style="display:none" onchange="uploadCookies(this)">
-              Upload cookies.txt
-            </label>
-            <button class="btn-danger" id="cookieDeleteBtn" onclick="deleteCookies()" style="display:none">Remove</button>
-          </div>
-        </div>
-        <div class="cookie-note">
-          Export your TikTok cookies using the <strong>Get cookies.txt LOCALLY</strong> extension:
-          <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
-            <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
-               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
-              <img src="/static/icons/chrome.svg" width="16" height="16" alt="">
-              Chrome
-            </a>
-            <a href="https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp"
-               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
-              <img src="/static/icons/edge.svg" width="16" height="16" alt="">
-              Edge
-            </a>
-            <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/"
-               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
-              <img src="/static/icons/firefox.svg" width="16" height="16" alt="">
-              Firefox
-            </a>
-          </div>
-          The file must be in Netscape format and include the <code>msToken</code> cookie.
-          Cookies are stored server-side. Uploading once applies everywhere.
-        </div>
-
-        <hr class="hr-divider">
-
-        <div class="settings-section-title">Loop Schedule</div>
-        <p class="settings-note">
-          Changes take effect at the next scheduled run.
-        </p>
-
-        <div class="settings-subtitle">User Loop</div>
-        <div class="settings-group">
-          <label class="settings-label">
-            <span>Sessions per day</span>
-            <div class="loop-interval-field">
-              <input type="number" id="settingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
-              <span></span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Starred check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="settingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Active user check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="settingsActiveHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Inactive user check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="settingsInactiveHours" min="1" max="720" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Full refresh cycle</span>
-            <div class="loop-interval-field">
-              <input type="number" id="settingsStatsRefreshDays" min="1" max="30" class="loop-interval-input">
-              <span>days</span>
-            </div>
-          </label>
-        </div>
-
-        <div class="settings-subtitle">Sound Loop</div>
-        <div class="settings-group">
-          <label class="settings-label">
-            <span>Sound loop interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="soundLoopIntervalInput" min="1" max="9999" class="loop-interval-input">
-              <span>min</span>
-            </div>
-          </label>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-          <button class="btn-primary btn-sm" onclick="saveLoopSettings()">Save</button>
-        </div>
-
-        <hr class="hr-divider">
-
-        <div class="settings-section-title">Stats Backfill</div>
-        <p class="settings-note">
-          Fetches view counts, likes, and other metadata for downloaded videos that are missing stats.
-        </p>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-          <button class="btn-primary" id="backfillBtn" onclick="triggerBackfill()" style="font-size:12px;padding:5px 14px;">Run Backfill</button>
-          <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
-          <span id="statsFailedCount"  style="font-size:12px;color:var(--red);display:none;cursor:pointer;text-decoration:underline dotted" onclick="toggleFailedList()" title="Click to see which videos"></span>
-          <button id="retryFailedBtn" onclick="retryFailed()" style="display:none;font-size:12px;padding:3px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text-dim);cursor:pointer" title="Clear error counts so these videos are retried on the next backfill run">Retry failed</button>
-        </div>
-        <div style="min-height:16px;margin-bottom:6px;">
-          <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
-        </div>
-        <div id="failedList" style="display:none;font-size:11px;color:var(--muted);line-height:1.7"></div>
-        <div style="margin-top:14px">
-          <div class="settings-subtitle">Re-backfill all videos</div>
-          <p style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
-            Marks every video as needing a stats backfill. Use this after adding new tracked columns; the next Run Backfill will re-fetch all videos.
-          </p>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <button class="btn-danger" id="resetBackfillBtn" onclick="resetBackfillStep()">Reset all backfill status</button>
-            <span id="resetBackfillStatus" style="font-size:12px;color:var(--muted)"></span>
-          </div>
-        </div>
-
-        <hr class="hr-divider">
-
-        <div class="settings-section-title">Utilities</div>
-
-        <div class="job-card">
-          <div class="job-card-hdr">
-            <div style="flex:1">
-              <div class="job-card-title">Remove audio-only files</div>
-              <div class="job-card-desc">
-                Scans the videos folder for audio-only files (.mp3, .m4a, etc.) that were
-                downloaded before yt-dlp was restricted to video-only formats. Deletes each
-                file from disk and removes its database entry. Safe to run multiple times.
-              </div>
-            </div>
-            <button class="btn-danger" id="job-audio-btn" onclick="triggerAudioCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
-          </div>
-          <div class="job-status" id="job-audio-status" style="display:none">
-            <div id="job-audio-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-audio-bar"></div></div></div>
-            <div class="job-status-text" id="job-audio-text"></div>
-          </div>
-        </div>
-
-        <div class="job-card">
-          <div class="job-card-hdr">
-            <div style="flex:1">
-              <div class="job-card-title">Delete all avatars</div>
-              <div class="job-card-desc">
-                Deletes the current cached profile picture for tracked users. Archived avatar
-                history is preserved. On the next loop run, avatars will be re-downloaded and
-                saved without triggering a profile change event. Banned users are excluded by
-                default; their avatars cannot be re-fetched from TikTok.
-              </div>
-              <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.85em;cursor:pointer">
-                <input type="checkbox" id="util-clear-avatars-include-banned">
-                Include banned users
+        <div id="accounts-tiktok">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+            <span class="cookie-pill absent" id="cookiePill">
+              <span class="dot"></span>
+              <span id="cookiePillText">No cookies file</span>
+            </span>
+            <span class="cookie-meta" id="cookieMeta"></span>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <label class="cookie-upload-label">
+                <input type="file" id="cookieFileInput" accept=".txt,text/plain" style="display:none" onchange="uploadCookies(this)">
+                Upload cookies.txt
               </label>
+              <button class="btn-danger" id="cookieDeleteBtn" onclick="deleteCookies()" style="display:none">Remove</button>
             </div>
-            <button class="btn-danger" id="util-clear-avatars-btn" onclick="triggerClearAvatars()" style="flex-shrink:0;align-self:flex-start">Delete</button>
           </div>
-          <div class="job-status" id="util-clear-avatars-status" style="display:none">
-            <div class="job-status-text" id="util-clear-avatars-text"></div>
+          <div class="cookie-note">
+            Export your TikTok cookies using the <strong>Get cookies.txt LOCALLY</strong> extension:
+            <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
+              <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
+                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+                <img src="/static/icons/chrome.svg" width="16" height="16" alt="">
+                Chrome
+              </a>
+              <a href="https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp"
+                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+                <img src="/static/icons/edge.svg" width="16" height="16" alt="">
+                Edge
+              </a>
+              <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/"
+                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+                <img src="/static/icons/firefox.svg" width="16" height="16" alt="">
+                Firefox
+              </a>
+            </div>
+            The file must be in Netscape format and include the <code>msToken</code> cookie.
+            Cookies are stored server-side. Uploading once applies everywhere.
           </div>
         </div>
 
-        <div class="job-card">
-          <div class="job-card-hdr">
-            <div style="flex:1">
-              <div class="job-card-title">Delete all thumbnails</div>
-              <div class="job-card-desc">
-                Deletes all generated thumbnails for videos and photo posts. Thumbnails will
-                be regenerated automatically on the next startup backfill.
-              </div>
+        <div id="accounts-twitter" style="display:none">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+            <span class="cookie-pill absent" id="twCookiePill">
+              <span class="dot"></span>
+              <span id="twCookiePillText">No cookies file</span>
+            </span>
+            <span class="cookie-meta" id="twCookieMeta"></span>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <label class="cookie-upload-label">
+                <input type="file" id="twCookieFileInput" accept=".txt,text/plain" style="display:none" onchange="twUploadCookies(this)">
+                Upload cookies.txt
+              </label>
+              <button class="btn-danger" id="twCookieDeleteBtn" onclick="twDeleteCookies()" style="display:none">Remove</button>
             </div>
-            <button class="btn-danger" id="util-clear-thumbs-btn" onclick="triggerClearThumbnails()" style="flex-shrink:0;align-self:flex-start">Delete</button>
           </div>
-          <div class="job-status" id="util-clear-thumbs-status" style="display:none">
-            <div class="job-status-text" id="util-clear-thumbs-text"></div>
+          <div class="cookie-note">
+            Export cookies from a logged-in x.com session using the <strong>Get cookies.txt LOCALLY</strong> extension:
+            <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
+              <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
+                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+                <img src="/static/icons/chrome.svg" width="16" height="16" alt="">
+                Chrome
+              </a>
+              <a href="https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp"
+                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+                <img src="/static/icons/edge.svg" width="16" height="16" alt="">
+                Edge
+              </a>
+              <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/"
+                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+                <img src="/static/icons/firefox.svg" width="16" height="16" alt="">
+                Firefox
+              </a>
+            </div>
+            The file must be in Netscape format and include the <code>auth_token</code> and <code>ct0</code> cookies.
+            Twitter requires a logged-in session for timeline access; to fetch sensitive media the account
+            must have "Display media that may contain sensitive content" enabled in its settings.
           </div>
         </div>
 
-        <hr class="hr-divider">
-
-        <div class="settings-section-title">Migration</div>
-        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
-          Upgrades from tiktok-downloader stored video files under <code>videos/</code> but the new layout uses <code>media/</code>.
-          This tool rewrites the stored file paths in the TikTok database to match your current folder layout.
-        </p>
-        <p class="settings-note">
-          Before running: stop the container, rename <code>videos/</code> to <code>media/</code> on the host, update your docker-compose.yml volumes, then restart and open this panel.
-        </p>
-        <div id="migrate-preview" style="margin-bottom:16px;font-size:13px;"></div>
-        <div style="display:flex;flex-direction:column;gap:10px;max-width:440px;margin-bottom:14px">
-          <label style="display:flex;gap:8px;font-size:13px">
-            <span style="color:var(--text-dim)">Old prefix</span>
-            <input type="text" id="migrateOldPrefix" class="text-input" placeholder="/app/videos">
-          </label>
-          <label style="display:flex;gap:8px;font-size:13px">
-            <span style="color:var(--text-dim)">New prefix</span>
-            <input type="text" id="migrateNewPrefix" class="text-input" placeholder="/app/media">
-          </label>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <button class="btn-primary btn-sm" onclick="loadMigratePreview()">Scan database</button>
-          <button class="btn-danger" id="migrateRunBtn" onclick="runMigration()" style="display:none;font-size:12px;padding:5px 14px">Rewrite paths</button>
-          <span id="migrateStatus" style="font-size:12px;color:var(--muted)"></span>
-        </div>
-
-      </div>
-
-      <!-- YouTube section -->
-      <div id="ssec-youtube" style="display:none">
-        <div class="settings-section-title">Loop Schedule</div>
-        <p class="settings-note">
-          Check sessions are spread randomly across each 24 hour window. Each session
-          processes only the channels whose check interval has come due.
-          Changes take effect at the next scheduled session.
-        </p>
-        <div class="settings-group">
-          <label class="settings-label">
-            <span>Sessions per day</span>
-            <div class="loop-interval-field">
-              <input type="number" id="ytSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
-              <span></span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Starred check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="ytSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Active check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="ytSettingsActiveHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Inactive check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="ytSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
-            <span>Full check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="ytSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
-              <span>d</span>
-            </div>
-          </label>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
-          <button class="btn-primary btn-sm" onclick="ytSaveLoopSettings()">Save</button>
-        </div>
-      </div>
-
-      <!-- Instagram section -->
-      <div id="ssec-instagram" style="display:none">
-        <div class="settings-section-title">Authentication</div>
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px">
-          <span class="cookie-pill absent" id="igSessionPill">
-            <span class="dot"></span>
-            <span id="igSessionPillText">Not logged in</span>
-          </span>
-          <button class="btn-danger" id="igSessionLogoutBtn" onclick="igSessionLogout()" style="display:none">Log out</button>
-        </div>
-        <div id="igLoginForm">
-          <div style="display:flex;flex-direction:column;gap:10px;max-width:340px">
-            <input type="text" id="igLoginUser" class="text-input" placeholder="Instagram username" autocomplete="off" spellcheck="false">
-            <input type="password" id="igLoginPass" class="text-input" placeholder="Password">
+        <div id="accounts-instagram" style="display:none">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+            <span class="cookie-pill absent" id="igSessionPill">
+              <span class="dot"></span>
+              <span id="igSessionPillText">Not logged in</span>
+            </span>
+            <button class="btn-danger" id="igSessionLogoutBtn" onclick="igSessionLogout()" style="display:none">Log out</button>
           </div>
-          <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
-            <button class="btn-primary btn-sm" id="igLoginBtn" onclick="igSessionLogin()">Log in</button>
-            <span id="igLoginStatus" style="font-size:12px;color:var(--muted)"></span>
+          <div id="igLoginForm">
+            <div style="display:flex;flex-direction:column;gap:10px;max-width:340px">
+              <input type="text" id="igLoginUser" class="text-input" placeholder="Instagram username" autocomplete="off" spellcheck="false">
+              <input type="password" id="igLoginPass" class="text-input" placeholder="Password">
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+              <button class="btn-primary btn-sm" id="igLoginBtn" onclick="igSessionLogin()">Log in</button>
+              <span id="igLoginStatus" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+            <p class="cookie-note" style="margin-top:12px">
+              Credentials are sent to the container once to create an instaloader session. The password is not stored on disk; only the session cookie is saved.
+            </p>
           </div>
-          <p class="cookie-note" style="margin-top:12px">
-            Credentials are sent to the container once to create an instaloader session. The password is not stored on disk; only the session cookie is saved.
+        </div>
+
+        <div id="accounts-youtube" style="display:none">
+          <p class="settings-note" style="margin-top:4px">
+            YouTube fetches public data with yt-dlp and needs no login.
           </p>
         </div>
-
-        <hr class="hr-divider">
-
-        <div class="settings-section-title">Loop Schedule</div>
-        <p class="settings-note">
-          Check sessions are spread randomly across each 24 hour window. Each session
-          processes only the profiles whose check interval has come due.
-          Changes take effect at the next scheduled session.
-        </p>
-        <div class="settings-group">
-          <label class="settings-label">
-            <span>Sessions per day</span>
-            <div class="loop-interval-field">
-              <input type="number" id="igSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
-              <span></span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Starred check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="igSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Active check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="igSettingsActiveHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Inactive check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="igSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
-            <span>Full check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="igSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
-              <span>d</span>
-            </div>
-          </label>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
-          <button class="btn-primary btn-sm" onclick="igSaveLoopSettings()">Save</button>
-        </div>
       </div>
 
-      <!-- Twitter section -->
-      <div id="ssec-twitter" style="display:none">
-        <div class="settings-section-title">Authentication</div>
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
-          <span class="cookie-pill absent" id="twCookiePill">
-            <span class="dot"></span>
-            <span id="twCookiePillText">No cookies file</span>
-          </span>
-          <span class="cookie-meta" id="twCookieMeta"></span>
-          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <label class="cookie-upload-label">
-              <input type="file" id="twCookieFileInput" accept=".txt,text/plain" style="display:none" onchange="twUploadCookies(this)">
-              Upload cookies.txt
+      <!-- Schedules: per-platform loop schedules -->
+      <div id="ssec-schedules" style="display:none">
+        <div class="settings-section-title">Loop Schedules</div>
+        <p class="settings-note">
+          Check sessions are spread randomly across each 24 hour window. Each session
+          processes only the creators whose check interval has come due.
+          Changes take effect at the next scheduled session.
+        </p>
+        <div id="schedules-tabs" class="settings-sub-tabs"></div>
+
+        <div id="schedules-tiktok">
+          <div class="settings-subtitle">User Loop</div>
+          <div class="settings-group">
+            <label class="settings-label">
+              <span>Sessions per day</span>
+              <div class="loop-interval-field">
+                <input type="number" id="settingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
+                <span></span>
+              </div>
             </label>
-            <button class="btn-danger" id="twCookieDeleteBtn" onclick="twDeleteCookies()" style="display:none">Remove</button>
+            <label class="settings-label">
+              <span>Starred check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="settingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Active user check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="settingsActiveHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Inactive user check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="settingsInactiveHours" min="1" max="720" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Full refresh cycle</span>
+              <div class="loop-interval-field">
+                <input type="number" id="settingsStatsRefreshDays" min="1" max="30" class="loop-interval-input">
+                <span>days</span>
+              </div>
+            </label>
+          </div>
+          <div class="settings-subtitle">Sound Loop</div>
+          <div class="settings-group">
+            <label class="settings-label">
+              <span>Sound loop interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="soundLoopIntervalInput" min="1" max="9999" class="loop-interval-input">
+                <span>min</span>
+              </div>
+            </label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+            <button class="btn-primary btn-sm" onclick="saveLoopSettings()">Save</button>
           </div>
         </div>
-        <div class="cookie-note">
-          Export cookies from a logged-in x.com session using the <strong>Get cookies.txt LOCALLY</strong> extension:
-          <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
-            <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
-               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
-              <img src="/static/icons/chrome.svg" width="16" height="16" alt="">
-              Chrome
-            </a>
-            <a href="https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp"
-               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
-              <img src="/static/icons/edge.svg" width="16" height="16" alt="">
-              Edge
-            </a>
-            <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/"
-               class="browser-ext-link" target="_blank" rel="noopener noreferrer">
-              <img src="/static/icons/firefox.svg" width="16" height="16" alt="">
-              Firefox
-            </a>
+
+        <div id="schedules-youtube" style="display:none">
+          <div class="settings-group">
+            <label class="settings-label">
+              <span>Sessions per day</span>
+              <div class="loop-interval-field">
+                <input type="number" id="ytSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
+                <span></span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Starred check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="ytSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Active check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="ytSettingsActiveHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Inactive check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="ytSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
+              <span>Full check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="ytSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
+                <span>d</span>
+              </div>
+            </label>
           </div>
-          The file must be in Netscape format and include the <code>auth_token</code> and <code>ct0</code> cookies.
-          Twitter requires a logged-in session for timeline access; to fetch sensitive media the account
-          must have "Display media that may contain sensitive content" enabled in its settings.
+          <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+            <button class="btn-primary btn-sm" onclick="ytSaveLoopSettings()">Save</button>
+          </div>
         </div>
 
-        <hr class="hr-divider">
-
-        <div class="settings-section-title">Loop Schedule</div>
-        <p class="settings-note">
-          Check sessions are spread randomly across each 24 hour window. Each session
-          processes only the accounts whose check interval has come due.
-          Changes take effect at the next scheduled session.
-        </p>
-        <div class="settings-group">
-          <label class="settings-label">
-            <span>Sessions per day</span>
-            <div class="loop-interval-field">
-              <input type="number" id="twSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
-              <span></span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Starred check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="twSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Active check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="twSettingsActiveHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label">
-            <span>Inactive check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="twSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
-              <span>h</span>
-            </div>
-          </label>
-          <label class="settings-label" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
-            <span>Full check interval</span>
-            <div class="loop-interval-field">
-              <input type="number" id="twSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
-              <span>d</span>
-            </div>
-          </label>
+        <div id="schedules-instagram" style="display:none">
+          <div class="settings-group">
+            <label class="settings-label">
+              <span>Sessions per day</span>
+              <div class="loop-interval-field">
+                <input type="number" id="igSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
+                <span></span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Starred check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="igSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Active check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="igSettingsActiveHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Inactive check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="igSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
+              <span>Full check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="igSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
+                <span>d</span>
+              </div>
+            </label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+            <button class="btn-primary btn-sm" onclick="igSaveLoopSettings()">Save</button>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
-          <button class="btn-primary btn-sm" onclick="twSaveLoopSettings()">Save</button>
+
+        <div id="schedules-twitter" style="display:none">
+          <div class="settings-group">
+            <label class="settings-label">
+              <span>Sessions per day</span>
+              <div class="loop-interval-field">
+                <input type="number" id="twSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
+                <span></span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Starred check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="twSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Active check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="twSettingsActiveHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label">
+              <span>Inactive check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="twSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
+                <span>h</span>
+              </div>
+            </label>
+            <label class="settings-label" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
+              <span>Full check interval</span>
+              <div class="loop-interval-field">
+                <input type="number" id="twSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
+                <span>d</span>
+              </div>
+            </label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+            <button class="btn-primary btn-sm" onclick="twSaveLoopSettings()">Save</button>
+          </div>
         </div>
       </div>
 
-      <!-- Jobs section -->
+      <!-- Jobs: per-platform maintenance -->
       <div id="ssec-jobs" style="display:none">
         <div class="settings-section-title">Jobs</div>
         <div id="jobs-tabs" class="settings-sub-tabs"></div>
 
         <div id="jobs-tiktok">
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Stats backfill</div>
+                <div class="job-card-desc">
+                  Fetches view counts, likes, and other metadata for downloaded videos that
+                  are missing stats.
+                </div>
+              </div>
+              <button class="btn-primary" id="backfillBtn" onclick="triggerBackfill()" style="flex-shrink:0;align-self:flex-start">Run</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;min-height:16px">
+              <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
+              <span id="statsFailedCount"  style="font-size:12px;color:var(--red);display:none;cursor:pointer;text-decoration:underline dotted" onclick="toggleFailedList()" title="Click to see which videos"></span>
+              <button id="retryFailedBtn" onclick="retryFailed()" style="display:none;font-size:12px;padding:3px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-dim);cursor:pointer" title="Clear error counts so these videos are retried on the next backfill run">Retry failed</button>
+              <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+            <div id="failedList" style="display:none;font-size:11px;color:var(--muted);line-height:1.7"></div>
+            <div class="report-widget">
+              <div class="job-card-desc" style="margin-bottom:8px">
+                Reset marks every video as needing a stats backfill. Use it after adding new
+                tracked columns; the next run will re-fetch all videos.
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <button class="btn-danger" id="resetBackfillBtn" onclick="resetBackfillStep()">Reset all backfill status</button>
+                <span id="resetBackfillStatus" style="font-size:12px;color:var(--muted)"></span>
+              </div>
+            </div>
+          </div>
+
           <div class="job-card">
             <div class="job-card-hdr">
               <div style="flex:1">
@@ -569,6 +476,93 @@
               </div>
             </div>
           </div>
+
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Remove audio-only files</div>
+                <div class="job-card-desc">
+                  Scans the videos folder for audio-only files (.mp3, .m4a, etc.) that were
+                  downloaded before yt-dlp was restricted to video-only formats. Deletes each
+                  file from disk and removes its database entry. Safe to run multiple times.
+                </div>
+              </div>
+              <button class="btn-danger" id="job-audio-btn" onclick="triggerAudioCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+            </div>
+            <div class="job-status" id="job-audio-status" style="display:none">
+              <div id="job-audio-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-audio-bar"></div></div></div>
+              <div class="job-status-text" id="job-audio-text"></div>
+            </div>
+          </div>
+
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Delete all avatars</div>
+                <div class="job-card-desc">
+                  Deletes the current cached profile picture for tracked users. Archived avatar
+                  history is preserved. On the next loop run, avatars will be re-downloaded and
+                  saved without triggering a profile change event. Banned users are excluded by
+                  default; their avatars cannot be re-fetched from TikTok.
+                </div>
+                <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.85em;cursor:pointer">
+                  <input type="checkbox" id="util-clear-avatars-include-banned">
+                  Include banned users
+                </label>
+              </div>
+              <button class="btn-danger" id="util-clear-avatars-btn" onclick="triggerClearAvatars()" style="flex-shrink:0;align-self:flex-start">Delete</button>
+            </div>
+            <div class="job-status" id="util-clear-avatars-status" style="display:none">
+              <div class="job-status-text" id="util-clear-avatars-text"></div>
+            </div>
+          </div>
+
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Delete all thumbnails</div>
+                <div class="job-card-desc">
+                  Deletes all generated thumbnails for videos and photo posts. Thumbnails will
+                  be regenerated automatically on the next startup backfill.
+                </div>
+              </div>
+              <button class="btn-danger" id="util-clear-thumbs-btn" onclick="triggerClearThumbnails()" style="flex-shrink:0;align-self:flex-start">Delete</button>
+            </div>
+            <div class="job-status" id="util-clear-thumbs-status" style="display:none">
+              <div class="job-status-text" id="util-clear-thumbs-text"></div>
+            </div>
+          </div>
+
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
+                <div class="job-card-title">Path migration</div>
+                <div class="job-card-desc">
+                  Upgrades from tiktok-downloader stored video files under <code>videos/</code> but the
+                  new layout uses <code>media/</code>. This tool rewrites the stored file paths in the
+                  TikTok database to match your current folder layout. Before running: stop the
+                  container, rename <code>videos/</code> to <code>media/</code> on the host, update your
+                  docker-compose.yml volumes, then restart and open this panel.
+                </div>
+              </div>
+            </div>
+            <div id="migrate-preview" style="margin:10px 0 0;font-size:13px;"></div>
+            <div style="display:flex;flex-direction:column;gap:10px;max-width:440px;margin:10px 0 12px">
+              <label style="display:flex;gap:8px;font-size:13px">
+                <span style="color:var(--text-dim)">Old prefix</span>
+                <input type="text" id="migrateOldPrefix" class="text-input" placeholder="/app/videos">
+              </label>
+              <label style="display:flex;gap:8px;font-size:13px">
+                <span style="color:var(--text-dim)">New prefix</span>
+                <input type="text" id="migrateNewPrefix" class="text-input" placeholder="/app/media">
+              </label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <button class="btn-primary btn-sm" onclick="loadMigratePreview()">Scan database</button>
+              <button class="btn-danger" id="migrateRunBtn" onclick="runMigration()" style="display:none;font-size:12px;padding:5px 14px">Rewrite paths</button>
+              <span id="migrateStatus" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+          </div>
         </div>
 
         <div id="jobs-youtube" style="display:none">
@@ -630,7 +624,6 @@
             </div>
           </div>
         </div>
-
       </div>
 
       <!-- Diagnostics section -->
@@ -735,9 +728,9 @@
 
       </div>
 
-      <!-- Authentication section -->
-      <div id="ssec-auth" style="display:none">
-        <div class="settings-section-title">OAuth Authentication</div>
+      <!-- Access section: OAuth login for the app itself -->
+      <div id="ssec-access" style="display:none">
+        <div class="settings-section-title">Access</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:4px">
           Require login before accessing the app via any OIDC provider (Authentik, Keycloak, etc.).
         </p>
