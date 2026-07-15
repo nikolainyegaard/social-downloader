@@ -5,6 +5,19 @@ import threading
 import time
 from datetime import datetime, timedelta
 
+# Patchright is a drop-in Playwright fork that closes the known CDP detection
+# leaks (Runtime.enable side effects, automation command flags). Alias it over
+# playwright before anything imports the real one so TikTokApi and the QR login
+# use the patched driver transparently. Without patchright installed this is a
+# no-op and vanilla Playwright is used.
+try:
+    import patchright
+    import patchright.async_api
+    sys.modules["playwright"] = patchright
+    sys.modules["playwright.async_api"] = patchright.async_api
+except ImportError:
+    pass
+
 import glob as _glob
 import shutil as _shutil
 from config import DATA_DIR, MEDIA_DIR, WEB_PORT
@@ -55,9 +68,9 @@ if os.path.exists(_run_current):
 # ── Application log: stdout/stderr → run_current.log ─────────────────────────
 #
 # _RunLog owns run_current.log and handles two kinds of rotation:
-#   • Midnight rotation  — at the first write after midnight the file is closed,
+#   • Midnight rotation: at the first write after midnight the file is closed,
 #     renamed run_YYYYMMDD.log, and a fresh run_current.log is opened.
-#   • Startup rotation   — handled above before _RunLog is created.
+#   • Startup rotation: handled above before _RunLog is created.
 #
 # _Tee wraps stdout/stderr so every print() goes to the terminal AND _RunLog.
 # Both wrappers share the same _RunLog instance, so midnight rotation is

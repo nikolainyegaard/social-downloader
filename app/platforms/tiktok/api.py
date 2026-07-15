@@ -6,6 +6,7 @@ import copy
 import json
 import os
 import re
+import sys
 import threading
 
 # One persistent Chrome profile shared by every TikTok browser session, so
@@ -60,6 +61,24 @@ def _profile_context_factory():
     return factory, release
 
 
+def _patchright_active() -> bool:
+    # main.py aliases sys.modules["playwright"] to patchright at startup when
+    # the package is installed
+    return getattr(sys.modules.get("playwright"), "__name__", "") == "patchright"
+
+
+async def _plain_page(context):
+    """page_factory that skips TikTokApi's vendored stealth patches.
+
+    Those JS patches (navigator overrides, toString rewrites) are themselves
+    fingerprintable. Patchright hides the CDP layer natively, so a plain
+    untouched page is the cleaner profile when it is active.
+    """
+    page = await context.new_page()
+    await page.goto("https://www.tiktok.com")
+    return page
+
+
 async def create_tiktok_session(api, ms_token: str | None = None,
                                 cookies: dict | None = None, **overrides):
     """The one create_sessions call every TikTok browser session goes through.
@@ -81,6 +100,8 @@ async def create_tiktok_session(api, ms_token: str | None = None,
         kwargs["browser_context_factory"] = factory
     else:
         kwargs["executable_path"] = CHROME_EXECUTABLE
+    if _patchright_active():
+        kwargs["page_factory"] = _plain_page
     kwargs.update(overrides)
     try:
         await api.create_sessions(**kwargs)

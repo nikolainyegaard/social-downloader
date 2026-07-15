@@ -16,9 +16,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Browser for TikTokApi (Playwright). Google Chrome on amd64: noticeably
-# better bot detection resistance than Playwright Chromium. Google ships no
-# linux/arm64 Chrome build, so arm64 keeps the bundled Chromium instead.
+# Browser for TikTokApi (driven by patchright, the leak-patched Playwright
+# fork main.py aliases in). Google Chrome on amd64: noticeably better bot
+# detection resistance than the bundled Chromium. Google ships no linux/arm64
+# Chrome build, so arm64 installs patchright's Chromium instead.
 # config.py auto-detects google-chrome and falls back to Chromium, so each
 # arch carries only its one browser.
 RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
@@ -29,7 +30,7 @@ RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
       rm /tmp/chrome.deb && \
       rm -rf /var/lib/apt/lists/*; \
     else \
-      playwright install chromium; \
+      patchright install chromium; \
     fi
 
 COPY . .
