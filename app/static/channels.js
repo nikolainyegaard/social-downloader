@@ -34,8 +34,6 @@ function initChannelApp(cfg) {
   // ── Section HTML ──────────────────────────────────────────────────────────
 
   const _triggerIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12C21 16.9706 16.9706 21 12 21C9.69494 21 7.59227 20.1334 6 18.7083L3 16M3 12C3 7.02944 7.02944 3 12 3C14.3051 3 16.4077 3.86656 18 5.29168L21 8M3 21V16M3 16H8M21 3V8M21 8H16"/></svg>`;
-  const _bookmarkIcon = `<svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 0 1 1 1v19l-7-5.5L5 22V3a1 1 0 0 1 1-1z"/></svg>`;
-  const _bookmarkBadge = `<span class="account-status bookmark" title="Bookmarked">${_bookmarkIcon}</span>`;
   const _bmOutline = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21V3z"/></svg>`;
   const _bmFilled  = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 0 1 1 1v19l-7-5.5L5 22V3a1 1 0 0 1 1-1z"/></svg>`;
 
@@ -65,7 +63,7 @@ function initChannelApp(cfg) {
         <button class="filter-pill"        id="${P}Rf_saved"   onclick="${P}SetRecentFilter('saved')">Saved</button>
         <button class="filter-pill"        id="${P}Rf_deleted" onclick="${P}SetRecentFilter('deleted')">Deleted</button>
         <button class="filter-pill"        id="${P}Rf_changed" onclick="${P}SetRecentFilter('changed')">Changes</button>
-        ${cfg.hasBans ? `<button class="filter-pill" id="${P}Rf_banned" onclick="${P}SetRecentFilter('banned')">Bans</button>` : ''}
+        <button class="filter-pill" id="${P}Rf_banned" onclick="${P}SetRecentFilter('banned')">Bans</button>
       </div>
       <span style="display:flex;gap:4px">
         <button class="btn-star" id="${P}RfStar" onclick="${P}ToggleRfStar()" title="Only starred ${CREATORS}">☆</button>
@@ -125,7 +123,7 @@ function initChannelApp(cfg) {
         <span id="${P}Count" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
         <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)">
       </div>
-      <div id="${P}Controls" class="filter-control-group" style="margin-top:10px"
+      <div id="${P}Controls" class="filter-control-group" style="margin-top:10px">
         ${EXTRA_FILTER_GROUPS.map(g => `
         <div class="filter-row">
           <span class="filter-row-label">${g.label}</span>
@@ -511,7 +509,7 @@ function initChannelApp(cfg) {
   // Warm the per-kind caches the first time the pointer reaches the filter
   // pills, so the first filter click is instant too
   X('PrefetchFeedKinds', async () => {
-    for (const kind of ['saved', 'deleted', 'changed', ...(cfg.hasBans ? ['banned'] : [])]) {
+    for (const kind of ['saved', 'deleted', 'changed', 'banned']) {
       const key = `${kind}|0|0`;
       if (_rf.cache[key]) continue;
       const { ok, data } = await apiJSON(`${API}/recent/feed?limit=40&kind=${kind}`);
@@ -1069,8 +1067,6 @@ function initChannelApp(cfg) {
           <div class="user-badges">
             <span class="account-status ${trackingCls}">${trackingLabel}</span>
             ${_relationPill(ch)}
-            ${ch.starred ? '<span class="account-status priority" title="Starred: checked on the high-priority interval">★ Priority</span>' : ''}
-            ${ch.bookmarked ? _bookmarkBadge : ''}
           </div>
         </div>
 
@@ -1383,7 +1379,6 @@ function initChannelApp(cfg) {
           ${ch.verified ? '<span class="modal-verified">✓ Verified</span>' : ''}
           <span class="account-status ${trackingCls}">${trackingLbl}</span>
           ${_relationPill(ch)}
-          ${ch.bookmarked ? _bookmarkBadge : ''}
           <label class="tracking-toggle" title="${isInactive ? `${ItemsCap} tracking off (profile changes still tracked)` : `${ItemsCap} tracking on`}">
             <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="${P}SetTracking('${esc(ch.channel_id)}', this.checked)">
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -1638,11 +1633,13 @@ function initChannelApp(cfg) {
     trackingView = view;
     const searchEl = _el('Search');
     if (searchEl) {
-      searchEl.style.display = view === 'log' ? 'none' : '';
+      // visibility, not display: the box still occupies its slot on the Log
+      // view so the tab row keeps its height and the page never shifts
+      searchEl.style.visibility = view === 'log' ? 'hidden' : '';
       if (view !== 'log') searchEl.value = '';
     }
     const countEl = _el('Count');
-    if (countEl) countEl.style.display = view === 'log' ? 'none' : '';
+    if (countEl) countEl.style.visibility = view === 'log' ? 'hidden' : '';
     search = '';
     _el('TvCreators').classList.toggle('active', view === 'creators');
     _el('TvLog').classList.toggle('active', view === 'log');
@@ -1687,8 +1684,9 @@ function initChannelApp(cfg) {
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     if ([...document.querySelectorAll('.modal-backdrop')].some(el => el.style.display !== 'none')) return;
     const searchEl = _el('Search');
-    // offsetParent is null while this platform's tab or the search box is hidden
-    if (!searchEl || !searchEl.offsetParent) return;
+    // offsetParent is null while this platform's tab is hidden, and the box
+    // itself is visibility-hidden on the Log view
+    if (!searchEl || !searchEl.offsetParent || searchEl.style.visibility === 'hidden') return;
     e.preventDefault();
     searchEl.focus();
   });
@@ -1714,6 +1712,9 @@ function initChannelApp(cfg) {
   loadRecent();
   loadQueue();
   loadAddHistory(true);
+
+  _attachEdgeFade(_el('Controls'));
+  EXTRA_VIEWS.forEach(v => _attachEdgeFade(_el(`Controls_${v.key}`)));
 
   setInterval(loadStatus,   5000);
   setInterval(_tickActivityBar, 1000);

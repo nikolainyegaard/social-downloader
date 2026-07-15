@@ -438,6 +438,70 @@ class ChannelDB:
             )
 
 
+    def touch_last_checked(self, channel_id: str) -> None:
+        with self.get_db() as conn:
+            conn.execute(
+                "UPDATE channels SET last_checked = ? WHERE channel_id = ?",
+                (int(time.time()), channel_id)
+            )
+
+
+    def set_account_status(self, channel_id: str, status: str) -> None:
+        """Set account_status; 'banned' also stamps banned_at (COALESCE, never
+        overwritten). Status transitions are recorded in profile_history."""
+        with self.get_db() as conn:
+            row = conn.execute(
+                "SELECT account_status FROM channels WHERE channel_id = ?", (channel_id,)
+            ).fetchone()
+            old_status = row["account_status"] if row else None
+            if status == "banned":
+                conn.execute(
+                    "UPDATE channels SET account_status = ?, banned_at = COALESCE(banned_at, ?) WHERE channel_id = ?",
+                    (status, int(time.time()), channel_id)
+                )
+            else:
+                conn.execute(
+                    "UPDATE channels SET account_status = ? WHERE channel_id = ?",
+                    (status, channel_id)
+                )
+            if old_status and old_status != status:
+                conn.execute(
+                    "INSERT INTO profile_history (channel_id, field, old_value, changed_at) VALUES (?, 'account_status', ?, ?)",
+                    (channel_id, old_status, int(time.time()))
+                )
+
+
+    def ban_channel_videos(self, channel_id: str) -> int:
+        """Mark all active videos deleted with reason 'user_banned'. Videos already
+        deleted individually keep their video_deleted reason. Returns the count."""
+        with self.get_db() as conn:
+            conn.execute("""
+                UPDATE videos
+                SET status             = 'deleted',
+                    deleted_reason     = 'user_banned',
+                    deleted_at         = COALESCE(deleted_at, ?),
+                    deletion_confirmed = 1
+                WHERE channel_id = ? AND status IN ('up', 'undeleted')
+            """, (int(time.time()), channel_id))
+            row = conn.execute("SELECT changes() AS n").fetchone()
+        return row["n"] if row else 0
+
+
+    def restore_banned_videos(self, channel_id: str) -> int:
+        """Re-activate all videos deleted by a ban. Videos deleted before the ban
+        (deleted_reason='video_deleted') are left untouched. Returns the count."""
+        with self.get_db() as conn:
+            conn.execute("""
+                UPDATE videos
+                SET status         = 'undeleted',
+                    deleted_reason = NULL,
+                    undeleted_at   = ?
+                WHERE channel_id = ? AND deleted_reason = 'user_banned'
+            """, (int(time.time()), channel_id))
+            row = conn.execute("SELECT changes() AS n").fetchone()
+        return row["n"] if row else 0
+
+
     def set_channel_starred(self, channel_id: str, starred: bool) -> None:
         with self.get_db() as conn:
             if starred:

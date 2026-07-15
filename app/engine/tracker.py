@@ -13,6 +13,7 @@ import threading
 import time
 from typing import Callable
 
+from engine import ChannelGoneError
 from scheduling import (
     channel_gap_secs, get_check_intervals, get_full_refresh_secs,
     set_channel_last_full, set_channel_next_check,
@@ -155,12 +156,35 @@ def process_single_channel(
         log(f"Processing @{handle}{suffix}")
 
         display_name = channel.get("display_name") or handle
+        was_banned   = channel.get("account_status") == "banned"
 
         try:
             info = adapter.fetch_profile(channel)
+            if was_banned:
+                restored = db.restore_banned_videos(channel_id)
+                db.set_account_status(channel_id, "active")
+                db.set_channel_tracking_enabled(channel_id, True)
+                log(f"  Account restored: ban cleared, {restored} {noun}s re-activated")
             _update_profile(engine, channel, info, log)
             handle       = info.get("handle") or handle
             display_name = info.get("display_name") or display_name
+        except ChannelGoneError as e:
+            if was_banned:
+                log("  No changes (still banned)")
+                banned_at = channel.get("banned_at")
+                if (banned_at
+                        and time.time() - banned_at >= 14 * 86400
+                        and channel.get("tracking_enabled", 1)):
+                    db.set_channel_tracking_enabled(channel_id, False)
+                    log("  Banned for 14+ consecutive days, tracking disabled")
+            else:
+                log(f"  {adapter.creator_noun.capitalize()} banned or removed ({e}), marking as banned")
+                db.set_account_status(channel_id, "banned")
+                n = db.ban_channel_videos(channel_id)
+                if n:
+                    log(f"  {n} {noun}s marked deleted (user_banned)")
+            db.touch_last_checked(channel_id)
+            return "ok"
         except Exception as e:
             log(f"  Profile fetch failed: {e}")
 

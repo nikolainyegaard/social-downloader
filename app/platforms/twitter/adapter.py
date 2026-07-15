@@ -5,13 +5,24 @@ from __future__ import annotations
 import os
 
 from config import MEDIA_DIR
-from engine import ChannelAdapter
+from engine import ChannelAdapter, ChannelGoneError
 from platforms.twitter import api
 from thumbnailer import generate_thumbnail
 
+# Definitive account-gone signals from gallery-dl / the profile lookup.
+# ponytail: profile lookup is by handle, so a rename also matches. The ban
+# clears itself once the row's handle is corrected or the account returns
+_GONE_MARKERS = ("not found", "suspended")
+
 
 def _fetch_profile(channel: dict) -> dict:
-    return api.fetch_profile_info(channel["handle"])
+    try:
+        return api.fetch_profile_info(channel["handle"])
+    except Exception as e:
+        msg = str(e).lower()
+        if any(m in msg for m in _GONE_MARKERS):
+            raise ChannelGoneError(str(e)) from e
+        raise
 
 
 def _download_item(engine, channel_id, handle, display_name, vid_id, post, files, log) -> None:

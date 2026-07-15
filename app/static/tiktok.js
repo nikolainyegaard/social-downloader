@@ -263,7 +263,6 @@ const tt = initChannelApp({
     bio: 'Bio', description: 'Bio', bio_link: 'Bio link', avatar: 'Avatar',
     account_status: 'Account status', privacy_status: 'Privacy',
   },
-  hasBans: true,
   statsRows: s => [
     { label: 'Tracked users', value: (s.channel_count || 0).toLocaleString() },
     { label: 'Saved posts',   value: (s.saved_count   || 0).toLocaleString() },

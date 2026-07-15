@@ -864,6 +864,20 @@ function _attachGridSentinel(gridEl, callback) {
   return obs;
 }
 
+// Horizontal-scroll edge fade: toggles fade-l/fade-r classes on a scrollable
+// row so the clipped edge gets a fade-out mask (see .filter-control-group).
+function _attachEdgeFade(el) {
+  if (!el) return;
+  const update = () => {
+    const max = el.scrollWidth - el.clientWidth;
+    el.classList.toggle('fade-l', max > 1 && el.scrollLeft > 1);
+    el.classList.toggle('fade-r', max > 1 && el.scrollLeft < max - 1);
+  };
+  el.addEventListener('scroll', update, { passive: true });
+  new ResizeObserver(update).observe(el);
+  update();
+}
+
 // ── Toolbar helpers ───────────────────────────────────────────────────────────
 // Shared toolbar expand/collapse body. Returns the new expanded value so
 // the caller can write it back to its own state variable.

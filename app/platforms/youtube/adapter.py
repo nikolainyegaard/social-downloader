@@ -5,8 +5,12 @@ from __future__ import annotations
 import json
 import time
 
-from engine import ChannelAdapter
+from engine import ChannelAdapter, ChannelGoneError
 from platforms.youtube import api
+
+# Definitive account-gone signals from yt-dlp. The loop fetches by stable
+# channel ID, so a rename never matches; only a dead channel does.
+_GONE_MARKERS = ("does not exist", "has been terminated", "http error 404")
 
 
 def _lookup_profile(handle: str) -> dict:
@@ -14,7 +18,13 @@ def _lookup_profile(handle: str) -> dict:
 
 
 def _fetch_profile(channel: dict) -> dict:
-    return api.fetch_channel_info(f"https://www.youtube.com/channel/{channel['channel_id']}")
+    try:
+        return api.fetch_channel_info(f"https://www.youtube.com/channel/{channel['channel_id']}")
+    except Exception as e:
+        msg = str(e).lower()
+        if any(m in msg for m in _GONE_MARKERS):
+            raise ChannelGoneError(str(e)) from e
+        raise
 
 
 def _iter_posts(channel_id: str):

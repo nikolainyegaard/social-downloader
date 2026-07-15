@@ -567,8 +567,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .account-status.active   { background: var(--green-bg); color: var(--green); }
 .account-status.inactive { background: var(--surface2);      color: var(--muted); }
 .account-status.unknown  { background: var(--surface2);      color: var(--muted); }
-.account-status.priority { background: var(--yellow-bg);     color: var(--yellow); }
-.account-status.bookmark { background: var(--accent-bg); color: var(--accent); display: inline-flex; align-items: center; padding: 3px 7px; }
 
 .privacy-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
 .privacy-status.public             { background: var(--green-bg); color: var(--green); }
@@ -1137,8 +1135,31 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* ── Filter control rows ─────────────────────────────────────────────────── */
 
-.filter-control-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.filter-row { display: flex; align-items: center; gap: 4px; }
+/* One line, spread across the full width. When the window narrows the bar
+   scrolls sideways with no visible scrollbar, and _attachEdgeFade toggles
+   the fade-l/fade-r mask classes on the clipped edges. */
+.filter-control-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filter-control-group::-webkit-scrollbar { display: none; }
+.filter-control-group.fade-r {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent);
+}
+.filter-control-group.fade-l {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 48px);
+  mask-image: linear-gradient(90deg, transparent, #000 48px);
+}
+.filter-control-group.fade-l.fade-r {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+}
+.filter-row { display: flex; align-items: center; gap: 4px; flex: none; }
 .filter-row-label { font-size: 11px; letter-spacing: .07em; white-space: nowrap; }
 .sort-controls { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 
@@ -1781,8 +1802,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   }
   .modal,
   .settings-modal,
-  .report-view-modal,
-  .recent-log-modal {
+  .report-view-modal {
     width: 100%;
     max-width: 100%;
     height: 100dvh;
@@ -1790,10 +1810,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
     border-radius: 0;
     border: none;
   }
-
-  /* Filters: stacked rows with aligned label + controls columns */
-  .filter-control-group { display: grid; grid-template-columns: 1fr; gap: 6px; width: 100%; }
-  .filter-row { display: grid; grid-template-columns: 64px max-content; align-items: center; gap: 0 8px; }
 
   /* Creator modal header: compact avatar and name, tighter padding */
   .modal-header { padding: 12px 16px; gap: 12px; }
