@@ -999,6 +999,64 @@ class ChannelDB:
                 "bans": bans, "saved": saved}
 
 
+    def get_activity_feed(self, before: int | None = None, limit: int = 40,
+                          kind: str | None = None) -> dict:
+        """Unified chronological activity feed for the dashboard panel: saved
+        and deletion groups, profile changes, and bans merged newest first.
+        Keyset pagination via `before` (event unix ts). `kind` restricts to one
+        event type (saved, deleted, changed, banned). Each source fetches
+        limit+1 events so has_more stays correct when one source dominates.
+        ponytail: a strict before cursor can drop one of two adjacent events
+        sharing an identical timestamp across a page boundary."""
+        cap    = limit + 1
+        events = []
+        with self.get_db() as conn:
+            _sound = self._sound_id_select(conn)
+            if kind in (None, "saved"):
+                w    = "AND v.download_date < ?" if before else ""
+                args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)
+                rows = [dict(r) for r in conn.execute(f"""
+                    SELECT v.download_date, c.handle, c.channel_id, c.enabled,
+                           c.starred, c.account_status, v.video_id, {_sound} AS sound_id
+                    FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+                    WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL {w}
+                    ORDER BY v.download_date DESC LIMIT ?""", args).fetchall()]
+                for g in self._group_consecutive_by_channel(rows, "download_date")[:cap]:
+                    events.append({"ts": g["download_date"], "kind": "saved", "item": g})
+            if kind in (None, "deleted"):
+                w    = "AND v.deleted_at < ?" if before else ""
+                args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)
+                rows = [dict(r) for r in conn.execute(f"""
+                    SELECT v.video_id, v.deleted_at, c.handle, c.channel_id, c.enabled,
+                           c.starred, c.account_status, {_sound} AS sound_id
+                    FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+                    WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+                      AND (v.deleted_reason IS NULL OR v.deleted_reason != 'user_banned') {w}
+                    ORDER BY v.deleted_at DESC LIMIT ?""", args).fetchall()]
+                for g in self._group_consecutive_by_channel(rows, "deleted_at")[:cap]:
+                    events.append({"ts": g["deleted_at"], "kind": "deleted", "item": g})
+            if kind in (None, "changed"):
+                w    = "AND ph.changed_at < ?" if before else ""
+                args = (before, cap) if before else (cap,)
+                rows = conn.execute(f"""
+                    SELECT ph.field, ph.changed_at, c.handle, c.channel_id, c.starred, c.account_status
+                    FROM profile_history ph JOIN channels c ON c.channel_id = ph.channel_id
+                    WHERE 1=1 {w}
+                    ORDER BY ph.changed_at DESC LIMIT ?""", args).fetchall()
+                events += [{"ts": r["changed_at"], "kind": "changed", "item": dict(r)} for r in rows]
+            if kind in (None, "banned"):
+                w    = "AND banned_at < ?" if before else ""
+                args = (before, cap) if before else (cap,)
+                rows = conn.execute(f"""
+                    SELECT channel_id, handle, banned_at, starred
+                    FROM channels
+                    WHERE account_status = 'banned' AND banned_at IS NOT NULL {w}
+                    ORDER BY banned_at DESC LIMIT ?""", args).fetchall()
+                events += [{"ts": r["banned_at"], "kind": "banned", "item": dict(r)} for r in rows]
+        events.sort(key=lambda e: e["ts"], reverse=True)
+        return {"items": events[:limit], "has_more": len(events) > limit}
+
+
     def get_deletion_history(self, offset: int = 0, limit: int = 50) -> list[dict]:
         with self.get_db() as conn:
             rows = conn.execute(

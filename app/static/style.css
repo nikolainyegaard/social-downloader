@@ -1181,7 +1181,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 .stat-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 8px;
 }
 
@@ -1392,7 +1392,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Stat strip tiles. Scoped to .stat-strip because .stat-item is also the
    class for the plain inline stats on creator cards. */
 .stat-strip .stat-item {
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-radius: var(--radius);
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface2) 35%, var(--surface)), var(--surface));
   border: 1px solid var(--border);
@@ -1408,7 +1408,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 
 .stat-value {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -.02em;
   color: var(--text);
@@ -1420,7 +1420,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   letter-spacing: .06em;
 }
 
-.stat-sub { font-size: 10px; color: var(--muted); }
 
 /* Recent log modal entries. The dashboard panel uses the .rf-* feed rows,
    so these grid rows are rendered only inside the expanded log modal. */

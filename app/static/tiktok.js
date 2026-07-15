@@ -266,8 +266,9 @@ const tt = initChannelApp({
   hasBans: true,
   statsRows: s => [
     { label: 'Tracked users', value: (s.channel_count || 0).toLocaleString() },
-    { label: 'Saved posts',   value: (s.saved_count   || 0).toLocaleString(),
-      sub: `${(s.video_count || 0).toLocaleString()} videos · ${(s.photo_count || 0).toLocaleString()} photos` },
+    { label: 'Saved posts',   value: (s.saved_count   || 0).toLocaleString() },
+    { label: 'Videos',        value: (s.video_count   || 0).toLocaleString() },
+    { label: 'Photos',        value: (s.photo_count   || 0).toLocaleString() },
     { label: 'Deleted',       value: (s.deleted_count || 0).toLocaleString() },
     { label: 'Latest saved',  value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
     { label: 'Storage',       value: _fmtBytes(s.media_size_bytes || 0) },

@@ -148,6 +148,11 @@ _POLLING_ENDPOINTS = (
     '"GET /api/twitter/status HTTP',
     '"GET /api/twitter/queue HTTP',
     '"GET /api/twitter/channels HTTP',
+    # feed polls carry query strings, so no trailing HTTP anchor
+    '"GET /api/tiktok/recent/feed',
+    '"GET /api/youtube/recent/feed',
+    '"GET /api/instagram/recent/feed',
+    '"GET /api/twitter/recent/feed',
 )
 
 class _SuppressPolling(logging.Filter):

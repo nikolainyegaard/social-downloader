@@ -486,8 +486,13 @@ function initChannelApp(cfg) {
   };
   const _RF_LOG_TYPE = { all: 'saved', saved: 'saved', deleted: 'deletions', changed: 'profile-changes', banned: 'bans' };
 
-  let _recentData   = null;
   let _recentFilter = 'all';
+  const _rf = { items: [], hasMore: false, obs: null, loading: false, sig: null };
+
+  function _rfUrl(before) {
+    const kind = _recentFilter === 'all' ? '' : `&kind=${_recentFilter}`;
+    return `${API}/recent/feed?limit=40${kind}${before ? `&before=${before}` : ''}`;
+  }
 
   function _rfRow(ev, now) {
     const it = ev.item;
@@ -509,20 +514,26 @@ function initChannelApp(cfg) {
     </div>`;
   }
 
-  function renderRecent(data) {
+  function _renderFeed() {
     const el = document.getElementById(`${P}RecentFeed`);
     if (!el) return;
+    if (_rf.obs) { _rf.obs.disconnect(); _rf.obs = null; }
     const now = new Date();
-    const events = [
-      ...(data.saved           || []).map(g => ({ ts: g.download_date, kind: 'saved',   item: g })),
-      ...(data.deletions       || []).map(d => ({ ts: d.deleted_at,    kind: 'deleted', item: d })),
-      ...(data.profile_changes || []).map(p => ({ ts: p.changed_at,    kind: 'changed', item: p })),
-      ...(data.bans            || []).map(b => ({ ts: b.banned_at,     kind: 'banned',  item: b })),
-    ].filter(e => e.ts).sort((a, b) => b.ts - a.ts);
-    const shown = _recentFilter === 'all' ? events : events.filter(e => e.kind === _recentFilter);
-    el.innerHTML = shown.length
-      ? shown.map(e => _rfRow(e, now)).join('')
+    el.innerHTML = _rf.items.length
+      ? _rf.items.map(e => _rfRow(e, now)).join('')
       : '<div class="rf-empty">No activity yet</div>';
+    if (_rf.hasMore) _rf.obs = _attachSentinel(el, _loadFeedMore);
+  }
+
+  async function _loadFeedMore() {
+    if (_rf.loading || !_rf.items.length) return;
+    _rf.loading = true;
+    const { ok, data } = await apiJSON(_rfUrl(_rf.items[_rf.items.length - 1].ts));
+    _rf.loading = false;
+    if (!ok) return;
+    _rf.items.push(...data.items);
+    _rf.hasMore = data.has_more;
+    _renderFeed();
   }
 
   X('SetRecentFilter', f => {
@@ -530,25 +541,27 @@ function initChannelApp(cfg) {
     ['all', 'saved', 'deleted', 'changed', 'banned'].forEach(k => {
       document.getElementById(`${P}Rf_${k}`)?.classList.toggle('active', k === f);
     });
-    if (_recentData) renderRecent(_recentData);
+    _rf.sig = null;
+    loadRecent();
   });
 
   X('OpenRecentLogCurrent', () => window[`${P}OpenRecentLog`](_RF_LOG_TYPE[_recentFilter]));
 
-  let _lastRecentJson = null;
+  // The 30 s poll refreshes page one of the feed. Pages the user scrolled in
+  // are reset only when page one actually changed, so idle polls never yank
+  // the scroll position. Older pages load through the scroll sentinel.
   const loadRecent = X('LoadRecent', async () => {
-    const { ok, data } = await apiJSON(`${API}/recent`);
+    const { ok, data } = await apiJSON(_rfUrl());
     if (!ok) return;
-    _recentData = data;
-    renderRecent(data);
-    // Warm the recent-log modal cache so the expanded lists open instantly;
-    // refresh only when the panel data actually changed
-    const j = JSON.stringify(data);
-    if (j !== _lastRecentJson) {
-      _lastRecentJson = j;
-      _prefetchRecentLog(`${API}/recent`,
-        ['saved', 'deletions', 'profile-changes', ...(cfg.hasBans ? ['bans'] : [])]);
-    }
+    const sig = JSON.stringify(data.items);
+    if (sig === _rf.sig) return;
+    _rf.sig     = sig;
+    _rf.items   = data.items;
+    _rf.hasMore = data.has_more;
+    _renderFeed();
+    // Warm the recent-log modal cache so the expanded lists open instantly
+    _prefetchRecentLog(`${API}/recent`,
+      ['saved', 'deletions', 'profile-changes', ...(cfg.hasBans ? ['bans'] : [])]);
   });
 
   // ── Loop status ───────────────────────────────────────────────────────────

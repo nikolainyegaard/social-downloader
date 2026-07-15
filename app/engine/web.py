@@ -587,6 +587,13 @@ def create_channel_blueprint(engine) -> Blueprint:
     def get_recent():
         return jsonify(db.get_recent_activity())
 
+    @bp.route("/recent/feed", methods=["GET"])
+    def get_recent_feed():
+        before = request.args.get("before", type=int)
+        limit  = min(request.args.get("limit", 40, type=int) or 40, 100)
+        kind   = request.args.get("kind") or None
+        return jsonify(db.get_activity_feed(before=before, limit=limit, kind=kind))
+
     @bp.route("/recent/deletions", methods=["GET"])
     def get_recent_deletions():
         offset = int(request.args.get("offset", 0))
