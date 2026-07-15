@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
       libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
       libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
-      fonts-liberation xvfb \
+      fonts-liberation xvfb xauth \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -46,4 +46,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 EXPOSE 5000
 
-CMD ["python", "app/main.py"]
+# xvfb-run gives the app a virtual X display so the TikTok browser can run
+# headed (a realistic 1920x1080 screen), dropping the headless fingerprint
+# class entirely. The app falls back to headless when DISPLAY is absent.
+CMD ["xvfb-run", "-a", "-s", "-screen 0 1920x1080x24", "python", "app/main.py"]

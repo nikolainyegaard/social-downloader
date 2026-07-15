@@ -49,16 +49,25 @@ def _profile_context_factory():
         os.makedirs(profile, exist_ok=True)
         context = await playwright.chromium.launch_persistent_context(
             profile,
-            # Mirror TikTokApi's own headless handling: Chrome's new headless
-            # mode via arg, with the Playwright flag off
+            # Headed on a display, otherwise Chrome's new headless mode via
+            # arg with the Playwright flag off (TikTokApi's own handling)
             headless=False,
-            args=["--headless=new"],
+            args=[] if _headed() else ["--headless=new"],
             executable_path=CHROME_EXECUTABLE,
         )
         context.on("close", lambda _ctx: release())
         return context
 
     return factory, release
+
+
+def _headed() -> bool:
+    """Run the browser headed when an X display exists (in Docker that is the
+    Xvfb the container starts under). Headed Chrome drops the entire headless
+    fingerprint class."""
+    # ponytail: DISPLAY presence is the whole check. Local dev on a Linux
+    # desktop gets visible Chrome windows, add an env opt-out if that annoys
+    return bool(os.environ.get("DISPLAY"))
 
 
 def _patchright_active() -> bool:
@@ -100,6 +109,7 @@ async def create_tiktok_session(api, ms_token: str | None = None,
         kwargs["browser_context_factory"] = factory
     else:
         kwargs["executable_path"] = CHROME_EXECUTABLE
+        kwargs["headless"] = not _headed()
     if _patchright_active():
         kwargs["page_factory"] = _plain_page
     kwargs.update(overrides)

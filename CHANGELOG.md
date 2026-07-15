@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Changed
+- The TikTok browser now runs headed on a virtual display inside the container instead of headless. Headless Chrome carries a whole class of detectable markers no matter how new the headless mode is, and a real windowed Chrome on a standard 1920x1080 screen drops them all
 - The TikTok browser is now driven by patchright, a Playwright fork that closes the DevTools protocol leaks TikTok's bot detection probes for. TikTokApi's built-in stealth scripts are skipped when it is active, since those JS patches are themselves detectable and patchright covers the real leak at the protocol layer
 - TikTok browser sessions now run on one persistent Chrome profile stored under the data folder, so TikTok sees the same device across restarts instead of a brand-new device carrying your account cookie on every browser launch (the classic stolen-session pattern its bot detection scores hardest). If two sessions overlap, the extra one falls back to the old throwaway browser instead of failing. Requires TikTokApi 7.3 or newer, now pinned
 - The settings modal has one global platform selector at the top instead of a selector inside each section, so the chosen platform follows you between Accounts, Schedules, Jobs, Diagnostics, and Database. The gear button now opens settings for the app you are currently on
