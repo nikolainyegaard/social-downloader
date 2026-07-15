@@ -33,3 +33,7 @@ services:
     # Then remove the `ports` block below and use `expose` instead.
     ports:
       - "127.0.0.1:5000:5000"
+      # noVNC viewer for the TikTok browser display (solve captchas live).
+      # No auth of its own: keep it on localhost and reach it via an SSH
+      # tunnel, or put it behind Caddy with authentication.
+      - "127.0.0.1:6080:6080"

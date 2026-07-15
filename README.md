@@ -99,6 +99,18 @@ If the old docker-compose used `LOOP_INTERVAL_MINUTES`, the app still accepts it
 
 TikTok signs in with a QR code in **Settings > Accounts > TikTok**: generate a code, scan it with the TikTok app on your phone, and the session is created inside the app's own browser with the matching cookies file saved automatically. No password is ever entered or stored. The session is born with the browser fingerprint that uses it, which is what makes it resistant to bot detection. A cookies file exported from your desktop browser carries the wrong fingerprint, so the old upload flow was removed. The Reset session button signs out and discards the browser identity entirely. Use it before signing in again if TikTok has flagged the current one.
 
+### Watching the TikTok browser (captchas)
+
+The container serves its virtual display over noVNC on port 6080. Open it in a browser to watch the TikTok browser live and interact with it using your own mouse, which is how you solve a rotate captcha or verification wall if TikTok serves one: trigger a run (or start a QR login), watch the session, and complete the challenge when it appears. The display is black while no session is running, since the browser only exists during checks, lookups, and logins.
+
+The viewer has no authentication of its own, so it is bound to `127.0.0.1:6080` in docker-compose.yml. Reach it with an SSH tunnel:
+
+```
+ssh -L 6080:localhost:6080 your-server
+```
+
+Then open [http://localhost:6080/vnc.html](http://localhost:6080/vnc.html). Alternatively put it behind your reverse proxy with authentication (in Caddy: a `basic_auth` block in front of `reverse_proxy localhost:6080`). Do not publish the port unprotected: anyone who reaches it controls the signed-in TikTok browser.
+
 X/Twitter requires a `cookies.txt` from a logged-in x.com session (must include `auth_token` and `ct0`), uploaded from the **Settings > Twitter** cookies panel. Profile lookups work without it, but timelines and downloads do not.
 
 Instagram uses a username/password login from the **Settings > Instagram** panel instead of a cookies file; only the resulting session cookie is stored, never the password.
