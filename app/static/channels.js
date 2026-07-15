@@ -67,10 +67,10 @@ function initChannelApp(cfg) {
         <button class="filter-pill"        id="${P}Rf_changed" onclick="${P}SetRecentFilter('changed')">Changes</button>
         ${cfg.hasBans ? `<button class="filter-pill" id="${P}Rf_banned" onclick="${P}SetRecentFilter('banned')">Bans</button>` : ''}
       </div>
-      <div class="filter-pills multi hdr-pills" style="margin-left:0">
-        <button class="filter-pill" id="${P}RfStar" onclick="${P}ToggleRfStar()" title="Only starred ${CREATORS}">★</button>
-        <button class="filter-pill" id="${P}RfBook" onclick="${P}ToggleRfBook()" title="Only bookmarked ${CREATORS}">${_bookmarkIcon}</button>
-      </div>
+      <span style="display:flex;gap:4px">
+        <button class="btn-star" id="${P}RfStar" onclick="${P}ToggleRfStar()" title="Only starred ${CREATORS}">☆</button>
+        <button class="btn-bookmark" id="${P}RfBook" onclick="${P}ToggleRfBook()" title="Only bookmarked ${CREATORS}">${_bmOutline}</button>
+      </span>
     </div>
     <div class="recent-feed" id="${P}RecentFeed"><div class="rf-empty">Loading…</div></div>
   </div>
@@ -492,15 +492,19 @@ function initChannelApp(cfg) {
     _applyFeedFilter();
   });
 
+  // The flag toggles mirror the star and bookmark buttons on cards: same
+  // classes, same filled/outline state swap
   X('ToggleRfStar', () => {
     _rfStar = !_rfStar;
-    document.getElementById(`${P}RfStar`)?.classList.toggle('active', _rfStar);
+    const b = document.getElementById(`${P}RfStar`);
+    if (b) { b.classList.toggle('starred', _rfStar); b.textContent = _rfStar ? '★' : '☆'; }
     _applyFeedFilter();
   });
 
   X('ToggleRfBook', () => {
     _rfBook = !_rfBook;
-    document.getElementById(`${P}RfBook`)?.classList.toggle('active', _rfBook);
+    const b = document.getElementById(`${P}RfBook`);
+    if (b) { b.classList.toggle('bookmarked', _rfBook); b.innerHTML = _rfBook ? _bmFilled : _bmOutline; }
     _applyFeedFilter();
   });
 
