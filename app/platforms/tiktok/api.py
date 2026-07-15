@@ -112,19 +112,36 @@ async def _plain_page(context):
     untouched page is the cleaner profile when it is active.
     """
     page = await context.new_page()
+
+    # TikTokApi signs every request by evaluating window.byted_acrawler in the
+    # page's main world. Patchright's evaluate defaults to an isolated context
+    # where page globals do not exist (that is its Runtime.enable fix), so
+    # this page's evaluate is rebound to the main world. Everything else keeps
+    # the isolated default.
+    orig_evaluate = page.evaluate
+
+    async def _evaluate_main_world(expression, arg=None):
+        return await orig_evaluate(expression, arg, isolated_context=False)
+
+    page.evaluate = _evaluate_main_world
+
     await page.goto("https://www.tiktok.com")
-    # TikTok's own page scripts inject the request signer TikTokApi evaluates
-    # (window.byted_acrawler.frontierSign). When it never appears the page is
-    # a verification or consent wall, and every request in this session would
-    # die on a cryptic frontierSign evaluate error. One clear line instead.
-    try:
-        await page.wait_for_function(
-            "() => window.byted_acrawler && window.byted_acrawler.frontierSign",
-            timeout=10000,
-        )
-    except Exception:
-        print(f"TikTok page loaded without the request signer, likely a"
-              f" verification or consent wall (url: {page.url})")
+
+    # TikTok's own page scripts inject the request signer. When it never
+    # appears the page is a verification or consent wall, and every request in
+    # this session would die on a cryptic frontierSign evaluate error. One
+    # clear line instead.
+    for _ in range(20):
+        try:
+            if await page.evaluate(
+                "() => !!(window.byted_acrawler && window.byted_acrawler.frontierSign)"
+            ):
+                return page
+        except Exception:
+            pass
+        await asyncio.sleep(0.5)
+    print(f"TikTok page loaded without the request signer, likely a"
+          f" verification or consent wall (url: {page.url})")
     return page
 
 
