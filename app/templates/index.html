@@ -14,7 +14,7 @@
 
   <!-- Header -->
   <header>
-    <h1>Social Downloader <span style="font-size:12px;font-weight:400;color:var(--muted);letter-spacing:0">v{{ version }}</span></h1>
+    <h1>Social Downloader <span class="version-tag">v{{ version }}</span></h1>
     <span class="status-badge" id="statusBadge">
       <span class="dot"></span>
       <span id="statusText">Idle</span>
@@ -28,7 +28,7 @@
       </span>
       {% if oauth_user %}
       <span style="font-size:12px;color:var(--muted);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis" title="{{ oauth_user.email }}">{{ oauth_user.name or oauth_user.email }}</span>
-      <a href="/logout" style="font-size:12px;padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text-dim);text-decoration:none;white-space:nowrap;cursor:pointer">Log out</a>
+      <a href="/logout" class="hdr-link">Log out</a>
       {% endif %}
       <button class="btn-gear" onclick="openSettings('cookies')" title="Settings"><svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/><path d="M27.758,10.366l-1-1.732c-0.552-0.957-1.775-1.284-2.732-0.732L23.5,8.206C21.5,9.36,19,7.917,19,5.608V5c0-1.105-0.895-2-2-2h-2c-1.105,0-2,0.895-2,2v0.608c0,2.309-2.5,3.753-4.5,2.598L7.974,7.902C7.017,7.35,5.794,7.677,5.242,8.634l-1,1.732c-0.552,0.957-0.225,2.18,0.732,2.732L5.5,13.402c2,1.155,2,4.041,0,5.196l-0.526,0.304c-0.957,0.552-1.284,1.775-0.732,2.732l1,1.732c0.552,0.957,1.775,1.284,2.732,0.732L8.5,23.794c2-1.155,4.5,0.289,4.5,2.598V27c0,1.105,0.895,2,2,2h2c1.105,0,2-0.895,2-2v-0.608c0-2.309,2.5-3.753,4.5-2.598l0.526,0.304c0.957,0.552,2.18,0.225,2.732-0.732l1-1.732c0.552-0.957,0.225-2.18-0.732-2.732L26.5,18.598c-2-1.155-2-4.041,0-5.196l0.526-0.304C27.983,12.546,28.311,11.323,27.758,10.366z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/></svg></button>
     </div>
@@ -105,44 +105,44 @@
           Cookies are stored server-side. Uploading once applies everywhere.
         </div>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
+        <hr class="hr-divider">
 
         <div class="settings-section-title">Loop Schedule</div>
-        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+        <p class="settings-note">
           Changes take effect at the next scheduled run.
         </p>
 
-        <div class="settings-section-title" style="font-size:11px;color:var(--muted);margin-bottom:8px">User Loop</div>
-        <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+        <div class="settings-subtitle">User Loop</div>
+        <div class="settings-group">
+          <label class="settings-label">
             <span>Sessions per day</span>
             <div class="loop-interval-field">
               <input type="number" id="settingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
               <span></span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Starred check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="settingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Active user check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="settingsActiveHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Inactive user check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="settingsInactiveHours" min="1" max="720" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Full refresh cycle</span>
             <div class="loop-interval-field">
               <input type="number" id="settingsStatsRefreshDays" min="1" max="30" class="loop-interval-input">
@@ -151,9 +151,9 @@
           </label>
         </div>
 
-        <div class="settings-section-title" style="font-size:11px;color:var(--muted);margin-bottom:8px">Sound Loop</div>
-        <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+        <div class="settings-subtitle">Sound Loop</div>
+        <div class="settings-group">
+          <label class="settings-label">
             <span>Sound loop interval</span>
             <div class="loop-interval-field">
               <input type="number" id="soundLoopIntervalInput" min="1" max="9999" class="loop-interval-input">
@@ -163,13 +163,13 @@
         </div>
 
         <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-          <button class="btn-primary" onclick="saveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
+          <button class="btn-primary btn-sm" onclick="saveLoopSettings()">Save</button>
         </div>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
+        <hr class="hr-divider">
 
         <div class="settings-section-title">Stats Backfill</div>
-        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+        <p class="settings-note">
           Fetches view counts, likes, and other metadata for downloaded videos that are missing stats.
         </p>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
@@ -183,7 +183,7 @@
         </div>
         <div id="failedList" style="display:none;font-size:11px;color:var(--muted);line-height:1.7"></div>
         <div style="margin-top:14px">
-          <div class="settings-section-title" style="font-size:12px;margin-bottom:8px;">Re-backfill all videos</div>
+          <div class="settings-subtitle">Re-backfill all videos</div>
           <p style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
             Marks every video as needing a stats backfill. Use this after adding new tracked columns; the next Run Backfill will re-fetch all videos.
           </p>
@@ -193,7 +193,7 @@
           </div>
         </div>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
+        <hr class="hr-divider">
 
         <div class="settings-section-title">Utilities</div>
 
@@ -253,14 +253,14 @@
           </div>
         </div>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
+        <hr class="hr-divider">
 
         <div class="settings-section-title">Migration</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
           Upgrades from tiktok-downloader stored video files under <code>videos/</code> but the new layout uses <code>media/</code>.
           This tool rewrites the stored file paths in the TikTok database to match your current folder layout.
         </p>
-        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+        <p class="settings-note">
           Before running: stop the container, rename <code>videos/</code> to <code>media/</code> on the host, update your docker-compose.yml volumes, then restart and open this panel.
         </p>
         <div id="migrate-preview" style="margin-bottom:16px;font-size:13px;"></div>
@@ -275,7 +275,7 @@
           </label>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <button class="btn-primary" onclick="loadMigratePreview()" style="font-size:12px;padding:5px 14px">Scan database</button>
+          <button class="btn-primary btn-sm" onclick="loadMigratePreview()">Scan database</button>
           <button class="btn-danger" id="migrateRunBtn" onclick="runMigration()" style="display:none;font-size:12px;padding:5px 14px">Rewrite paths</button>
           <span id="migrateStatus" style="font-size:12px;color:var(--muted)"></span>
         </div>
@@ -285,41 +285,41 @@
       <!-- YouTube section -->
       <div id="ssec-youtube" style="display:none">
         <div class="settings-section-title">Loop Schedule</div>
-        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+        <p class="settings-note">
           Check sessions are spread randomly across each 24 hour window. Each session
           processes only the channels whose check interval has come due.
           Changes take effect at the next scheduled session.
         </p>
-        <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+        <div class="settings-group">
+          <label class="settings-label">
             <span>Sessions per day</span>
             <div class="loop-interval-field">
               <input type="number" id="ytSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
               <span></span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Starred check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="ytSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Active check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="ytSettingsActiveHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Inactive check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="ytSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
+          <label class="settings-label" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
             <span>Full check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="ytSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
@@ -328,7 +328,7 @@
           </label>
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
-          <button class="btn-primary" onclick="ytSaveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
+          <button class="btn-primary btn-sm" onclick="ytSaveLoopSettings()">Save</button>
         </div>
       </div>
 
@@ -348,7 +348,7 @@
             <input type="password" id="igLoginPass" class="text-input" placeholder="Password">
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
-            <button class="btn-primary" id="igLoginBtn" onclick="igSessionLogin()" style="font-size:12px;padding:5px 14px">Log in</button>
+            <button class="btn-primary btn-sm" id="igLoginBtn" onclick="igSessionLogin()">Log in</button>
             <span id="igLoginStatus" style="font-size:12px;color:var(--muted)"></span>
           </div>
           <p class="cookie-note" style="margin-top:12px">
@@ -356,44 +356,44 @@
           </p>
         </div>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
+        <hr class="hr-divider">
 
         <div class="settings-section-title">Loop Schedule</div>
-        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+        <p class="settings-note">
           Check sessions are spread randomly across each 24 hour window. Each session
           processes only the profiles whose check interval has come due.
           Changes take effect at the next scheduled session.
         </p>
-        <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+        <div class="settings-group">
+          <label class="settings-label">
             <span>Sessions per day</span>
             <div class="loop-interval-field">
               <input type="number" id="igSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
               <span></span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Starred check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="igSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Active check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="igSettingsActiveHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Inactive check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="igSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
+          <label class="settings-label" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
             <span>Full check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="igSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
@@ -402,7 +402,7 @@
           </label>
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
-          <button class="btn-primary" onclick="igSaveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
+          <button class="btn-primary btn-sm" onclick="igSaveLoopSettings()">Save</button>
         </div>
       </div>
 
@@ -447,44 +447,44 @@
           must have "Display media that may contain sensitive content" enabled in its settings.
         </div>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
+        <hr class="hr-divider">
 
         <div class="settings-section-title">Loop Schedule</div>
-        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+        <p class="settings-note">
           Check sessions are spread randomly across each 24 hour window. Each session
           processes only the accounts whose check interval has come due.
           Changes take effect at the next scheduled session.
         </p>
-        <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin-bottom:16px">
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+        <div class="settings-group">
+          <label class="settings-label">
             <span>Sessions per day</span>
             <div class="loop-interval-field">
               <input type="number" id="twSettingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
               <span></span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Starred check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="twSettingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Active check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="twSettingsActiveHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Inactive check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="twSettingsInactiveHours" min="1" max="168" class="loop-interval-input">
               <span>h</span>
             </div>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
+          <label class="settings-label" title="Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff">
             <span>Full check interval</span>
             <div class="loop-interval-field">
               <input type="number" id="twSettingsFullRefreshDays" min="1" max="90" class="loop-interval-input">
@@ -493,7 +493,7 @@
           </label>
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
-          <button class="btn-primary" onclick="twSaveLoopSettings()" style="font-size:12px;padding:5px 14px">Save</button>
+          <button class="btn-primary btn-sm" onclick="twSaveLoopSettings()">Save</button>
         </div>
       </div>
 
@@ -665,10 +665,7 @@
 
           <div id="diagOutputWrap" style="position:relative">
             <pre id="diagOutput" class="diag-output">No output yet.</pre>
-            <button onclick="diagCopy()" title="Copy output" style="
-              position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
-              border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
-            ">Copy</button>
+            <button onclick="diagCopy()" title="Copy output" class="diag-copy-btn">Copy</button>
           </div>
           <div id="diagResolveHint" style="display:none;margin-top:8px;font-size:12px;color:var(--muted)"></div>
         </div>
@@ -692,10 +689,7 @@
           </div>
           <div id="igDiagOutputWrap" style="position:relative">
             <pre id="igDiagOutput" class="diag-output">No output yet.</pre>
-            <button onclick="igDiagCopy()" title="Copy output" style="
-              position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
-              border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
-            ">Copy</button>
+            <button onclick="igDiagCopy()" title="Copy output" class="diag-copy-btn">Copy</button>
           </div>
         </div>
 
@@ -718,10 +712,7 @@
           </div>
           <div id="twDiagOutputWrap" style="position:relative">
             <pre id="twDiagOutput" class="diag-output">No output yet.</pre>
-            <button onclick="twDiagCopy()" title="Copy output" style="
-              position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
-              border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
-            ">Copy</button>
+            <button onclick="twDiagCopy()" title="Copy output" class="diag-copy-btn">Copy</button>
           </div>
         </div>
 
@@ -738,10 +729,7 @@
           </div>
           <div style="position:relative">
             <pre id="ytDiagOutput" class="diag-output">No output yet.</pre>
-            <button onclick="ytDiagCopy()" title="Copy output" style="
-              position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
-              border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
-            ">Copy</button>
+            <button onclick="ytDiagCopy()" title="Copy output" class="diag-copy-btn">Copy</button>
           </div>
         </div>
 
@@ -789,7 +777,7 @@
             </div>
             <span id="authSecretStatus" style="font-size:11px;color:var(--muted)"></span>
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px">
+          <label class="settings-label">
             <span>Session lifetime</span>
             <div class="loop-interval-field">
               <input type="number" id="authSessionDays" min="1" max="365" class="loop-interval-input" value="7">
@@ -799,13 +787,13 @@
         </div>
 
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:24px">
-          <button class="btn-primary" onclick="saveAuthSettings()" style="font-size:12px;padding:5px 14px">Save</button>
+          <button class="btn-primary btn-sm" onclick="saveAuthSettings()">Save</button>
           <span id="authSaveStatus" style="font-size:12px;color:var(--muted)"></span>
         </div>
 
         <hr style="border:none;border-top:1px solid var(--border);margin-bottom:16px">
 
-        <div class="settings-section-title" style="font-size:12px;color:var(--muted);margin-bottom:6px">Locked out?</div>
+        <div class="settings-subtitle">Locked out?</div>
         <p style="font-size:12px;color:var(--text-dim);line-height:1.6;margin:0">
           If the OIDC provider is unreachable and you cannot log in, add
           <code>OAUTH_FORCE_DISABLE: "true"</code> to your docker-compose.yml environment
