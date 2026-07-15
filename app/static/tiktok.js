@@ -6,8 +6,18 @@
 // ── Cookie management ─────────────────────────────────────────────────────────
 // The static settings markup references these by name (see index.html).
 
-async function deleteCookies()      { return _cookiesDelete('tiktok', 'cookie'); }
 async function loadCookies()        { return _cookiesLoad('tiktok', 'cookie'); }
+
+// Full sign-out: deletes the persistent browser identity and cookies.txt, so
+// the next QR sign-in starts as a brand-new device. Also the recovery move
+// when the identity is deeply flagged.
+async function ttResetSession() {
+  if (!confirm('Reset the TikTok session? This signs out, deletes the browser identity, and requires a new QR sign-in.')) return;
+  const { ok, data } = await apiJSON('/api/tiktok/login/session', { method: 'DELETE' });
+  showToast((data && (data.message || data.error)) || (ok ? 'Session reset' : 'Reset failed'),
+            { type: ok ? 'info' : 'error' });
+  loadCookies();
+}
 
 // ── QR login ──────────────────────────────────────────────────────────────────
 // Signs in inside the persistent browser profile. The backend streams the QR

@@ -78,6 +78,26 @@ def _headed() -> bool:
     return os.path.exists(f"/tmp/.X11-unix/X{num}")
 
 
+def reset_browser_profile() -> tuple[bool, str]:
+    """Full sign-out: delete the persistent browser profile and cookies.txt.
+
+    The next session starts as a brand-new device, so this is also the
+    recovery move when the identity is deeply flagged: reset, then mint a
+    fresh session with the QR login.
+    """
+    import shutil
+    from cookies import delete_cookies
+
+    if not _PROFILE_LOCK.acquire(blocking=False):
+        return False, "The browser is in use, likely by a running loop. Try again when it finishes."
+    try:
+        shutil.rmtree(_profile_dir(), ignore_errors=True)
+        delete_cookies("tiktok")
+        return True, "Session reset. Sign in with a new QR code."
+    finally:
+        _PROFILE_LOCK.release()
+
+
 def _patchright_active() -> bool:
     # main.py aliases sys.modules["playwright"] to patchright at startup when
     # the package is installed
@@ -93,6 +113,18 @@ async def _plain_page(context):
     """
     page = await context.new_page()
     await page.goto("https://www.tiktok.com")
+    # TikTok's own page scripts inject the request signer TikTokApi evaluates
+    # (window.byted_acrawler.frontierSign). When it never appears the page is
+    # a verification or consent wall, and every request in this session would
+    # die on a cryptic frontierSign evaluate error. One clear line instead.
+    try:
+        await page.wait_for_function(
+            "() => window.byted_acrawler && window.byted_acrawler.frontierSign",
+            timeout=10000,
+        )
+    except Exception:
+        print(f"TikTok page loaded without the request signer, likely a"
+              f" verification or consent wall (url: {page.url})")
     return page
 
 

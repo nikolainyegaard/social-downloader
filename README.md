@@ -97,7 +97,7 @@ If the old docker-compose used `LOOP_INTERVAL_MINUTES`, the app still accepts it
 
 ## Cookies
 
-TikTok signs in with a QR code in **Settings > Accounts > TikTok**: generate a code, scan it with the TikTok app on your phone, and the session is created inside the app's own browser with the matching cookies file saved automatically. No password is ever entered or stored. The session is born with the browser fingerprint that uses it, which is what makes it resistant to bot detection. A cookies file exported from your desktop browser carries the wrong fingerprint, so the old upload flow was removed.
+TikTok signs in with a QR code in **Settings > Accounts > TikTok**: generate a code, scan it with the TikTok app on your phone, and the session is created inside the app's own browser with the matching cookies file saved automatically. No password is ever entered or stored. The session is born with the browser fingerprint that uses it, which is what makes it resistant to bot detection. A cookies file exported from your desktop browser carries the wrong fingerprint, so the old upload flow was removed. The Reset session button signs out and discards the browser identity entirely. Use it before signing in again if TikTok has flagged the current one.
 
 X/Twitter requires a `cookies.txt` from a logged-in x.com session (must include `auth_token` and `ct0`), uploaded from the **Settings > Twitter** cookies panel. Profile lookups work without it, but timelines and downloads do not.
 

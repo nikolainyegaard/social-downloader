@@ -84,6 +84,14 @@ def register_tiktok_routes(bp, engine) -> None:
     def tiktok_qr_status():
         return jsonify(qr_login.get_state())
 
+    @bp.route("/login/session", methods=["DELETE"])
+    def tiktok_session_reset():
+        from platforms.tiktok.api import reset_browser_profile
+        ok, msg = reset_browser_profile()
+        if not ok:
+            return jsonify({"error": msg}), 409
+        return jsonify({"ok": True, "message": msg})
+
     # Stats backfill state
     _backfill_lock  = threading.Lock()
     _backfill_state: dict = {"running": False, "done": 0, "total": 0, "errors": 0}
