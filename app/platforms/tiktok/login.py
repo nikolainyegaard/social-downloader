@@ -16,6 +16,11 @@ import time
 QR_URL       = "https://www.tiktok.com/login/qrcode"
 TIMEOUT_SECS = 240
 POLL_SECS    = 2
+# Consecutive polls the QR element must be missing before the whole page is
+# shown instead. The element is legitimately absent on a verification wall or
+# a post-scan confirmation, but also briefly while the page loads, and a
+# flash of the half-loaded page before the code appears looks broken.
+FULL_PAGE_AFTER = 3
 
 _lock  = threading.Lock()
 _state = {"status": "idle", "qr": None, "message": None}
@@ -66,15 +71,27 @@ async def _flow():
                 page = await context.new_page()
                 await page.goto(QR_URL, wait_until="domcontentloaded")
                 deadline = time.time() + TIMEOUT_SECS
+                misses = 0  # consecutive polls without the QR element
                 while time.time() < deadline:
                     if await _logged_in(context):
                         n = _export_cookies(await context.cookies())
                         _set(status="success", qr=None,
                              message=f"Signed in. {n} cookies saved to cookies.txt")
                         return
-                    shot = await _screenshot(page)
-                    if shot:
-                        _set(status="waiting", qr=shot)
+                    shot, cropped = await _screenshot(page, full_page=misses >= FULL_PAGE_AFTER)
+                    if cropped:
+                        misses = 0
+                        _set(status="waiting", qr=shot, message=None)
+                    elif shot:
+                        misses += 1
+                        _set(status="waiting", qr=shot, message=None)
+                    else:
+                        misses += 1
+                        # keep the last frame on a transient miss; only report
+                        # loading while nothing has been shown yet
+                        if get_state()["qr"] is None:
+                            _set(status="waiting", qr=None,
+                                 message="Loading the login page")
                     await asyncio.sleep(POLL_SECS)
                 _set(status="expired", qr=None, message="Login window timed out")
             finally:
@@ -90,11 +107,13 @@ async def _logged_in(context) -> bool:
     return False
 
 
-async def _screenshot(page) -> str | None:
-    """Return the QR element (or the whole login page as fallback) as a data URL.
+async def _screenshot(page, full_page: bool) -> tuple[str | None, bool]:
+    """Return (data URL, cropped) for the QR element, re-captured every poll so
+    refresh prompts and scan confirmations show up in the UI as the page changes.
 
-    Re-captured every poll so refresh prompts and scan confirmations show up in
-    the UI as the page changes.
+    The whole page is captured instead only when full_page is set (the element
+    has been missing for a few polls, so this is a wall or a changed page, not
+    a load in progress).
     """
     # ponytail: selector-based capture of the QR canvas, whole page when TikTok
     # changes markup. The user still sees whatever the login page shows
@@ -103,14 +122,16 @@ async def _screenshot(page) -> str | None:
             loc = page.locator(selector)
             if await loc.count():
                 png = await loc.first.screenshot(timeout=3000)
-                return "data:image/png;base64," + base64.b64encode(png).decode()
+                return "data:image/png;base64," + base64.b64encode(png).decode(), True
         except Exception:
             continue
+    if not full_page:
+        return None, False
     try:
         png = await page.screenshot(timeout=3000)
-        return "data:image/png;base64," + base64.b64encode(png).decode()
+        return "data:image/png;base64," + base64.b64encode(png).decode(), False
     except Exception:
-        return None
+        return None, False
 
 
 def _export_cookies(cookies: list[dict]) -> int:

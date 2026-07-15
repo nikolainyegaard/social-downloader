@@ -49,13 +49,17 @@ function _qrRender(state) {
   const status = document.getElementById('ttQrStatus');
   const labels = {
     starting: 'Opening the browser…',
-    waiting:  'Scan the code with the TikTok app on your phone',
+    waiting:  state.qr ? 'Scan the code with the TikTok app on your phone'
+                       : (state.message || 'Loading the login page') + '…',
     success:  state.message || 'Signed in',
     expired:  state.message || 'Login window timed out. Generate a new code to retry',
     error:    state.message || 'QR login failed',
   };
+  const loading = state.status === 'starting' || (state.status === 'waiting' && !state.qr);
   status.style.display = '';
-  status.textContent   = labels[state.status] || '';
+  status.classList.toggle('loading', loading);
+  if (loading) status.innerHTML = '<span class="spinner"></span>' + esc(labels[state.status]);
+  else status.textContent = labels[state.status] || '';
   status.style.color   = state.status === 'success' ? 'var(--green)'
                        : (state.status === 'error' || state.status === 'expired') ? 'var(--red)' : '';
   img.style.display = state.qr ? '' : 'none';

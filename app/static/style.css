@@ -1922,6 +1922,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   margin-bottom: 16px;
 }
 
+/* A note with a leading inline spinner (QR login loading state) */
+.settings-note.loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .settings-group {
   display: flex;
   flex-direction: column;
