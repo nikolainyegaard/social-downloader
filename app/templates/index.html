@@ -30,7 +30,7 @@
       <span style="font-size:12px;color:var(--muted);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis" title="{{ oauth_user.email }}">{{ oauth_user.name or oauth_user.email }}</span>
       <a href="/logout" class="hdr-link">Log out</a>
       {% endif %}
-      <button class="btn-gear" onclick="openSettings('cookies')" title="Settings"><svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/><path d="M27.758,10.366l-1-1.732c-0.552-0.957-1.775-1.284-2.732-0.732L23.5,8.206C21.5,9.36,19,7.917,19,5.608V5c0-1.105-0.895-2-2-2h-2c-1.105,0-2,0.895-2,2v0.608c0,2.309-2.5,3.753-4.5,2.598L7.974,7.902C7.017,7.35,5.794,7.677,5.242,8.634l-1,1.732c-0.552,0.957-0.225,2.18,0.732,2.732L5.5,13.402c2,1.155,2,4.041,0,5.196l-0.526,0.304c-0.957,0.552-1.284,1.775-0.732,2.732l1,1.732c0.552,0.957,1.775,1.284,2.732,0.732L8.5,23.794c2-1.155,4.5,0.289,4.5,2.598V27c0,1.105,0.895,2,2,2h2c1.105,0,2-0.895,2-2v-0.608c0-2.309,2.5-3.753,4.5-2.598l0.526,0.304c0.957,0.552,2.18,0.225,2.732-0.732l1-1.732c0.552-0.957,0.225-2.18-0.732-2.732L26.5,18.598c-2-1.155-2-4.041,0-5.196l0.526-0.304C27.983,12.546,28.311,11.323,27.758,10.366z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/></svg></button>
+      <button class="btn-gear" onclick="openSettings(_activePlatform)" title="Settings"><svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/><path d="M27.758,10.366l-1-1.732c-0.552-0.957-1.775-1.284-2.732-0.732L23.5,8.206C21.5,9.36,19,7.917,19,5.608V5c0-1.105-0.895-2-2-2h-2c-1.105,0-2,0.895-2,2v0.608c0,2.309-2.5,3.753-4.5,2.598L7.974,7.902C7.017,7.35,5.794,7.677,5.242,8.634l-1,1.732c-0.552,0.957-0.225,2.18,0.732,2.732L5.5,13.402c2,1.155,2,4.041,0,5.196l-0.526,0.304c-0.957,0.552-1.284,1.775-0.732,2.732l1,1.732c0.552,0.957,1.775,1.284,2.732,0.732L8.5,23.794c2-1.155,4.5,0.289,4.5,2.598V27c0,1.105,0.895,2,2,2h2c1.105,0,2-0.895,2-2v-0.608c0-2.309,2.5-3.753,4.5-2.598l0.526,0.304c0.957,0.552,2.18,0.225,2.732-0.732l1-1.732c0.552-0.957,0.225-2.18-0.732-2.732L26.5,18.598c-2-1.155-2-4.041,0-5.196l0.526-0.304C27.983,12.546,28.311,11.323,27.758,10.366z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/></svg></button>
     </div>
   </header>
 
@@ -64,12 +64,12 @@
       <div class="settings-nav-item" id="snav-access"   onclick="switchSettingsSection('access')">Access</div>
     </nav>
     <div class="settings-content">
+      <div id="settingsPlatformTabs" class="settings-sub-tabs"></div>
 
       <!-- Accounts: per-platform authentication -->
       <div id="ssec-accounts">
         <div class="settings-section-title">Accounts</div>
         <p class="settings-note">Authentication each platform uses when fetching content.</p>
-        <div id="accounts-tabs" class="settings-sub-tabs"></div>
 
         <div id="accounts-tiktok">
           <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
@@ -188,7 +188,6 @@
           processes only the creators whose check interval has come due.
           Changes take effect at the next scheduled session.
         </p>
-        <div id="schedules-tabs" class="settings-sub-tabs"></div>
 
         <div id="schedules-tiktok">
           <div class="settings-subtitle">User Loop</div>
@@ -377,7 +376,6 @@
       <!-- Jobs: per-platform maintenance -->
       <div id="ssec-jobs" style="display:none">
         <div class="settings-section-title">Jobs</div>
-        <div id="jobs-tabs" class="settings-sub-tabs"></div>
 
         <div id="jobs-tiktok">
           <div class="job-card">
@@ -629,7 +627,6 @@
       <!-- Diagnostics section -->
       <div id="ssec-diag" style="display:none">
         <div class="settings-section-title">Diagnostics</div>
-        <div id="diag-tabs" class="settings-sub-tabs"></div>
 
         <div id="diag-tiktok">
           <div class="settings-section-title">API Diagnostics</div>
@@ -798,7 +795,6 @@
       <!-- Database section -->
       <div id="ssec-database" style="display:none">
         <div class="settings-section-title">Database Query</div>
-        <div id="database-tabs" class="settings-sub-tabs"></div>
         <div id="database-tiktok"></div>
         <div id="database-youtube"></div>
         <div id="database-instagram"></div>
@@ -846,14 +842,6 @@
       <span class="report-view-hdr-sub" id="reportViewSub"></span>
     </div>
     <pre class="report-view-body" id="reportViewBody">Loading...</pre>
-  </div>
-</div>
-
-<div id="recentLogBackdrop" class="modal-backdrop" style="display:none;z-index:190" onclick="if(event.target===this)closeRecentLog()">
-  <div class="modal-base recent-log-modal">
-    <button class="modal-close" onclick="closeRecentLog()"></button>
-    <div class="recent-log-modal-hdr" id="recentLogTitle"></div>
-    <div class="recent-log-modal-body" id="recentLogBody"></div>
   </div>
 </div>
 

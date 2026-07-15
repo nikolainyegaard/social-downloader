@@ -811,9 +811,10 @@ function openSettings(section) {
   const _OLD_TO_NEW = { cookies: 'accounts', loops: 'schedules', backfill: 'jobs', utils: 'jobs', migrate: 'jobs', auth: 'access' };
   const target = _OLD_TO_NEW[section] || section || _settingsSection;
   if (PLATFORMS.some(p => p.id === target)) {
-    // A platform id (header auth pill) opens that platform's Accounts tab
+    // A platform id (gear button, header auth pill) selects that platform
+    // globally and lands on its Accounts section
+    switchSettingsPlatform(target);
     switchSettingsSection('accounts');
-    switchSettingsPlatformTab('accounts', target);
   } else {
     switchSettingsSection(target);
   }
@@ -844,6 +845,9 @@ function switchSettingsSection(name) {
     document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
   });
   document.querySelector('.settings-content').classList.toggle('diag-fill', name === 'diag');
+  // The global platform selector applies to every section except Access
+  const ptabs = document.getElementById('settingsPlatformTabs');
+  if (ptabs) ptabs.style.display = name === 'access' ? 'none' : '';
   if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); }
   if (name === 'schedules') { loadSettings(); loadYtSettings(); _scheduleSettingsLoad('twitter', 'twSettings'); _scheduleSettingsLoad('instagram', 'igSettings'); }
   if (name === 'access')    { loadAuthSettings(); }
@@ -1384,8 +1388,8 @@ setInterval(loadCookies, 30000);
 setInterval(loadSounds,  60000);
 _initAllGliders();
 
-// Settings platform tabs
-['accounts', 'schedules', 'jobs', 'diag', 'database'].forEach(s => initSettingsPlatformTabs(s));
+// Global settings platform selector
+initSettingsPlatformTabs();
 PLATFORMS.forEach(p => initDbQueryPane(p.id));
 
 // Resume backfill poll if it was running before page load

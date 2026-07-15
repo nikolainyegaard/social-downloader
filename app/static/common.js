@@ -47,30 +47,32 @@ function switchPlatform(name) {
   if (typeof _initAllGliders === 'function') _initAllGliders();
 }
 
-// ── Settings platform tabs ────────────────────────────────────────────────────
-// Call initSettingsPlatformTabs(sectionId) once for any settings section that
-// has per-platform panes. It renders the tab buttons from PLATFORMS and wires
-// up switching. Panes must be <div id="{sectionId}-{platformId}">.
+// ── Settings platform selector ───────────────────────────────────────────────
+// One global platform switcher for the whole settings modal: switching it
+// swaps the {section}-{platform} pane in every platform-varying section at
+// once, so the chosen platform follows you between Accounts, Schedules, Jobs,
+// Diagnostics, and Database.
 
-function initSettingsPlatformTabs(sectionId) {
-  const container = document.getElementById(sectionId + '-tabs');
+const _SETTINGS_PLATFORM_SECTIONS = ['accounts', 'schedules', 'jobs', 'diag', 'database'];
+let _settingsPlatform = PLATFORMS[0].id;
+
+function initSettingsPlatformTabs() {
+  const container = document.getElementById('settingsPlatformTabs');
   if (!container) return;
-  container.innerHTML = PLATFORMS.map((p, i) =>
-    `<button class="settings-sub-tab${i === 0 ? ' active' : ''}" id="stab-${sectionId}-${p.id}" onclick="switchSettingsPlatformTab('${sectionId}','${p.id}')">${p.label}</button>`
+  container.innerHTML = PLATFORMS.map(p =>
+    `<button class="settings-sub-tab" id="stab-${p.id}" onclick="switchSettingsPlatform('${p.id}')">${p.label}</button>`
   ).join('');
-  PLATFORMS.forEach((p, i) => {
-    const pane = document.getElementById(sectionId + '-' + p.id);
-    if (pane) pane.style.display = i === 0 ? '' : 'none';
-  });
+  switchSettingsPlatform(_settingsPlatform);
 }
 
-function switchSettingsPlatformTab(sectionId, platformId) {
+function switchSettingsPlatform(platformId) {
+  _settingsPlatform = platformId;
   PLATFORMS.forEach(p => {
-    const btn  = document.getElementById(`stab-${sectionId}-${p.id}`);
-    const pane = document.getElementById(`${sectionId}-${p.id}`);
-    const active = p.id === platformId;
-    if (btn)  btn.classList.toggle('active', active);
-    if (pane) pane.style.display = active ? '' : 'none';
+    document.getElementById(`stab-${p.id}`)?.classList.toggle('active', p.id === platformId);
+    _SETTINGS_PLATFORM_SECTIONS.forEach(sec => {
+      const pane = document.getElementById(`${sec}-${p.id}`);
+      if (pane) pane.style.display = p.id === platformId ? '' : 'none';
+    });
   });
 }
 
@@ -1021,7 +1023,6 @@ document.addEventListener('keydown', e => {
   if (_open('imgModal'))           { closeImgModal(); return; }
   if (_open('vidModal'))           { closeVidModal(); return; }
   if (_open('soundModalBackdrop')) { window.closeSoundModal?.(); return; }
-  if (_open('recentLogBackdrop'))  { closeRecentLog(); return; }
   if (_open('settingsBackdrop'))   { window.closeSettings?.(); }
 });
 
@@ -1375,119 +1376,4 @@ function _recentDate(ts, now = new Date()) {
   if (diffDays === 0) return `Today, ${timeStr}`;
   if (diffDays === 1) return `Yesterday, ${timeStr}`;
   return _dtFmtRecent.format(d);
-}
-
-// ── Recent log modal ──────────────────────────────────────────────────────────
-// Generic paginated history modal. Each platform opens it via _openRecentLogModal,
-// passing a cfg object with: apiBase, titles, groupKey, renderSaved, renderOther.
-
-let _recentLogType      = null;
-let _recentLogOffset    = 0;
-let _recentLogDone      = false;
-let _recentLogLoading   = false;
-let _recentLogObs       = null;
-let _recentLogLastGroup = null;
-let _recentLogCfg       = null;
-
-// First-batch cache per "apiBase/type", warmed by each platform's recents
-// poll when the panel data changes, so the expanded modals open instantly
-const _recentLogCache = {};
-
-async function _prefetchRecentLog(apiBase, types) {
-  for (const t of types) {
-    const { ok, data } = await apiJSON(`${apiBase}/${t}?offset=0&limit=50`);
-    if (ok) _recentLogCache[`${apiBase}/${t}`] = data;
-  }
-}
-
-function _openRecentLogModal(type, cfg) {
-  _recentLogCfg       = cfg;
-  _recentLogType      = type;
-  _recentLogOffset    = 0;
-  _recentLogDone      = false;
-  _recentLogLoading   = false;
-  _recentLogLastGroup = null;
-
-  document.getElementById('recentLogTitle').textContent = cfg.titles[type] || type;
-  document.getElementById('recentLogBody').innerHTML = '';
-  document.getElementById('recentLogBackdrop').style.display = 'flex';
-  _lockScroll();
-
-  _setupRecentLogScroll();
-  // Initial load triggered by IntersectionObserver firing on the newly-added
-  // sentinel, which is immediately visible in the empty container.
-}
-
-function closeRecentLog() {
-  document.getElementById('recentLogBackdrop').style.display = 'none';
-  _unlockScroll();
-  if (_recentLogObs) { _recentLogObs.disconnect(); _recentLogObs = null; }
-  _recentLogLastGroup = null;
-  _recentLogType    = null;
-  _recentLogLoading = false;
-  _recentLogCfg     = null;
-}
-
-function _setupRecentLogScroll() {
-  if (_recentLogObs) _recentLogObs.disconnect();
-  const sentinel = document.createElement('div');
-  sentinel.id = 'recentLogSentinel';
-  sentinel.style.height = '1px';
-  document.getElementById('recentLogBody').appendChild(sentinel);
-  _recentLogObs = new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting && !_recentLogDone) _loadRecentLogBatch();
-  }, { threshold: 0 });
-  _recentLogObs.observe(sentinel);
-}
-
-async function _loadRecentLogBatch() {
-  if (_recentLogDone || !_recentLogType || !_recentLogCfg || _recentLogLoading) return;
-  _recentLogLoading = true;
-  const cached = _recentLogOffset === 0
-    ? _recentLogCache[`${_recentLogCfg.apiBase}/${_recentLogType}`] : null;
-  let ok = true, data = cached;
-  if (!cached) {
-    const url = `${_recentLogCfg.apiBase}/${_recentLogType}?offset=${_recentLogOffset}&limit=50`;
-    ({ ok, data } = await apiJSON(url));
-  }
-  if (!ok || !_recentLogType) { _recentLogLoading = false; return; }
-
-  // Grouped responses return {items, rows_consumed}; flat responses return a plain array.
-  const isGrouped = !Array.isArray(data) && Array.isArray(data.items);
-  const items   = isGrouped ? data.items         : data;
-  const advance = isGrouped ? data.rows_consumed  : data.length;
-
-  if (!items.length) { _recentLogDone = true; _recentLogLoading = false; return; }
-  _recentLogOffset += advance;
-  if (items.length < 50) _recentLogDone = true;
-
-  const body     = document.getElementById('recentLogBody');
-  const sentinel = document.getElementById('recentLogSentinel');
-  const frag     = document.createDocumentFragment();
-  const now      = new Date();
-  const cfg      = _recentLogCfg;
-
-  if (isGrouped) {
-    // Server returns pre-grouped runs; stitch across batch boundaries.
-    const renderFn = _recentLogType === 'saved' ? cfg.renderSaved : cfg.renderGrouped;
-    let i = 0;
-    if (_recentLogLastGroup && items.length > 0 && _recentLogLastGroup.id === items[0][cfg.groupKey]) {
-      const merged = _recentLogLastGroup.count + items[0].count;
-      _recentLogLastGroup.count = merged;
-      const detailEl = _recentLogLastGroup.el.querySelector('.recent-detail');
-      if (detailEl) detailEl.textContent = `${merged}x`;
-      i = 1;
-    }
-    for (; i < items.length; i++) {
-      const g   = items[i];
-      const row = renderFn(g, now);
-      frag.appendChild(row);
-      _recentLogLastGroup = { id: g[cfg.groupKey], el: row, count: g.count };
-    }
-  } else {
-    items.forEach(item => frag.appendChild(cfg.renderOther(item, _recentLogType, now)));
-  }
-
-  body.insertBefore(frag, sentinel);
-  _recentLogLoading = false;
 }

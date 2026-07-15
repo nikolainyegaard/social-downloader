@@ -592,7 +592,10 @@ def create_channel_blueprint(engine) -> Blueprint:
         before = request.args.get("before", type=int)
         limit  = min(request.args.get("limit", 40, type=int) or 40, 100)
         kind   = request.args.get("kind") or None
-        return jsonify(db.get_activity_feed(before=before, limit=limit, kind=kind))
+        return jsonify(db.get_activity_feed(
+            before=before, limit=limit, kind=kind,
+            starred=request.args.get("starred") == "1",
+            bookmarked=request.args.get("bookmarked") == "1"))
 
     @bp.route("/recent/deletions", methods=["GET"])
     def get_recent_deletions():

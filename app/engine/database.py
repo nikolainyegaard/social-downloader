@@ -1000,7 +1000,8 @@ class ChannelDB:
 
 
     def get_activity_feed(self, before: int | None = None, limit: int = 40,
-                          kind: str | None = None) -> dict:
+                          kind: str | None = None, starred: bool = False,
+                          bookmarked: bool = False) -> dict:
         """Unified chronological activity feed for the dashboard panel: saved
         and deletion groups, profile changes, and bans merged newest first.
         Keyset pagination via `before` (event unix ts). `kind` restricts to one
@@ -1010,10 +1011,14 @@ class ChannelDB:
         sharing an identical timestamp across a page boundary."""
         cap    = limit + 1
         events = []
+        # Flag filters on the joined channels table (bare column names for the
+        # bans query, which selects from channels directly)
+        flags   = ("AND c.starred = 1 " if starred else "") + ("AND c.bookmarked = 1 " if bookmarked else "")
+        flags_b = ("AND starred = 1 "   if starred else "") + ("AND bookmarked = 1 "   if bookmarked else "")
         with self.get_db() as conn:
             _sound = self._sound_id_select(conn)
             if kind in (None, "saved"):
-                w    = "AND v.download_date < ?" if before else ""
+                w    = f"{flags}" + ("AND v.download_date < ?" if before else "")
                 args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)
                 rows = [dict(r) for r in conn.execute(f"""
                     SELECT v.download_date, c.handle, c.channel_id, c.enabled,
@@ -1024,7 +1029,7 @@ class ChannelDB:
                 for g in self._group_consecutive_by_channel(rows, "download_date")[:cap]:
                     events.append({"ts": g["download_date"], "kind": "saved", "item": g})
             if kind in (None, "deleted"):
-                w    = "AND v.deleted_at < ?" if before else ""
+                w    = f"{flags}" + ("AND v.deleted_at < ?" if before else "")
                 args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)
                 rows = [dict(r) for r in conn.execute(f"""
                     SELECT v.video_id, v.deleted_at, c.handle, c.channel_id, c.enabled,
@@ -1036,7 +1041,7 @@ class ChannelDB:
                 for g in self._group_consecutive_by_channel(rows, "deleted_at")[:cap]:
                     events.append({"ts": g["deleted_at"], "kind": "deleted", "item": g})
             if kind in (None, "changed"):
-                w    = "AND ph.changed_at < ?" if before else ""
+                w    = f"{flags}" + ("AND ph.changed_at < ?" if before else "")
                 args = (before, cap) if before else (cap,)
                 rows = conn.execute(f"""
                     SELECT ph.field, ph.changed_at, c.handle, c.channel_id, c.starred, c.account_status
@@ -1045,7 +1050,7 @@ class ChannelDB:
                     ORDER BY ph.changed_at DESC LIMIT ?""", args).fetchall()
                 events += [{"ts": r["changed_at"], "kind": "changed", "item": dict(r)} for r in rows]
             if kind in (None, "banned"):
-                w    = "AND banned_at < ?" if before else ""
+                w    = f"{flags_b}" + ("AND banned_at < ?" if before else "")
                 args = (before, cap) if before else (cap,)
                 rows = conn.execute(f"""
                     SELECT channel_id, handle, banned_at, starred

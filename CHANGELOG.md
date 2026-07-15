@@ -7,6 +7,10 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Changed
+- The settings modal has one global platform selector at the top instead of a selector inside each section, so the chosen platform follows you between Accounts, Schedules, Jobs, Diagnostics, and Database. The gear button now opens settings for the app you are currently on
+- The expanded per-type recent history modals and the feed's Log button are gone. The infinitely scrolling activity feed replaces them and gains starred and bookmarked filter pills
+- Switching activity feed filters is instant: each filter combination renders from a cache and revalidates in the background, and hovering the filter pills pre-warms the per-type caches
+- The Users / Sounds / Log view selector uses the same underline tab style as the platform tabs, and the search box is right-aligned on that tab bar
 - Settings modal rebuilt around function-first navigation with grouped sections: Accounts (per-platform login and cookies), Schedules (per-platform loop settings), Jobs, Diagnostics, Database, and Access (the app's own OAuth login, formerly named Authentication). Every section that varies by platform uses the same platform sub-tabs, and TikTok's stats backfill, cleanup utilities, and path migration moved into Jobs as regular job cards
 - The Recent activity and Add history panels now share one list design: identical row anatomy with a leading status or type icon, fixed-width detail and time columns so rows line up instead of flexing per row, and the same date format in both lists
 - The stat strip is more compact and drops Total views. TikTok keeps separate Videos and Photos tiles alongside the Saved posts total

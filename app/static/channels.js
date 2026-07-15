@@ -60,14 +60,17 @@ function initChannelApp(cfg) {
   <div class="panel-card recent-card">
     <div class="panel-header">
       <span class="section-title">Recent activity</span>
-      <div class="filter-pills multi hdr-pills">
+      <div class="filter-pills multi hdr-pills" onpointerenter="${P}PrefetchFeedKinds()">
         <button class="filter-pill active" id="${P}Rf_all"     onclick="${P}SetRecentFilter('all')">All</button>
         <button class="filter-pill"        id="${P}Rf_saved"   onclick="${P}SetRecentFilter('saved')">Saved</button>
         <button class="filter-pill"        id="${P}Rf_deleted" onclick="${P}SetRecentFilter('deleted')">Deleted</button>
         <button class="filter-pill"        id="${P}Rf_changed" onclick="${P}SetRecentFilter('changed')">Changes</button>
         ${cfg.hasBans ? `<button class="filter-pill" id="${P}Rf_banned" onclick="${P}SetRecentFilter('banned')">Bans</button>` : ''}
       </div>
-      <button class="panel-hdr-btn" onclick="${P}OpenRecentLogCurrent()" title="Open the full log for the selected activity type">Log</button>
+      <div class="filter-pills multi hdr-pills" style="margin-left:0">
+        <button class="filter-pill" id="${P}RfStar" onclick="${P}ToggleRfStar()" title="Only starred ${CREATORS}">★</button>
+        <button class="filter-pill" id="${P}RfBook" onclick="${P}ToggleRfBook()" title="Only bookmarked ${CREATORS}">${_bookmarkIcon}</button>
+      </div>
     </div>
     <div class="recent-feed" id="${P}RecentFeed"><div class="rf-empty">Loading…</div></div>
   </div>
@@ -112,17 +115,17 @@ function initChannelApp(cfg) {
   </div>
 
   <section>
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-      <div class="tracking-tab-row" style="display:flex;align-items:center;gap:8px;">
-        <div class="filter-pills">
-          <button class="filter-pill active" id="${P}TvCreators" onclick="${P}SetTrackingView('creators')">${CreatorsCap}</button>
-          ${EXTRA_VIEWS.map(v => `<button class="filter-pill" id="${P}Tv_${v.key}" onclick="${P}SetTrackingView('${v.key}')">${v.label}</button>`).join('')}
-          <button class="filter-pill"        id="${P}TvLog"      onclick="${P}SetTrackingView('log')">Log</button>
+    <div style="margin-bottom:12px;">
+      <div class="view-tabs-row">
+        <div class="view-tabs">
+          <button class="view-tab active" id="${P}TvCreators" onclick="${P}SetTrackingView('creators')">${CreatorsCap}</button>
+          ${EXTRA_VIEWS.map(v => `<button class="view-tab" id="${P}Tv_${v.key}" onclick="${P}SetTrackingView('${v.key}')">${v.label}</button>`).join('')}
+          <button class="view-tab"        id="${P}TvLog"      onclick="${P}SetTrackingView('log')">Log</button>
         </div>
         <span id="${P}Count" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
         <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)">
       </div>
-      <div id="${P}Controls" class="filter-control-group">
+      <div id="${P}Controls" class="filter-control-group" style="margin-top:10px"
         ${EXTRA_FILTER_GROUPS.map(g => `
         <div class="filter-row">
           <span class="filter-row-label">${g.label}</span>
@@ -387,13 +390,6 @@ function initChannelApp(cfg) {
 
   // ── Recent panel ──────────────────────────────────────────────────────────
 
-  const RECENT_LOG_TITLES = {
-    'deletions':       `All Deleted ${ItemsCap}`,
-    'profile-changes': 'All Profile Changes',
-    'saved':           `All Saved ${ItemsCap}`,
-    'bans':            'All Banned Accounts',
-  };
-
   const _nameStyle = r => r.enabled === 0 ? 'style="color:var(--text-dim)"'
     : r.starred ? 'style="color:var(--yellow)"'
     : r.account_status === 'banned' ? 'style="color:var(--red)"' : '';
@@ -411,72 +407,8 @@ function initChannelApp(cfg) {
     return `${P}OpenModal('${esc(item.channel_id)}')`;
   }
 
-  function _renderSavedRow(g, now) {
-    const row = document.createElement('div');
-    row.className = 'recent-entry';
-    row.title = `Open @${g.handle}`;
-    row.setAttribute('onclick', _recentOnclick(g, 'saved'));
-    row.innerHTML = `
-      <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-      <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
-      <span class="recent-detail">${g.count}x</span>`;
-    return row;
-  }
-
-  function _renderDeletedGroupRow(g, now) {
-    const row = document.createElement('div');
-    row.className = 'recent-entry';
-    row.title = `Open @${g.handle}`;
-    row.setAttribute('onclick', _recentOnclick(g, 'deleted'));
-    row.innerHTML = `
-      <span class="recent-date">${_recentDate(g.deleted_at, now)}</span>
-      <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
-      <span class="recent-detail">${g.count}x</span>`;
-    return row;
-  }
-
-  function _renderOtherRow(item, type, now) {
-    const row = document.createElement('div');
-    row.className = 'recent-entry';
-    if (type === 'deletions') {
-      row.title = `Open @${item.handle}`;
-      row.setAttribute('onclick', _recentOnclick({ ...item, count: 1 }, 'deleted'));
-      row.innerHTML = `
-        <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
-        <span class="recent-name" ${_nameStyle(item)}>@${esc(item.handle)}</span>
-        <span class="recent-detail">${esc((item.video_id || '').slice(0, 11))}</span>`;
-    } else if (type === 'bans') {
-      row.title = `Open @${item.handle}`;
-      row.onclick = () => window[`${P}OpenModal`](item.channel_id);
-      row.innerHTML = `
-        <span class="recent-date">${_recentDate(item.banned_at, now)}</span>
-        <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(item.handle)}</span>
-        <span class="recent-detail" style="color:var(--red)">Banned</span>`;
-    } else {
-      const label = FIELD_LABELS[item.field] || item.field;
-      row.title = `Open @${item.handle} · ${label} history`;
-      row.onclick = () => window[`${P}OpenModalWithHistory`](item.channel_id, item.field);
-      row.innerHTML = `
-        <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
-        <span class="recent-name" ${_nameStyle(item)}>@${esc(item.handle)}</span>
-        <span class="recent-detail">${esc(label)}</span>`;
-    }
-    return row;
-  }
-
-  X('OpenRecentLog', type => {
-    _openRecentLogModal(type, {
-      apiBase:       `${API}/recent`,
-      titles:        RECENT_LOG_TITLES,
-      groupKey:      'channel_id',
-      renderSaved:   _renderSavedRow,
-      renderGrouped: _renderDeletedGroupRow,
-      renderOther:   _renderOtherRow,
-    });
-  });
-
   // One chronological feed mixing every activity type, filterable from the
-  // panel header. The per-type expanded logs stay behind the Log button.
+  // panel header. Server-paginated; older pages load through a scroll sentinel.
 
   const _RF_ICONS = {
     saved:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16"/></svg>',
@@ -484,14 +416,19 @@ function initChannelApp(cfg) {
     changed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L7 21H3v-4L17 3z"/></svg>',
     banned:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.7 5.7l12.6 12.6"/></svg>',
   };
-  const _RF_LOG_TYPE = { all: 'saved', saved: 'saved', deleted: 'deletions', changed: 'profile-changes', banned: 'bans' };
-
   let _recentFilter = 'all';
-  const _rf = { items: [], hasMore: false, obs: null, loading: false, sig: null };
+  let _rfStar       = false;
+  let _rfBook       = false;
+  // Page-one cache per filter combination: switching filters renders instantly
+  // from cache while a background fetch revalidates
+  const _rf = { items: [], hasMore: false, obs: null, loading: false, sig: null, cache: {} };
+
+  const _rfKey = () => `${_recentFilter}|${_rfStar ? 1 : 0}|${_rfBook ? 1 : 0}`;
 
   function _rfUrl(before) {
     const kind = _recentFilter === 'all' ? '' : `&kind=${_recentFilter}`;
-    return `${API}/recent/feed?limit=40${kind}${before ? `&before=${before}` : ''}`;
+    const flags = `${_rfStar ? '&starred=1' : ''}${_rfBook ? '&bookmarked=1' : ''}`;
+    return `${API}/recent/feed?limit=40${kind}${flags}${before ? `&before=${before}` : ''}`;
   }
 
   function _rfRow(ev, now) {
@@ -514,14 +451,14 @@ function initChannelApp(cfg) {
     </div>`;
   }
 
-  function _renderFeed() {
+  function _renderFeed(loading) {
     const el = document.getElementById(`${P}RecentFeed`);
     if (!el) return;
     if (_rf.obs) { _rf.obs.disconnect(); _rf.obs = null; }
     const now = new Date();
     el.innerHTML = _rf.items.length
       ? _rf.items.map(e => _rfRow(e, now)).join('')
-      : '<div class="rf-empty">No activity yet</div>';
+      : `<div class="rf-empty">${loading ? 'Loading…' : 'No activity yet'}</div>`;
     if (_rf.hasMore) _rf.obs = _attachSentinel(el, _loadFeedMore);
   }
 
@@ -536,32 +473,63 @@ function initChannelApp(cfg) {
     _renderFeed();
   }
 
+  // Stale-while-revalidate on filter change: render the cached page one for the
+  // new combination immediately, then let loadRecent refresh it in the background
+  function _applyFeedFilter() {
+    const c = _rf.cache[_rfKey()];
+    _rf.sig     = c ? c.sig : null;
+    _rf.items   = c ? c.items.slice() : [];
+    _rf.hasMore = c ? c.hasMore : false;
+    _renderFeed(!c);
+    loadRecent();
+  }
+
   X('SetRecentFilter', f => {
     _recentFilter = f;
     ['all', 'saved', 'deleted', 'changed', 'banned'].forEach(k => {
       document.getElementById(`${P}Rf_${k}`)?.classList.toggle('active', k === f);
     });
-    _rf.sig = null;
-    loadRecent();
+    _applyFeedFilter();
   });
 
-  X('OpenRecentLogCurrent', () => window[`${P}OpenRecentLog`](_RF_LOG_TYPE[_recentFilter]));
+  X('ToggleRfStar', () => {
+    _rfStar = !_rfStar;
+    document.getElementById(`${P}RfStar`)?.classList.toggle('active', _rfStar);
+    _applyFeedFilter();
+  });
+
+  X('ToggleRfBook', () => {
+    _rfBook = !_rfBook;
+    document.getElementById(`${P}RfBook`)?.classList.toggle('active', _rfBook);
+    _applyFeedFilter();
+  });
+
+  // Warm the per-kind caches the first time the pointer reaches the filter
+  // pills, so the first filter click is instant too
+  X('PrefetchFeedKinds', async () => {
+    for (const kind of ['saved', 'deleted', 'changed', ...(cfg.hasBans ? ['banned'] : [])]) {
+      const key = `${kind}|0|0`;
+      if (_rf.cache[key]) continue;
+      const { ok, data } = await apiJSON(`${API}/recent/feed?limit=40&kind=${kind}`);
+      if (ok) _rf.cache[key] = { items: data.items, hasMore: data.has_more, sig: JSON.stringify(data.items) };
+    }
+  });
 
   // The 30 s poll refreshes page one of the feed. Pages the user scrolled in
   // are reset only when page one actually changed, so idle polls never yank
   // the scroll position. Older pages load through the scroll sentinel.
   const loadRecent = X('LoadRecent', async () => {
+    const key = _rfKey();
     const { ok, data } = await apiJSON(_rfUrl());
     if (!ok) return;
     const sig = JSON.stringify(data.items);
+    _rf.cache[key] = { items: data.items, hasMore: data.has_more, sig };
+    if (key !== _rfKey()) return;   // filter changed while the fetch was in flight
     if (sig === _rf.sig) return;
     _rf.sig     = sig;
-    _rf.items   = data.items;
+    _rf.items   = data.items.slice();
     _rf.hasMore = data.has_more;
     _renderFeed();
-    // Warm the recent-log modal cache so the expanded lists open instantly
-    _prefetchRecentLog(`${API}/recent`,
-      ['saved', 'deletions', 'profile-changes', ...(cfg.hasBans ? ['bans'] : [])]);
   });
 
   // ── Loop status ───────────────────────────────────────────────────────────
@@ -1694,7 +1662,6 @@ function initChannelApp(cfg) {
     if (view === 'creators') renderCreators();
     const extra = EXTRA_VIEWS.find(v => v.key === view);
     if (extra) extra.show(search);
-    _placeGlider(_el('TvCreators').closest('.filter-pills'));
     const activeCtrl = extra ? _el(`Controls_${extra.key}`) : ctrl;
     if (activeCtrl) activeCtrl.querySelectorAll('.filter-pills').forEach(_placeGlider);
   });
@@ -1727,7 +1694,7 @@ function initChannelApp(cfg) {
     // Overlay modals (carousel, image, video, sound, recent log, settings) sit
     // on top of the creator modal and close themselves via their own handler;
     // don't close both at once.
-    for (const id of ['carouselModal', 'imgModal', 'vidModal', 'soundModalBackdrop', 'recentLogBackdrop', 'settingsBackdrop']) {
+    for (const id of ['carouselModal', 'imgModal', 'vidModal', 'soundModalBackdrop', 'settingsBackdrop']) {
       if (document.getElementById(id) && document.getElementById(id).style.display !== 'none') return;
     }
     if (_el('ModalBackdrop')?.style.display !== 'none') {
