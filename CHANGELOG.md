@@ -40,7 +40,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The TikTok Loops panel now toggles between the User and Sound loops with pills in the panel header, so the panel is the same height as on the other apps instead of stacking both loops
 
 ### Changed
-- Error notifications now stay on screen until dismissed, so there is time to read them, and long errors show a two-line preview that opens a dialog with the full text and a Copy button when clicked
+- Error notifications now stay on screen until dismissed, so there is time to read them, and long errors show a two-line preview that opens a dialog with the full text and a Copy button when clicked; the QR login card reports its failures the same way instead of dumping the raw error inline
 - The Network settings pane reports its results (proxy save, VPN toggle, connection test, WireGuard save) through toast notifications instead of inline status text; the connection test and gluetun restart show their progress in the same toast
 - The 1 second activity-bar countdown only renders while the Log view is actually visible, and the TikTok cookies and sounds polls only run while the TikTok tab is active instead of firing from every tab
 - When a TikTok run cancels on repeated bot detection (or the session is unrecoverable), the loop now backs off for 6 hours (configurable via the bot_cooldown_hours setting) instead of retrying the flagged identity at the next scheduled session, which only kept the flag fresh. Manual triggers still run during the cooldown, and a run that completes normally ends it early
@@ -101,6 +101,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel takes the full row; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
+- The TikTok browser refused to start when the container had stopped while a session was running, with "profile in use by another Google Chrome process on another computer": Chrome's profile lock lives on the data volume and named the previous container, so it never cleared itself, not even across a full container recreation. Clearly stale locks (another host, or a dead process) are now removed at browser launch
 - A docker restart no longer breaks every TikTok browser use (QR login, checks, the browser viewer) with a browser launch error: the restarted container inherited the previous run's X display lock and socket in /tmp, which kept the virtual display from starting while still looking alive. The container now cleans those up at startup, and the app verifies the display actually responds before launching the browser headed, falling back to headless otherwise
 - The User/Sound loop switcher in the TikTok Loops panel highlights the selected pill again; it switched the view but left the slider on the previous pill
 - TikTok story expiry now reads the millisecond ExpiredAt field TikTok actually sends instead of relying on the post-time-plus-24h fallback

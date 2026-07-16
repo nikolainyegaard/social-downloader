@@ -24,10 +24,12 @@ async function ttResetSession() {
 // page as screenshots and this poll shows them until a terminal state.
 
 let _qrTimer = null;
+let _qrLastStatus = null;
 
 async function ttQrStart() {
   const btn = document.getElementById('ttQrBtn');
   btn.disabled = true;
+  _qrLastStatus = null;   // a fresh attempt may toast a fresh error
   const { ok, data } = await apiJSON('/api/tiktok/login/qr', { method: 'POST' });
   if (!ok) {
     btn.disabled = false;
@@ -53,7 +55,7 @@ function _qrRender(state) {
                        : (state.message || 'Loading the login page') + '…',
     success:  state.message || 'Signed in',
     expired:  state.message || 'Login window timed out. Generate a new code to retry',
-    error:    state.message || 'QR login failed',
+    error:    'QR login failed',   // the full (often long) error goes to a toast
   };
   const loading = state.status === 'starting' || (state.status === 'waiting' && !state.qr);
   status.style.display = '';
@@ -68,7 +70,13 @@ function _qrRender(state) {
     if (_qrTimer) { clearInterval(_qrTimer); _qrTimer = null; }
     document.getElementById('ttQrBtn').disabled = false;
     if (state.status === 'success') loadCookies();
+    // An in-flight poll can re-render the terminal state; toast only on the
+    // transition into it
+    if (state.status === 'error' && _qrLastStatus !== 'error') {
+      showToast(state.message || 'QR login failed', { type: 'error' });
+    }
   }
+  _qrLastStatus = state.status;
 }
 
 // ── Live browser viewer ────────────────────────────────────────────────────────

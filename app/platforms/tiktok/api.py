@@ -50,6 +50,7 @@ def _profile_context_factory():
         from platforms.tiktok.config import get_proxy
         profile = _profile_dir()
         os.makedirs(profile, exist_ok=True)
+        _clear_stale_singleton(profile)
         proxy = get_proxy()
         context = await playwright.chromium.launch_persistent_context(
             profile,
@@ -64,6 +65,38 @@ def _profile_context_factory():
         return context
 
     return factory, release
+
+
+def _clear_stale_singleton(profile: str) -> None:
+    """Chrome refuses a profile whose SingletonLock names another host (exit
+    21, "in use by another Google Chrome process on another computer"). The
+    profile lives on the data volume, so a lock left by a container that
+    stopped while Chrome was running names the previous container's hostname
+    and never clears itself, not even across a compose down/up. Remove the
+    singleton files when the lock is clearly stale: another hostname, or a
+    dead pid on this one. _PROFILE_LOCK is already held when this runs, so no
+    session of this process can legitimately own them."""
+    import socket
+
+    lock = os.path.join(profile, "SingletonLock")
+    try:
+        target = os.readlink(lock)  # the lock is a symlink to "hostname-pid"
+    except OSError:
+        return
+    host, _, pid = target.rpartition("-")
+    stale = host != socket.gethostname()
+    if not stale:
+        try:
+            os.kill(int(pid), 0)
+        except (OSError, ValueError):
+            stale = True
+    if not stale:
+        return
+    for name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
+        try:
+            os.remove(os.path.join(profile, name))
+        except OSError:
+            pass
 
 
 def _headed() -> bool:
