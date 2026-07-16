@@ -120,6 +120,24 @@
             </label>
             <div class="settings-note" id="ttProxyStatus" style="display:none;margin-top:8px"></div>
           </div>
+          <div class="settings-group">
+            <span class="settings-label">WireGuard config (gluetun)</span>
+            <div class="settings-note">
+              Paste the WireGuard config for the gluetun container here (ProtonVPN: account
+              page &gt; Downloads &gt; WireGuard configuration) and it is saved to
+              <code>data/gluetun/wireguard/wg0.conf</code>. Point gluetun's volume at
+              <code>./data/gluetun:/gluetun</code> so it reads the same file. Gluetun only
+              loads the config at startup, so restart that container after saving.
+              The saved config is never shown again; pasting a new one replaces it.
+            </div>
+            <div class="settings-note" id="ttWgMeta" style="margin-bottom:8px"></div>
+            <textarea id="ttWgConfig" class="db-query-input" style="height:150px" placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = ...&#10;&#10;[Peer]&#10;PublicKey = ...&#10;Endpoint = ...&#10;AllowedIPs = 0.0.0.0/0" spellcheck="false"></textarea>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn-sm" onclick="ttWgSave()">Save config</button>
+              <button class="btn-danger" id="ttWgDeleteBtn" onclick="ttWgDelete()" style="display:none">Remove</button>
+            </div>
+            <div class="settings-note" id="ttWgStatus" style="display:none;margin-top:8px"></div>
+          </div>
         </div>
 
         <div id="accounts-twitter" style="display:none">

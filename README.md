@@ -120,7 +120,7 @@ services:
     devices:
       - /dev/net/tun:/dev/net/tun
     volumes:
-      - ./gluetun:/gluetun
+      - ./data/gluetun:/gluetun
     environment:
       - VPN_SERVICE_PROVIDER=custom
       - VPN_TYPE=wireguard
@@ -129,6 +129,10 @@ services:
 ```
 
 With that service in the app's docker-compose.yml (or both containers on one shared network), the proxy URL is `http://gluetun:8888`. The proxy port never needs to be published on the host; the app reaches it over the Docker network.
+
+With `VPN_SERVICE_PROVIDER=custom`, the WireGuard credentials do not go in the environment: gluetun reads a standard WireGuard config from `/gluetun/wireguard/wg0.conf` inside its volume. With the volume above (`./data/gluetun`, inside the app's data folder), you can paste the config straight into **Settings > Accounts > TikTok > WireGuard config** and the app writes it to that path for you; download one from your VPN provider first (ProtonVPN: account page > Downloads > WireGuard configuration). Gluetun only loads the config at startup, so restart the gluetun container after saving. Managing the file by hand at `data/gluetun/wireguard/wg0.conf` works the same.
+
+Generate a dedicated config for this container rather than reusing one from another gluetun instance; a WireGuard server keeps one session per key, so two tunnels on the same config kick each other off. If the app cannot reach the proxy, set `FIREWALL_OUTBOUND_SUBNETS` to the Docker network's subnet so gluetun's firewall allows replies to it.
 
 Two caveats. VPN exit IPs are datacenter IPs, which TikTok tends to score worse than residential ones, so treat this as an escape hatch for a flagged home IP rather than a default. And the proxy changes what IP TikTok sees for an existing session, so expect extra scrutiny right after toggling; pairing a proxy change with **Reset session** and a fresh QR sign-in gives the new IP a clean identity.
 

@@ -117,6 +117,56 @@ def register_tiktok_routes(bp, engine) -> None:
             db.set_setting("proxy_enabled", "1" if body["enabled"] else "0")
         return jsonify({"ok": True})
 
+    # WireGuard config for the gluetun VPN container. The app writes wg0.conf
+    # under its own data volume; gluetun mounts that folder (./data/gluetun) as
+    # /gluetun and reads the file at startup. The private key is never echoed
+    # back, only presence and the non-secret lines.
+    _WG_PATH = os.path.join(DATA_DIR, "gluetun", "wireguard", "wg0.conf")
+
+    @bp.route("/proxy/wireguard", methods=["GET"])
+    def tiktok_wireguard_get():
+        if not os.path.exists(_WG_PATH):
+            return jsonify({"present": False})
+        endpoint = address = None
+        try:
+            with open(_WG_PATH, encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    key, _, val = line.partition("=")
+                    if key.strip().lower() == "endpoint":
+                        endpoint = val.strip()
+                    elif key.strip().lower() == "address":
+                        address = val.strip()
+            updated = int(os.path.getmtime(_WG_PATH))
+        except OSError:
+            updated = None
+        return jsonify({"present": True, "endpoint": endpoint,
+                        "address": address, "updated_at": updated})
+
+    @bp.route("/proxy/wireguard", methods=["POST"])
+    def tiktok_wireguard_set():
+        body = request.get_json(silent=True) or {}
+        conf = str(body.get("config", "")).strip()
+        low  = conf.lower()
+        if "[interface]" not in low or "privatekey" not in low or "[peer]" not in low:
+            return jsonify({"error": "That does not look like a WireGuard config "
+                            "(needs [Interface] with PrivateKey and a [Peer] section)"}), 400
+        os.makedirs(os.path.dirname(_WG_PATH), exist_ok=True)
+        with open(_WG_PATH, "w", encoding="utf-8") as f:
+            f.write(conf + "\n")
+        try:
+            os.chmod(_WG_PATH, 0o600)
+        except OSError:
+            pass
+        return jsonify({"ok": True})
+
+    @bp.route("/proxy/wireguard", methods=["DELETE"])
+    def tiktok_wireguard_delete():
+        try:
+            os.remove(_WG_PATH)
+        except FileNotFoundError:
+            pass
+        return jsonify({"ok": True})
+
     # Live view of the headed browser display: grab frames and inject mouse
     # input so the user can solve a captcha or verification wall in the UI
     from platforms.tiktok import screen as browser_screen

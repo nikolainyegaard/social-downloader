@@ -191,6 +191,48 @@ async function ttProxyToggle() {
                          : 'Proxy routing is off. TikTok uses the server\'s own IP.', false);
 }
 
+// WireGuard config for the gluetun container: saved under the app's data
+// volume, which gluetun mounts as /gluetun. The config is write-only in the
+// UI; the meta line shows the non-secret parts of what is on disk.
+
+function _ttWgStatus(msg, isError) {
+  const el = document.getElementById('ttWgStatus');
+  el.style.display = msg ? '' : 'none';
+  el.textContent   = msg || '';
+  el.style.color   = isError ? 'var(--red)' : 'var(--green)';
+}
+
+async function ttWgLoad() {
+  const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard');
+  if (!ok) return;
+  const meta = document.getElementById('ttWgMeta');
+  document.getElementById('ttWgDeleteBtn').style.display = data.present ? '' : 'none';
+  if (!data.present) { meta.textContent = 'No config saved yet.'; return; }
+  const parts = ['Config saved'];
+  if (data.endpoint)   parts.push('endpoint ' + data.endpoint);
+  if (data.updated_at) parts.push('updated ' + fmtDateShort(data.updated_at));
+  meta.textContent = parts.join(', ');
+}
+
+async function ttWgSave() {
+  const box    = document.getElementById('ttWgConfig');
+  const config = box.value.trim();
+  if (!config) { _ttWgStatus('Paste a WireGuard config first', true); return; }
+  const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'POST', body: JSON.stringify({ config }) });
+  if (!ok) { _ttWgStatus((data && data.error) || 'Could not save the config', true); return; }
+  box.value = '';
+  _ttWgStatus('Saved. Restart the gluetun container to apply it.', false);
+  ttWgLoad();
+}
+
+async function ttWgDelete() {
+  if (!confirm('Remove the saved WireGuard config? Gluetun keeps using it until that container restarts.')) return;
+  const { ok } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'DELETE' });
+  if (!ok) { _ttWgStatus('Could not remove the config', true); return; }
+  _ttWgStatus('Removed.', false);
+  ttWgLoad();
+}
+
 // ── Sounds state ──────────────────────────────────────────────────────────────
 
 let sounds          = [];
@@ -1027,7 +1069,7 @@ function switchSettingsSection(name) {
   // The global platform selector applies to every section except Access
   const ptabs = document.getElementById('settingsPlatformTabs');
   if (ptabs) ptabs.style.display = name === 'access' ? 'none' : '';
-  if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); ttProxyLoad(); }
+  if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); ttProxyLoad(); ttWgLoad(); }
   if (name === 'schedules') { loadSettings(); loadYtSettings(); _scheduleSettingsLoad('twitter', 'twSettings'); _scheduleSettingsLoad('instagram', 'igSettings'); }
   if (name === 'access')    { loadAuthSettings(); }
   if (name === 'jobs')      { _avifLoadStatus(); _startJobsPoll(); }
