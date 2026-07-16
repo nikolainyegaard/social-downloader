@@ -214,17 +214,24 @@ async function ttProxySave() {
   _ttProxyStatus('Saved. Takes effect from the next browser session.', 'ok');
 }
 
+function _ttVpnStatus(msg, tone) {
+  const el = document.getElementById('ttVpnStatus');
+  el.style.display = msg ? '' : 'none';
+  el.textContent   = msg || '';
+  el.style.color   = { ok: 'var(--green)', error: 'var(--red)' }[tone] || '';
+}
+
 async function ttProxyToggle() {
   const box     = document.getElementById('ttProxyEnabled');
   const enabled = box.checked;
   const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ enabled }) });
   if (!ok) {
     box.checked = !enabled;
-    _ttProxyStatus((data && data.error) || 'Could not change proxy routing', 'error');
+    _ttVpnStatus((data && data.error) || 'Could not change the VPN state', 'error');
     return;
   }
-  _ttProxyStatus(enabled ? 'Proxy routing is on for all TikTok traffic.'
-                         : 'Proxy routing is off. TikTok uses the server\'s own IP.', 'ok');
+  _ttVpnStatus(enabled ? 'On. All TikTok traffic now leaves through the configured proxy, starting with the next browser session.'
+                       : 'Off. TikTok uses the server\'s own connection.', 'ok');
 }
 
 async function ttProxyTest() {
