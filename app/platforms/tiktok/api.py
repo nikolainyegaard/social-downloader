@@ -153,6 +153,22 @@ def _patchright_active() -> bool:
     return getattr(sys.modules.get("playwright"), "__name__", "") == "patchright"
 
 
+async def _wait_for_signer(page, attempts: int = 20) -> bool:
+    """Wait for TikTok's request signer (window.byted_acrawler) to appear on
+    the current page. Every make_request signs through it, so after any
+    navigation the signer must be back before the session's next API call."""
+    for _ in range(attempts):
+        try:
+            if await page.evaluate(
+                "() => !!(window.byted_acrawler && window.byted_acrawler.frontierSign)"
+            ):
+                return True
+        except Exception:
+            pass
+        await asyncio.sleep(0.5)
+    return False
+
+
 async def _plain_page(context):
     """page_factory that skips TikTokApi's vendored stealth patches.
 
@@ -180,17 +196,9 @@ async def _plain_page(context):
     # appears the page is a verification or consent wall, and every request in
     # this session would die on a cryptic frontierSign evaluate error. One
     # clear line instead.
-    for _ in range(20):
-        try:
-            if await page.evaluate(
-                "() => !!(window.byted_acrawler && window.byted_acrawler.frontierSign)"
-            ):
-                return page
-        except Exception:
-            pass
-        await asyncio.sleep(0.5)
-    print(f"TikTok page loaded without the request signer, likely a"
-          f" verification or consent wall (url: {page.url})")
+    if not await _wait_for_signer(page):
+        print(f"TikTok page loaded without the request signer, likely a"
+              f" verification or consent wall (url: {page.url})")
     return page
 
 
@@ -285,113 +293,42 @@ class UserBlockedException(Exception):
     """
 
 
-async def get_user_info(api, username: str | None = None,
-                        sec_uid: str | None = None) -> dict:
-    """Fetch user profile data. Returns a normalised dict.
-
-    When sec_uid is available it is used as the primary lookup key via
-    api.make_request() directly, bypassing TikTokApi's user.info() username guard
-    and resolving the account by secUid alone. The service survives username
-    changes transparently.
-
-    Falls back to user.info() with username when sec_uid is absent (e.g. on the
-    very first add before a sec_uid has been stored in the DB).
-    """
-    if not sec_uid and not username:
-        raise ValueError("Must provide username or sec_uid")
-
-    if sec_uid:
-        # Primary path: resolve by secUid via make_request (no username required).
-        # Passing username alongside when available does no harm and may help
-        # TikTok disambiguate, but is not required.
-        import asyncio as _asyncio
-        for _attempt in range(2):
-            data = await api.make_request(
-                url="https://www.tiktok.com/api/user/detail/",
-                params={"secUid": sec_uid, "uniqueId": username or ""},
+def _raise_for_user_status(data: dict, ident: str) -> None:
+    """Shared TikTok profile status handling. Both profile sources carry the
+    same statusCode/userInfo shape: the /api/user/detail/ JSON response and
+    the profile page blob's webapp.user-detail scope."""
+    _sc = data.get("statusCode")
+    if _sc in (10202, 10221, 10223, 10225):
+        raise UserBannedException(
+            f"TikTok returned statusCode {_sc} for {ident} "
+            f"-- account is banned, removed, restricted, or FTC-restricted"
+        )
+    if _sc == 10222:
+        _rel = int(data.get("userInfo", {}).get("user", {}).get("relation") or 0)
+        if _rel in (4, 5):
+            raise UserBlockedException(
+                f"TikTok returned statusCode 10222 for {ident} "
+                f"-- cookies account is blocked by this user (relation={_rel})"
             )
-            if data is None:
-                raise RuntimeError(
-                    f"TikTokApi returned None for sec_uid={sec_uid} "
-                    f"-- TikTok may have blocked the request or cookies are stale"
-                )
-            _sc = data.get("statusCode")
-            if _sc in (10202, 10221, 10223, 10225):
-                raise UserBannedException(
-                    f"TikTok returned statusCode {_sc} for sec_uid={sec_uid} "
-                    f"-- account is banned, removed, restricted, or FTC-restricted"
-                )
-            if _sc == 10222:
-                _rel = int(data.get("userInfo", {}).get("user", {}).get("relation") or 0)
-                if _rel in (4, 5):
-                    raise UserBlockedException(
-                        f"TikTok returned statusCode 10222 for sec_uid={sec_uid} "
-                        f"-- cookies account is blocked by this user (relation={_rel})"
-                    )
-                # TikTok returns 10222 for private accounts but still provides full
-                # profile data when a relationship exists (e.g. mutual follow).
-                # If the user object is populated, fall through and return it normally;
-                # is_private will be set from secret=True in the response.
-                if data.get("userInfo", {}).get("user", {}).get("id"):
-                    break
-                raise UserPrivateException(
-                    f"TikTok returned statusCode 10222 for sec_uid={sec_uid} "
-                    f"-- account is private"
-                )
-            if _sc == 10102:
-                raise ValueError(
-                    f"TikTok returned statusCode 10102 for sec_uid={sec_uid} "
-                    f"-- session is not authenticated; cookies may be stale or expired"
-                )
-            # statusCode 0 with empty user object is a transient session artifact.
-            # The session is degraded but not blocked -- a short wait and one retry
-            # consistently resolves it (confirmed via diagnostics on affected accounts).
-            if data.get("userInfo", {}).get("user", {}).get("id"):
-                break  # got valid data
-            if _attempt == 0:
-                await _asyncio.sleep(3)
-            # second attempt falls through to the empty-check below
-    else:
-        # Fallback path: username-only lookup via user.info() (first-time adds).
-        user = api.user(username=username)
-        try:
-            data = await user.info()
-        except KeyError as exc:
-            if exc.args[0] == 'user':
-                # TikTok returned userInfo without a 'user' sub-key -- the
-                # canonical shape for banned / removed / FTC-restricted accounts.
-                raise UserBannedException(
-                    f"@{username} is banned or removed on TikTok"
-                ) from exc
-            raise RuntimeError(
-                f"TikTokApi returned incomplete data for @{username} "
-                f"(missing key {exc}) -- cookies may be stale"
-            ) from exc
-        _sc = data.get("statusCode")
-        if _sc in (10202, 10221, 10223, 10225):
-            raise UserBannedException(
-                f"TikTok returned statusCode {_sc} for @{username} "
-                f"-- account is banned, removed, restricted, or FTC-restricted"
+        # TikTok returns 10222 for private accounts but still provides full
+        # profile data when a relationship exists (e.g. mutual follow). If the
+        # user object is populated, callers fall through and return it normally;
+        # is_private will be set from secret=True in the response.
+        if not data.get("userInfo", {}).get("user", {}).get("id"):
+            raise UserPrivateException(
+                f"TikTok returned statusCode 10222 for {ident} "
+                f"-- account is private"
             )
-        if _sc == 10222:
-            _rel = int(data.get("userInfo", {}).get("user", {}).get("relation") or 0)
-            if _rel in (4, 5):
-                raise UserBlockedException(
-                    f"TikTok returned statusCode 10222 for @{username} "
-                    f"-- cookies account is blocked by this user (relation={_rel})"
-                )
-            if data.get("userInfo", {}).get("user", {}).get("id"):
-                pass  # fall through; TikTok provides full data when a relationship exists
-            else:
-                raise UserPrivateException(
-                    f"TikTok returned statusCode 10222 for @{username} "
-                    f"-- account is private"
-                )
-        if _sc == 10102:
-            raise ValueError(
-                f"TikTok returned statusCode 10102 for @{username} "
-                f"-- session is not authenticated; cookies may be stale or expired"
-            )
+    if _sc == 10102:
+        raise ValueError(
+            f"TikTok returned statusCode 10102 for {ident} "
+            f"-- session is not authenticated; cookies may be stale or expired"
+        )
+
+
+def _normalise_user_info(data: dict, username: str | None = None) -> dict:
+    """Map a statusCode/userInfo payload (JSON endpoint response or the page
+    blob's webapp.user-detail scope) to the normalised profile dict."""
     u = data.get("userInfo", {}).get("user", {})
     s = data.get("userInfo", {}).get("stats", {})
 
@@ -421,6 +358,177 @@ async def get_user_info(api, username: str | None = None,
         "avatar_url":      u.get("avatarLarger") or u.get("avatarMedium") or u.get("avatarThumb"),
         "_raw_user_data":  json.dumps(data),
     }
+
+
+async def _fetch_page_user_detail(api, username: str) -> dict | None:
+    """Load @{username}'s profile page in the open session's browser and read
+    the embedded __UNIVERSAL_DATA_FOR_REHYDRATION__ script tag (the same blob
+    get_video_details parses off video pages with curl_cffi). Returns the
+    webapp.user-detail scope, which carries the same statusCode/userInfo shape
+    as the /api/user/detail/ JSON endpoint, or None when no blob is readable
+    (consent or verification wall, timeout, page layout change) so the caller
+    falls back to the endpoint. Misses are printed (terminal only): they are
+    expected to be rare, and a silent miss would make every fallback failure
+    look like an endpoint problem."""
+    try:
+        page = api.sessions[0].page
+        await page.goto(f"https://www.tiktok.com/@{username}",
+                        wait_until="domcontentloaded")
+        blob = await page.evaluate(
+            """() => {
+                const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+                return el ? el.textContent : null;
+            }"""
+        )
+        if not blob:
+            print(f"Profile page read for @{username}: no rehydration blob, "
+                  f"likely a verification or consent wall (url: {page.url})")
+            return None
+        detail = json.loads(blob).get("__DEFAULT_SCOPE__", {}).get("webapp.user-detail")
+    except Exception as exc:
+        print(f"Profile page read for @{username} failed: {exc}")
+        return None
+    if not isinstance(detail, dict):
+        print(f"Profile page read for @{username}: blob has no webapp.user-detail scope")
+        return None
+    # The navigation replaced the page that carried the request signer; wait
+    # for it to come back so the session's next signed call (item_list) works.
+    await _wait_for_signer(page, attempts=10)
+    return detail
+
+
+async def _endpoint_user_info(api, username: str | None, sec_uid: str) -> dict:
+    """Resolve a profile through the signed /api/user/detail/ JSON endpoint.
+
+    The fallback behind the page read: it resolves by secUid alone (no
+    username needed) and self-heals the moment TikTok starts answering it
+    again. Passing username alongside when available does no harm and may
+    help TikTok disambiguate, but is not required.
+    """
+    data = None
+    for _attempt in range(2):
+        data = await api.make_request(
+            url="https://www.tiktok.com/api/user/detail/",
+            params={"secUid": sec_uid, "uniqueId": username or ""},
+        )
+        if data is None:
+            raise RuntimeError(
+                f"TikTokApi returned None for sec_uid={sec_uid} "
+                f"-- TikTok may have blocked the request or cookies are stale"
+            )
+        _raise_for_user_status(data, f"sec_uid={sec_uid}")
+        if data.get("userInfo", {}).get("user", {}).get("id"):
+            break  # got valid data
+        # statusCode 0 with empty user object is a transient session artifact.
+        # The session is degraded but not blocked -- a short wait and one retry
+        # consistently resolves it (confirmed via diagnostics on affected accounts).
+        if _attempt == 0:
+            await asyncio.sleep(3)
+        # second attempt falls through to the empty-check in _normalise_user_info
+    return _normalise_user_info(data, username)
+
+
+async def _recover_handle_via_items(api, sec_uid: str) -> str | None:
+    """Read the current handle for a secUid off one item_list page.
+
+    Disambiguates a rename from a ban when the profile page under the stored
+    handle shows no account and the JSON endpoint is not answering: a renamed
+    account still lists items under its secUid, a banned or removed one does
+    not. Returns None when nothing is listable.
+    """
+    try:
+        async for video in api.user(sec_uid=sec_uid).videos(count=1):
+            author = video.as_dict.get("author") or {}
+            if author.get("secUid") == sec_uid and author.get("uniqueId"):
+                return str(author["uniqueId"])
+            return None
+    except Exception:
+        pass
+    return None
+
+
+async def get_user_info(api, username: str | None = None,
+                        sec_uid: str | None = None) -> dict:
+    """Fetch user profile data. Returns a normalised dict.
+
+    Primary path: navigate the session's own browser page to the profile and
+    read the embedded rehydration blob. TikTok serves full profile data to
+    the real browser even while the signed /api/user/detail/ JSON endpoint
+    returns empty bodies for the same session.
+
+    Fallback path: the JSON endpoint (resolves by secUid alone, so it
+    survives username changes), kept so the code self-heals if the endpoint
+    starts answering again. A final username-only user.info() fallback covers
+    lookups that reach the endpoint tier without a sec_uid.
+
+    Renames vs bans: a renamed handle's profile page is indistinguishable
+    from a removed account's, so a not-found page for a user with a stored
+    sec_uid is never trusted directly; the endpoint and an item_list probe
+    get to answer first.
+    """
+    if not sec_uid and not username:
+        raise ValueError("Must provide username or sec_uid")
+
+    page_detail = None
+    if username:
+        page_detail = await _fetch_page_user_detail(api, username)
+    if page_detail:
+        u = page_detail.get("userInfo", {}).get("user", {})
+        if u.get("id") and (not sec_uid or u.get("secUid") == sec_uid):
+            _raise_for_user_status(page_detail, f"@{username}")
+            return _normalise_user_info(page_detail, username)
+        if not sec_uid:
+            # No stored sec_uid means the handle is the identity, so the
+            # page's status (banned, private, stale login) is authoritative.
+            # When nothing raises the blob was some wall shape; fall through
+            # to the endpoint tiers.
+            _raise_for_user_status(page_detail, f"@{username}")
+        # With a stored sec_uid, a page without that user under this handle
+        # is a rename as often as a ban; resolve by secUid below before
+        # trusting the page's not-found status.
+
+    if sec_uid:
+        try:
+            return await _endpoint_user_info(api, username, sec_uid)
+        except (UserBannedException, UserPrivateException, UserBlockedException):
+            raise  # the endpoint answered; its verdict is authoritative
+        except Exception as endpoint_exc:
+            # Endpoint dead or empty (TikTok's current behaviour for this
+            # session). Probe item_list to tell a rename from a ban.
+            handle = await _recover_handle_via_items(api, sec_uid)
+            if handle and handle != username:
+                renamed_detail = await _fetch_page_user_detail(api, handle)
+                if renamed_detail:
+                    u = renamed_detail.get("userInfo", {}).get("user", {})
+                    if u.get("id") and u.get("secUid") == sec_uid:
+                        _raise_for_user_status(renamed_detail, f"@{handle}")
+                        return _normalise_user_info(renamed_detail, handle)
+            if page_detail is not None:
+                # Nothing listable and no endpoint: the page's ban/private
+                # status is the best signal left. A renamed account with
+                # nothing listable (zero videos, or private and not followed)
+                # lands here as a ban; the ban restore machinery self-heals
+                # if it ever answers again.
+                _raise_for_user_status(page_detail, f"@{username} (sec_uid={sec_uid})")
+            raise endpoint_exc
+
+    # Final fallback: username-only lookup via user.info() (first-time adds).
+    user = api.user(username=username)
+    try:
+        data = await user.info()
+    except KeyError as exc:
+        if exc.args[0] == 'user':
+            # TikTok returned userInfo without a 'user' sub-key -- the
+            # canonical shape for banned / removed / FTC-restricted accounts.
+            raise UserBannedException(
+                f"@{username} is banned or removed on TikTok"
+            ) from exc
+        raise RuntimeError(
+            f"TikTokApi returned incomplete data for @{username} "
+            f"(missing key {exc}) -- cookies may be stale"
+        ) from exc
+    _raise_for_user_status(data, f"@{username}")
+    return _normalise_user_info(data, username)
 
 
 def get_user_videos(tiktok_id: str, sec_uid: str | None = None,

@@ -38,9 +38,7 @@ async def _api_lookup(handle: str, sec_uid: str | None):
     cookies  = get_cookies_flat()
     async with TikTokApi() as api:
         await create_tiktok_session(api, ms_token, cookies)
-        if sec_uid:
-            return await get_user_info(api, sec_uid=sec_uid)
-        return await get_user_info(api, username=handle)
+        return await get_user_info(api, username=handle, sec_uid=sec_uid)
 
 
 def _lookup_profile(handle: str) -> dict:

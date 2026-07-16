@@ -66,6 +66,15 @@ class _BotDetectedError(Exception):
 
 
 def _is_bot_error(exc: Exception) -> bool:
+    # An empty body is not a session verdict: since TikTok stopped answering
+    # the signed JSON endpoints altogether, it is those endpoints' resting
+    # state (the library's message blames bot detection, hence the explicit
+    # exclusion before the "bot" match). The same session still loads real
+    # pages, and yt-dlp still lists videos, so callers treat it as a plain
+    # fetch failure and run their fallbacks instead of restarting the browser.
+    from TikTokApi.exceptions import EmptyResponseException
+    if isinstance(exc, EmptyResponseException):
+        return False
     msg = str(exc).lower()
     return (
         "bot" in msg
@@ -140,11 +149,12 @@ async def process_single_user(
 
         for _attempt in range(2):
             try:
-                # If sec_uid is known, resolve purely by secUid (username not needed).
-                # For new users (no sec_uid yet), fall back to username lookup.
+                # Pass both: the page read needs the handle for the profile
+                # URL, and sec_uid pins the identity across username changes
+                # (the fallback tiers resolve by secUid alone).
                 info = await get_user_info(
                     api,
-                    username=None if sec_uid else user["handle"],
+                    username=user["handle"],
                     sec_uid=sec_uid,
                 )
 
