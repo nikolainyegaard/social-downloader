@@ -46,26 +46,24 @@ async function loadIgSessionStatus() {
 }
 
 async function igSessionLogin() {
-  const user     = (document.getElementById('igLoginUser')?.value || '').trim();
-  const pass     = document.getElementById('igLoginPass')?.value || '';
-  const btn      = document.getElementById('igLoginBtn');
-  const statusEl = document.getElementById('igLoginStatus');
-  if (!user || !pass) { if (statusEl) statusEl.textContent = 'Enter username and password.'; return; }
+  const user = (document.getElementById('igLoginUser')?.value || '').trim();
+  const pass = document.getElementById('igLoginPass')?.value || '';
+  const btn  = document.getElementById('igLoginBtn');
+  if (!user || !pass) { showToast('Enter username and password.', { type: 'warning' }); return; }
   btn.disabled = true;
-  if (statusEl) { statusEl.textContent = 'Logging in...'; statusEl.style.color = 'var(--muted)'; }
+  const t = showToast('Logging in…', { spinner: true, duration: 0 });
   const { ok, data } = await apiJSON('/api/instagram/session', {
     method: 'POST',
     body: JSON.stringify({ username: user, password: pass }),
   });
   btn.disabled = false;
   if (ok) {
-    if (statusEl) statusEl.textContent = '';
     const passEl = document.getElementById('igLoginPass');
     if (passEl) passEl.value = '';
     loadIgSessionStatus();
-    showToast(`Logged in as @${data.username}`, { type: 'success', duration: 3000 });
+    t.update(`Logged in as @${data.username}`, { type: 'success' });
   } else {
-    if (statusEl) { statusEl.textContent = data.error || 'Login failed.'; statusEl.style.color = 'var(--red)'; }
+    t.update(data.error || 'Login failed.', { type: 'error' });
   }
 }
 

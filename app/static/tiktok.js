@@ -53,7 +53,7 @@ function _qrRender(state) {
     starting: 'Opening the browser…',
     waiting:  state.qr ? 'Scan the code with the TikTok app on your phone'
                        : (state.message || 'Loading the login page') + '…',
-    success:  state.message || 'Signed in',
+    success:  'Signed in',         // the full message (cookie count) goes to a toast
     expired:  state.message || 'Login window timed out. Generate a new code to retry',
     error:    'QR login failed',   // the full (often long) error goes to a toast
   };
@@ -72,8 +72,9 @@ function _qrRender(state) {
     if (state.status === 'success') loadCookies();
     // An in-flight poll can re-render the terminal state; toast only on the
     // transition into it
-    if (state.status === 'error' && _qrLastStatus !== 'error') {
-      showToast(state.message || 'QR login failed', { type: 'error' });
+    if (_qrLastStatus !== state.status) {
+      if (state.status === 'error')   showToast(state.message || 'QR login failed', { type: 'error' });
+      if (state.status === 'success') showToast(state.message || 'Signed in', { type: 'success' });
     }
   }
   _qrLastStatus = state.status;
@@ -1637,13 +1638,11 @@ async function triggerBackfill() {
 
 async function retryFailed() {
   const btn = document.getElementById('retryFailedBtn');
-  const statusEl = document.getElementById('backfillStatus');
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/backfill/reset-errors', { method: 'POST' });
   btn.disabled = false;
-  if (!ok) { statusEl.textContent = data.error || 'Failed.'; return; }
-  statusEl.textContent = `${data.reset} video(s) cleared, ready to retry.`;
-  setTimeout(() => { statusEl.textContent = ''; }, 8000);
+  if (!ok) { showToast(data.error || 'Could not clear failed videos', { type: 'error' }); return; }
+  showToast(`${data.reset} video(s) cleared, ready to retry.`, { type: 'success' });
   // Reload status so the counts update
   ttLoadStatus();
 }
@@ -1681,11 +1680,11 @@ function _startBackfillPoll() {
       clearInterval(_backfillPoll);
       _backfillPoll = null;
       btn.disabled = false;
+      statusEl.textContent = '';
       const ok2 = data.done - data.errors;
-      statusEl.textContent = data.total === 0
-        ? 'Nothing to backfill'
-        : `Done: ${ok2} updated, ${data.errors} failed`;
-      setTimeout(() => { statusEl.textContent = ''; }, 12000);
+      if (data.total === 0) showToast('Nothing to backfill', { type: 'info' });
+      else showToast(`Stats backfill done: ${ok2} updated, ${data.errors} failed`,
+                     { type: data.errors ? 'warning' : 'success' });
     }
   }, 2000);
 }
@@ -1720,19 +1719,13 @@ function resetBackfillStep() {
     btn.disabled = true;
     btn.textContent = 'Reset all backfill status';
     btn.style.background = '';
-    statusEl.textContent = 'Resetting…';
-    statusEl.style.color = 'var(--muted)';
+    statusEl.textContent = '';
+    const t = showToast('Resetting…', { spinner: true, duration: 0 });
 
     apiJSON('/api/tiktok/backfill/reset', { method: 'POST' }).then(({ ok, data }) => {
       btn.disabled = false;
-      if (!ok) {
-        statusEl.textContent = data.error || 'Failed.';
-        statusEl.style.color = 'var(--red)';
-      } else {
-        statusEl.textContent = `Done. ${data.reset.toLocaleString()} videos marked for re-backfill.`;
-        statusEl.style.color = 'var(--green)';
-        setTimeout(() => { statusEl.textContent = ''; }, 12000);
-      }
+      if (!ok) t.update(data.error || 'Could not reset the backfill status', { type: 'error' });
+      else t.update(`Done. ${data.reset.toLocaleString()} videos marked for re-backfill.`, { type: 'success' });
     });
   }
 }

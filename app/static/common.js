@@ -595,7 +595,6 @@ async function loadAuthSettings() {
   document.getElementById('authSecretStatus').textContent = data.client_secret_set
     ? 'A client secret is saved.'
     : 'No client secret saved.';
-  document.getElementById('authSaveStatus').textContent   = '';
 
   // Warn when the saved config differs from what is currently running
   const pendingChange = data.enabled !== data.enabled_runtime;
@@ -624,11 +623,8 @@ async function saveAuthSettings() {
   const clientSecret = document.getElementById('authClientSecret').value;
   const sessionDays  = parseInt(document.getElementById('authSessionDays').value, 10) || 7;
 
-  const statusEl = document.getElementById('authSaveStatus');
-
   if (enabled && (!discoveryUrl || !clientId)) {
-    statusEl.textContent = 'Discovery URL and Client ID are required to enable OAuth.';
-    statusEl.style.color = 'var(--red)';
+    showToast('Discovery URL and Client ID are required to enable OAuth.', { type: 'warning' });
     return;
   }
 
@@ -638,8 +634,7 @@ async function saveAuthSettings() {
   const { ok, data } = await apiJSON('/api/auth/config', { method: 'PATCH', body: JSON.stringify(body) });
 
   if (ok) {
-    statusEl.textContent = 'Saved.';
-    statusEl.style.color = 'var(--muted)';
+    showToast('Authentication settings saved.', { type: 'success' });
     document.getElementById('authClientSecret').value       = '';
     document.getElementById('authClientSecret').type        = 'password';
     document.getElementById('authSecretToggle').textContent = 'Show';
@@ -647,8 +642,7 @@ async function saveAuthSettings() {
     // Show restart banner any time settings are saved, since all changes require a restart
     document.getElementById('authRestartBanner').style.display = '';
   } else {
-    statusEl.textContent = (data && data.error) || 'Save failed.';
-    statusEl.style.color = 'var(--red)';
+    showToast((data && data.error) || 'Save failed.', { type: 'error' });
   }
 }
 
