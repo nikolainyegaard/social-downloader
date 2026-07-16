@@ -260,14 +260,29 @@ async function ttProxyTest() {
 
 const _WG_FIELD_IDS = { private_key: 'ttWgPrivateKey', address: 'ttWgAddress',
                         public_key: 'ttWgPublicKey', endpoint: 'ttWgEndpoint' };
+let _ttWgCanRestart = false;   // Docker socket mounted, so the app can restart gluetun itself
 const _eyeIcon    = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 const _eyeOffIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 
-function _ttWgStatus(msg, tone) {
+function _ttWgStatus(msg, tone, offerRestart = false) {
   const el = document.getElementById('ttWgStatus');
   el.style.display = msg ? '' : 'none';
   el.textContent   = msg || '';
   el.style.color   = { ok: 'var(--green)', error: 'var(--red)' }[tone] || '';
+  if (msg && offerRestart && _ttWgCanRestart) {
+    const link = document.createElement('span');
+    link.className   = 'hdr-link';
+    link.textContent = 'Restart gluetun now';
+    link.onclick     = ttGluetunRestart;
+    el.append(' ', link);
+  }
+}
+
+async function ttGluetunRestart() {
+  _ttWgStatus('Restarting gluetun…');
+  const { ok, data } = await apiJSON('/api/tiktok/proxy/gluetun/restart', { method: 'POST' });
+  if (!ok) { _ttWgStatus((data && data.error) || 'Could not restart gluetun', 'error'); return; }
+  _ttWgStatus('Gluetun restarted with the saved config. Give it a few seconds to connect, then Test connection above shows the new exit IP.', 'ok');
 }
 
 function ttWgToggleKey() {
@@ -284,6 +299,7 @@ async function ttWgLoad() {
   if (eye && !eye.innerHTML) eye.innerHTML = _eyeIcon;
   const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard');
   if (!ok) return;
+  _ttWgCanRestart = !!data.restart_available;
   const meta = document.getElementById('ttWgMeta');
   document.getElementById('ttWgDeleteBtn').style.display = data.present ? '' : 'none';
   for (const [field, id] of Object.entries(_WG_FIELD_IDS)) {
@@ -301,7 +317,7 @@ async function ttWgSave() {
   }
   const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'POST', body: JSON.stringify(body) });
   if (!ok) { _ttWgStatus((data && data.error) || 'Could not save the config', 'error'); return; }
-  _ttWgStatus('Saved. Restart the gluetun container to apply it.', 'ok');
+  _ttWgStatus(_ttWgCanRestart ? 'Saved.' : 'Saved. Restart the gluetun container to apply it.', 'ok', true);
   ttWgLoad();
 }
 
@@ -309,7 +325,7 @@ async function ttWgDelete() {
   if (!confirm('Remove the saved WireGuard config? Gluetun keeps using it until that container restarts.')) return;
   const { ok } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'DELETE' });
   if (!ok) { _ttWgStatus('Could not remove the config', 'error'); return; }
-  _ttWgStatus('Removed.', 'ok');
+  _ttWgStatus('Removed.', 'ok', true);
   ttWgLoad();
 }
 

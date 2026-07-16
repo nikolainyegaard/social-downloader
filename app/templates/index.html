@@ -449,7 +449,9 @@
               discarded automatically. Saving writes a clean
               <code>data/gluetun/wireguard/wg0.conf</code>, where gluetun's
               <code>./data/gluetun:/gluetun</code> volume reads it. Gluetun only loads the
-              config at startup, so restart that container after saving.
+              config at startup, so restart that container after saving. With the host's
+              Docker socket mounted into the app container (see the README), a Restart
+              gluetun now link appears after saving and does that for you.
             </div>
           </div>
         </div>

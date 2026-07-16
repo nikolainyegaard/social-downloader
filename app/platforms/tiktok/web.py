@@ -158,11 +158,13 @@ def register_tiktok_routes(bp, engine) -> None:
     # reveal toggle; it already sits in plaintext on disk for gluetun.
     _WG_PATH = os.path.join(DATA_DIR, "gluetun", "wireguard", "wg0.conf")
     _WG_FIELDS = ("private_key", "address", "public_key", "endpoint")
+    _DOCKER_SOCK = "/var/run/docker.sock"
 
     @bp.route("/proxy/wireguard", methods=["GET"])
     def tiktok_wireguard_get():
+        restart_available = os.path.exists(_DOCKER_SOCK)
         if not os.path.exists(_WG_PATH):
-            return jsonify({"present": False})
+            return jsonify({"present": False, "restart_available": restart_available})
         fields = {f: None for f in _WG_FIELDS}
         keymap = {"privatekey": "private_key", "address": "address",
                   "publickey": "public_key", "endpoint": "endpoint"}
@@ -176,7 +178,8 @@ def register_tiktok_routes(bp, engine) -> None:
             updated = int(os.path.getmtime(_WG_PATH))
         except OSError:
             updated = None
-        return jsonify({"present": True, "updated_at": updated, **fields})
+        return jsonify({"present": True, "updated_at": updated,
+                        "restart_available": restart_available, **fields})
 
     @bp.route("/proxy/wireguard", methods=["POST"])
     def tiktok_wireguard_set():
@@ -219,6 +222,47 @@ def register_tiktok_routes(bp, engine) -> None:
             os.remove(_WG_PATH)
         except FileNotFoundError:
             pass
+        return jsonify({"ok": True})
+
+    @bp.route("/proxy/gluetun/restart", methods=["POST"])
+    def tiktok_gluetun_restart():
+        """Restart the gluetun sidecar through the Docker socket so a saved
+        WireGuard config takes effect without shell access. Requires the host
+        socket mounted into this container (optional; documented in the
+        README); the UI only offers the action when restart_available from
+        the GET above is true. Stdlib HTTP over the unix socket, since
+        requests cannot speak to one and the docker package would be a heavy
+        dependency for a single call."""
+        import http.client
+        import socket as _socket
+
+        if not os.path.exists(_DOCKER_SOCK):
+            return jsonify({"error": "The Docker socket is not mounted into this "
+                            "container; see the README for the volume line that "
+                            "enables restarting gluetun from here"}), 503
+
+        class _DockerSockConnection(http.client.HTTPConnection):
+            def connect(self):
+                self.sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+                self.sock.settimeout(self.timeout)
+                self.sock.connect(_DOCKER_SOCK)
+
+        # t=5: Docker sends SIGTERM, waits up to 5 s, then kills. The request
+        # blocks until the container is up again, hence the generous timeout.
+        conn = _DockerSockConnection("localhost", timeout=30)
+        try:
+            conn.request("POST", "/containers/gluetun/restart?t=5")
+            resp = conn.getresponse()
+            status = resp.status
+            detail = resp.read().decode("utf-8", errors="ignore").strip()
+        except Exception as e:
+            return jsonify({"error": f"Docker API request failed: {type(e).__name__}: {e}"}), 502
+        finally:
+            conn.close()
+        if status == 404:
+            return jsonify({"error": "Docker has no container named gluetun"}), 404
+        if status >= 300:
+            return jsonify({"error": f"Docker returned {status}: {detail}"}), 502
         return jsonify({"ok": True})
 
     # Live view of the headed browser display: grab frames and inject mouse
