@@ -482,7 +482,10 @@ class ChannelDB:
 
     def set_account_status(self, channel_id: str, status: str) -> None:
         """Set account_status; 'banned' also stamps banned_at (COALESCE, never
-        overwritten). Status transitions are recorded in profile_history."""
+        overwritten). Transitions away from banned (an unban) are recorded in
+        profile_history; a transition to banned is not, since the activity
+        feed already shows it as its own banned event and a second
+        account-status row would just duplicate it."""
         with self.get_db() as conn:
             row = conn.execute(
                 "SELECT account_status FROM channels WHERE channel_id = ?", (channel_id,)
@@ -498,7 +501,7 @@ class ChannelDB:
                     "UPDATE channels SET account_status = ? WHERE channel_id = ?",
                     (status, channel_id)
                 )
-            if old_status and old_status != status:
+            if old_status and old_status != status and status != "banned":
                 conn.execute(
                     "INSERT INTO profile_history (channel_id, field, old_value, changed_at) VALUES (?, 'account_status', ?, ?)",
                     (channel_id, old_status, int(time.time()))
@@ -1150,8 +1153,11 @@ class ChannelDB:
             if kind in (None, "banned"):
                 w    = f"{flags_b}" + ("AND banned_at < ?" if before else "")
                 args = (before, cap) if before else (cap,)
+                # enabled and account_status ride along for the frontend's
+                # name styling, same as the other event sources; without them
+                # a banned row's handle rendered in the default colour
                 rows = conn.execute(f"""
-                    SELECT channel_id, handle, banned_at, starred
+                    SELECT channel_id, handle, banned_at, starred, enabled, account_status
                     FROM channels
                     WHERE account_status = 'banned' AND banned_at IS NOT NULL {w}
                     ORDER BY banned_at DESC LIMIT ?""", args).fetchall()

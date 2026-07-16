@@ -1,5 +1,5 @@
 """
-Thumbnail and avatar generation — all output in AVIF format.
+Thumbnail and avatar generation -- all output in AVIF format.
 
 Thumbnails are stored as AVIF files at:
     MEDIA_DIR/@username/thumbs/{video_id}.avif
@@ -31,6 +31,14 @@ AVATARS_DIR = os.path.join(DATA_DIR, "tiktok", "avatars")
 from photo_converter import encode_avif, CRF_THUMB, CRF_AVATAR
 
 THUMB_WIDTH = 360   # px
+
+
+def _file_md5(p: str) -> str:
+    h = hashlib.md5()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 # ── Path helpers ──────────────────────────────────────────────────────────────
@@ -121,6 +129,7 @@ def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok",
     os.makedirs(_avatars_dir, exist_ok=True)
 
     path     = os.path.join(_avatars_dir, f"{creator_id}.avif")
+    src_sig  = path + ".src.md5"
     jpg_tmp  = path + ".jpg.tmp"
     avif_tmp = path + ".avif.tmp"
 
@@ -130,6 +139,29 @@ def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok",
         _try_remove(jpg_tmp)
         return False
 
+    # Change detection compares the downloaded source image, never the AVIF
+    # re-encode: libaom encodes are not byte-stable across runs, so hashing
+    # the encode reported an avatar change on nearly every check, spamming
+    # profile_history and archiving a copy each time. The source hash lives
+    # in a sidecar next to the cached file; a match also means the whole
+    # re-encode can be skipped.
+    try:
+        new_md5 = _file_md5(jpg_tmp)
+    except OSError:
+        _try_remove(jpg_tmp)
+        return False
+    old_md5 = None
+    try:
+        with open(src_sig, encoding="ascii") as f:
+            old_md5 = f.read().strip()
+    except OSError:
+        pass
+
+    if old_md5 == new_md5 and os.path.exists(path):
+        _try_remove(jpg_tmp)
+        _db.set_avatar_cached(creator_id, True)
+        return "unchanged"
+
     if not encode_avif(jpg_tmp, avif_tmp, CRF_AVATAR):
         _try_remove(jpg_tmp)
         _try_remove(avif_tmp)
@@ -137,23 +169,21 @@ def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok",
     _try_remove(jpg_tmp)
 
     try:
-        def _md5(p: str) -> str:
-            h = hashlib.md5()
-            with open(p, "rb") as f:
-                for chunk in iter(lambda: f.read(65536), b""):
-                    h.update(chunk)
-            return h.hexdigest()
-
+        # A missing sidecar (first download, or a cache from before the
+        # sidecar existed) baselines silently: whether the old AVIF matches
+        # is unknowable without the unstable encode compare, so no change is
+        # recorded and no archive is kept for that one check.
         changed = False
-        if os.path.exists(path):
-            if _md5(path) != _md5(avif_tmp):
-                ts   = int(time.time())
-                arch = os.path.join(_avatars_dir, f"{creator_id}_{ts}.avif")
-                shutil.copy2(path, arch)
-                _db.record_profile_change(creator_id, "avatar", f"{creator_id}_{ts}.avif")
-                changed = True
+        if os.path.exists(path) and old_md5 and old_md5 != new_md5:
+            ts   = int(time.time())
+            arch = os.path.join(_avatars_dir, f"{creator_id}_{ts}.avif")
+            shutil.copy2(path, arch)
+            _db.record_profile_change(creator_id, "avatar", f"{creator_id}_{ts}.avif")
+            changed = True
 
         os.replace(avif_tmp, path)
+        with open(src_sig, "w", encoding="ascii") as f:
+            f.write(new_md5)
         _db.set_avatar_cached(creator_id, True)
         return "changed" if changed else "unchanged"
     except Exception:

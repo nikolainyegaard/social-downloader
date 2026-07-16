@@ -279,6 +279,17 @@ def _update_profile(engine, channel: dict, info: dict, log: Callable[[str], None
     db         = engine.db
     channel_id = channel["channel_id"]
 
+    # Same handle in a different casing or with an @ prefix is not a change:
+    # handles are case-insensitive on these platforms and yt-dlp has alternated
+    # variants between fetch paths, which spammed profile_history hourly and
+    # ping-ponged the media folder rename. Keep the stored form everywhere.
+    _new_handle = info.get("handle")
+    _old_handle = channel.get("handle")
+    if (_new_handle and _old_handle and _new_handle != _old_handle
+            and str(_new_handle).lstrip("@").lower() == str(_old_handle).lstrip("@").lower()):
+        info = dict(info)
+        info["handle"] = _old_handle
+
     field_map = {
         "handle":       (channel.get("handle"),       info.get("handle")),
         "display_name": (channel.get("display_name"), info.get("display_name")),
