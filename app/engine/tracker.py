@@ -47,6 +47,7 @@ def save_new_stories(db, platform: str, channel_id: str, handle: str,
             path = download_story(
                 story_id=s["story_id"], username=handle, platform=platform,
                 media_url=s["media_url"], media_urls=s.get("media_urls"),
+                page_url=s.get("page_url"),
                 content_type=s.get("content_type", "video"),
                 posted_at=s.get("posted_at"), cookies=cookies, cookies_path=cookies_path,
                 headers=s.get("headers"), proxy=proxy,

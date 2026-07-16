@@ -222,9 +222,49 @@ class StoryDownloadError(Exception):
     fit for the UI log; per-candidate detail goes to the run log."""
 
 
+def _download_story_via_ytdlp(*, story_id: str, page_url: str, stories_dir: str,
+                              stamp: str, posted_at: int | None,
+                              cookies_path: str | None = None,
+                              proxy: str | None = None) -> str | None:
+    """Video stories: let yt-dlp fetch the story page and download the media
+    itself, so the URL is signed for the client that uses it. This sidesteps
+    the CDN 403s that hit pre-signed URLs reused by a second client. Returns
+    the saved path, or None so the caller falls back to the direct CDN GETs.
+    Not used for photo stories: yt-dlp returns audio-only for TikTok images.
+    """
+    output_template = os.path.join(stories_dir, f"{stamp}_{story_id}.%(ext)s")
+    ydl_opts: dict[str, Any] = {
+        "outtmpl":        output_template,
+        "format":         "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "merge_output_format": "mp4",
+        "socket_timeout": 30,
+        "retries":        2,
+        "quiet":          True,
+        "no_warnings":    True,
+        **({"proxy": proxy} if proxy else {}),
+        **({"cookiefile": cookies_path} if cookies_path and os.path.exists(cookies_path) else {}),
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.extract_info(page_url, download=True)
+    except Exception as e:
+        print(f"[{_ts()}] Story {story_id} yt-dlp attempt failed: {e}")
+        return None
+    for ext in ("mp4", "webm", "mkv", "mov"):
+        path = os.path.join(stories_dir, f"{stamp}_{story_id}.{ext}")
+        if os.path.exists(path):
+            if posted_at:
+                os.utime(path, (posted_at, posted_at))
+            print(f"[{_ts()}] Story {story_id} saved via yt-dlp -> {path}")
+            return path
+    print(f"[{_ts()}] Story {story_id} yt-dlp reported success but produced no file")
+    return None
+
+
 def download_story(*, story_id: str, username: str, platform: str,
                    media_url: str, content_type: str, posted_at: int | None,
                    media_urls: list[str] | None = None,
+                   page_url: str | None = None,
                    cookies: dict | None = None,
                    cookies_path: str | None = None,
                    headers: dict | None = None,
@@ -248,6 +288,18 @@ def download_story(*, story_id: str, username: str, platform: str,
 
     stamp   = (datetime.fromtimestamp(posted_at).strftime("%Y%m%d_%H%M%S")
                if posted_at else datetime.now().strftime("%Y%m%d_%H%M%S"))
+
+    # Video stories with a page URL go to yt-dlp first: it fetches the page
+    # and downloads with its own session, so the media URL is signed for the
+    # client actually using it. The direct CDN GETs below stay as fallback.
+    if page_url and content_type == "video":
+        path = _download_story_via_ytdlp(
+            story_id=story_id, page_url=page_url, stories_dir=stories_dir,
+            stamp=stamp, posted_at=posted_at, cookies_path=cookies_path, proxy=proxy,
+        )
+        if path:
+            return path
+
     # A live cookies dict (the fetching session's jar) wins over cookies.txt:
     # TikTok's CDN signs story URLs against the session's tt_chain_token
     if not cookies:

@@ -106,6 +106,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Fixed
 - Every story save and listing is now visible in the run log (saved path with size, live count per user), so silent successes and silent no-story checks can be told apart when diagnosing
+- Video stories download through yt-dlp first: it fetches the story page and downloads with its own session, so the media URL is signed for the client that actually uses it, sidestepping the CDN 403s that hit pre-signed URLs reused by a second client; photo stories keep the direct CDN path (yt-dlp returns audio-only for TikTok images) and the CDN candidates remain the fallback for videos
 - Story downloads try every URL the platform offered (TikTok lists two CDN hosts plus a www.tiktok.com play endpoint per video) instead of giving up when the first host refuses; the log console line now names the failure reason (e.g. HTTP 403) and the run log records each attempted host with status, response snippet, and which cookies were sent
 - Story downloads no longer 403 intermittently: the CDN validates the tt_chain_token cookie the story URL was signed for, and downloads now carry the live browser session's cookies instead of the stale cookies.txt jar (which remains the fallback)
 - A ban no longer produces two activity feed entries (the banned event plus an account status change); the account status change is now reserved for recoveries, where it is the only signal. The banned feed row also colours the handle red like everywhere else in the UI, instead of the default colour
