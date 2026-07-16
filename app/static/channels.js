@@ -39,6 +39,7 @@
  * @property {(view: string, vids: Object[]) => Object[]} [viewVideoFilter]
  * @property {(raw: string, addToasts: Object) => (boolean|Promise<boolean>)} [addHandler]  Return true when fully handled
  * @property {(state: Object) => void} [onStatus]       Called after every status render
+ * @property {Object<string, () => void>} [extraDomainLoaders]  Platform panels refetched on SSE 'changed' domains (TikTok: sounds)
  * @property {(state: Object) => boolean} [statusActive]  Extra 'running' signal for the header badge
  * @property {(state: Object) => {iso: string, label: string}[]} [nextRunCandidates]
  * @property {(s: Object) => Object[]} [statsRows]      Rows for the stat strip
@@ -419,9 +420,14 @@ function initChannelApp(cfg) {
     _renderStatGrid(`${P}StatsGrid`, _statsRows(s));
   }
 
+  let _statsSig = null;
   const loadStats = X('LoadStats', async () => {
     const { ok, data } = await apiJSON(`${API}/stats`);
-    if (ok) renderStats(data);
+    if (!ok) return;
+    const sig = JSON.stringify(data);
+    if (sig === _statsSig) return;
+    _statsSig = sig;
+    renderStats(data);
   });
 
   // ── Recent panel ──────────────────────────────────────────────────────────
@@ -1750,20 +1756,60 @@ function initChannelApp(cfg) {
   // ── Live events (SSE) ─────────────────────────────────────────────────────
   //
   // The active platform tab holds one EventSource on /events; the server
-  // pushes status and queue snapshots the moment they change. Hidden tabs
-  // close their stream (browsers cap concurrent HTTP/1.1 connections per
-  // origin, and four idle streams would crowd out normal fetches) and fall
-  // back to the slow polls below. EventSource reconnects on its own after
-  // a dropped connection and re-sends full snapshots on connect.
+  // pushes status and queue snapshots the moment they change, plus a
+  // 'changed' event naming the data panels whose tables were written.
+  // Hidden tabs close their stream (browsers cap concurrent HTTP/1.1
+  // connections per origin, and four idle streams would crowd out normal
+  // fetches) and fall back to the slow polls below. EventSource reconnects
+  // on its own after a dropped connection and re-sends full status/queue
+  // snapshots on connect.
+
+  // Loader per 'changed' domain. Each refetches its panel; every loader is
+  // signature-gated, so a refetch that comes back identical never touches
+  // the DOM. A change drops the recent feed's per-filter page-one caches
+  // too, since those went stale with the data.
+  const _domainLoaders = Object.assign({
+    creators: loadCreators,
+    stats:    loadStats,
+    recent:   () => { _rf.cache = {}; return loadRecent(); },
+  }, cfg.extraDomainLoaders || {});
+  const _domainState = {};
+  const _REFETCH_GAP_MS = 2000;
+
+  // Leading edge fires at once (one write renders within ~1 s of the server
+  // tick); while events keep arriving (a session saves something every few
+  // seconds for minutes) each panel refetches at most once per gap, trailing
+  // edge included so the final state always lands.
+  function _refetchDomain(domain) {
+    const load = _domainLoaders[domain];
+    if (!load) return;
+    const st  = _domainState[domain] || (_domainState[domain] = { last: 0, timer: null });
+    const due = st.last + _REFETCH_GAP_MS - Date.now();
+    if (due <= 0) {
+      st.last = Date.now();
+      load();
+    } else if (!st.timer) {
+      st.timer = setTimeout(() => { st.timer = null; st.last = Date.now(); load(); }, due);
+    }
+  }
 
   let _es = null;
+  let _esHadOpen = false;
   const _isActiveTab = () => (location.hash.slice(1) || 'tiktok') === cfg.id;
 
   function _syncEvents() {
     if (_isActiveTab() && !_es && window.EventSource) {
       _es = new EventSource(`${API}/events`);
-      _es.addEventListener('status', e => renderStatus(JSON.parse(e.data)));
-      _es.addEventListener('queue',  e => _syncQueue(JSON.parse(e.data)));
+      _es.addEventListener('status',  e => renderStatus(JSON.parse(e.data)));
+      _es.addEventListener('queue',   e => _syncQueue(JSON.parse(e.data)));
+      _es.addEventListener('changed', e => JSON.parse(e.data).forEach(_refetchDomain));
+      _es.onopen = () => {
+        // Any open after the first (tab switched back, or a reconnect after
+        // a drop) may have missed 'changed' events, so refetch every domain;
+        // status and queue re-send themselves on connect.
+        if (_esHadOpen) Object.keys(_domainLoaders).forEach(_refetchDomain);
+        _esHadOpen = true;
+      };
     } else if (!_isActiveTab() && _es) {
       _es.close();
       _es = null;
@@ -1785,14 +1831,17 @@ function initChannelApp(cfg) {
   _attachEdgeFade(_el('Controls'));
   EXTRA_VIEWS.forEach(v => _attachEdgeFade(_el(`Controls_${v.key}`)));
 
-  // Status and queue arrive over SSE while this tab is active; the polls
-  // only cover hidden tabs and the no-EventSource fallback.
+  // While this tab is active, everything arrives over SSE: status and queue
+  // as pushed snapshots, creators / stats / recent (and platform extras) as
+  // 'changed' refetches. The polls below only cover hidden tabs and the
+  // no-EventSource fallback.
   setInterval(() => { if (!_es) loadStatus(); }, 15000);
   setInterval(() => { if (!_es) loadQueue();  }, 15000);
+  setInterval(() => { if (!_es) { loadCreators(); loadStats(); loadRecent(); } }, 60000);
   setInterval(_tickActivityBar, 1000);
-  setInterval(loadCreators, 15000);
-  setInterval(loadStats,    60000);
-  setInterval(loadRecent,   30000);
+  // Relative timestamps ("3m ago" on cards and feed rows) still need a
+  // clock: re-render from memory once a minute, no fetch.
+  setInterval(() => { if (_es) { renderCreators(); _renderFeed(); } }, 60000);
 
   // App handle for platform extras (e.g. the TikTok sounds catalog and
   // untracked-user modal) that need to drive the engine-generated UI.
@@ -1814,5 +1863,8 @@ function initChannelApp(cfg) {
     setModalCreator:   ch => { modalCreator = ch; modalCreatorId = ch.channel_id; },
     getTrackingView:   () => trackingView,
     getSearch:         () => search,
+    // True while the SSE stream is open (active tab): platform extras use it
+    // to demote their own polls to a no-stream fallback
+    isLive:            () => !!_es,
   };
 }

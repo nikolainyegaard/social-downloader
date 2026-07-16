@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 import os
 from contextlib import contextmanager
 
 from config import DATA_DIR
+
+# Authorizer action codes for statements that write a table
+_WRITE_ACTIONS = (sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE, sqlite3.SQLITE_DELETE)
 
 
 class ChannelDB:
@@ -24,19 +28,49 @@ class ChannelDB:
         self.platform = platform
         self.data_dir = os.path.join(DATA_DIR, platform)
         self.DB_PATH  = os.path.join(self.data_dir, f"{platform}.db")
+        # Per-table write-version counters, bumped after every committed
+        # get_db() block that wrote the table. The SSE stream sums them into
+        # per-panel versions, so the frontend refetches a panel the moment
+        # any writer (loop thread, add worker, web route) commits a change
+        # instead of polling on timers. In-memory only: versions restart at 0
+        # on relaunch, which is fine because the stream diffs against what it
+        # already sent on the same connection.
+        self._table_versions: dict[str, int] = {}
+        self._versions_lock = threading.Lock()
 
     @contextmanager
     def get_db(self):
         conn = sqlite3.connect(self.DB_PATH)
         conn.row_factory = sqlite3.Row
+        written: set[str] = set()
+
+        def _track_writes(action, arg1, _arg2, _dbname, _source):
+            # Fires at statement compile time: a table lands in `written`
+            # even when the statement ends up matching zero rows. That only
+            # over-signals (a no-op refetch downstream), never misses.
+            if action in _WRITE_ACTIONS and arg1:
+                written.add(arg1)
+            return sqlite3.SQLITE_OK
+
+        conn.set_authorizer(_track_writes)
         try:
             yield conn
             conn.commit()
+            if written:
+                with self._versions_lock:
+                    for table in written:
+                        self._table_versions[table] = self._table_versions.get(table, 0) + 1
         except Exception:
             conn.rollback()
             raise
         finally:
             conn.close()
+
+    def tables_version(self, *tables: str) -> int:
+        """Combined write-version of the given tables. Monotonic, so equality
+        with a previously seen value means none of them were written since."""
+        with self._versions_lock:
+            return sum(self._table_versions.get(t, 0) for t in tables)
 
 
     def init_db(self):

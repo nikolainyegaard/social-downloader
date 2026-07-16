@@ -657,6 +657,7 @@ const tt = initChannelApp({
   extraLoopLabel:    'Sounds',
   addHandler:        _ttAddHandler,
   videoActionBtnsFn: _ttVideoActionBtns,
+  extraDomainLoaders: { sounds: () => loadSounds() },
   recentFallback:    item => item.sound_id
     ? `openSoundModalAndHighlight('${esc(item.sound_id)}','${esc(item.video_id)}')`
     : '',
@@ -817,9 +818,15 @@ function renderSounds() {
   }).join('') + _ghostCards(Math.max(0, 9 - filtered.length));
 }
 
+let _soundsSig = null;
 async function loadSounds() {
   const { ok, data } = await apiJSON('/api/tiktok/sounds');
-  if (ok) { sounds = data; renderSounds(); }
+  if (!ok) return;
+  const sig = JSON.stringify(data);
+  if (sig === _soundsSig) return;
+  _soundsSig = sig;
+  sounds = data;
+  renderSounds();
 }
 
 async function removeSound(soundId, label) {
@@ -1738,7 +1745,9 @@ loadSounds();
 // them on the TikTok tab being active instead of polling from every tab
 const _ttTabActive = () => (location.hash.slice(1) || 'tiktok') === 'tiktok';
 setInterval(() => { if (_ttTabActive()) loadCookies(); }, 30000);
-setInterval(() => { if (_ttTabActive()) loadSounds();  }, 60000);
+// Sounds arrive via the SSE 'changed' event while the stream is open; this
+// poll is the no-stream fallback
+setInterval(() => { if (_ttTabActive() && !tt.isLive()) loadSounds(); }, 60000);
 window.addEventListener('hashchange', () => { if (_ttTabActive()) { loadCookies(); loadSounds(); } });
 _initAllGliders();
 

@@ -646,23 +646,58 @@ def create_channel_blueprint(engine) -> Blueprint:
     def get_status():
         return jsonify(_status_snapshot())
 
+    # Panels served by plain GET routes, mapped to the tables whose writes
+    # invalidate them (creators = /channels, recent = /recent/feed, stats =
+    # /stats, sounds = the TikTok catalog; the sound tables never bump on the
+    # other platforms so the domain just stays quiet there). The SSE stream
+    # sums each domain's table write-versions once a second and names the
+    # changed domains in a 'changed' event; the frontend refetches only those.
+    _DATA_DOMAINS = {
+        "creators": ("channels", "videos", "profile_history", "stories"),
+        "recent":   ("channels", "videos", "profile_history"),
+        "stats":    ("channels", "videos"),
+        "sounds":   ("sounds", "sound_videos"),
+    }
+
     @bp.route("/events", methods=["GET"])
     def events():
-        """SSE stream: pushes 'status' and 'queue' events whenever their
-        snapshots change, checked server-side once a second. The frontend
-        keeps one stream open for the active platform tab and falls back to
-        slow polling on hidden tabs, so at most one stream runs per browser
-        tab and the werkzeug thread it holds is bounded."""
+        """SSE stream: pushes 'status' and 'queue' snapshots whenever they
+        change and a 'changed' event naming data domains whose tables were
+        written, checked server-side once a second. The frontend keeps one
+        stream open for the active platform tab and falls back to slow
+        polling on hidden tabs, so at most one stream runs per browser tab
+        and the werkzeug thread it holds is bounded."""
         def _gen():
             last: dict[str, str | None] = {"status": None, "queue": None}
+            # Seeded silently: the client fetched everything at page load, so
+            # the first 'changed' should mean a real write after connect.
+            versions = {d: db.tables_version(*t) for d, t in _DATA_DOMAINS.items()}
+            queue_ver = db.tables_version("add_queue")
             ticks = 0
             yield "retry: 3000\n\n"
             while True:
-                for name, snap in (("status", _status_snapshot), ("queue", _queue_snapshot)):
-                    data = _json.dumps(snap(), default=str)
-                    if data != last[name]:
-                        last[name] = data
-                        yield f"event: {name}\ndata: {data}\n\n"
+                data = _json.dumps(_status_snapshot(), default=str)
+                if data != last["status"]:
+                    last["status"] = data
+                    yield f"event: status\ndata: {data}\n\n"
+                # The queue snapshot is a DB query; only run it when add_queue
+                # was written, plus every 30 s so rows falling out of its
+                # 10-minute window still clear their toasts on an idle page.
+                qv = db.tables_version("add_queue")
+                if qv != queue_ver or ticks % 30 == 0 or last["queue"] is None:
+                    queue_ver = qv
+                    data = _json.dumps(_queue_snapshot(), default=str)
+                    if data != last["queue"]:
+                        last["queue"] = data
+                        yield f"event: queue\ndata: {data}\n\n"
+                changed = []
+                for domain, tabs in _DATA_DOMAINS.items():
+                    v = db.tables_version(*tabs)
+                    if v != versions[domain]:
+                        versions[domain] = v
+                        changed.append(domain)
+                if changed:
+                    yield f"event: changed\ndata: {_json.dumps(changed)}\n\n"
                 ticks += 1
                 if ticks % 15 == 0:
                     # Comment frame: keeps proxies from idling the connection
