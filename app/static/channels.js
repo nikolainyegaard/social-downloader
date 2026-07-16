@@ -202,7 +202,7 @@ function initChannelApp(cfg) {
           </div>
         </div>
       </div>
-      ${EXTRA_VIEWS.map(v => `<div id="${P}Controls_${v.key}" class="filter-control-group" style="display:none">${v.controlsHtml || ''}</div>`).join('')}
+      ${EXTRA_VIEWS.map(v => `<div id="${P}Controls_${v.key}" class="filter-control-group" style="display:none;margin-top:10px">${v.controlsHtml || ''}</div>`).join('')}
     </div>
     <div class="users-grid" id="${P}Grid">
       ${Array(6).fill('<div class="user-card skeleton-card" aria-hidden="true"></div>').join('')}

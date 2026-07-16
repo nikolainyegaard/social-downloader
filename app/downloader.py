@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import time
 import requests
 import yt_dlp
@@ -222,6 +223,19 @@ class StoryDownloadError(Exception):
     fit for the UI log; per-candidate detail goes to the run log."""
 
 
+def _valid_media_file(path: str) -> bool:
+    """ffprobe gate for downloaded story videos. TikTok's CDN sometimes
+    answers 200 with a truncated body, which used to save as a corrupt mp4
+    (moov atom missing) that no browser can play."""
+    try:
+        r = subprocess.run(["ffprobe", "-v", "error", path],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=30)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def _download_story_via_ytdlp(*, story_id: str, page_url: str, stories_dir: str,
                               stamp: str, posted_at: int | None,
                               cookies_path: str | None = None,
@@ -342,6 +356,28 @@ def download_story(*, story_id: str, username: str, platform: str,
             print(f"[{_ts()}] Story {story_id} candidate {i}/{len(candidates)} ({host}): "
                   f"HTTP 200 with empty body ({cookie_note})")
             continue
+        if content_type != "photo":
+            # A 200 is not proof of a valid video: TikTok's CDN sometimes
+            # delivers a truncated body. Validate before accepting the
+            # candidate so a garbage response falls through to the next URL.
+            mp4_path = os.path.join(stories_dir, f"{stamp}_{story_id}.mp4")
+            with open(mp4_path, "wb") as f:
+                f.write(r.content)
+            if not _valid_media_file(mp4_path):
+                last_reason = "invalid video data"
+                try:
+                    os.remove(mp4_path)
+                except OSError:
+                    pass
+                print(f"[{_ts()}] Story {story_id} candidate {i}/{len(candidates)} ({host}): "
+                      f"HTTP 200 but invalid video data ({len(r.content) // 1024} KB, {cookie_note})")
+                continue
+            if posted_at:
+                os.utime(mp4_path, (posted_at, posted_at))
+            if i > 1:
+                print(f"[{_ts()}] Story {story_id} saved via fallback candidate {i} ({host})")
+            print(f"[{_ts()}] Story {story_id} saved ({len(r.content) // 1024} KB) -> {mp4_path}")
+            return mp4_path
         resp = r
         if i > 1:
             print(f"[{_ts()}] Story {story_id} saved via fallback candidate {i} ({host})")
@@ -349,28 +385,21 @@ def download_story(*, story_id: str, username: str, platform: str,
     if resp is None:
         raise StoryDownloadError(last_reason)
 
-    if content_type == "photo":
-        jpg_path  = os.path.join(stories_dir, f"{stamp}_{story_id}.jpg")
-        avif_path = os.path.join(stories_dir, f"{stamp}_{story_id}.avif")
-        with open(jpg_path, "wb") as f:
-            f.write(resp.content)
+    jpg_path  = os.path.join(stories_dir, f"{stamp}_{story_id}.jpg")
+    avif_path = os.path.join(stories_dir, f"{stamp}_{story_id}.avif")
+    with open(jpg_path, "wb") as f:
+        f.write(resp.content)
+    if posted_at:
+        os.utime(jpg_path, (posted_at, posted_at))
+    saved = jpg_path  # keep JPEG if encode fails; photo_converter retries later
+    if encode_avif(jpg_path, avif_path, CRF_PHOTO):
         if posted_at:
-            os.utime(jpg_path, (posted_at, posted_at))
-        saved = jpg_path  # keep JPEG if encode fails; photo_converter retries later
-        if encode_avif(jpg_path, avif_path, CRF_PHOTO):
-            if posted_at:
-                os.utime(avif_path, (posted_at, posted_at))
-            try:
-                os.remove(jpg_path)
-            except OSError:
-                pass
-            saved = avif_path
-    else:
-        saved = os.path.join(stories_dir, f"{stamp}_{story_id}.mp4")
-        with open(saved, "wb") as f:
-            f.write(resp.content)
-        if posted_at:
-            os.utime(saved, (posted_at, posted_at))
+            os.utime(avif_path, (posted_at, posted_at))
+        try:
+            os.remove(jpg_path)
+        except OSError:
+            pass
+        saved = avif_path
     print(f"[{_ts()}] Story {story_id} saved ({len(resp.content) // 1024} KB) -> {saved}")
     return saved
 

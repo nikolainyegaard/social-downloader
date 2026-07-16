@@ -185,6 +185,14 @@ def create_channel_blueprint(engine) -> Blueprint:
                 _cleanup_state["steps"] = list(steps)
 
             with _cleanup_lock:
+                _cleanup_state["current"] = "Checking for missing story files..."
+            n = db.delete_missing_story_files()
+            steps.append(f"Removed {n} story row{'s' if n != 1 else ''} with missing files (re-saved next check if still live)")
+            removed += n
+            with _cleanup_lock:
+                _cleanup_state["steps"] = list(steps)
+
+            with _cleanup_lock:
                 _cleanup_state["current"] = "Scanning thumbnails..."
             video_ids   = db.get_all_video_ids()
             thumb_count = 0

@@ -1071,7 +1071,11 @@ function _storyBeginSlide(idx, isVid, vid) {
   // Video slides: the bar tracks the video duration and advance follows the
   // ended event; a video that errors advances instead of stalling the story
   vid.onended = () => { if (_storyMode) _storyAdvance(); };
-  vid.onerror = () => { if (_storyMode) _storyAdvance(); };
+  vid.onerror = () => {
+    if (!_storyMode) return;
+    showToast('A story video failed to play; skipping it.', { type: 'warning' });
+    _storyAdvance();
+  };
   vid.onloadedmetadata = () => {
     if (!_storyMode) return;
     _storyClearTimer();

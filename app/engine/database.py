@@ -990,6 +990,21 @@ class ChannelDB:
         return {r[0]: r[1] for r in rows}
 
 
+    def delete_missing_story_files(self) -> int:
+        """Remove story rows whose file is gone from disk. A still-live story
+        is re-saved at the channel's next check; expired ones stay gone."""
+        with self.get_db() as conn:
+            rows = conn.execute("SELECT story_id, file_path FROM stories").fetchall()
+            gone = [r["story_id"] for r in rows
+                    if not (r["file_path"] and os.path.exists(os.path.abspath(r["file_path"])))]
+            if gone:
+                conn.execute(
+                    f"DELETE FROM stories WHERE story_id IN ({','.join('?' * len(gone))})",
+                    gone,
+                )
+        return len(gone)
+
+
     def get_story_day_counts(self, channel_id: str) -> dict:
         """{'YYYY-MM-DD': story count} across all saved stories of a channel."""
         with self.get_db() as conn:
