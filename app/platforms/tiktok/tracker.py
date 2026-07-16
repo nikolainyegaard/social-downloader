@@ -129,6 +129,7 @@ async def _check_user_stories(user: dict, api, username: str,
     if not items:
         return 0
     stories = [s for s in (parse_story_item(i) for i in items) if s]
+    logd(f"  [{channel_id}] story listing: {len(items)} live, {len(stories)} with media")
     if not stories:
         return len(items)
     try:

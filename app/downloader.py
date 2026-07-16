@@ -304,6 +304,7 @@ def download_story(*, story_id: str, username: str, platform: str,
             f.write(resp.content)
         if posted_at:
             os.utime(jpg_path, (posted_at, posted_at))
+        saved = jpg_path  # keep JPEG if encode fails; photo_converter retries later
         if encode_avif(jpg_path, avif_path, CRF_PHOTO):
             if posted_at:
                 os.utime(avif_path, (posted_at, posted_at))
@@ -311,15 +312,15 @@ def download_story(*, story_id: str, username: str, platform: str,
                 os.remove(jpg_path)
             except OSError:
                 pass
-            return avif_path
-        return jpg_path  # keep JPEG; photo_converter will retry later
-
-    path = os.path.join(stories_dir, f"{stamp}_{story_id}.mp4")
-    with open(path, "wb") as f:
-        f.write(resp.content)
-    if posted_at:
-        os.utime(path, (posted_at, posted_at))
-    return path
+            saved = avif_path
+    else:
+        saved = os.path.join(stories_dir, f"{stamp}_{story_id}.mp4")
+        with open(saved, "wb") as f:
+            f.write(resp.content)
+        if posted_at:
+            os.utime(saved, (posted_at, posted_at))
+    print(f"[{_ts()}] Story {story_id} saved ({len(resp.content) // 1024} KB) -> {saved}")
+    return saved
 
 
 def _get_video_files(folder: str, video_id: str) -> list[str]:
