@@ -221,6 +221,15 @@ function _ttVpnStatus(msg, tone) {
   el.style.color   = { ok: 'var(--green)', error: 'var(--red)' }[tone] || '';
 }
 
+// The status lines persist in the DOM, so without this a message from an
+// earlier action (say a WireGuard save) still sits in the pane on the next
+// visit and reads as a response to whatever was just clicked
+function _ttNetworkStatusReset() {
+  _ttProxyStatus('');
+  _ttVpnStatus('');
+  _ttWgStatus('');
+}
+
 async function ttProxyToggle() {
   const box     = document.getElementById('ttProxyEnabled');
   const enabled = box.checked;
@@ -1214,7 +1223,7 @@ function switchSettingsSection(name) {
   const ptabs = document.getElementById('settingsPlatformTabs');
   if (ptabs) ptabs.style.display = name === 'access' ? 'none' : '';
   if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); }
-  if (name === 'network')   { ttProxyLoad(); }  // also refreshes the WireGuard meta
+  if (name === 'network')   { _ttNetworkStatusReset(); ttProxyLoad(); }  // also refreshes the WireGuard meta
   if (name === 'schedules') { loadSettings(); loadYtSettings(); _scheduleSettingsLoad('twitter', 'twSettings'); _scheduleSettingsLoad('instagram', 'igSettings'); }
   if (name === 'access')    { loadAuthSettings(); }
   if (name === 'jobs')      { _avifLoadStatus(); _startJobsPoll(); }
