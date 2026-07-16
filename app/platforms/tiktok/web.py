@@ -19,11 +19,11 @@ import threading
 import time
 import traceback
 import zipfile
-from flask import jsonify, request, send_file
+from flask import jsonify, request, send_file, Response
 
-from config import DATA_DIR, MEDIA_DIR, CHROME_EXECUTABLE
+from config import DATA_DIR, MEDIA_DIR
 from platforms.tiktok.config import get_ms_token, get_cookies_flat, COOKIES_PATH
-from platforms.tiktok.api import get_video_details
+from platforms.tiktok.api import create_tiktok_session, get_video_details
 from platforms.tiktok.store import TikTokStore
 from platforms.tiktok.sounds import get_sound_loop
 from thumbnailer import AVATARS_DIR
@@ -69,6 +69,295 @@ def register_tiktok_routes(bp, engine) -> None:
     # Cookie API (shared per-platform cookies.txt storage)
     from cookies import register_cookie_routes
     register_cookie_routes(bp, "tiktok")
+
+    # QR login: signs in inside the persistent browser profile
+    from platforms.tiktok import login as qr_login
+
+    @bp.route("/login/qr", methods=["POST"])
+    def tiktok_qr_start():
+        ok, msg = qr_login.start_qr_login()
+        if not ok:
+            return jsonify({"error": msg}), 409
+        return jsonify({"ok": True})
+
+    @bp.route("/login/qr", methods=["GET"])
+    def tiktok_qr_status():
+        return jsonify(qr_login.get_state())
+
+    @bp.route("/login/session", methods=["DELETE"])
+    def tiktok_session_reset():
+        from platforms.tiktok.api import reset_browser_profile
+        ok, msg = reset_browser_profile()
+        if not ok:
+            return jsonify({"error": msg}), 409
+        return jsonify({"ok": True, "message": msg})
+
+    # Proxy routing: all TikTok traffic (browser, page fetches, downloads) can
+    # go through an HTTP proxy. Two modes: "gluetun" uses the fixed sidecar
+    # address and manages its WireGuard config below; "custom" takes any URL.
+    from platforms.tiktok.config import get_proxy_settings, GLUETUN_PROXY_URL
+
+    @bp.route("/proxy", methods=["GET"])
+    def tiktok_proxy_get():
+        return jsonify({**get_proxy_settings(), "gluetun_url": GLUETUN_PROXY_URL})
+
+    @bp.route("/proxy", methods=["PATCH"])
+    def tiktok_proxy_set():
+        body = request.get_json(silent=True) or {}
+        if "mode" in body:
+            if body["mode"] not in ("gluetun", "custom"):
+                return jsonify({"error": "mode must be gluetun or custom"}), 400
+            db.set_setting("proxy_mode", body["mode"])
+        if "url" in body:
+            url = str(body["url"]).strip()
+            if url and not url.startswith(("http://", "https://", "socks5://")):
+                return jsonify({"error": "The proxy URL must start with http://, https://, or socks5://"}), 400
+            db.set_setting("proxy_url", url)
+        if "enabled" in body:
+            s = get_proxy_settings()
+            if body["enabled"] and s["mode"] == "custom" and not s["url"]:
+                return jsonify({"error": "Set a proxy URL before enabling routing"}), 400
+            db.set_setting("proxy_enabled", "1" if body["enabled"] else "0")
+        return jsonify({"ok": True})
+
+    @bp.route("/proxy/test", methods=["POST"])
+    def tiktok_proxy_test():
+        """Fetch an IP echo through the configured proxy, whether or not
+        routing is enabled, so the path can be verified before flipping the
+        toggle. Compares against the server's direct IP: the same address on
+        both sides means the proxy is not actually changing the exit."""
+        import requests as _requests
+        s = get_proxy_settings()
+        proxy = GLUETUN_PROXY_URL if s["mode"] == "gluetun" else s["url"]
+        if not proxy:
+            return jsonify({"ok": False, "error": "No proxy address configured"})
+        echo = "https://api.ipify.org"
+        try:
+            t0 = time.time()
+            resp = _requests.get(echo, proxies={"http": proxy, "https": proxy}, timeout=15)
+            resp.raise_for_status()
+            proxy_ip   = resp.text.strip()
+            latency_ms = int((time.time() - t0) * 1000)
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"})
+        try:
+            direct_ip = _requests.get(echo, timeout=10).text.strip()
+        except Exception:
+            direct_ip = None
+        return jsonify({"ok": True, "proxy_ip": proxy_ip, "direct_ip": direct_ip,
+                        "latency_ms": latency_ms,
+                        "same_ip": bool(direct_ip) and direct_ip == proxy_ip})
+
+    # WireGuard config for the gluetun VPN container, managed as four values
+    # (private key, address, server public key, endpoint) instead of a raw
+    # file: the app composes a canonical wg0.conf itself, so AllowedIPs and
+    # keepalive are constants and IPv6 entries (which gluetun rejects when the
+    # host has no IPv6) can never reach the file. Written under the app's data
+    # volume; gluetun mounts that folder (./data/gluetun) as /gluetun and
+    # reads it at startup. The private key is returned by GET for the UI's
+    # reveal toggle; it already sits in plaintext on disk for gluetun.
+    _WG_PATH = os.path.join(DATA_DIR, "gluetun", "wireguard", "wg0.conf")
+    _WG_FIELDS = ("private_key", "address", "public_key", "endpoint")
+    _DOCKER_SOCK = "/var/run/docker.sock"
+
+    @bp.route("/proxy/wireguard", methods=["GET"])
+    def tiktok_wireguard_get():
+        restart_available = os.path.exists(_DOCKER_SOCK)
+        if not os.path.exists(_WG_PATH):
+            return jsonify({"present": False, "restart_available": restart_available})
+        fields = {f: None for f in _WG_FIELDS}
+        keymap = {"privatekey": "private_key", "address": "address",
+                  "publickey": "public_key", "endpoint": "endpoint"}
+        try:
+            with open(_WG_PATH, encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    key, _, val = line.partition("=")
+                    name = keymap.get(key.strip().lower())
+                    if name:
+                        fields[name] = val.strip()
+            updated = int(os.path.getmtime(_WG_PATH))
+        except OSError:
+            updated = None
+        return jsonify({"present": True, "updated_at": updated,
+                        "restart_available": restart_available, **fields})
+
+    @bp.route("/proxy/wireguard", methods=["POST"])
+    def tiktok_wireguard_set():
+        body = request.get_json(silent=True) or {}
+        vals = {}
+        for f in _WG_FIELDS:
+            v = str(body.get(f, "")).strip()
+            if not v or "\n" in v or "\r" in v:
+                return jsonify({"error": f"{f.replace('_', ' ')} is required"}), 400
+            vals[f] = v
+        # Keep only the IPv4 entries of a comma-separated address list
+        v4 = [a.strip() for a in vals["address"].split(",")
+              if a.strip() and ":" not in a]
+        if not v4:
+            return jsonify({"error": "The address needs an IPv4 entry like 10.2.0.2/32 "
+                            "(gluetun does not support IPv6)"}), 400
+        if ":" not in vals["endpoint"] or vals["endpoint"].startswith("["):
+            return jsonify({"error": "The endpoint must be an IPv4 host:port pair"}), 400
+        conf = ("[Interface]\n"
+                f"PrivateKey = {vals['private_key']}\n"
+                f"Address = {', '.join(v4)}\n"
+                "\n"
+                "[Peer]\n"
+                f"PublicKey = {vals['public_key']}\n"
+                "AllowedIPs = 0.0.0.0/0\n"
+                f"Endpoint = {vals['endpoint']}\n"
+                "PersistentKeepalive = 25\n")
+        os.makedirs(os.path.dirname(_WG_PATH), exist_ok=True)
+        with open(_WG_PATH, "w", encoding="utf-8") as f:
+            f.write(conf)
+        try:
+            os.chmod(_WG_PATH, 0o600)
+        except OSError:
+            pass
+        return jsonify({"ok": True})
+
+    @bp.route("/proxy/wireguard", methods=["DELETE"])
+    def tiktok_wireguard_delete():
+        try:
+            os.remove(_WG_PATH)
+        except FileNotFoundError:
+            pass
+        return jsonify({"ok": True})
+
+    @bp.route("/proxy/gluetun/restart", methods=["POST"])
+    def tiktok_gluetun_restart():
+        """Restart the gluetun sidecar through the Docker socket so a saved
+        WireGuard config takes effect without shell access. Requires the host
+        socket mounted into this container (optional; documented in the
+        README); the UI only offers the action when restart_available from
+        the GET above is true. Stdlib HTTP over the unix socket, since
+        requests cannot speak to one and the docker package would be a heavy
+        dependency for one route.
+
+        The Docker API only addresses containers by name or id, not by the
+        network alias the proxy URL uses, and the container name is
+        deployment-specific (compose defaults to project-gluetun-1, setups
+        with several gluetun stacks name them apart). So the right container
+        is found by resolving the gluetun DNS name on the shared network and
+        matching that IP against the running containers. DNS fails exactly
+        when the restart is most needed, though: a gluetun crash-looping on a
+        bad config has no network presence. The fallback therefore searches
+        all containers (any state) for the compose service label or literal
+        name gluetun, narrowed to this container's own networks and compose
+        project so another stack's gluetun is never the one restarted."""
+        import http.client
+        import socket as _socket
+
+        if not os.path.exists(_DOCKER_SOCK):
+            return jsonify({"error": "The Docker socket is not mounted into this "
+                            "container; see the README for the volume line that "
+                            "enables restarting gluetun from here"}), 503
+
+        class _DockerSockConnection(http.client.HTTPConnection):
+            def connect(self):
+                self.sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+                self.sock.settimeout(self.timeout)
+                self.sock.connect(_DOCKER_SOCK)
+
+        def docker_request(method, path):
+            conn = _DockerSockConnection("localhost", timeout=30)
+            try:
+                conn.request(method, path)
+                resp = conn.getresponse()
+                return resp.status, resp.read().decode("utf-8", errors="ignore")
+            finally:
+                conn.close()
+
+        def networks_of(c):
+            return set(((c.get("NetworkSettings") or {}).get("Networks") or {}).keys())
+
+        try:
+            try:
+                gluetun_ip = _socket.gethostbyname("gluetun")
+            except OSError:
+                gluetun_ip = None
+            status, body = docker_request("GET", "/containers/json?all=true")
+            if status != 200:
+                return jsonify({"error": f"Docker returned {status}: {body.strip()}"}), 502
+            containers = json.loads(body)
+
+            # The container the app actually talks to: the one holding the IP
+            # the gluetun DNS name resolves to on the shared network
+            target = None
+            if gluetun_ip:
+                for c in containers:
+                    nets = (c.get("NetworkSettings") or {}).get("Networks") or {}
+                    if any(n.get("IPAddress") == gluetun_ip for n in nets.values()):
+                        target = c["Id"]
+                        break
+
+            if not target:
+                cands = [c for c in containers
+                         if "/gluetun" in (c.get("Names") or [])
+                         or (c.get("Labels") or {}).get("com.docker.compose.service") == "gluetun"]
+                # Narrow multiple matches using this container's own networks
+                # and compose project (best effort: the default hostname is
+                # the container id, so Docker can tell us who we are)
+                self_networks, self_project = set(), None
+                try:
+                    status, body = docker_request("GET", f"/containers/{_socket.gethostname()}/json")
+                    if status == 200:
+                        me = json.loads(body)
+                        self_networks = networks_of(me)
+                        self_project = ((me.get("Config") or {}).get("Labels") or {}).get(
+                            "com.docker.compose.project")
+                except Exception:
+                    pass
+                if self_networks:
+                    # Ours has to share a network with us, whatever its state;
+                    # a candidate that does not belongs to some other stack
+                    cands = [c for c in cands if networks_of(c) & self_networks]
+                if len(cands) > 1 and self_project:
+                    scoped = [c for c in cands
+                              if (c.get("Labels") or {}).get("com.docker.compose.project") == self_project]
+                    cands = scoped or cands
+                if len(cands) == 1:
+                    target = cands[0]["Id"]
+                elif len(cands) > 1:
+                    names = ", ".join((c.get("Names") or ["?"])[0].lstrip("/") for c in cands)
+                    return jsonify({"error": f"Several gluetun containers match ({names}) and "
+                                    "none could be tied to this app; restart yours by hand"}), 409
+            if not target:
+                return jsonify({"error": "No gluetun container found on this app's Docker "
+                                "networks; check that the gluetun service is defined next to "
+                                "the app and see its state with docker ps -a"}), 404
+
+            # t=5: Docker sends SIGTERM, waits up to 5 s, then kills. The
+            # request blocks until the container is up again, hence the
+            # generous connection timeout.
+            status, body = docker_request("POST", f"/containers/{target}/restart?t=5")
+            if status >= 300:
+                return jsonify({"error": f"Docker returned {status}: {body.strip()}"}), 502
+        except Exception as e:
+            return jsonify({"error": f"Docker API request failed: {type(e).__name__}: {e}"}), 502
+        return jsonify({"ok": True})
+
+    # Live view of the headed browser display: grab frames and inject mouse
+    # input so the user can solve a captcha or verification wall in the UI
+    from platforms.tiktok import screen as browser_screen
+
+    @bp.route("/screen", methods=["GET"])
+    def tiktok_screen_frame():
+        if not browser_screen.available():
+            return jsonify({"error": "No display: the browser runs headless here"}), 503
+        frame = browser_screen.grab_frame()
+        if not frame:
+            return jsonify({"error": "Could not capture the display"}), 503
+        return Response(frame, mimetype="image/jpeg",
+                        headers={"Cache-Control": "no-store"})
+
+    @bp.route("/screen/input", methods=["POST"])
+    def tiktok_screen_input():
+        events = (request.get_json(silent=True) or {}).get("events", [])
+        if not isinstance(events, list):
+            return jsonify({"error": "events must be a list"}), 400
+        browser_screen.send_input(events)
+        return jsonify({"ok": True})
 
     # Stats backfill state
     _backfill_lock  = threading.Lock()
@@ -693,13 +982,7 @@ def register_tiktok_routes(bp, engine) -> None:
                 async def _fetch_user_info_adhoc():
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         return await _api.make_request(
                             url="https://www.tiktok.com/api/user/detail/",
                             params={"uniqueId": handle, "secUid": ""},
@@ -726,13 +1009,7 @@ def register_tiktok_routes(bp, engine) -> None:
                 async def _fetch_stories_adhoc():
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         return await get_user_stories(_api, _match["channel_id"])
 
                 items  = asyncio.run(_fetch_stories_adhoc())
@@ -760,13 +1037,7 @@ def register_tiktok_routes(bp, engine) -> None:
                 async def _fetch_by_sec_uid():
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         return await _api.make_request(
                             url="https://www.tiktok.com/api/user/detail/",
                             params={"secUid": sec_uid, "uniqueId": ""},
@@ -790,13 +1061,7 @@ def register_tiktok_routes(bp, engine) -> None:
                 async def _resolve_handle():
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         return await _api.make_request(
                             url="https://www.tiktok.com/api/user/detail/",
                             params={"uniqueId": handle, "secUid": ""},
@@ -816,13 +1081,7 @@ def register_tiktok_routes(bp, engine) -> None:
                     ms_token     = get_ms_token()
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         await asyncio.sleep(3)
                         user_obj = _api.user(username=handle)
                         await user_obj.info()  # resolve sec_uid
@@ -846,13 +1105,7 @@ def register_tiktok_routes(bp, engine) -> None:
                     ms_token     = get_ms_token()
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         await asyncio.sleep(3)
                         results = await _get_vws(_api, sec_uid=sec_uid)
                         return {"channel_id": channel_id, "sec_uid": sec_uid,
@@ -880,13 +1133,7 @@ def register_tiktok_routes(bp, engine) -> None:
                     ms_token     = get_ms_token()
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         await asyncio.sleep(3)
                         results = await _get_vws(_api, sec_uid=sec_uid)
                         return {"channel_id": channel_id, "handle": handle,
@@ -905,13 +1152,7 @@ def register_tiktok_routes(bp, engine) -> None:
                     ms_token     = get_ms_token()
                     cookies_flat = get_cookies_flat()
                     async with _TikTokApi() as _api:
-                        await _api.create_sessions(
-                            ms_tokens=[ms_token] if ms_token else [],
-                            num_sessions=1,
-                            sleep_after=3,
-                            executable_path=CHROME_EXECUTABLE,
-                            cookies=[cookies_flat] if cookies_flat else None,
-                        )
+                        await create_tiktok_session(_api, ms_token, cookies_flat)
                         raw_items = []
                         total = 0
                         async for video in _api.sound(id=sound_id).videos(count=3000):

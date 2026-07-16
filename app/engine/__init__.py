@@ -17,6 +17,12 @@ from engine.database import ChannelDB
 from engine.loop import ChannelLoop
 
 
+class ChannelGoneError(Exception):
+    """The platform definitively reports the account as gone (banned, suspended,
+    terminated, or deleted). Adapters raise this from fetch_profile so the
+    tracker can mark the channel banned. Transient errors must NOT use it."""
+
+
 @dataclass
 class ChannelAdapter:
     platform: str                   # "twitter"; URL prefix, DB dir, media dir

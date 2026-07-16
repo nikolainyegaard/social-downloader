@@ -6,10 +6,368 @@
 // ── Cookie management ─────────────────────────────────────────────────────────
 // The static settings markup references these by name (see index.html).
 
-function renderCookies(info)        { _cookiesRender('tiktok', 'cookie', info); }
-async function uploadCookies(input) { return _cookiesUpload('tiktok', 'cookie', input); }
-async function deleteCookies()      { return _cookiesDelete('tiktok', 'cookie'); }
 async function loadCookies()        { return _cookiesLoad('tiktok', 'cookie'); }
+
+// Full sign-out: deletes the persistent browser identity and cookies.txt, so
+// the next QR sign-in starts as a brand-new device. Also the recovery move
+// when the identity is deeply flagged.
+async function ttResetSession() {
+  if (!confirm('Reset the TikTok session? This signs out, deletes the browser identity, and requires a new QR sign-in.')) return;
+  const { ok, data } = await apiJSON('/api/tiktok/login/session', { method: 'DELETE' });
+  showToast((data && (data.message || data.error)) || (ok ? 'Session reset' : 'Reset failed'),
+            { type: ok ? 'info' : 'error' });
+  loadCookies();
+}
+
+// ── QR login ──────────────────────────────────────────────────────────────────
+// Signs in inside the persistent browser profile. The backend streams the QR
+// page as screenshots and this poll shows them until a terminal state.
+
+let _qrTimer = null;
+let _qrLastStatus = null;
+
+async function ttQrStart() {
+  const btn = document.getElementById('ttQrBtn');
+  btn.disabled = true;
+  _qrLastStatus = null;   // a fresh attempt may toast a fresh error
+  const { ok, data } = await apiJSON('/api/tiktok/login/qr', { method: 'POST' });
+  if (!ok) {
+    btn.disabled = false;
+    _qrRender({ status: 'error', message: (data && data.error) || 'Could not start QR login' });
+    return;
+  }
+  if (_qrTimer) clearInterval(_qrTimer);
+  _qrTimer = setInterval(ttQrPoll, 2000);
+  ttQrPoll();
+}
+
+async function ttQrPoll() {
+  const { ok, data } = await apiJSON('/api/tiktok/login/qr');
+  if (ok && data) _qrRender(data);
+}
+
+function _qrRender(state) {
+  const img    = document.getElementById('ttQrImg');
+  const status = document.getElementById('ttQrStatus');
+  const labels = {
+    starting: 'Opening the browser…',
+    waiting:  state.qr ? 'Scan the code with the TikTok app on your phone'
+                       : (state.message || 'Loading the login page') + '…',
+    success:  'Signed in',         // the full message (cookie count) goes to a toast
+    expired:  state.message || 'Login window timed out. Generate a new code to retry',
+    error:    'QR login failed',   // the full (often long) error goes to a toast
+  };
+  const loading = state.status === 'starting' || (state.status === 'waiting' && !state.qr);
+  status.style.display = '';
+  status.classList.toggle('loading', loading);
+  if (loading) status.innerHTML = '<span class="spinner"></span>' + esc(labels[state.status]);
+  else status.textContent = labels[state.status] || '';
+  status.style.color   = state.status === 'success' ? 'var(--green)'
+                       : (state.status === 'error' || state.status === 'expired') ? 'var(--red)' : '';
+  img.style.display = state.qr ? '' : 'none';
+  if (state.qr) img.src = state.qr;
+  if (['success', 'expired', 'error', 'idle'].includes(state.status)) {
+    if (_qrTimer) { clearInterval(_qrTimer); _qrTimer = null; }
+    document.getElementById('ttQrBtn').disabled = false;
+    if (state.status === 'success') loadCookies();
+    // An in-flight poll can re-render the terminal state; toast only on the
+    // transition into it
+    if (_qrLastStatus !== state.status) {
+      if (state.status === 'error')   showToast(state.message || 'QR login failed', { type: 'error' });
+      if (state.status === 'success') showToast(state.message || 'Signed in', { type: 'success' });
+    }
+  }
+  _qrLastStatus = state.status;
+}
+
+// ── Live browser viewer ────────────────────────────────────────────────────────
+// Streams JPEG frames of the headed TikTok browser display and forwards mouse
+// input to it, so a captcha or verification wall can be solved by hand. The
+// display is a fixed 1920x1080 (matches the container Xvfb), so pointer
+// coordinates map from the rendered image rect onto that space directly.
+
+const _VIEWER_W = 1920, _VIEWER_H = 1080;
+let _viewerOn = false;
+let _viewerQueue = [];
+let _viewerFlushTimer = null;
+let _viewerDown = false;
+
+function ttViewerOpen() {
+  const modal = document.getElementById('ttViewer');
+  modal.style.display = 'flex';
+  _lockScroll();
+  _viewerOn = true;
+  _viewerNextFrame();
+}
+
+function ttViewerClose() {
+  _viewerOn = false;
+  _viewerDown = false;
+  document.getElementById('ttViewer').style.display = 'none';
+  _unlockScroll();
+}
+
+function _viewerNextFrame() {
+  if (!_viewerOn) return;
+  const img    = document.getElementById('ttViewerImg');
+  const status = document.getElementById('ttViewerStatus');
+  const next = new Image();
+  next.onload = () => {
+    if (!_viewerOn) return;
+    img.src = next.src;
+    status.textContent = '';
+    setTimeout(_viewerNextFrame, 300);
+  };
+  next.onerror = () => {
+    if (!_viewerOn) return;
+    status.textContent = 'No live session running. Start a QR login or trigger a check, then it appears here.';
+    setTimeout(_viewerNextFrame, 1500);
+  };
+  next.src = '/api/tiktok/screen?t=' + Date.now();
+}
+
+function _viewerCoords(ev) {
+  const r = document.getElementById('ttViewerImg').getBoundingClientRect();
+  return {
+    x: Math.round((ev.clientX - r.left) / r.width  * _VIEWER_W),
+    y: Math.round((ev.clientY - r.top)  / r.height * _VIEWER_H),
+  };
+}
+
+function _viewerFlush() {
+  _viewerFlushTimer = null;
+  if (!_viewerQueue.length) return;
+  const events = _viewerQueue;
+  _viewerQueue = [];
+  apiJSON('/api/tiktok/screen/input', { method: 'POST', body: JSON.stringify({ events }) });
+}
+
+function _viewerSend(type, ev, immediate) {
+  const { x, y } = _viewerCoords(ev);
+  _viewerQueue.push({ type, x, y });
+  if (immediate) { if (_viewerFlushTimer) { clearTimeout(_viewerFlushTimer); } _viewerFlush(); }
+  else if (!_viewerFlushTimer) { _viewerFlushTimer = setTimeout(_viewerFlush, 60); }
+}
+
+// Wired once the DOM is ready (the viewer img is static markup)
+document.addEventListener('DOMContentLoaded', () => {
+  const img = document.getElementById('ttViewerImg');
+  if (!img) return;
+  img.addEventListener('pointerdown', (ev) => { ev.preventDefault(); _viewerDown = true; _viewerSend('down', ev, true); });
+  img.addEventListener('pointermove', (ev) => { if (_viewerDown) _viewerSend('move', ev, false); });
+  window.addEventListener('pointerup', (ev) => { if (_viewerDown) { _viewerDown = false; _viewerSend('up', ev, true); } });
+  // Escape closes the topmost TikTok overlay first (capture, before the
+  // shared overlay handlers): the WireGuard parse modal sits above all, then
+  // the browser viewer
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    const parse = document.getElementById('ttWgParse');
+    if (parse && parse.style.display !== 'none') { ev.stopPropagation(); ttWgParseClose(); return; }
+    if (_viewerOn) { ev.stopPropagation(); ttViewerClose(); }
+  }, true);
+});
+
+// ── VPN proxy ─────────────────────────────────────────────────────────────────
+// Settings > Network > TikTok: route all TikTok traffic through an HTTP proxy.
+// Gluetun mode uses the fixed sidecar address and shows the WireGuard panel;
+// custom mode takes any proxy URL. Everything persists in the TikTok settings.
+
+let _ttProxyCustomUrl = '';   // last saved custom URL, restored when leaving gluetun mode
+let _ttProxyGluetunUrl = 'http://gluetun:8888';
+
+function _ttHelpToggle(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+function _ttProxyApplyMode(mode) {
+  const gluetun = mode === 'gluetun';
+  const input   = document.getElementById('ttProxyUrl');
+  document.getElementById('ttProxyModeGluetun').classList.toggle('active', gluetun);
+  document.getElementById('ttProxyModeCustom').classList.toggle('active', !gluetun);
+  document.getElementById('ttProxySaveBtn').style.display = gluetun ? 'none' : '';
+  document.getElementById('ttWgGroup').style.display      = gluetun ? '' : 'none';
+  input.disabled = gluetun;
+  input.value    = gluetun ? _ttProxyGluetunUrl : _ttProxyCustomUrl;
+}
+
+async function ttProxyLoad() {
+  const { ok, data } = await apiJSON('/api/tiktok/proxy');
+  if (!ok) return;
+  _ttProxyCustomUrl  = data.url || '';
+  _ttProxyGluetunUrl = data.gluetun_url || _ttProxyGluetunUrl;
+  _ttProxyApplyMode(data.mode);
+  document.getElementById('ttProxyEnabled').checked = !!data.enabled;
+  ttWgLoad();
+}
+
+async function ttProxySetMode(mode) {
+  const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ mode }) });
+  if (!ok) { showToast((data && data.error) || 'Could not switch the proxy mode', { type: 'error' }); ttProxyLoad(); return; }
+  _ttProxyApplyMode(mode);
+}
+
+async function ttProxySave() {
+  const url = document.getElementById('ttProxyUrl').value.trim();
+  const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ url }) });
+  if (!ok) { showToast((data && data.error) || 'Could not save the proxy URL', { type: 'error' }); return; }
+  _ttProxyCustomUrl = url;
+  showToast('Proxy URL saved. Takes effect from the next browser session.', { type: 'success' });
+}
+
+async function ttProxyToggle() {
+  const box     = document.getElementById('ttProxyEnabled');
+  const enabled = box.checked;
+  const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ enabled }) });
+  if (!ok) {
+    box.checked = !enabled;
+    showToast((data && data.error) || 'Could not change the VPN state', { type: 'error' });
+    return;
+  }
+  showToast(enabled ? 'VPN on. All TikTok traffic now leaves through the configured proxy, starting with the next browser session.'
+                    : 'VPN off. TikTok uses the server\'s own connection.', { type: 'success' });
+}
+
+async function ttProxyTest() {
+  const btn = document.getElementById('ttProxyTestBtn');
+  btn.disabled = true;
+  const t = showToast('Testing the connection…', { spinner: true, duration: 0 });
+  const { ok, data } = await apiJSON('/api/tiktok/proxy/test', { method: 'POST' });
+  btn.disabled = false;
+  if (!ok || !data.ok) {
+    t.update('Test failed: ' + ((data && data.error) || 'request error'), { type: 'error' });
+    return;
+  }
+  let msg = `Proxy works. Exit IP ${data.proxy_ip}, ${data.latency_ms} ms.`;
+  if (data.same_ip) {
+    msg += ' Warning: that is the same IP the server has directly, so the proxy is not changing the exit address.';
+  } else if (data.direct_ip) {
+    msg += ` The server's own IP is ${data.direct_ip}.`;
+  }
+  t.update(msg, { type: data.same_ip ? 'warning' : 'success', duration: 8000 });
+}
+
+// WireGuard config for the gluetun container, managed as four fields; the
+// backend composes a clean wg0.conf under the app's data volume, which
+// gluetun mounts as /gluetun. "Paste full config" fills the fields from a
+// pasted file, discarding comments and IPv6.
+
+const _WG_FIELD_IDS = { private_key: 'ttWgPrivateKey', address: 'ttWgAddress',
+                        public_key: 'ttWgPublicKey', endpoint: 'ttWgEndpoint' };
+let _ttWgCanRestart = false;   // Docker socket mounted, so the app can restart gluetun itself
+const _eyeIcon    = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const _eyeOffIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+// Feedback toast for a saved or removed WireGuard config: gluetun only reads
+// its config at startup, so the toast carries the restart action when the
+// Docker socket makes that possible and stays until acted on or dismissed
+function _ttWgSavedToast(msg) {
+  if (_ttWgCanRestart) {
+    showToast(msg, { type: 'success', duration: 0,
+                     action: { label: 'Restart gluetun now', onclick: ttGluetunRestart } });
+  } else {
+    showToast(msg + ' Restart the gluetun container to apply the change.', { type: 'success', duration: 8000 });
+  }
+}
+
+async function ttGluetunRestart() {
+  const t = showToast('Restarting gluetun…', { spinner: true, duration: 0 });
+  const { ok, data } = await apiJSON('/api/tiktok/proxy/gluetun/restart', { method: 'POST' });
+  if (!ok) { t.update((data && data.error) || 'Could not restart gluetun', { type: 'error' }); return; }
+  t.update('Gluetun restarted. Give it a few seconds to connect, then Test connection shows the new exit IP.', { type: 'success', duration: 8000 });
+}
+
+function ttWgToggleKey() {
+  const input = document.getElementById('ttWgPrivateKey');
+  const eye   = document.getElementById('ttWgKeyEye');
+  const show  = input.type === 'password';
+  input.type    = show ? 'text' : 'password';
+  eye.innerHTML = show ? _eyeOffIcon : _eyeIcon;
+  eye.title     = show ? 'Hide the key' : 'Show the key';
+}
+
+async function ttWgLoad() {
+  const eye = document.getElementById('ttWgKeyEye');
+  if (eye && !eye.innerHTML) eye.innerHTML = _eyeIcon;
+  const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard');
+  if (!ok) return;
+  _ttWgCanRestart = !!data.restart_available;
+  const meta = document.getElementById('ttWgMeta');
+  document.getElementById('ttWgDeleteBtn').style.display = data.present ? '' : 'none';
+  for (const [field, id] of Object.entries(_WG_FIELD_IDS)) {
+    document.getElementById(id).value = (data.present && data[field]) || '';
+  }
+  meta.textContent = data.present
+    ? 'Config saved' + (data.updated_at ? ', updated ' + fmtDateShort(data.updated_at) : '')
+    : 'No config saved yet. Fill the fields or use Paste full config.';
+}
+
+async function ttWgSave() {
+  const body = {};
+  for (const [field, id] of Object.entries(_WG_FIELD_IDS)) {
+    body[field] = document.getElementById(id).value.trim();
+  }
+  const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'POST', body: JSON.stringify(body) });
+  if (!ok) { showToast((data && data.error) || 'Could not save the config', { type: 'error' }); return; }
+  _ttWgSavedToast('WireGuard config saved.');
+  ttWgLoad();
+}
+
+async function ttWgDelete() {
+  if (!confirm('Remove the saved WireGuard config? Gluetun keeps using it until that container restarts.')) return;
+  const { ok } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'DELETE' });
+  if (!ok) { showToast('Could not remove the config', { type: 'error' }); return; }
+  _ttWgSavedToast('WireGuard config removed.');
+  ttWgLoad();
+}
+
+// Parse modal: extract the four fields from a pasted WireGuard config
+
+function ttWgParseOpen() {
+  document.getElementById('ttWgParse').style.display = 'flex';
+  document.getElementById('ttWgParseStatus').style.display = 'none';
+  _lockScroll();
+  document.getElementById('ttWgParseText').focus();
+}
+
+function ttWgParseClose() {
+  document.getElementById('ttWgParse').style.display = 'none';
+  document.getElementById('ttWgParseText').value = '';
+  _unlockScroll();
+}
+
+function ttWgParseApply() {
+  const text  = document.getElementById('ttWgParseText').value;
+  const found = {};
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.split('#')[0].trim();   // comments end the line
+    const eq   = line.indexOf('=');
+    if (eq < 1) continue;
+    const key = line.slice(0, eq).trim().toLowerCase();
+    const val = line.slice(eq + 1).trim();
+    if (!val) continue;
+    if (key === 'privatekey') found.private_key = val;
+    else if (key === 'publickey') found.public_key = val;
+    else if (key === 'address') {
+      // keep only the IPv4 entries of a comma-separated list
+      const v4 = val.split(',').map(a => a.trim()).filter(a => a && !a.includes(':'));
+      if (v4.length) found.address = v4.join(', ');
+    }
+    else if (key === 'endpoint' && !val.startsWith('[')) found.endpoint = val;
+  }
+  const missing = Object.keys(_WG_FIELD_IDS).filter(f => !found[f]);
+  if (missing.length) {
+    const el = document.getElementById('ttWgParseStatus');
+    el.style.display = '';
+    el.textContent   = 'Could not find: ' + missing.map(f => f.replace('_', ' ')).join(', ');
+    return;
+  }
+  for (const [field, id] of Object.entries(_WG_FIELD_IDS)) {
+    document.getElementById(id).value = found[field];
+  }
+  ttWgParseClose();
+  showToast('Fields filled from the pasted config. Review them and press Save config.', { type: 'success' });
+}
 
 // ── Sounds state ──────────────────────────────────────────────────────────────
 
@@ -92,7 +450,7 @@ async function _ttAddHandler(val, addToasts) {
       t.update(`Sound ${data.sound_id} added.`, { type: 'success' });
       loadSounds();
     } else {
-      t.update(data.error || 'Could not add sound.', { type: 'error', duration: 8000 });
+      t.update(data.error || 'Could not add sound.', { type: 'error' });
     }
     return true;
   }
@@ -113,7 +471,7 @@ async function _ttAddHandler(val, addToasts) {
     } else if (ok) {
       t.update(`Post ${data.video_id} queued. Progress shows in the Log view.`, { type: 'success' });
     } else {
-      t.update(data.error || 'Could not fetch post.', { type: 'error', duration: 8000 });
+      t.update(data.error || 'Could not fetch post.', { type: 'error' });
     }
     return true;
   }
@@ -263,15 +621,13 @@ const tt = initChannelApp({
     bio: 'Bio', description: 'Bio', bio_link: 'Bio link', avatar: 'Avatar',
     account_status: 'Account status', privacy_status: 'Privacy',
   },
-  hasBans: true,
   statsRows: s => [
     { label: 'Tracked users', value: (s.channel_count || 0).toLocaleString() },
-    { label: 'Saved videos',  value: (s.saved_count   || 0).toLocaleString() },
-    { label: 'Video posts',   value: (s.video_count   || 0).toLocaleString() },
-    { label: 'Photo posts',   value: (s.photo_count   || 0).toLocaleString() },
+    { label: 'Saved posts',   value: (s.saved_count   || 0).toLocaleString() },
+    { label: 'Videos',        value: (s.video_count   || 0).toLocaleString() },
+    { label: 'Photos',        value: (s.photo_count   || 0).toLocaleString() },
     { label: 'Deleted',       value: (s.deleted_count || 0).toLocaleString() },
     { label: 'Latest saved',  value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
-    { label: 'Total views',   value: _fmtLarge(s.total_views || 0) },
     { label: 'Storage',       value: _fmtBytes(s.media_size_bytes || 0) },
   ],
   extraFilterGroups: [{
@@ -396,7 +752,7 @@ function renderSounds() {
   const isFiltered = soundFilter.stat.size > 0 || soundFilter.star.size > 0 || !!_soundSearch;
   if (tt.getTrackingView() === 'sounds') {
     const countEl = tt.el('Count');
-    if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${sounds.length}` : sounds.length;
+    if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${sounds.length}` : `${sounds.length}`;
   }
   const { field, dir } = soundSort;
   filtered = [...filtered].sort((a, b) => {
@@ -806,11 +1162,19 @@ function _pollUntilTracked(tiktokId, username, overlay) {
 
 // ── Settings modal ────────────────────────────────────────────────────────────
 
-let _settingsSection = 'tiktok';
+let _settingsSection = 'accounts';
 
 function openSettings(section) {
-  const _OLD_TO_NEW = { cookies: 'tiktok', loops: 'tiktok', backfill: 'tiktok', utils: 'tiktok', migrate: 'tiktok' };
-  switchSettingsSection(_OLD_TO_NEW[section] || section || _settingsSection);
+  const _OLD_TO_NEW = { cookies: 'accounts', loops: 'schedules', backfill: 'jobs', utils: 'jobs', migrate: 'jobs', auth: 'access' };
+  const target = _OLD_TO_NEW[section] || section || _settingsSection;
+  if (PLATFORMS.some(p => p.id === target)) {
+    // A platform id (gear button, header auth pill) selects that platform
+    // globally and lands on its Accounts section
+    switchSettingsPlatform(target);
+    switchSettingsSection('accounts');
+  } else {
+    switchSettingsSection(target);
+  }
   document.getElementById('settingsBackdrop').style.display = 'flex';
   _lockScroll();
 }
@@ -833,15 +1197,21 @@ function switchSettingsSection(name) {
   _settingsSection = name;
   // Every settings section needs an entry here or its ssec-* div will never be shown.
   // When adding a new section: add the id to this list AND add ssec-*/snav-* elements in index.html.
-  ['tiktok', 'youtube', 'instagram', 'twitter', 'jobs', 'diag', 'database', 'auth'].forEach(s => {
+  ['accounts', 'schedules', 'network', 'jobs', 'diag', 'database', 'access'].forEach(s => {
     document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
     document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
   });
   document.querySelector('.settings-content').classList.toggle('diag-fill', name === 'diag');
-  if (name === 'tiktok') { loadSettings(); }
-  if (name === 'jobs')   { _avifLoadStatus(); _startJobsPoll(); }
-  else                   { _stopJobsPoll(); }
-  if (name === 'diag')   { diagSourceChanged(); }
+  // The global platform selector applies to every section except Access
+  const ptabs = document.getElementById('settingsPlatformTabs');
+  if (ptabs) ptabs.style.display = name === 'access' ? 'none' : '';
+  if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); }
+  if (name === 'network')   { ttProxyLoad(); }  // also refreshes the WireGuard meta
+  if (name === 'schedules') { loadSettings(); loadYtSettings(); _scheduleSettingsLoad('twitter', 'twSettings'); _scheduleSettingsLoad('instagram', 'igSettings'); }
+  if (name === 'access')    { loadAuthSettings(); }
+  if (name === 'jobs')      { _avifLoadStatus(); _startJobsPoll(); }
+  else                      { _stopJobsPoll(); }
+  if (name === 'diag')      { diagSourceChanged(); }
 }
 
 async function loadSettings() {
@@ -1268,13 +1638,11 @@ async function triggerBackfill() {
 
 async function retryFailed() {
   const btn = document.getElementById('retryFailedBtn');
-  const statusEl = document.getElementById('backfillStatus');
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/backfill/reset-errors', { method: 'POST' });
   btn.disabled = false;
-  if (!ok) { statusEl.textContent = data.error || 'Failed.'; return; }
-  statusEl.textContent = `${data.reset} video(s) cleared, ready to retry.`;
-  setTimeout(() => { statusEl.textContent = ''; }, 8000);
+  if (!ok) { showToast(data.error || 'Could not clear failed videos', { type: 'error' }); return; }
+  showToast(`${data.reset} video(s) cleared, ready to retry.`, { type: 'success' });
   // Reload status so the counts update
   ttLoadStatus();
 }
@@ -1312,11 +1680,11 @@ function _startBackfillPoll() {
       clearInterval(_backfillPoll);
       _backfillPoll = null;
       btn.disabled = false;
+      statusEl.textContent = '';
       const ok2 = data.done - data.errors;
-      statusEl.textContent = data.total === 0
-        ? 'Nothing to backfill'
-        : `Done: ${ok2} updated, ${data.errors} failed`;
-      setTimeout(() => { statusEl.textContent = ''; }, 12000);
+      if (data.total === 0) showToast('Nothing to backfill', { type: 'info' });
+      else showToast(`Stats backfill done: ${ok2} updated, ${data.errors} failed`,
+                     { type: data.errors ? 'warning' : 'success' });
     }
   }, 2000);
 }
@@ -1351,19 +1719,13 @@ function resetBackfillStep() {
     btn.disabled = true;
     btn.textContent = 'Reset all backfill status';
     btn.style.background = '';
-    statusEl.textContent = 'Resetting…';
-    statusEl.style.color = 'var(--muted)';
+    statusEl.textContent = '';
+    const t = showToast('Resetting…', { spinner: true, duration: 0 });
 
     apiJSON('/api/tiktok/backfill/reset', { method: 'POST' }).then(({ ok, data }) => {
       btn.disabled = false;
-      if (!ok) {
-        statusEl.textContent = data.error || 'Failed.';
-        statusEl.style.color = 'var(--red)';
-      } else {
-        statusEl.textContent = `Done. ${data.reset.toLocaleString()} videos marked for re-backfill.`;
-        statusEl.style.color = 'var(--green)';
-        setTimeout(() => { statusEl.textContent = ''; }, 12000);
-      }
+      if (!ok) t.update(data.error || 'Could not reset the backfill status', { type: 'error' });
+      else t.update(`Done. ${data.reset.toLocaleString()} videos marked for re-backfill.`, { type: 'success' });
     });
   }
 }
@@ -1372,12 +1734,16 @@ function resetBackfillStep() {
 
 loadCookies();
 loadSounds();
-setInterval(loadCookies, 30000);
-setInterval(loadSounds,  60000);
+// These live at module level (outside the initChannelApp closure), so gate
+// them on the TikTok tab being active instead of polling from every tab
+const _ttTabActive = () => (location.hash.slice(1) || 'tiktok') === 'tiktok';
+setInterval(() => { if (_ttTabActive()) loadCookies(); }, 30000);
+setInterval(() => { if (_ttTabActive()) loadSounds();  }, 60000);
+window.addEventListener('hashchange', () => { if (_ttTabActive()) { loadCookies(); loadSounds(); } });
 _initAllGliders();
 
-// Settings platform tabs
-['jobs', 'diag', 'database'].forEach(s => initSettingsPlatformTabs(s));
+// Global settings platform selector
+initSettingsPlatformTabs();
 PLATFORMS.forEach(p => initDbQueryPane(p.id));
 
 // Resume backfill poll if it was running before page load
@@ -1402,7 +1768,7 @@ PLATFORMS.forEach(p => initDbQueryPane(p.id));
       {
         type: 'warning',
         duration: 0,
-        action: { label: 'Open Migration Settings', onclick: () => openSettings('tiktok') },
+        action: { label: 'Open Migration Settings', onclick: () => openSettings('migrate') },
       }
     );
   } catch (_) {}

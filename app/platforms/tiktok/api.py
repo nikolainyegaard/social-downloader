@@ -2,9 +2,259 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
+import os
+import random
 import re
+import sys
+import threading
+
+# One persistent Chrome profile shared by every TikTok browser session, so
+# TikTok sees the same device identity across runs. A fresh Playwright context
+# per launch reads as a brand-new device carrying the same account cookie,
+# which is exactly the pattern bot detection scores hardest.
+_PROFILE_LOCK = threading.Lock()
+
+
+def _profile_dir() -> str:
+    from platforms.tiktok.config import TIKTOK_DATA_DIR
+    return os.path.join(TIKTOK_DATA_DIR, "browser_profile")
+
+
+_RELEASE_GUARD = threading.Lock()
+
+
+def _profile_context_factory():
+    """Claim the persistent profile and return (browser_context_factory, release),
+    or (None, None) when another browser currently holds the profile (Chrome
+    cannot run two processes on one user-data-dir). release() is idempotent and
+    frees the profile from whichever thread calls it: normally the context close
+    event, or the caller when create_sessions fails before the context exists."""
+    from platforms.tiktok.config import CHROME_EXECUTABLE
+
+    if not _PROFILE_LOCK.acquire(blocking=False):
+        return None, None
+
+    released = [False]
+
+    def release():
+        with _RELEASE_GUARD:
+            if released[0]:
+                return
+            released[0] = True
+        _PROFILE_LOCK.release()
+
+    async def factory(playwright):
+        from platforms.tiktok.config import get_proxy
+        profile = _profile_dir()
+        os.makedirs(profile, exist_ok=True)
+        _clear_stale_singleton(profile)
+        proxy = get_proxy()
+        context = await playwright.chromium.launch_persistent_context(
+            profile,
+            # Headed on a display, otherwise Chrome's new headless mode via
+            # arg with the Playwright flag off (TikTokApi's own handling)
+            headless=False,
+            args=[] if _headed() else ["--headless=new"],
+            executable_path=CHROME_EXECUTABLE,
+            **({"proxy": {"server": proxy}} if proxy else {}),
+        )
+        context.on("close", lambda _ctx: release())
+        return context
+
+    return factory, release
+
+
+def _clear_stale_singleton(profile: str) -> None:
+    """Chrome refuses a profile whose SingletonLock names another host (exit
+    21, "in use by another Google Chrome process on another computer"). The
+    profile lives on the data volume, so a lock left by a container that
+    stopped while Chrome was running names the previous container's hostname
+    and never clears itself, not even across a compose down/up. Remove the
+    singleton files when the lock is clearly stale: another hostname, or a
+    dead pid on this one. _PROFILE_LOCK is already held when this runs, so no
+    session of this process can legitimately own them."""
+    import socket
+
+    lock = os.path.join(profile, "SingletonLock")
+    try:
+        target = os.readlink(lock)  # the lock is a symlink to "hostname-pid"
+    except OSError:
+        return
+    host, _, pid = target.rpartition("-")
+    stale = host != socket.gethostname()
+    if not stale:
+        try:
+            os.kill(int(pid), 0)
+        except (OSError, ValueError):
+            stale = True
+    if not stale:
+        return
+    for name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
+        try:
+            os.remove(os.path.join(profile, name))
+        except OSError:
+            pass
+
+
+def _headed() -> bool:
+    """Run the browser headed when a working X display exists (in Docker that
+    is the Xvfb the container starts). Headed Chrome drops the entire headless
+    fingerprint class. Connects to the X socket instead of trusting DISPLAY or
+    the socket file: the env var is baked into the image, and the socket file
+    in /tmp survives a docker restart while the Xvfb process does not, so only
+    a listening server proves the display is alive. Anything less must degrade
+    to headless instead of launching Chrome at a display that is not there."""
+    # ponytail: local dev on a Linux desktop gets visible Chrome windows, add
+    # an env opt-out if that annoys
+    import socket
+
+    display = os.environ.get("DISPLAY", "")
+    if not display.startswith(":"):
+        return bool(display)  # remote display forms: trust the env var
+    num = display[1:].split(".")[0]
+    path = f"/tmp/.X11-unix/X{num}"
+    if not os.path.exists(path):
+        return False
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            s.connect(path)
+        return True
+    except OSError:
+        return False
+
+
+def reset_browser_profile() -> tuple[bool, str]:
+    """Full sign-out: delete the persistent browser profile and cookies.txt.
+
+    The next session starts as a brand-new device, so this is also the
+    recovery move when the identity is deeply flagged: reset, then mint a
+    fresh session with the QR login.
+    """
+    import shutil
+    from cookies import delete_cookies
+
+    if not _PROFILE_LOCK.acquire(blocking=False):
+        return False, "The browser is in use, likely by a running loop. Try again when it finishes."
+    try:
+        shutil.rmtree(_profile_dir(), ignore_errors=True)
+        delete_cookies("tiktok")
+        return True, "Session reset. Sign in with a new QR code."
+    finally:
+        _PROFILE_LOCK.release()
+
+
+def _patchright_active() -> bool:
+    # main.py aliases sys.modules["playwright"] to patchright at startup when
+    # the package is installed
+    return getattr(sys.modules.get("playwright"), "__name__", "") == "patchright"
+
+
+async def _plain_page(context):
+    """page_factory that skips TikTokApi's vendored stealth patches.
+
+    Those JS patches (navigator overrides, toString rewrites) are themselves
+    fingerprintable. Patchright hides the CDP layer natively, so a plain
+    untouched page is the cleaner profile when it is active.
+    """
+    page = await context.new_page()
+
+    # TikTokApi signs every request by evaluating window.byted_acrawler in the
+    # page's main world. Patchright's evaluate defaults to an isolated context
+    # where page globals do not exist (that is its Runtime.enable fix), so
+    # this page's evaluate is rebound to the main world. Everything else keeps
+    # the isolated default.
+    orig_evaluate = page.evaluate
+
+    async def _evaluate_main_world(expression, arg=None):
+        return await orig_evaluate(expression, arg, isolated_context=False)
+
+    page.evaluate = _evaluate_main_world
+
+    await page.goto("https://www.tiktok.com")
+
+    # TikTok's own page scripts inject the request signer. When it never
+    # appears the page is a verification or consent wall, and every request in
+    # this session would die on a cryptic frontierSign evaluate error. One
+    # clear line instead.
+    for _ in range(20):
+        try:
+            if await page.evaluate(
+                "() => !!(window.byted_acrawler && window.byted_acrawler.frontierSign)"
+            ):
+                return page
+        except Exception:
+            pass
+        await asyncio.sleep(0.5)
+    print(f"TikTok page loaded without the request signer, likely a"
+          f" verification or consent wall (url: {page.url})")
+    return page
+
+
+async def create_tiktok_session(api, ms_token: str | None = None,
+                                cookies: dict | None = None, **overrides):
+    """The one create_sessions call every TikTok browser session goes through.
+
+    Uses the persistent browser profile when it is free. Concurrent sessions
+    (an add lookup or diagnostics probe while a loop runs) fall back to the old
+    ephemeral context so they never fail on the profile lock.
+    """
+    from platforms.tiktok.config import CHROME_EXECUTABLE, get_proxy
+
+    factory, release = _profile_context_factory()
+    kwargs = dict(
+        ms_tokens=[ms_token] if ms_token else [],
+        num_sessions=1,
+        sleep_after=3,
+        cookies=[cookies] if cookies else None,
+    )
+    if factory:
+        # The factory launches with the proxy itself (persistent context)
+        kwargs["browser_context_factory"] = factory
+    else:
+        kwargs["executable_path"] = CHROME_EXECUTABLE
+        kwargs["headless"] = not _headed()
+        proxy = get_proxy()
+        if proxy:
+            kwargs["context_options"] = {"proxy": {"server": proxy}}
+    if _patchright_active():
+        kwargs["page_factory"] = _plain_page
+    kwargs.update(overrides)
+    try:
+        await api.create_sessions(**kwargs)
+    except Exception:
+        # A context that launched gets released by its close event (TikTokApi
+        # closes partially created contexts on failure). This covers failures
+        # before the factory ever ran. release() is idempotent so both paths
+        # firing is harmless.
+        if release:
+            release()
+        raise
+    await _warmup(api)
+
+
+async def _warmup(api):
+    """A few seconds of human-shaped activity on the loaded TikTok page before
+    the first API call of the session: dwell, mouse drift, scrolling.
+
+    A human loads the page, looks at it, and scrolls. A cold start straight
+    into the item_list API is a behavioral tell no fingerprint work covers.
+    Best-effort by design: a warmup failure never fails the session.
+    """
+    try:
+        page = api.sessions[0].page
+        await asyncio.sleep(random.uniform(1.0, 2.5))
+        for _ in range(random.randint(2, 4)):
+            await page.mouse.move(random.randint(60, 1200), random.randint(60, 660),
+                                  steps=random.randint(5, 15))
+            await asyncio.sleep(random.uniform(0.2, 0.6))
+            await page.mouse.wheel(0, random.randint(250, 900))
+            await asyncio.sleep(random.uniform(0.4, 1.2))
+    except Exception:
+        pass
 
 
 class UserBannedException(Exception):
@@ -184,6 +434,7 @@ def get_user_videos(tiktok_id: str, sec_uid: str | None = None,
     Returns [{video_id, description, upload_date}].
     """
     import yt_dlp
+    from platforms.tiktok.config import get_proxy
 
     ydl_opts = {
         "quiet":        True,
@@ -192,6 +443,9 @@ def get_user_videos(tiktok_id: str, sec_uid: str | None = None,
     }
     if cookies_path:
         ydl_opts["cookiefile"] = cookies_path
+    proxy = get_proxy()
+    if proxy:
+        ydl_opts["proxy"] = proxy
 
     # sec_uid is the "channel_id" in yt-dlp terms. Using it directly avoids the
     # "Unable to extract secondary user ID" error yt-dlp raises when it can't
@@ -414,7 +668,6 @@ def parse_story_item(item: dict) -> dict | None:
 
 
 async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
-                                chrome_executable: str | None,
                                 cookies_flat: dict | None = None) -> list[str]:
     """Fetch all video IDs that use a given TikTok sound.
     Returns a list of video ID strings (up to ~3000).
@@ -424,13 +677,7 @@ async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
 
     video_ids: list[str] = []
     async with TikTokApi() as api:
-        await api.create_sessions(
-            ms_tokens=[ms_token] if ms_token else [],
-            num_sessions=1,
-            sleep_after=3,
-            executable_path=chrome_executable,
-            cookies=[cookies_flat] if cookies_flat else None,
-        )
+        await create_tiktok_session(api, ms_token, cookies_flat)
         async for video in api.sound(id=sound_id).videos(count=3000):
             video_ids.append(str(video.id))
     return video_ids
@@ -441,8 +688,10 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
     Returns {type, description, upload_date, image_urls}.
     """
     from curl_cffi import requests as curl_requests
+    from platforms.tiktok.config import get_proxy
 
     url = f"https://www.tiktok.com/@{username}/video/{video_id}"
+    proxy = get_proxy()
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -456,6 +705,7 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
     resp = curl_requests.get(
         url, headers=headers, cookies=cookies,
         impersonate="chrome120", timeout=30,
+        **({"proxies": {"http": proxy, "https": proxy}} if proxy else {}),
     )
 
     if resp.status_code != 200:

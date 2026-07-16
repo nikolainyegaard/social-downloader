@@ -22,6 +22,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import threading
 import time
 import urllib.request
 from config import DATA_DIR, MEDIA_DIR, THUMBNAIL_WORKERS, THUMBNAIL_USE_GPU, _ts
@@ -49,6 +50,53 @@ def _thumb_exists(video_id: str, file_path: str) -> bool:
     avif = thumb_path_for(video_id, file_path)
     jpg  = avif.replace(".avif", ".jpg")
     return os.path.exists(avif) or os.path.exists(jpg)
+
+
+# ── Avatar thumbnails ─────────────────────────────────────────────────────────
+
+AVATAR_THUMB_SIZE = 96   # px. Covers 20px feed avatars at 3x and 48px card avatars at 2x
+
+# Cap concurrent encodes: a first page load can request dozens of thumbs at once
+_avatar_thumb_sem = threading.Semaphore(4)
+
+
+def avatar_thumb(platform: str, creator_id: str) -> str | None:
+    """
+    Return the path of a small cached avatar thumbnail, generating it on first
+    request. Regenerates when the full-size avatar is newer than the thumb.
+    Returns None when no source avatar exists or encoding fails.
+    """
+    src = os.path.join(DATA_DIR, platform, "avatars", f"{creator_id}.avif")
+    if not os.path.exists(src):
+        src = os.path.join(DATA_DIR, platform, "avatars", f"{creator_id}.jpg")
+        if not os.path.exists(src):
+            return None
+
+    dst = os.path.join(DATA_DIR, platform, "avatars", "thumbs", f"{creator_id}.avif")
+    try:
+        if os.path.exists(dst) and os.path.getmtime(dst) >= os.path.getmtime(src):
+            return dst
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with _avatar_thumb_sem:
+            # Re-check after waiting: a concurrent request may have built it
+            if os.path.exists(dst) and os.path.getmtime(dst) >= os.path.getmtime(src):
+                return dst
+            tmp = dst + ".tmp"
+            result = subprocess.run(
+                ["ffmpeg", "-i", src,
+                 "-vf", f"scale={AVATAR_THUMB_SIZE}:-2,format=yuv420p",
+                 "-c:v", "libaom-av1", "-still-picture", "1",
+                 "-crf", str(CRF_AVATAR), "-b:v", "0", "-cpu-used", "6",
+                 "-threads", "1", "-f", "avif", "-y", tmp],
+                capture_output=True, timeout=30,
+            )
+            if result.returncode != 0:
+                _try_remove(tmp)
+                return None
+            os.replace(tmp, dst)
+        return dst
+    except Exception:
+        return None
 
 
 # ── Avatar caching ────────────────────────────────────────────────────────────

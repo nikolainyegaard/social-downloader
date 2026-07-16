@@ -145,6 +145,9 @@ class ChannelDB:
                     SELECT handle, 'ok', added_at, added_at FROM channels
                     WHERE enabled = 1 ORDER BY added_at
                 """)
+            # Invariant: starred channels are always bookmarked. Cheap and
+            # idempotent, so it also repairs pre-bookmark databases on launch.
+            conn.execute("UPDATE channels SET bookmarked = 1 WHERE starred = 1 AND bookmarked = 0")
         if needs_vacuum:
             self.vacuum()
 
@@ -155,6 +158,8 @@ class ChannelDB:
             "ALTER TABLE channels ADD COLUMN banner_url             TEXT",
             "ALTER TABLE channels ADD COLUMN banner_cached          INTEGER DEFAULT 0",
             "ALTER TABLE channels ADD COLUMN raw_channel_data       TEXT",
+            # Pure filter flag: no loop or scheduling logic reads it
+            "ALTER TABLE channels ADD COLUMN bookmarked             INTEGER DEFAULT 0",
             "ALTER TABLE videos   ADD COLUMN content_type           TEXT DEFAULT 'video'",
             "ALTER TABLE videos   ADD COLUMN raw_video_data         TEXT",
             "ALTER TABLE videos   ADD COLUMN ytdlp_data             TEXT",
@@ -433,11 +438,90 @@ class ChannelDB:
             )
 
 
-    def set_channel_starred(self, channel_id: str, starred: bool) -> None:
+    def touch_last_checked(self, channel_id: str) -> None:
         with self.get_db() as conn:
             conn.execute(
-                "UPDATE channels SET starred = ? WHERE channel_id = ?",
-                (1 if starred else 0, channel_id)
+                "UPDATE channels SET last_checked = ? WHERE channel_id = ?",
+                (int(time.time()), channel_id)
+            )
+
+
+    def set_account_status(self, channel_id: str, status: str) -> None:
+        """Set account_status; 'banned' also stamps banned_at (COALESCE, never
+        overwritten). Status transitions are recorded in profile_history."""
+        with self.get_db() as conn:
+            row = conn.execute(
+                "SELECT account_status FROM channels WHERE channel_id = ?", (channel_id,)
+            ).fetchone()
+            old_status = row["account_status"] if row else None
+            if status == "banned":
+                conn.execute(
+                    "UPDATE channels SET account_status = ?, banned_at = COALESCE(banned_at, ?) WHERE channel_id = ?",
+                    (status, int(time.time()), channel_id)
+                )
+            else:
+                conn.execute(
+                    "UPDATE channels SET account_status = ? WHERE channel_id = ?",
+                    (status, channel_id)
+                )
+            if old_status and old_status != status:
+                conn.execute(
+                    "INSERT INTO profile_history (channel_id, field, old_value, changed_at) VALUES (?, 'account_status', ?, ?)",
+                    (channel_id, old_status, int(time.time()))
+                )
+
+
+    def ban_channel_videos(self, channel_id: str) -> int:
+        """Mark all active videos deleted with reason 'user_banned'. Videos already
+        deleted individually keep their video_deleted reason. Returns the count."""
+        with self.get_db() as conn:
+            conn.execute("""
+                UPDATE videos
+                SET status             = 'deleted',
+                    deleted_reason     = 'user_banned',
+                    deleted_at         = COALESCE(deleted_at, ?),
+                    deletion_confirmed = 1
+                WHERE channel_id = ? AND status IN ('up', 'undeleted')
+            """, (int(time.time()), channel_id))
+            row = conn.execute("SELECT changes() AS n").fetchone()
+        return row["n"] if row else 0
+
+
+    def restore_banned_videos(self, channel_id: str) -> int:
+        """Re-activate all videos deleted by a ban. Videos deleted before the ban
+        (deleted_reason='video_deleted') are left untouched. Returns the count."""
+        with self.get_db() as conn:
+            conn.execute("""
+                UPDATE videos
+                SET status         = 'undeleted',
+                    deleted_reason = NULL,
+                    undeleted_at   = ?
+                WHERE channel_id = ? AND deleted_reason = 'user_banned'
+            """, (int(time.time()), channel_id))
+            row = conn.execute("SELECT changes() AS n").fetchone()
+        return row["n"] if row else 0
+
+
+    def set_channel_starred(self, channel_id: str, starred: bool) -> None:
+        with self.get_db() as conn:
+            if starred:
+                # Starring implies bookmarking. Unstarring leaves the bookmark.
+                conn.execute(
+                    "UPDATE channels SET starred = 1, bookmarked = 1 WHERE channel_id = ?",
+                    (channel_id,)
+                )
+            else:
+                conn.execute(
+                    "UPDATE channels SET starred = 0 WHERE channel_id = ?",
+                    (channel_id,)
+                )
+
+
+    def set_channel_bookmarked(self, channel_id: str, bookmarked: bool) -> None:
+        with self.get_db() as conn:
+            conn.execute(
+                "UPDATE channels SET bookmarked = ? WHERE channel_id = ?",
+                (1 if bookmarked else 0, channel_id)
             )
 
 
@@ -977,6 +1061,69 @@ class ChannelDB:
         saved     = self._group_consecutive_by_channel(saved_rows, "download_date")[:9]
         return {"deletions": deletions, "profile_changes": profile_changes,
                 "bans": bans, "saved": saved}
+
+
+    def get_activity_feed(self, before: int | None = None, limit: int = 40,
+                          kind: str | None = None, starred: bool = False,
+                          bookmarked: bool = False) -> dict:
+        """Unified chronological activity feed for the dashboard panel: saved
+        and deletion groups, profile changes, and bans merged newest first.
+        Keyset pagination via `before` (event unix ts). `kind` restricts to one
+        event type (saved, deleted, changed, banned). Each source fetches
+        limit+1 events so has_more stays correct when one source dominates.
+        ponytail: a strict before cursor can drop one of two adjacent events
+        sharing an identical timestamp across a page boundary."""
+        cap    = limit + 1
+        events = []
+        # Flag filters on the joined channels table (bare column names for the
+        # bans query, which selects from channels directly)
+        flags   = ("AND c.starred = 1 " if starred else "") + ("AND c.bookmarked = 1 " if bookmarked else "")
+        flags_b = ("AND starred = 1 "   if starred else "") + ("AND bookmarked = 1 "   if bookmarked else "")
+        with self.get_db() as conn:
+            _sound = self._sound_id_select(conn)
+            if kind in (None, "saved"):
+                w    = f"{flags}" + ("AND v.download_date < ?" if before else "")
+                args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)
+                rows = [dict(r) for r in conn.execute(f"""
+                    SELECT v.download_date, c.handle, c.channel_id, c.enabled,
+                           c.starred, c.account_status, v.video_id, {_sound} AS sound_id
+                    FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+                    WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL {w}
+                    ORDER BY v.download_date DESC LIMIT ?""", args).fetchall()]
+                for g in self._group_consecutive_by_channel(rows, "download_date")[:cap]:
+                    events.append({"ts": g["download_date"], "kind": "saved", "item": g})
+            if kind in (None, "deleted"):
+                w    = f"{flags}" + ("AND v.deleted_at < ?" if before else "")
+                args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)
+                rows = [dict(r) for r in conn.execute(f"""
+                    SELECT v.video_id, v.deleted_at, c.handle, c.channel_id, c.enabled,
+                           c.starred, c.account_status, {_sound} AS sound_id
+                    FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+                    WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+                      AND (v.deleted_reason IS NULL OR v.deleted_reason != 'user_banned') {w}
+                    ORDER BY v.deleted_at DESC LIMIT ?""", args).fetchall()]
+                for g in self._group_consecutive_by_channel(rows, "deleted_at")[:cap]:
+                    events.append({"ts": g["deleted_at"], "kind": "deleted", "item": g})
+            if kind in (None, "changed"):
+                w    = f"{flags}" + ("AND ph.changed_at < ?" if before else "")
+                args = (before, cap) if before else (cap,)
+                rows = conn.execute(f"""
+                    SELECT ph.field, ph.changed_at, c.handle, c.channel_id, c.starred, c.account_status
+                    FROM profile_history ph JOIN channels c ON c.channel_id = ph.channel_id
+                    WHERE 1=1 {w}
+                    ORDER BY ph.changed_at DESC LIMIT ?""", args).fetchall()
+                events += [{"ts": r["changed_at"], "kind": "changed", "item": dict(r)} for r in rows]
+            if kind in (None, "banned"):
+                w    = f"{flags_b}" + ("AND banned_at < ?" if before else "")
+                args = (before, cap) if before else (cap,)
+                rows = conn.execute(f"""
+                    SELECT channel_id, handle, banned_at, starred
+                    FROM channels
+                    WHERE account_status = 'banned' AND banned_at IS NOT NULL {w}
+                    ORDER BY banned_at DESC LIMIT ?""", args).fetchall()
+                events += [{"ts": r["banned_at"], "kind": "banned", "item": dict(r)} for r in rows]
+        events.sort(key=lambda e: e["ts"], reverse=True)
+        return {"items": events[:limit], "has_more": len(events) > limit}
 
 
     def get_deletion_history(self, offset: int = 0, limit: int = 50) -> list[dict]:

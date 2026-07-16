@@ -9,6 +9,11 @@ services:
       - ./data:/app/data
       # Downloaded media (videos, photos) are stored here.
       - ./media:/app/media
+      # Optional: lets the app restart the gluetun VPN container from
+      # Settings > Network > TikTok after saving a WireGuard config.
+      # Note that the socket gives this container control over the host's
+      # Docker daemon, so leave it out if you do not use the gluetun setup.
+      # - /var/run/docker.sock:/var/run/docker.sock
 
     environment:
       TZ: "Europe/Oslo"                           # set your timezone so log timestamps are in local time

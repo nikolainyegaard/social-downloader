@@ -47,30 +47,32 @@ function switchPlatform(name) {
   if (typeof _initAllGliders === 'function') _initAllGliders();
 }
 
-// ── Settings platform tabs ────────────────────────────────────────────────────
-// Call initSettingsPlatformTabs(sectionId) once for any settings section that
-// has per-platform panes. It renders the tab buttons from PLATFORMS and wires
-// up switching. Panes must be <div id="{sectionId}-{platformId}">.
+// ── Settings platform selector ───────────────────────────────────────────────
+// One global platform switcher for the whole settings modal: switching it
+// swaps the {section}-{platform} pane in every platform-varying section at
+// once, so the chosen platform follows you between Accounts, Schedules,
+// Network, Jobs, Diagnostics, and Database.
 
-function initSettingsPlatformTabs(sectionId) {
-  const container = document.getElementById(sectionId + '-tabs');
+const _SETTINGS_PLATFORM_SECTIONS = ['accounts', 'schedules', 'network', 'jobs', 'diag', 'database'];
+let _settingsPlatform = PLATFORMS[0].id;
+
+function initSettingsPlatformTabs() {
+  const container = document.getElementById('settingsPlatformTabs');
   if (!container) return;
-  container.innerHTML = PLATFORMS.map((p, i) =>
-    `<button class="settings-sub-tab${i === 0 ? ' active' : ''}" id="stab-${sectionId}-${p.id}" onclick="switchSettingsPlatformTab('${sectionId}','${p.id}')">${p.label}</button>`
+  container.innerHTML = PLATFORMS.map(p =>
+    `<button class="settings-sub-tab" id="stab-${p.id}" onclick="switchSettingsPlatform('${p.id}')">${p.label}</button>`
   ).join('');
-  PLATFORMS.forEach((p, i) => {
-    const pane = document.getElementById(sectionId + '-' + p.id);
-    if (pane) pane.style.display = i === 0 ? '' : 'none';
-  });
+  switchSettingsPlatform(_settingsPlatform);
 }
 
-function switchSettingsPlatformTab(sectionId, platformId) {
+function switchSettingsPlatform(platformId) {
+  _settingsPlatform = platformId;
   PLATFORMS.forEach(p => {
-    const btn  = document.getElementById(`stab-${sectionId}-${p.id}`);
-    const pane = document.getElementById(`${sectionId}-${p.id}`);
-    const active = p.id === platformId;
-    if (btn)  btn.classList.toggle('active', active);
-    if (pane) pane.style.display = active ? '' : 'none';
+    document.getElementById(`stab-${p.id}`)?.classList.toggle('active', p.id === platformId);
+    _SETTINGS_PLATFORM_SECTIONS.forEach(sec => {
+      const pane = document.getElementById(`${sec}-${p.id}`);
+      if (pane) pane.style.display = p.id === platformId ? '' : 'none';
+    });
   });
 }
 
@@ -80,7 +82,7 @@ function switchSettingsPlatformTab(sectionId, platformId) {
 
 function _cookiesRender(platform, idPrefix, info) {
   const timeStr = (info.present && info.updated_at)
-    ? `Uploaded ${(() => { const h = Math.round((Date.now() - info.updated_at * 1000) / 3600000); return h < 24 ? `${h}h ago` : `${Math.round(h/24)}d ago`; })()}`
+    ? `Updated ${(() => { const h = Math.round((Date.now() - info.updated_at * 1000) / 3600000); return h < 24 ? `${h}h ago` : `${Math.round(h/24)}d ago`; })()}`
     : '';
   const metaStr = info.present
     ? [timeStr, `${(info.size_bytes / 1024).toFixed(1)} KB`].filter(Boolean).join('  ·  ')
@@ -242,11 +244,15 @@ checkHealth();
 // ── Toast notifications ────────────────────────────────────────────────────────
 // showToast(message, { type, duration, action })
 //   type:     'success' | 'warning' | 'error' | 'info'  (default: 'info')
-//   duration: ms before auto-dismiss; 0 = persistent     (default: 5000)
+//   duration: ms before auto-dismiss; 0 = persistent
+//             (default: 5000, except errors: persistent until dismissed, so
+//             there is time to read and copy the message)
 //   action:   { label: string, onclick: fn }              (optional)
-// Returns { dismiss } for programmatic dismissal.
+// Error toasts clamp the message to a two-line preview; clicking one opens
+// the error dialog with the full text and a Copy button.
+// Returns { dismiss, update } for programmatic dismissal and morphing.
 
-function showToast(message, { type = 'info', duration = 5000, action = null, spinner = false } = {}) {
+function showToast(message, { type = 'info', duration = type === 'error' ? 0 : 5000, action = null, spinner = false } = {}) {
   let container = document.getElementById('toast-container');
   if (!container) {
     container = document.createElement('div');
@@ -267,8 +273,18 @@ function showToast(message, { type = 'info', duration = 5000, action = null, spi
   const body = document.createElement('div');
   body.className = 'toast-body';
   const msg = document.createElement('span');
+  msg.className = 'toast-msg';
   msg.textContent = message;
   body.appendChild(msg);
+
+  // The full message survives the CSS preview clamp and update() morphs, so
+  // the error dialog always gets the complete text
+  let fullMessage = message;
+  if (type === 'error') msg.title = 'Show the full error';
+  body.onclick = (ev) => {
+    if (ev.target instanceof Element && ev.target.closest('button')) return;
+    if (toast.classList.contains('toast-error')) openErrorModal(fullMessage);
+  };
 
   if (action) {
     const btn = document.createElement('button');
@@ -297,9 +313,11 @@ function showToast(message, { type = 'info', duration = 5000, action = null, spi
 
   // Morph this toast in place (e.g. loading spinner into a result). If the
   // user already dismissed it, the result is shown as a fresh toast instead.
-  function update(newMessage, { type: newType = 'info', duration: newDuration = 5000 } = {}) {
+  function update(newMessage, { type: newType = 'info', duration: newDuration = newType === 'error' ? 0 : 5000 } = {}) {
     if (!toast.isConnected) { showToast(newMessage, { type: newType, duration: newDuration }); return; }
+    fullMessage = newMessage;
     msg.textContent = newMessage;
+    msg.title = newType === 'error' ? 'Show the full error' : '';
     toast.className = `toast toast-${newType}`;
     if (spin) { spin.remove(); spin = null; }
     if (timer) clearTimeout(timer);
@@ -307,6 +325,40 @@ function showToast(message, { type = 'info', duration = 5000, action = null, spi
   }
 
   return { dismiss, update };
+}
+
+// ── Error dialog ────────────────────────────────────────────────────────────────
+// Full text behind a truncated error toast: selectable, with a Copy button.
+
+function openErrorModal(text) {
+  document.getElementById('errorModalText').textContent = text;
+  document.getElementById('errorModal').style.display = 'flex';
+  _lockScroll();
+}
+
+function closeErrorModal() {
+  document.getElementById('errorModal').style.display = 'none';
+  _unlockScroll();
+}
+
+async function copyErrorModal() {
+  const textEl = document.getElementById('errorModalText');
+  const btn    = document.getElementById('errorModalCopy');
+  try {
+    await navigator.clipboard.writeText(textEl.textContent || '');
+  } catch {
+    // The clipboard API needs a secure context; select-and-copy as fallback
+    const range = document.createRange();
+    range.selectNodeContents(textEl);
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('copy');
+    sel.removeAllRanges();
+  }
+  btn.textContent = 'Copied';
+  setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
 }
 
 // ── Add-lookup toasts ─────────────────────────────────────────────────────────
@@ -337,7 +389,7 @@ function _makeAddToasts(onAdded) {
       active.delete(handle);
       if (info.status === 'error') {
         t.update(`Failed to add @${handle}: ${info.message || info.kind || 'lookup failed'}`,
-                 { type: 'error', duration: 8000 });
+                 { type: 'error' });
       } else {
         t.update(`@${handle} added.`, { type: 'success' });
         resolvedOk = true;
@@ -543,7 +595,6 @@ async function loadAuthSettings() {
   document.getElementById('authSecretStatus').textContent = data.client_secret_set
     ? 'A client secret is saved.'
     : 'No client secret saved.';
-  document.getElementById('authSaveStatus').textContent   = '';
 
   // Warn when the saved config differs from what is currently running
   const pendingChange = data.enabled !== data.enabled_runtime;
@@ -572,11 +623,8 @@ async function saveAuthSettings() {
   const clientSecret = document.getElementById('authClientSecret').value;
   const sessionDays  = parseInt(document.getElementById('authSessionDays').value, 10) || 7;
 
-  const statusEl = document.getElementById('authSaveStatus');
-
   if (enabled && (!discoveryUrl || !clientId)) {
-    statusEl.textContent = 'Discovery URL and Client ID are required to enable OAuth.';
-    statusEl.style.color = 'var(--red)';
+    showToast('Discovery URL and Client ID are required to enable OAuth.', { type: 'warning' });
     return;
   }
 
@@ -586,8 +634,7 @@ async function saveAuthSettings() {
   const { ok, data } = await apiJSON('/api/auth/config', { method: 'PATCH', body: JSON.stringify(body) });
 
   if (ok) {
-    statusEl.textContent = 'Saved.';
-    statusEl.style.color = 'var(--muted)';
+    showToast('Authentication settings saved.', { type: 'success' });
     document.getElementById('authClientSecret').value       = '';
     document.getElementById('authClientSecret').type        = 'password';
     document.getElementById('authSecretToggle').textContent = 'Show';
@@ -595,8 +642,7 @@ async function saveAuthSettings() {
     // Show restart banner any time settings are saved, since all changes require a restart
     document.getElementById('authRestartBanner').style.display = '';
   } else {
-    statusEl.textContent = (data && data.error) || 'Save failed.';
-    statusEl.style.color = 'var(--red)';
+    showToast((data && data.error) || 'Save failed.', { type: 'error' });
   }
 }
 
@@ -605,7 +651,7 @@ async function saveAuthSettings() {
 const fmt = {
   rel: ts => {
     if (!ts) return '—';
-    const diff = Math.round((Date.now() - new Date(ts)) / 1000);
+    const diff = Math.round((Date.now() - new Date(ts).getTime()) / 1000);
     if (diff < 60)       return `${diff}s ago`;
     if (diff < 3600)     return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400)  { const h = Math.floor(diff / 3600),   m = Math.floor((diff % 3600) / 60);          return m > 0 ? `${h}h ${m}m ago`   : `${h}h ago`;   }
@@ -615,7 +661,7 @@ const fmt = {
   },
   relFuture: ts => {
     if (!ts) return '—';
-    const diff = Math.round((new Date(ts) - Date.now()) / 1000);
+    const diff = Math.round((new Date(ts).getTime() - Date.now()) / 1000);
     if (diff <= 0)       return 'soon';
     if (diff < 60)       return `in ${diff}s`;
     if (diff < 3600)     return `in ${Math.floor(diff / 60)}m`;
@@ -862,6 +908,20 @@ function _attachGridSentinel(gridEl, callback) {
   return obs;
 }
 
+// Horizontal-scroll edge fade: toggles fade-l/fade-r classes on a scrollable
+// row so the clipped edge gets a fade-out mask (see .filter-control-group).
+function _attachEdgeFade(el) {
+  if (!el) return;
+  const update = () => {
+    const max = el.scrollWidth - el.clientWidth;
+    el.classList.toggle('fade-l', max > 1 && el.scrollLeft > 1);
+    el.classList.toggle('fade-r', max > 1 && el.scrollLeft < max - 1);
+  };
+  el.addEventListener('scroll', update, { passive: true });
+  new ResizeObserver(update).observe(el);
+  update();
+}
+
 // ── Toolbar helpers ───────────────────────────────────────────────────────────
 // Shared toolbar expand/collapse body. Returns the new expanded value so
 // the caller can write it back to its own state variable.
@@ -895,6 +955,7 @@ function _makeJobWidget(id) {
   const textEl   = document.getElementById(`job-${id}-text`);
   const stepsEl  = document.getElementById(`job-${id}-steps`);
   return {
+    /** @param {{barPct?: number, label?: string, steps?: string[]}} [state] */
     update({ barPct, label, steps } = {}) {
       statusEl.style.display = '';
       const hasBar = barPct !== undefined;
@@ -1011,6 +1072,12 @@ function closeCarousel() {
 
 document.addEventListener('keydown', e => {
   const _open = id => { const el = document.getElementById(id); return el && el.style.display !== 'none'; };
+  // The error dialog can open over anything (its toast floats above all
+  // overlays), so it outranks even the carousel
+  if (_open('errorModal')) {
+    if (e.key === 'Escape') closeErrorModal();
+    return;
+  }
   if (_open('carouselModal')) {
     if (e.key === 'ArrowLeft')  { carouselStep(-1); return; }
     if (e.key === 'ArrowRight') { carouselStep(1);  return; }
@@ -1021,7 +1088,6 @@ document.addEventListener('keydown', e => {
   if (_open('imgModal'))           { closeImgModal(); return; }
   if (_open('vidModal'))           { closeVidModal(); return; }
   if (_open('soundModalBackdrop')) { window.closeSoundModal?.(); return; }
-  if (_open('recentLogBackdrop'))  { closeRecentLog(); return; }
   if (_open('settingsBackdrop'))   { window.closeSettings?.(); }
 });
 
@@ -1370,124 +1436,9 @@ function _recentDate(ts, now = new Date()) {
   const d        = new Date(ts * 1000);
   const today    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dDay     = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diffDays = Math.round((today - dDay) / 86400000);
+  const diffDays = Math.round((today.getTime() - dDay.getTime()) / 86400000);
   const timeStr  = _dtFmtTime.format(d);
   if (diffDays === 0) return `Today, ${timeStr}`;
   if (diffDays === 1) return `Yesterday, ${timeStr}`;
   return _dtFmtRecent.format(d);
-}
-
-// ── Recent log modal ──────────────────────────────────────────────────────────
-// Generic paginated history modal. Each platform opens it via _openRecentLogModal,
-// passing a cfg object with: apiBase, titles, groupKey, renderSaved, renderOther.
-
-let _recentLogType      = null;
-let _recentLogOffset    = 0;
-let _recentLogDone      = false;
-let _recentLogLoading   = false;
-let _recentLogObs       = null;
-let _recentLogLastGroup = null;
-let _recentLogCfg       = null;
-
-// First-batch cache per "apiBase/type", warmed by each platform's recents
-// poll when the panel data changes, so the expanded modals open instantly
-const _recentLogCache = {};
-
-async function _prefetchRecentLog(apiBase, types) {
-  for (const t of types) {
-    const { ok, data } = await apiJSON(`${apiBase}/${t}?offset=0&limit=50`);
-    if (ok) _recentLogCache[`${apiBase}/${t}`] = data;
-  }
-}
-
-function _openRecentLogModal(type, cfg) {
-  _recentLogCfg       = cfg;
-  _recentLogType      = type;
-  _recentLogOffset    = 0;
-  _recentLogDone      = false;
-  _recentLogLoading   = false;
-  _recentLogLastGroup = null;
-
-  document.getElementById('recentLogTitle').textContent = cfg.titles[type] || type;
-  document.getElementById('recentLogBody').innerHTML = '';
-  document.getElementById('recentLogBackdrop').style.display = 'flex';
-  _lockScroll();
-
-  _setupRecentLogScroll();
-  // Initial load triggered by IntersectionObserver firing on the newly-added
-  // sentinel, which is immediately visible in the empty container.
-}
-
-function closeRecentLog() {
-  document.getElementById('recentLogBackdrop').style.display = 'none';
-  _unlockScroll();
-  if (_recentLogObs) { _recentLogObs.disconnect(); _recentLogObs = null; }
-  _recentLogLastGroup = null;
-  _recentLogType    = null;
-  _recentLogLoading = false;
-  _recentLogCfg     = null;
-}
-
-function _setupRecentLogScroll() {
-  if (_recentLogObs) _recentLogObs.disconnect();
-  const sentinel = document.createElement('div');
-  sentinel.id = 'recentLogSentinel';
-  sentinel.style.height = '1px';
-  document.getElementById('recentLogBody').appendChild(sentinel);
-  _recentLogObs = new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting && !_recentLogDone) _loadRecentLogBatch();
-  }, { threshold: 0 });
-  _recentLogObs.observe(sentinel);
-}
-
-async function _loadRecentLogBatch() {
-  if (_recentLogDone || !_recentLogType || !_recentLogCfg || _recentLogLoading) return;
-  _recentLogLoading = true;
-  const cached = _recentLogOffset === 0
-    ? _recentLogCache[`${_recentLogCfg.apiBase}/${_recentLogType}`] : null;
-  let ok = true, data = cached;
-  if (!cached) {
-    const url = `${_recentLogCfg.apiBase}/${_recentLogType}?offset=${_recentLogOffset}&limit=50`;
-    ({ ok, data } = await apiJSON(url));
-  }
-  if (!ok || !_recentLogType) { _recentLogLoading = false; return; }
-
-  // Grouped responses return {items, rows_consumed}; flat responses return a plain array.
-  const isGrouped = !Array.isArray(data) && Array.isArray(data.items);
-  const items   = isGrouped ? data.items         : data;
-  const advance = isGrouped ? data.rows_consumed  : data.length;
-
-  if (!items.length) { _recentLogDone = true; _recentLogLoading = false; return; }
-  _recentLogOffset += advance;
-  if (items.length < 50) _recentLogDone = true;
-
-  const body     = document.getElementById('recentLogBody');
-  const sentinel = document.getElementById('recentLogSentinel');
-  const frag     = document.createDocumentFragment();
-  const now      = new Date();
-  const cfg      = _recentLogCfg;
-
-  if (isGrouped) {
-    // Server returns pre-grouped runs; stitch across batch boundaries.
-    const renderFn = _recentLogType === 'saved' ? cfg.renderSaved : cfg.renderGrouped;
-    let i = 0;
-    if (_recentLogLastGroup && items.length > 0 && _recentLogLastGroup.id === items[0][cfg.groupKey]) {
-      const merged = _recentLogLastGroup.count + items[0].count;
-      _recentLogLastGroup.count = merged;
-      const detailEl = _recentLogLastGroup.el.querySelector('.recent-detail');
-      if (detailEl) detailEl.textContent = `${merged}x`;
-      i = 1;
-    }
-    for (; i < items.length; i++) {
-      const g   = items[i];
-      const row = renderFn(g, now);
-      frag.appendChild(row);
-      _recentLogLastGroup = { id: g[cfg.groupKey], el: row, count: g.count };
-    }
-  } else {
-    items.forEach(item => frag.appendChild(cfg.renderOther(item, _recentLogType, now)));
-  }
-
-  body.insertBefore(frag, sentinel);
-  _recentLogLoading = false;
 }

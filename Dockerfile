@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
       libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
       libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
-      fonts-liberation xvfb \
+      fonts-liberation xvfb xdotool \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -16,9 +16,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Browser for TikTokApi (Playwright). Google Chrome on amd64: noticeably
-# better bot detection resistance than Playwright Chromium. Google ships no
-# linux/arm64 Chrome build, so arm64 keeps the bundled Chromium instead.
+# Browser for TikTokApi (driven by patchright, the leak-patched Playwright
+# fork main.py aliases in). Google Chrome on amd64: noticeably better bot
+# detection resistance than the bundled Chromium. Google ships no linux/arm64
+# Chrome build, so arm64 installs patchright's Chromium instead.
 # config.py auto-detects google-chrome and falls back to Chromium, so each
 # arch carries only its one browser.
 RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
@@ -29,7 +30,7 @@ RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
       rm /tmp/chrome.deb && \
       rm -rf /var/lib/apt/lists/*; \
     else \
-      playwright install chromium; \
+      patchright install chromium; \
     fi
 
 COPY . .
@@ -41,8 +42,22 @@ ENV PYTHONUNBUFFERED=1 \
     DATA_DIR=/app/data \
     MEDIA_DIR=/app/media \
     WEB_PORT=5000 \
+    DISPLAY=:99 \
     APP_VERSION=${BUILD_VERSION}
 
 EXPOSE 5000
 
-CMD ["python", "app/main.py"]
+# Xvfb gives the app a virtual X display so the TikTok browser can run headed
+# (a realistic 1920x1080 screen), dropping the headless fingerprint class.
+# Started directly instead of via xvfb-run: as PID 1 xvfb-run never receives
+# Xvfb's readiness signal and hangs before launching the app. exec keeps
+# python as PID 1, same as before. The app falls back to headless without
+# DISPLAY, so a failed Xvfb degrades instead of breaking.
+#
+# The rm clears the previous run's display lock and socket: /tmp survives a
+# docker restart (only a container recreation resets it), and Xvfb refuses to
+# start over a stale lock whose pid matches any live process.
+#
+# xdotool injects mouse input into that display at the X server level, which
+# backs the in-app browser viewer (Settings > TikTok) used to solve captchas.
+CMD ["sh", "-c", "rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 && Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & exec python app/main.py"]

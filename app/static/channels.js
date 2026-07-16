@@ -2,16 +2,54 @@
 //
 // One implementation of the creator cards, detail modal, filter bar, add form,
 // recent panel, loop panel, and log view, shared by every channel platform
-// (Twitter, Instagram, YouTube). Each platform calls initChannelApp(cfg) with
-// its nouns, API base, and hooks; the engine generates the platform section
+// (TikTok, Twitter, Instagram, YouTube). Each platform calls initChannelApp(cfg)
+// with its nouns, API base, and hooks; the engine generates the platform section
 // and detail modal HTML and exposes its public functions on window with the
 // platform prefix (e.g. twOpenModal) so generated onclick strings and the
-// static settings/jobs markup can reference them.
-//
-// TikTok keeps its own implementation (sounds catalog plus TikTok-specific
-// domain features) but shares the same building blocks from common.js, so the
-// UI stays identical.
+// static settings/jobs markup can reference them. TikTok layers its extras
+// (sounds catalog, jobs, QR login) on top in tiktok.js.
 
+/**
+ * @typedef {Object} ChannelAppConfig
+ * @property {string} id                 Platform id, also the tab hash ('tiktok' | 'twitter' | 'instagram' | 'youtube')
+ * @property {string} prefix             Global-function prefix ('tt' | 'tw' | 'ig' | 'yt')
+ * @property {string} api                API base, e.g. '/api/twitter'
+ * @property {string} creatorNoun        'user' | 'account' | 'profile' | 'channel'
+ * @property {string} creatorNounPlural
+ * @property {string} itemNoun           'video' | 'tweet' | 'post'
+ * @property {string} itemNounPlural
+ * @property {string} addAriaLabel
+ * @property {string} addPlaceholder
+ * @property {(ch: Object) => string} profileUrl        Public URL of a creator on the platform
+ * @property {string} loopLabel          Loop name in pause toasts and the loop panel
+ * @property {string} [loopsTitle]       Loops panel header (default 'Loop')
+ * @property {string} [extraLoopHtml]    Second loop block markup (TikTok sounds)
+ * @property {string} [extraLoopLabel]   Toggle label for the extra loop block
+ * @property {string} [subLabelCard]     Follower-count label on cards
+ * @property {string} [subLabelModal]    Follower-count label in the detail modal
+ * @property {string} [subLabelSort]     Follower-count label in the sort dropdown
+ * @property {string} [titleColLabel]    Video table title column (default 'Title')
+ * @property {string} [uploadDateLabel]  Video table date column
+ * @property {boolean} [uploadDateOnly]  Render dates without time (YouTube)
+ * @property {boolean} [hasBanner]       Show the banner slot in the detail modal
+ * @property {Object<string, string>} [fieldLabels]     profile_history field -> label
+ * @property {{key: string, label: string, defaults?: string[], options: {key: string, label: string}[], test: (ch: Object, active: Set<string>) => boolean}[]} [extraFilterGroups]
+ * @property {{key: string, label: string, controlsHtml?: string, emptyLabel?: string, show: (search: string) => void}[]} [extraViews]
+ * @property {{key: string, icon: string, title: string}[]} [viewKeys]  Video-type filter tabs in the detail modal
+ * @property {(view: string, vids: Object[]) => Object[]} [viewVideoFilter]
+ * @property {(raw: string, addToasts: Object) => (boolean|Promise<boolean>)} [addHandler]  Return true when fully handled
+ * @property {(state: Object) => void} [onStatus]       Called after every status render
+ * @property {(state: Object) => boolean} [statusActive]  Extra 'running' signal for the header badge
+ * @property {(state: Object) => {iso: string, label: string}[]} [nextRunCandidates]
+ * @property {(s: Object) => Object[]} [statsRows]      Rows for the stat strip
+ * @property {(item: Object) => string} [recentFallback]  Recent-feed line for disabled creators
+ * @property {(ch: Object) => string} [gridClassFn]
+ * @property {(v: Object) => string} [typeIconFn]
+ * @property {(v: Object) => string} [thumbBadge]
+ * @property {Function} [videoActionBtnsFn]
+ */
+
+/** @param {ChannelAppConfig} cfg */
 function initChannelApp(cfg) {
   const P    = cfg.prefix;                 // 'tw' | 'ig' | 'yt'
   const API  = cfg.api;                    // '/api/twitter'
@@ -34,6 +72,12 @@ function initChannelApp(cfg) {
   // ── Section HTML ──────────────────────────────────────────────────────────
 
   const _triggerIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12C21 16.9706 16.9706 21 12 21C9.69494 21 7.59227 20.1334 6 18.7083L3 16M3 12C3 7.02944 7.02944 3 12 3C14.3051 3 16.4077 3.86656 18 5.29168L21 8M3 21V16M3 16H8M21 3V8M21 8H16"/></svg>`;
+  const _bmOutline = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21V3z"/></svg>`;
+  const _bmFilled  = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 0 1 1 1v19l-7-5.5L5 22V3a1 1 0 0 1 1-1z"/></svg>`;
+
+  const _bookmarkBtn = (ch, stop) => `<button class="btn-bookmark${ch.bookmarked ? ' bookmarked' : ''}"
+      onclick="${stop ? 'event.stopPropagation();' : ''}${P}ToggleBookmark('${esc(ch.channel_id)}')"
+      title="${ch.bookmarked ? (ch.starred ? `Starred ${CREATORS} stay bookmarked` : 'Remove bookmark') : 'Bookmark'}">${ch.bookmarked ? _bmFilled : _bmOutline}</button>`;
 
   function _sectionHtml() {
     return `
@@ -46,31 +90,27 @@ function initChannelApp(cfg) {
     <button class="btn-primary" onclick="${P}AddCreator()">Add</button>
   </div>
 
-  <div class="top-panels">
-    <div class="panel-card">
-      <div class="panel-header"><span class="section-title">Statistics</span></div>
-      <div class="panel-body" style="padding:8px">
-        <div class="stat-grid" id="${P}StatsGrid"></div>
-      </div>
-    </div>
-    <div class="panel-card">
-      <div class="panel-header"><span class="section-title">Recent</span></div>
-      <div class="panel-body" style="padding:12px 16px">
-        <div class="recent-split">
-          <div class="recent-col" id="${P}RecentLeft"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
-          <div class="recent-col" id="${P}RecentRight"></div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div class="stat-strip" id="${P}StatsGrid"></div>
 
-  <div class="mid-panels">
-  <div class="panel-card">
-    <div class="panel-header"><span class="section-title">Add history</span></div>
-    <div class="panel-body" style="padding:0">
-      <div class="add-history" id="${P}AddHistory"></div>
+  <div class="dash-row">
+  <div class="panel-card recent-card">
+    <div class="panel-header">
+      <span class="section-title">Recent activity</span>
+      <div class="filter-pills multi hdr-pills" onpointerenter="${P}PrefetchFeedKinds()">
+        <button class="filter-pill active" id="${P}Rf_all"     onclick="${P}SetRecentFilter('all')">All</button>
+        <button class="filter-pill"        id="${P}Rf_saved"   onclick="${P}SetRecentFilter('saved')">Saved</button>
+        <button class="filter-pill"        id="${P}Rf_deleted" onclick="${P}SetRecentFilter('deleted')">Deleted</button>
+        <button class="filter-pill"        id="${P}Rf_changed" onclick="${P}SetRecentFilter('changed')">Changes</button>
+        <button class="filter-pill" id="${P}Rf_banned" onclick="${P}SetRecentFilter('banned')">Bans</button>
+      </div>
+      <span style="display:flex;gap:4px">
+        <button class="btn-star" id="${P}RfStar" onclick="${P}ToggleRfStar()" title="Only starred ${CREATORS}">☆</button>
+        <button class="btn-bookmark" id="${P}RfBook" onclick="${P}ToggleRfBook()" title="Only bookmarked ${CREATORS}">${_bmOutline}</button>
+      </span>
     </div>
+    <div class="recent-feed" id="${P}RecentFeed"><div class="rf-empty">Loading…</div></div>
   </div>
+  <div class="dash-col">
   <div class="panel-card loops-card">
     <div class="panel-header" style="position:relative">
       <span class="section-title">${cfg.loopsTitle || 'Loop'}</span>
@@ -103,21 +143,25 @@ function initChannelApp(cfg) {
       ${cfg.extraLoopHtml ? `<div id="${P}LoopBlockExtra" style="display:none">${cfg.extraLoopHtml}</div>` : ''}
     </div>
   </div>
+  <div class="panel-card ah-card">
+    <div class="panel-header"><span class="section-title">Add history</span></div>
+    <div class="add-history" id="${P}AddHistory"></div>
+  </div>
+  </div>
   </div>
 
   <section>
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-      <div class="tracking-tab-row" style="display:flex;align-items:center;gap:8px;">
-        <div class="filter-pills">
-          <button class="filter-pill active" id="${P}TvCreators" onclick="${P}SetTrackingView('creators')">${CreatorsCap}</button>
-          ${EXTRA_VIEWS.map(v => `<button class="filter-pill" id="${P}Tv_${v.key}" onclick="${P}SetTrackingView('${v.key}')">${v.label}</button>`).join('')}
-          <button class="filter-pill"        id="${P}TvLog"      onclick="${P}SetTrackingView('log')">Log</button>
+    <div style="margin-bottom:12px;">
+      <div class="view-tabs-row">
+        <div class="view-tabs">
+          <button class="view-tab active" id="${P}TvCreators" onclick="${P}SetTrackingView('creators')">${CreatorsCap}</button>
+          ${EXTRA_VIEWS.map(v => `<button class="view-tab" id="${P}Tv_${v.key}" onclick="${P}SetTrackingView('${v.key}')">${v.label}</button>`).join('')}
+          <button class="view-tab"        id="${P}TvLog"      onclick="${P}SetTrackingView('log')">Log</button>
         </div>
         <span id="${P}Count" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
-        <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)"
-               style="width:160px;font-size:12px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
+        <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)">
       </div>
-      <div id="${P}Controls" class="filter-control-group">
+      <div id="${P}Controls" class="filter-control-group" style="margin-top:10px">
         ${EXTRA_FILTER_GROUPS.map(g => `
         <div class="filter-row">
           <span class="filter-row-label">${g.label}</span>
@@ -133,9 +177,10 @@ function initChannelApp(cfg) {
           </div>
         </div>
         <div class="filter-row">
-          <span class="filter-row-label">Starred</span>
+          <span class="filter-row-label">Flags</span>
           <div class="filter-pills multi">
             <button class="filter-pill" id="${P}fStarStarred" onclick="${P}SetFilter('star','starred')">Starred</button>
+            <button class="filter-pill" id="${P}fBookBookmarked" onclick="${P}SetFilter('book','bookmarked')">Bookmarked</button>
           </div>
         </div>
         <div class="filter-row">
@@ -159,7 +204,7 @@ function initChannelApp(cfg) {
       ${EXTRA_VIEWS.map(v => `<div id="${P}Controls_${v.key}" class="filter-control-group" style="display:none">${v.controlsHtml || ''}</div>`).join('')}
     </div>
     <div class="users-grid" id="${P}Grid">
-      <div class="empty-state">No ${CREATORS} tracked yet.</div>
+      ${Array(6).fill('<div class="user-card skeleton-card" aria-hidden="true"></div>').join('')}
     </div>
     ${EXTRA_VIEWS.map(v => `<div class="users-grid" id="${P}Grid_${v.key}" style="display:none"><div class="empty-state">${v.emptyLabel || ''}</div></div>`).join('')}
     <div id="${P}LogPanel" style="display:none">
@@ -201,9 +246,9 @@ function initChannelApp(cfg) {
 
   let creators       = [];
   let sort           = { field: 'handle', dir: 'asc' };
-  // Default filter: hide inactive creators; Starred stays off
+  // Default filter: hide inactive creators; Starred and Bookmarked stay off
   const _defaultFilter = () => {
-    const f = { stat: new Set(['active']), star: new Set() };
+    const f = { stat: new Set(['active']), star: new Set(), book: new Set() };
     EXTRA_FILTER_GROUPS.forEach(g => { f[g.key] = new Set(g.defaults || []); });
     return f;
   };
@@ -367,7 +412,6 @@ function initChannelApp(cfg) {
     { label: `Saved ${ITEMS}`,      value: (s.saved_count   || 0).toLocaleString() },
     { label: 'Deleted',             value: (s.deleted_count || 0).toLocaleString() },
     { label: 'Latest saved',        value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
-    { label: 'Total views',         value: _fmtLarge(s.total_views || 0) },
     { label: 'Storage',             value: _fmtBytes(s.media_size_bytes || 0) },
   ]);
 
@@ -381,13 +425,6 @@ function initChannelApp(cfg) {
   });
 
   // ── Recent panel ──────────────────────────────────────────────────────────
-
-  const RECENT_LOG_TITLES = {
-    'deletions':       `All Deleted ${ItemsCap}`,
-    'profile-changes': 'All Profile Changes',
-    'saved':           `All Saved ${ItemsCap}`,
-    'bans':            'All Banned Accounts',
-  };
 
   const _nameStyle = r => r.enabled === 0 ? 'style="color:var(--text-dim)"'
     : r.starred ? 'style="color:var(--yellow)"'
@@ -406,158 +443,133 @@ function initChannelApp(cfg) {
     return `${P}OpenModal('${esc(item.channel_id)}')`;
   }
 
-  function _renderSavedRow(g, now) {
-    const row = document.createElement('div');
-    row.className = 'recent-entry';
-    row.title = `Open @${g.handle}`;
-    row.setAttribute('onclick', _recentOnclick(g, 'saved'));
-    row.innerHTML = `
-      <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-      <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
-      <span class="recent-detail">${g.count}x</span>`;
-    return row;
+  // One chronological feed mixing every activity type, filterable from the
+  // panel header. Server-paginated; older pages load through a scroll sentinel.
+
+  const _RF_ICONS = {
+    saved:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16"/></svg>',
+    deleted: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+    changed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L7 21H3v-4L17 3z"/></svg>',
+    banned:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.7 5.7l12.6 12.6"/></svg>',
+  };
+  let _recentFilter = 'all';
+  let _rfStar       = false;
+  let _rfBook       = false;
+  // Page-one cache per filter combination: switching filters renders instantly
+  // from cache while a background fetch revalidates
+  const _rf = { items: [], hasMore: false, obs: null, loading: false, sig: null, cache: {} };
+
+  const _rfKey = () => `${_recentFilter}|${_rfStar ? 1 : 0}|${_rfBook ? 1 : 0}`;
+
+  function _rfUrl(before) {
+    const kind = _recentFilter === 'all' ? '' : `&kind=${_recentFilter}`;
+    const flags = `${_rfStar ? '&starred=1' : ''}${_rfBook ? '&bookmarked=1' : ''}`;
+    return `${API}/recent/feed?limit=40${kind}${flags}${before ? `&before=${before}` : ''}`;
   }
 
-  function _renderDeletedGroupRow(g, now) {
-    const row = document.createElement('div');
-    row.className = 'recent-entry';
-    row.title = `Open @${g.handle}`;
-    row.setAttribute('onclick', _recentOnclick(g, 'deleted'));
-    row.innerHTML = `
-      <span class="recent-date">${_recentDate(g.deleted_at, now)}</span>
-      <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
-      <span class="recent-detail">${g.count}x</span>`;
-    return row;
+  function _rfRow(ev, now) {
+    const it = ev.item;
+    const detail = ev.kind === 'saved'   ? `${it.count} saved`
+                 : ev.kind === 'deleted' ? `${it.count} deleted`
+                 : ev.kind === 'changed' ? esc(FIELD_LABELS[it.field] || it.field)
+                 : 'Banned';
+    const onclick = ev.kind === 'saved' || ev.kind === 'deleted'
+      ? _recentOnclick(it, ev.kind)
+      : ev.kind === 'changed'
+        ? `${P}OpenModalWithHistory('${esc(it.channel_id)}','${esc(it.field)}')`
+        : `${P}OpenModal('${esc(it.channel_id)}')`;
+    return `<div class="rf-row" onclick="${onclick}" title="Open @${esc(it.handle)}">
+      <span class="rf-icon rf-${ev.kind}">${_RF_ICONS[ev.kind]}</span>
+      <span class="rf-avatar-wrap"><img class="rf-avatar" src="${API}/channels/${esc(it.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>
+      <span class="rf-name" ${_nameStyle(it)}>@${esc(it.handle)}</span>
+      <span class="rf-detail rf-${ev.kind}">${detail}</span>
+      <span class="rf-time">${_recentDate(ev.ts, now)}</span>
+    </div>`;
   }
 
-  function _renderOtherRow(item, type, now) {
-    const row = document.createElement('div');
-    row.className = 'recent-entry';
-    if (type === 'deletions') {
-      row.title = `Open @${item.handle}`;
-      row.setAttribute('onclick', _recentOnclick({ ...item, count: 1 }, 'deleted'));
-      row.innerHTML = `
-        <span class="recent-date">${_recentDate(item.deleted_at, now)}</span>
-        <span class="recent-name" ${_nameStyle(item)}>@${esc(item.handle)}</span>
-        <span class="recent-detail">${esc((item.video_id || '').slice(0, 11))}</span>`;
-    } else if (type === 'bans') {
-      row.title = `Open @${item.handle}`;
-      row.onclick = () => window[`${P}OpenModal`](item.channel_id);
-      row.innerHTML = `
-        <span class="recent-date">${_recentDate(item.banned_at, now)}</span>
-        <span class="recent-name" ${item.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(item.handle)}</span>
-        <span class="recent-detail" style="color:var(--red)">Banned</span>`;
-    } else {
-      const label = FIELD_LABELS[item.field] || item.field;
-      row.title = `Open @${item.handle} · ${label} history`;
-      row.onclick = () => window[`${P}OpenModalWithHistory`](item.channel_id, item.field);
-      row.innerHTML = `
-        <span class="recent-date">${_recentDate(item.changed_at, now)}</span>
-        <span class="recent-name" ${_nameStyle(item)}>@${esc(item.handle)}</span>
-        <span class="recent-detail">${esc(label)}</span>`;
-    }
-    return row;
+  function _renderFeed(loading) {
+    const el = document.getElementById(`${P}RecentFeed`);
+    if (!el) return;
+    if (_rf.obs) { _rf.obs.disconnect(); _rf.obs = null; }
+    const now = new Date();
+    el.innerHTML = _rf.items.length
+      ? _rf.items.map(e => _rfRow(e, now)).join('')
+      : `<div class="rf-empty">${loading ? 'Loading…' : 'No activity yet'}</div>`;
+    if (_rf.hasMore) _rf.obs = _attachSentinel(el, _loadFeedMore);
   }
 
-  X('OpenRecentLog', type => {
-    _openRecentLogModal(type, {
-      apiBase:       `${API}/recent`,
-      titles:        RECENT_LOG_TITLES,
-      groupKey:      'channel_id',
-      renderSaved:   _renderSavedRow,
-      renderGrouped: _renderDeletedGroupRow,
-      renderOther:   _renderOtherRow,
+  async function _loadFeedMore() {
+    if (_rf.loading || !_rf.items.length) return;
+    _rf.loading = true;
+    const { ok, data } = await apiJSON(_rfUrl(_rf.items[_rf.items.length - 1].ts));
+    _rf.loading = false;
+    if (!ok) return;
+    _rf.items.push(...data.items);
+    _rf.hasMore = data.has_more;
+    _renderFeed();
+  }
+
+  // Stale-while-revalidate on filter change: render the cached page one for the
+  // new combination immediately, then let loadRecent refresh it in the background
+  function _applyFeedFilter() {
+    const c = _rf.cache[_rfKey()];
+    _rf.sig     = c ? c.sig : null;
+    _rf.items   = c ? c.items.slice() : [];
+    _rf.hasMore = c ? c.hasMore : false;
+    _renderFeed(!c);
+    loadRecent();
+  }
+
+  X('SetRecentFilter', f => {
+    _recentFilter = f;
+    ['all', 'saved', 'deleted', 'changed', 'banned'].forEach(k => {
+      document.getElementById(`${P}Rf_${k}`)?.classList.toggle('active', k === f);
     });
+    _applyFeedFilter();
   });
 
-  function renderRecent(data) {
-    const leftEl  = document.getElementById(`${P}RecentLeft`);
-    const rightEl = document.getElementById(`${P}RecentRight`);
-    if (!leftEl || !rightEl) return;
-    const now = new Date();
+  // The flag toggles mirror the star and bookmark buttons on cards: same
+  // classes, same filled/outline state swap
+  X('ToggleRfStar', () => {
+    _rfStar = !_rfStar;
+    const b = document.getElementById(`${P}RfStar`);
+    if (b) { b.classList.toggle('starred', _rfStar); b.textContent = _rfStar ? '★' : '☆'; }
+    _applyFeedFilter();
+  });
 
-    let left = '';
+  X('ToggleRfBook', () => {
+    _rfBook = !_rfBook;
+    const b = document.getElementById(`${P}RfBook`);
+    if (b) { b.classList.toggle('bookmarked', _rfBook); b.innerHTML = _rfBook ? _bmFilled : _bmOutline; }
+    _applyFeedFilter();
+  });
 
-    left += `<div class="recent-section">`;
-    left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('deletions')" title="View all deleted ${ITEMS}">Recently deleted</div>`;
-    if (data.deletions && data.deletions.length) {
-      left += data.deletions.map(d =>
-        `<div class="recent-entry" onclick="${_recentOnclick(d, 'deleted')}" title="Open @${esc(d.handle)}">
-          <span class="recent-date">${_recentDate(d.deleted_at, now)}</span>
-          <span class="recent-name" ${_nameStyle(d)}>@${esc(d.handle)}</span>
-          <span class="recent-detail">${d.count}x</span>
-        </div>`
-      ).join('');
-    } else {
-      left += `<div class="recent-empty">No deleted ${ITEMS} yet</div>`;
+  // Warm the per-kind caches the first time the pointer reaches the filter
+  // pills, so the first filter click is instant too
+  X('PrefetchFeedKinds', async () => {
+    for (const kind of ['saved', 'deleted', 'changed', 'banned']) {
+      const key = `${kind}|0|0`;
+      if (_rf.cache[key]) continue;
+      const { ok, data } = await apiJSON(`${API}/recent/feed?limit=40&kind=${kind}`);
+      if (ok) _rf.cache[key] = { items: data.items, hasMore: data.has_more, sig: JSON.stringify(data.items) };
     }
-    left += `</div>`;
+  });
 
-    left += `<div class="recent-section">`;
-    left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('profile-changes')" title="View all profile changes">Recently changed profile</div>`;
-    if (data.profile_changes && data.profile_changes.length) {
-      left += data.profile_changes.map(p =>
-        `<div class="recent-entry" onclick="${P}OpenModalWithHistory('${esc(p.channel_id)}','${esc(p.field)}')" title="Open @${esc(p.handle)}">
-          <span class="recent-date">${_recentDate(p.changed_at, now)}</span>
-          <span class="recent-name" ${_nameStyle(p)}>@${esc(p.handle)}</span>
-          <span class="recent-detail">${esc(FIELD_LABELS[p.field] || p.field)}</span>
-        </div>`
-      ).join('');
-    } else {
-      left += `<div class="recent-empty">No profile changes recorded yet</div>`;
-    }
-    left += `</div>`;
-
-    if (cfg.hasBans) {
-      left += `<div class="recent-section">`;
-      left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('bans')" title="View all banned accounts">Recently banned</div>`;
-      if (data.bans && data.bans.length) {
-        const b = data.bans[0];
-        left += `<div class="recent-entry" onclick="${P}OpenModal('${esc(b.channel_id)}')" title="Open @${esc(b.handle)}">
-          <span class="recent-date">${_recentDate(b.banned_at, now)}</span>
-          <span class="recent-name" ${b.starred ? 'style="color:var(--yellow)"' : 'style="color:var(--red)"'}>@${esc(b.handle)}</span>
-          <span class="recent-detail" style="color:var(--red)">Banned</span>
-        </div>`;
-      } else {
-        left += `<div class="recent-empty">No banned accounts</div>`;
-      }
-      left += `</div>`;
-    }
-
-    leftEl.innerHTML = left;
-
-    let right = '';
-    right += `<div class="recent-section">`;
-    right += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="${P}OpenRecentLog('saved')" title="View all saved ${ITEMS}">Recently saved</div>`;
-    if (data.saved && data.saved.length) {
-      right += data.saved.map(g =>
-        `<div class="recent-entry" onclick="${_recentOnclick(g, 'saved')}" title="Open @${esc(g.handle)}">
-          <span class="recent-date">${_recentDate(g.download_date, now)}</span>
-          <span class="recent-name" ${_nameStyle(g)}>@${esc(g.handle)}</span>
-          <span class="recent-detail">${g.count}x</span>
-        </div>`
-      ).join('');
-    } else {
-      right += `<div class="recent-empty">No ${ITEMS} saved yet</div>`;
-    }
-    right += `</div>`;
-
-    rightEl.innerHTML = right;
-  }
-
-  let _lastRecentJson = null;
+  // The 30 s poll refreshes page one of the feed. Pages the user scrolled in
+  // are reset only when page one actually changed, so idle polls never yank
+  // the scroll position. Older pages load through the scroll sentinel.
   const loadRecent = X('LoadRecent', async () => {
-    const { ok, data } = await apiJSON(`${API}/recent`);
+    const key = _rfKey();
+    const { ok, data } = await apiJSON(_rfUrl());
     if (!ok) return;
-    renderRecent(data);
-    // Warm the recent-log modal cache so the expanded lists open instantly;
-    // refresh only when the panel data actually changed
-    const j = JSON.stringify(data);
-    if (j !== _lastRecentJson) {
-      _lastRecentJson = j;
-      _prefetchRecentLog(`${API}/recent`,
-        ['saved', 'deletions', 'profile-changes', ...(cfg.hasBans ? ['bans'] : [])]);
-    }
+    const sig = JSON.stringify(data.items);
+    _rf.cache[key] = { items: data.items, hasMore: data.has_more, sig };
+    if (key !== _rfKey()) return;   // filter changed while the fetch was in flight
+    if (sig === _rf.sig) return;
+    _rf.sig     = sig;
+    _rf.items   = data.items.slice();
+    _rf.hasMore = data.has_more;
+    _renderFeed();
   });
 
   // ── Loop status ───────────────────────────────────────────────────────────
@@ -676,7 +688,9 @@ function initChannelApp(cfg) {
 
   function _tickActivityBar() {
     const bar = _el('LogActivityBar');
-    if (!bar) return;
+    // offsetParent is null while the bar is hidden (platform tab not active,
+    // or the Log view not selected); skip the countdown render entirely then
+    if (!bar || bar.offsetParent === null) return;
     const dur = secs => {
       const m = Math.floor(secs / 60), s = secs % 60;
       return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
@@ -840,9 +854,7 @@ function initChannelApp(cfg) {
   });
 
   let _queueSig = null;
-  const loadQueue = X('LoadQueue', async () => {
-    const { ok, data } = await apiJSON(`${API}/queue`);
-    if (!ok) return;
+  function _syncQueue(data) {
     addToasts.sync(data);
     // Any queue state change (new pending, resolution, retry) is also a
     // change to the top of the Add history, so refresh it.
@@ -851,29 +863,41 @@ function initChannelApp(cfg) {
       if (_queueSig !== null) loadAddHistory(true);
       _queueSig = sig;
     }
+  }
+
+  const loadQueue = X('LoadQueue', async () => {
+    const { ok, data } = await apiJSON(`${API}/queue`);
+    if (ok) _syncQueue(data);
   });
 
   // ── Add history panel ─────────────────────────────────────────────────────
 
   const _ah = { items: [], hasMore: false, obs: null, loading: false };
 
+  const _AH_ICONS = {
+    ok:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>',
+    error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V13m0 3.5v.1"/></svg>',
+  };
+
   function _ahRow(e) {
+    const icon = e.status === 'pending'
+      ? '<span class="spinner"></span>'
+      : _AH_ICONS[e.status === 'error' ? 'error' : 'ok'];
     const status = e.status === 'pending'
       ? '<span class="ah-status ah-pending">looking up…</span>'
       : e.status === 'error'
         ? `<span class="ah-status ah-error" title="${esc(e.error_detail || '')}">${esc(e.error_kind || 'error')}</span>`
         : '<span class="ah-status ah-ok">added</span>';
     const actions = e.status === 'error'
-      ? `<span class="ah-actions">
-           <button class="ah-btn" title="Try again" onclick="${P}AhRetry(${e.id})">${_triggerIcon}</button>
-           <button class="ah-btn ah-btn-danger" title="Discard" onclick="${P}AhDiscard(${e.id})">✕</button>
-         </span>`
+      ? `<button class="ah-btn" title="Try again" onclick="${P}AhRetry(${e.id})">${_triggerIcon}</button>
+         <button class="ah-btn ah-btn-danger" title="Discard" onclick="${P}AhDiscard(${e.id})">✕</button>`
       : '';
     return `<div class="ah-row">
+      <span class="ah-icon ah-${esc(e.status)}">${icon}</span>
       <span class="ah-handle">@${esc(e.handle)}</span>
       ${status}
-      <span class="ah-time">${fmt.rel(e.updated_at * 1000)}</span>
-      ${actions}
+      <span class="ah-time">${_recentDate(e.updated_at)}</span>
+      <span class="ah-actions">${actions}</span>
     </div>`;
   }
 
@@ -923,16 +947,18 @@ function initChannelApp(cfg) {
 
   const STAT_IDS = { active: `${P}fStatActive`, inactive: `${P}fStatInactive` };
   const STAR_IDS = { starred: `${P}fStarStarred` };
+  const BOOK_IDS = { bookmarked: `${P}fBookBookmarked` };
 
   function _filterPillIds(group) {
     if (group === 'stat') return STAT_IDS;
     if (group === 'star') return STAR_IDS;
+    if (group === 'book') return BOOK_IDS;
     const g = EXTRA_FILTER_GROUPS.find(g => g.key === group);
     return g ? Object.fromEntries(g.options.map(o => [o.key, `${P}f_${g.key}_${o.key}`])) : {};
   }
 
   function _syncFilterPills() {
-    for (const group of ['stat', 'star', ...EXTRA_FILTER_GROUPS.map(g => g.key)]) {
+    for (const group of ['stat', 'star', 'book', ...EXTRA_FILTER_GROUPS.map(g => g.key)]) {
       Object.entries(_filterPillIds(group)).forEach(([v, id]) => {
         document.getElementById(id)?.classList.toggle('active', filter[group].has(v));
       });
@@ -979,11 +1005,16 @@ function initChannelApp(cfg) {
     renderCreators();
   });
 
+  // Debounced so fast typing coalesces into one grid rebuild
+  let _searchTimer = null;
   X('OnSearch', val => {
-    search = val.trim();
-    if (trackingView === 'creators') { renderCreators(); return; }
-    const extra = EXTRA_VIEWS.find(v => v.key === trackingView);
-    if (extra) extra.show(search);
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => {
+      search = val.trim();
+      if (trackingView === 'creators') { renderCreators(); return; }
+      const extra = EXTRA_VIEWS.find(v => v.key === trackingView);
+      if (extra) extra.show(search);
+    }, 150);
   });
 
   function _filteredCreators() {
@@ -994,6 +1025,7 @@ function initChannelApp(cfg) {
       }
       if (filter.stat.size && !filter.stat.has(ch.tracking_enabled === 0 ? 'inactive' : 'active')) return false;
       if (filter.star.has('starred') && !ch.starred) return false;
+      if (filter.book.has('bookmarked') && !ch.bookmarked) return false;
       if (q) {
         const hay = [ch.handle, ch.display_name, ch.channel_id, ch.description,
                      ...(ch.old_handles || []), ...(ch.old_display_names || []), ...(ch.old_descriptions || [])]
@@ -1019,6 +1051,7 @@ function initChannelApp(cfg) {
   let gridObs        = null;
   let renderedCount  = 0;
   let sortedCache    = [];
+  let gridAnimated   = false;   // staggered card entrance runs once, on first populate
 
   // Relation and privacy pill; only rendered when the platform's adapter
   // populates the fields (engine schema has them for every platform)
@@ -1065,7 +1098,7 @@ function initChannelApp(cfg) {
         <div class="user-card-top">
           <div class="avatar-wrap">
             <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
-            ${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar" alt=""
+            ${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" alt=""
                  onerror="this.style.display='none'"
                  onclick="event.stopPropagation();openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')">` : ''}
           </div>
@@ -1077,7 +1110,6 @@ function initChannelApp(cfg) {
           <div class="user-badges">
             <span class="account-status ${trackingCls}">${trackingLabel}</span>
             ${_relationPill(ch)}
-            ${ch.starred ? '<span class="account-status priority" title="Starred: checked on the high-priority interval">★ Priority</span>' : ''}
           </div>
         </div>
 
@@ -1089,7 +1121,7 @@ function initChannelApp(cfg) {
           ${ch.subscriber_count != null ? `<span class="stat-item"><span class="stat-item-label">${cfg.subLabelCard}</span><span class="stat-item-value">${(ch.subscriber_count || 0).toLocaleString()}</span></span>` : ''}
           <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${ch.video_total || 0}</span></span>
           ${(ch.video_deleted || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${ch.video_deleted}</span></span>` : ''}
-          ${ch.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:#ff9800">${ch.video_missing}</span></span>` : ''}
+          ${ch.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:var(--orange)">${ch.video_missing}</span></span>` : ''}
           ${ch.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${ch.video_undeleted}</span></span>` : ''}
         </div>
 
@@ -1098,6 +1130,7 @@ function initChannelApp(cfg) {
         <div class="user-card-footer">
           <div style="display:flex;gap:6px;">
             <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="event.stopPropagation();${P}ToggleStar('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
+            ${_bookmarkBtn(ch, true)}
             <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
             <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
             <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">&#x2022;&#x2022;&#x2022;</button>
@@ -1138,9 +1171,9 @@ function initChannelApp(cfg) {
     const grid = _el('Grid');
     if (!grid) return;
     const filtered   = _filteredCreators();
-    const isFiltered = filter.stat.size > 0 || filter.star.size > 0 || !!search;
+    const isFiltered = filter.stat.size > 0 || filter.star.size > 0 || filter.book.size > 0 || !!search;
     const countEl    = _el('Count');
-    if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${creators.length}` : creators.length;
+    if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${creators.length}` : `${creators.length}`;
 
     if (!creators.length) {
       grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">No ${CREATORS} tracked yet.</div>`;
@@ -1160,15 +1193,31 @@ function initChannelApp(cfg) {
     grid.innerHTML = slice.map(_renderCreatorCard).join('')
       + (toShow < CARD_BATCH ? _ghostCards(CARD_BATCH - toShow) : '');
     renderedCount = slice.length;
+    if (!gridAnimated) {
+      gridAnimated = true;
+      grid.classList.add('grid-anim');
+      setTimeout(() => grid.classList.remove('grid-anim'), 700);
+    }
 
     if (sortedCache.length > renderedCount) {
       gridObs = _attachGridSentinel(grid, _appendCreatorCards);
     }
   }
 
+  let _creatorsSig    = null;
+  let _lastGridRender = 0;
   const loadCreators = X('LoadCreators', async () => {
     const { ok, data } = await apiJSON(`${API}/channels`);
-    if (ok) { creators = data; renderCreators(); }
+    if (!ok) return;
+    // Skip the full grid rebuild when nothing changed, to avoid avatar reflow
+    // and hover flicker on the 15 s poll. Rebuild once a minute regardless so
+    // the relative timestamps on cards stay current.
+    const sig = JSON.stringify(data);
+    if (sig === _creatorsSig && Date.now() - _lastGridRender < 60000) return;
+    _creatorsSig    = sig;
+    _lastGridRender = Date.now();
+    creators = data;
+    renderCreators();
   });
 
   X('GetCreators', () => creators);
@@ -1177,7 +1226,44 @@ function initChannelApp(cfg) {
   X('RunCreatorQuick',   id => _creatorRun(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, () => { renderCreators(); updateRunStates(); }, 'quick'));
   X('RunCreatorProfile', id => _creatorRunProfile(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, renderCreators));
   X('RemoveCreator',     (id, label) => _creatorRemove(`${API}/channels`, id, label, loadCreators));
-  X('ToggleStar',        id => _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators));
+
+  // Starring implies bookmarking (the server applies the same rule)
+  function _syncStarBookmark(id) {
+    const ch = creators.find(c => c.channel_id === id);
+    if (ch && ch.starred && !ch.bookmarked) { ch.bookmarked = 1; renderCreators(); }
+  }
+
+  X('ToggleStar', async id => {
+    await _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators);
+    _syncStarBookmark(id);
+  });
+
+  // Bookmark: a pure filter flag with no loop or scheduling side effects.
+  // Optimistic toggle, reverted if the PATCH fails.
+  X('ToggleBookmark', async id => {
+    const ch = creators.find(c => c.channel_id === id);
+    if (!ch) return;
+    if (ch.starred && ch.bookmarked) {
+      showToast(`Starred ${CREATORS} stay bookmarked.`);
+      return;
+    }
+    const next = ch.bookmarked ? 0 : 1;
+    ch.bookmarked = next;
+    renderCreators();
+    if (modalCreator && modalCreator.channel_id === id) {
+      modalCreator.bookmarked = next;
+      _renderModalHeader(modalCreator);
+    }
+    const { ok, data } = await apiJSON(`${API}/channels/${id}/bookmark`, {
+      method: 'PATCH',
+      body: JSON.stringify({ bookmarked: !!next }),
+    });
+    if (!ok) {
+      ch.bookmarked = next ? 0 : 1;
+      renderCreators();
+      showToast(data.error || 'Could not update bookmark', { type: 'error' });
+    }
+  });
 
   // ── Tracking toggle ───────────────────────────────────────────────────────
 
@@ -1361,6 +1447,7 @@ function initChannelApp(cfg) {
         ${ch.bio_link ? `<div class="modal-bio-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
           <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
+          ${_bookmarkBtn(ch, false)}
           <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
           <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
           <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">&#x2022;&#x2022;&#x2022;</button>
@@ -1401,6 +1488,7 @@ function initChannelApp(cfg) {
 
   X('ToggleStarModal', async id => {
     await _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators);
+    _syncStarBookmark(id);
     if (modalCreator && modalCreator.channel_id === id) _renderModalHeader(modalCreator);
   });
 
@@ -1588,11 +1676,13 @@ function initChannelApp(cfg) {
     trackingView = view;
     const searchEl = _el('Search');
     if (searchEl) {
-      searchEl.style.display = view === 'log' ? 'none' : '';
+      // visibility, not display: the box still occupies its slot on the Log
+      // view so the tab row keeps its height and the page never shifts
+      searchEl.style.visibility = view === 'log' ? 'hidden' : '';
       if (view !== 'log') searchEl.value = '';
     }
     const countEl = _el('Count');
-    if (countEl) countEl.style.display = view === 'log' ? 'none' : '';
+    if (countEl) countEl.style.visibility = view === 'log' ? 'hidden' : '';
     search = '';
     _el('TvCreators').classList.toggle('active', view === 'creators');
     _el('TvLog').classList.toggle('active', view === 'log');
@@ -1616,25 +1706,71 @@ function initChannelApp(cfg) {
     if (view === 'creators') renderCreators();
     const extra = EXTRA_VIEWS.find(v => v.key === view);
     if (extra) extra.show(search);
-    _placeGlider(_el('TvCreators').closest('.filter-pills'));
     const activeCtrl = extra ? _el(`Controls_${extra.key}`) : ctrl;
     if (activeCtrl) activeCtrl.querySelectorAll('.filter-pills').forEach(_placeGlider);
   });
 
-  // ── Keyboard handler (Escape) ─────────────────────────────────────────────
+  // ── Keyboard handlers ─────────────────────────────────────────────────────
+
+  // Cards are focusable (role=button tabindex=0), so Enter and Space open them
+  _el('Grid')?.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('user-card')) {
+      e.preventDefault();
+      e.target.click();
+    }
+  });
+
+  // Slash focuses the search box on the active platform tab
+  document.addEventListener('keydown', e => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = document.activeElement;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if ([...document.querySelectorAll('.modal-backdrop')].some(el => el.style.display !== 'none')) return;
+    const searchEl = _el('Search');
+    // offsetParent is null while this platform's tab is hidden, and the box
+    // itself is visibility-hidden on the Log view
+    if (!searchEl || !searchEl.offsetParent || searchEl.style.visibility === 'hidden') return;
+    e.preventDefault();
+    searchEl.focus();
+  });
 
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     // Overlay modals (carousel, image, video, sound, recent log, settings) sit
     // on top of the creator modal and close themselves via their own handler;
     // don't close both at once.
-    for (const id of ['carouselModal', 'imgModal', 'vidModal', 'soundModalBackdrop', 'recentLogBackdrop', 'settingsBackdrop']) {
+    for (const id of ['carouselModal', 'imgModal', 'vidModal', 'soundModalBackdrop', 'settingsBackdrop']) {
       if (document.getElementById(id) && document.getElementById(id).style.display !== 'none') return;
     }
     if (_el('ModalBackdrop')?.style.display !== 'none') {
       window[`${P}CloseModal`]();
     }
   }, true);
+
+  // ── Live events (SSE) ─────────────────────────────────────────────────────
+  //
+  // The active platform tab holds one EventSource on /events; the server
+  // pushes status and queue snapshots the moment they change. Hidden tabs
+  // close their stream (browsers cap concurrent HTTP/1.1 connections per
+  // origin, and four idle streams would crowd out normal fetches) and fall
+  // back to the slow polls below. EventSource reconnects on its own after
+  // a dropped connection and re-sends full snapshots on connect.
+
+  let _es = null;
+  const _isActiveTab = () => (location.hash.slice(1) || 'tiktok') === cfg.id;
+
+  function _syncEvents() {
+    if (_isActiveTab() && !_es && window.EventSource) {
+      _es = new EventSource(`${API}/events`);
+      _es.addEventListener('status', e => renderStatus(JSON.parse(e.data)));
+      _es.addEventListener('queue',  e => _syncQueue(JSON.parse(e.data)));
+    } else if (!_isActiveTab() && _es) {
+      _es.close();
+      _es = null;
+    }
+  }
+
+  window.addEventListener('hashchange', _syncEvents);
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
@@ -1644,13 +1780,19 @@ function initChannelApp(cfg) {
   loadRecent();
   loadQueue();
   loadAddHistory(true);
+  _syncEvents();
 
-  setInterval(loadStatus,   5000);
+  _attachEdgeFade(_el('Controls'));
+  EXTRA_VIEWS.forEach(v => _attachEdgeFade(_el(`Controls_${v.key}`)));
+
+  // Status and queue arrive over SSE while this tab is active; the polls
+  // only cover hidden tabs and the no-EventSource fallback.
+  setInterval(() => { if (!_es) loadStatus(); }, 15000);
+  setInterval(() => { if (!_es) loadQueue();  }, 15000);
   setInterval(_tickActivityBar, 1000);
   setInterval(loadCreators, 15000);
   setInterval(loadStats,    60000);
   setInterval(loadRecent,   30000);
-  setInterval(loadQueue,     3000);
 
   // App handle for platform extras (e.g. the TikTok sounds catalog and
   // untracked-user modal) that need to drive the engine-generated UI.
