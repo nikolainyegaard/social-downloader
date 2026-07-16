@@ -244,11 +244,15 @@ checkHealth();
 // ── Toast notifications ────────────────────────────────────────────────────────
 // showToast(message, { type, duration, action })
 //   type:     'success' | 'warning' | 'error' | 'info'  (default: 'info')
-//   duration: ms before auto-dismiss; 0 = persistent     (default: 5000)
+//   duration: ms before auto-dismiss; 0 = persistent
+//             (default: 5000, except errors: persistent until dismissed, so
+//             there is time to read and copy the message)
 //   action:   { label: string, onclick: fn }              (optional)
-// Returns { dismiss } for programmatic dismissal.
+// Error toasts clamp the message to a two-line preview; clicking one opens
+// the error dialog with the full text and a Copy button.
+// Returns { dismiss, update } for programmatic dismissal and morphing.
 
-function showToast(message, { type = 'info', duration = 5000, action = null, spinner = false } = {}) {
+function showToast(message, { type = 'info', duration = type === 'error' ? 0 : 5000, action = null, spinner = false } = {}) {
   let container = document.getElementById('toast-container');
   if (!container) {
     container = document.createElement('div');
@@ -269,8 +273,18 @@ function showToast(message, { type = 'info', duration = 5000, action = null, spi
   const body = document.createElement('div');
   body.className = 'toast-body';
   const msg = document.createElement('span');
+  msg.className = 'toast-msg';
   msg.textContent = message;
   body.appendChild(msg);
+
+  // The full message survives the CSS preview clamp and update() morphs, so
+  // the error dialog always gets the complete text
+  let fullMessage = message;
+  if (type === 'error') msg.title = 'Show the full error';
+  body.onclick = (ev) => {
+    if (ev.target instanceof Element && ev.target.closest('button')) return;
+    if (toast.classList.contains('toast-error')) openErrorModal(fullMessage);
+  };
 
   if (action) {
     const btn = document.createElement('button');
@@ -299,9 +313,11 @@ function showToast(message, { type = 'info', duration = 5000, action = null, spi
 
   // Morph this toast in place (e.g. loading spinner into a result). If the
   // user already dismissed it, the result is shown as a fresh toast instead.
-  function update(newMessage, { type: newType = 'info', duration: newDuration = 5000 } = {}) {
+  function update(newMessage, { type: newType = 'info', duration: newDuration = newType === 'error' ? 0 : 5000 } = {}) {
     if (!toast.isConnected) { showToast(newMessage, { type: newType, duration: newDuration }); return; }
+    fullMessage = newMessage;
     msg.textContent = newMessage;
+    msg.title = newType === 'error' ? 'Show the full error' : '';
     toast.className = `toast toast-${newType}`;
     if (spin) { spin.remove(); spin = null; }
     if (timer) clearTimeout(timer);
@@ -309,6 +325,40 @@ function showToast(message, { type = 'info', duration = 5000, action = null, spi
   }
 
   return { dismiss, update };
+}
+
+// ── Error dialog ────────────────────────────────────────────────────────────────
+// Full text behind a truncated error toast: selectable, with a Copy button.
+
+function openErrorModal(text) {
+  document.getElementById('errorModalText').textContent = text;
+  document.getElementById('errorModal').style.display = 'flex';
+  _lockScroll();
+}
+
+function closeErrorModal() {
+  document.getElementById('errorModal').style.display = 'none';
+  _unlockScroll();
+}
+
+async function copyErrorModal() {
+  const textEl = document.getElementById('errorModalText');
+  const btn    = document.getElementById('errorModalCopy');
+  try {
+    await navigator.clipboard.writeText(textEl.textContent || '');
+  } catch {
+    // The clipboard API needs a secure context; select-and-copy as fallback
+    const range = document.createRange();
+    range.selectNodeContents(textEl);
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('copy');
+    sel.removeAllRanges();
+  }
+  btn.textContent = 'Copied';
+  setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
 }
 
 // ── Add-lookup toasts ─────────────────────────────────────────────────────────
@@ -339,7 +389,7 @@ function _makeAddToasts(onAdded) {
       active.delete(handle);
       if (info.status === 'error') {
         t.update(`Failed to add @${handle}: ${info.message || info.kind || 'lookup failed'}`,
-                 { type: 'error', duration: 8000 });
+                 { type: 'error' });
       } else {
         t.update(`@${handle} added.`, { type: 'success' });
         resolvedOk = true;
@@ -1028,6 +1078,12 @@ function closeCarousel() {
 
 document.addEventListener('keydown', e => {
   const _open = id => { const el = document.getElementById(id); return el && el.style.display !== 'none'; };
+  // The error dialog can open over anything (its toast floats above all
+  // overlays), so it outranks even the carousel
+  if (_open('errorModal')) {
+    if (e.key === 'Escape') closeErrorModal();
+    return;
+  }
   if (_open('carouselModal')) {
     if (e.key === 'ArrowLeft')  { carouselStep(-1); return; }
     if (e.key === 'ArrowRight') { carouselStep(1);  return; }

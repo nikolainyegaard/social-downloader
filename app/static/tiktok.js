@@ -192,42 +192,18 @@ async function ttProxyLoad() {
   ttWgLoad();
 }
 
-function _ttProxyStatus(msg, tone) {
-  const el = document.getElementById('ttProxyStatus');
-  el.style.display = msg ? '' : 'none';
-  el.textContent   = msg || '';
-  el.style.color   = { ok: 'var(--green)', error: 'var(--red)', warn: 'var(--orange)' }[tone] || '';
-}
-
 async function ttProxySetMode(mode) {
   const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ mode }) });
-  if (!ok) { _ttProxyStatus((data && data.error) || 'Could not switch the proxy mode', 'error'); ttProxyLoad(); return; }
+  if (!ok) { showToast((data && data.error) || 'Could not switch the proxy mode', { type: 'error' }); ttProxyLoad(); return; }
   _ttProxyApplyMode(mode);
-  _ttProxyStatus('');
 }
 
 async function ttProxySave() {
   const url = document.getElementById('ttProxyUrl').value.trim();
   const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ url }) });
-  if (!ok) { _ttProxyStatus((data && data.error) || 'Could not save the proxy URL', 'error'); return; }
+  if (!ok) { showToast((data && data.error) || 'Could not save the proxy URL', { type: 'error' }); return; }
   _ttProxyCustomUrl = url;
-  _ttProxyStatus('Saved. Takes effect from the next browser session.', 'ok');
-}
-
-function _ttVpnStatus(msg, tone) {
-  const el = document.getElementById('ttVpnStatus');
-  el.style.display = msg ? '' : 'none';
-  el.textContent   = msg || '';
-  el.style.color   = { ok: 'var(--green)', error: 'var(--red)' }[tone] || '';
-}
-
-// The status lines persist in the DOM, so without this a message from an
-// earlier action (say a WireGuard save) still sits in the pane on the next
-// visit and reads as a response to whatever was just clicked
-function _ttNetworkStatusReset() {
-  _ttProxyStatus('');
-  _ttVpnStatus('');
-  _ttWgStatus('');
+  showToast('Proxy URL saved. Takes effect from the next browser session.', { type: 'success' });
 }
 
 async function ttProxyToggle() {
@@ -236,21 +212,21 @@ async function ttProxyToggle() {
   const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ enabled }) });
   if (!ok) {
     box.checked = !enabled;
-    _ttVpnStatus((data && data.error) || 'Could not change the VPN state', 'error');
+    showToast((data && data.error) || 'Could not change the VPN state', { type: 'error' });
     return;
   }
-  _ttVpnStatus(enabled ? 'On. All TikTok traffic now leaves through the configured proxy, starting with the next browser session.'
-                       : 'Off. TikTok uses the server\'s own connection.', 'ok');
+  showToast(enabled ? 'VPN on. All TikTok traffic now leaves through the configured proxy, starting with the next browser session.'
+                    : 'VPN off. TikTok uses the server\'s own connection.', { type: 'success' });
 }
 
 async function ttProxyTest() {
   const btn = document.getElementById('ttProxyTestBtn');
   btn.disabled = true;
-  _ttProxyStatus('Testing the connection…');
+  const t = showToast('Testing the connection…', { spinner: true, duration: 0 });
   const { ok, data } = await apiJSON('/api/tiktok/proxy/test', { method: 'POST' });
   btn.disabled = false;
   if (!ok || !data.ok) {
-    _ttProxyStatus('Test failed: ' + ((data && data.error) || 'request error'), 'error');
+    t.update('Test failed: ' + ((data && data.error) || 'request error'), { type: 'error' });
     return;
   }
   let msg = `Proxy works. Exit IP ${data.proxy_ip}, ${data.latency_ms} ms.`;
@@ -259,7 +235,7 @@ async function ttProxyTest() {
   } else if (data.direct_ip) {
     msg += ` The server's own IP is ${data.direct_ip}.`;
   }
-  _ttProxyStatus(msg, data.same_ip ? 'warn' : 'ok');
+  t.update(msg, { type: data.same_ip ? 'warning' : 'success', duration: 8000 });
 }
 
 // WireGuard config for the gluetun container, managed as four fields; the
@@ -273,25 +249,23 @@ let _ttWgCanRestart = false;   // Docker socket mounted, so the app can restart 
 const _eyeIcon    = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 const _eyeOffIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 
-function _ttWgStatus(msg, tone, offerRestart = false) {
-  const el = document.getElementById('ttWgStatus');
-  el.style.display = msg ? '' : 'none';
-  el.textContent   = msg || '';
-  el.style.color   = { ok: 'var(--green)', error: 'var(--red)' }[tone] || '';
-  if (msg && offerRestart && _ttWgCanRestart) {
-    const link = document.createElement('span');
-    link.className   = 'hdr-link';
-    link.textContent = 'Restart gluetun now';
-    link.onclick     = ttGluetunRestart;
-    el.append(' ', link);
+// Feedback toast for a saved or removed WireGuard config: gluetun only reads
+// its config at startup, so the toast carries the restart action when the
+// Docker socket makes that possible and stays until acted on or dismissed
+function _ttWgSavedToast(msg) {
+  if (_ttWgCanRestart) {
+    showToast(msg, { type: 'success', duration: 0,
+                     action: { label: 'Restart gluetun now', onclick: ttGluetunRestart } });
+  } else {
+    showToast(msg + ' Restart the gluetun container to apply the change.', { type: 'success', duration: 8000 });
   }
 }
 
 async function ttGluetunRestart() {
-  _ttWgStatus('Restarting gluetun…');
+  const t = showToast('Restarting gluetun…', { spinner: true, duration: 0 });
   const { ok, data } = await apiJSON('/api/tiktok/proxy/gluetun/restart', { method: 'POST' });
-  if (!ok) { _ttWgStatus((data && data.error) || 'Could not restart gluetun', 'error'); return; }
-  _ttWgStatus('Gluetun restarted with the saved config. Give it a few seconds to connect, then Test connection above shows the new exit IP.', 'ok');
+  if (!ok) { t.update((data && data.error) || 'Could not restart gluetun', { type: 'error' }); return; }
+  t.update('Gluetun restarted. Give it a few seconds to connect, then Test connection shows the new exit IP.', { type: 'success', duration: 8000 });
 }
 
 function ttWgToggleKey() {
@@ -325,16 +299,16 @@ async function ttWgSave() {
     body[field] = document.getElementById(id).value.trim();
   }
   const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'POST', body: JSON.stringify(body) });
-  if (!ok) { _ttWgStatus((data && data.error) || 'Could not save the config', 'error'); return; }
-  _ttWgStatus(_ttWgCanRestart ? 'Saved.' : 'Saved. Restart the gluetun container to apply it.', 'ok', true);
+  if (!ok) { showToast((data && data.error) || 'Could not save the config', { type: 'error' }); return; }
+  _ttWgSavedToast('WireGuard config saved.');
   ttWgLoad();
 }
 
 async function ttWgDelete() {
   if (!confirm('Remove the saved WireGuard config? Gluetun keeps using it until that container restarts.')) return;
   const { ok } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'DELETE' });
-  if (!ok) { _ttWgStatus('Could not remove the config', 'error'); return; }
-  _ttWgStatus('Removed.', 'ok', true);
+  if (!ok) { showToast('Could not remove the config', { type: 'error' }); return; }
+  _ttWgSavedToast('WireGuard config removed.');
   ttWgLoad();
 }
 
@@ -383,7 +357,7 @@ function ttWgParseApply() {
     document.getElementById(id).value = found[field];
   }
   ttWgParseClose();
-  _ttWgStatus('Fields filled from the pasted config. Review them and press Save config.', 'ok');
+  showToast('Fields filled from the pasted config. Review them and press Save config.', { type: 'success' });
 }
 
 // ── Sounds state ──────────────────────────────────────────────────────────────
@@ -467,7 +441,7 @@ async function _ttAddHandler(val, addToasts) {
       t.update(`Sound ${data.sound_id} added.`, { type: 'success' });
       loadSounds();
     } else {
-      t.update(data.error || 'Could not add sound.', { type: 'error', duration: 8000 });
+      t.update(data.error || 'Could not add sound.', { type: 'error' });
     }
     return true;
   }
@@ -488,7 +462,7 @@ async function _ttAddHandler(val, addToasts) {
     } else if (ok) {
       t.update(`Post ${data.video_id} queued. Progress shows in the Log view.`, { type: 'success' });
     } else {
-      t.update(data.error || 'Could not fetch post.', { type: 'error', duration: 8000 });
+      t.update(data.error || 'Could not fetch post.', { type: 'error' });
     }
     return true;
   }
@@ -1223,7 +1197,7 @@ function switchSettingsSection(name) {
   const ptabs = document.getElementById('settingsPlatformTabs');
   if (ptabs) ptabs.style.display = name === 'access' ? 'none' : '';
   if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); }
-  if (name === 'network')   { _ttNetworkStatusReset(); ttProxyLoad(); }  // also refreshes the WireGuard meta
+  if (name === 'network')   { ttProxyLoad(); }  // also refreshes the WireGuard meta
   if (name === 'schedules') { loadSettings(); loadYtSettings(); _scheduleSettingsLoad('twitter', 'twSettings'); _scheduleSettingsLoad('instagram', 'igSettings'); }
   if (name === 'access')    { loadAuthSettings(); }
   if (name === 'jobs')      { _avifLoadStatus(); _startJobsPoll(); }

@@ -382,7 +382,6 @@
             <div class="settings-note" style="margin-top:6px;margin-bottom:0">
               Route all TikTok traffic through a VPN or proxy. The rest of the app is unaffected.
             </div>
-            <div class="settings-note" id="ttVpnStatus" style="display:none;margin-top:8px;margin-bottom:0"></div>
           </div>
           <div class="hr-divider"></div>
           <div class="settings-group">
@@ -396,7 +395,6 @@
               <button class="btn-sm" id="ttProxySaveBtn" onclick="ttProxySave()">Save</button>
               <button class="btn-sm" id="ttProxyTestBtn" onclick="ttProxyTest()">Test connection</button>
             </div>
-            <div class="settings-note" id="ttProxyStatus" style="display:none;margin-top:8px"></div>
             <span class="hdr-link" style="margin-top:8px;display:inline-block" onclick="_ttHelpToggle('ttProxyHelp')">How this works</span>
             <div class="settings-note" id="ttProxyHelp" style="display:none;margin-top:8px">
               With Enable VPN on, all TikTok traffic (the browser, page fetches, and
@@ -439,7 +437,6 @@
               <button class="btn-sm" onclick="ttWgSave()">Save config</button>
               <button class="btn-danger" id="ttWgDeleteBtn" onclick="ttWgDelete()" style="display:none">Remove</button>
             </div>
-            <div class="settings-note" id="ttWgStatus" style="display:none;margin-top:8px"></div>
             <span class="hdr-link" style="margin-top:8px;display:inline-block" onclick="_ttHelpToggle('ttWgHelp')">How this works</span>
             <div class="settings-note" id="ttWgHelp" style="display:none;margin-top:8px">
               These are the VPN credentials for the gluetun container behind the proxy
@@ -450,8 +447,8 @@
               <code>data/gluetun/wireguard/wg0.conf</code>, where gluetun's
               <code>./data/gluetun:/gluetun</code> volume reads it. Gluetun only loads the
               config at startup, so restart that container after saving. With the host's
-              Docker socket mounted into the app container (see the README), a Restart
-              gluetun now link appears after saving and does that for you.
+              Docker socket mounted into the app container (see the README), the save
+              notification offers a Restart gluetun now action that does that for you.
             </div>
           </div>
         </div>
@@ -900,6 +897,18 @@
 </div>
 
 <!-- Image preview modal -->
+<!-- Error dialog: full text behind a truncated error toast, with copy -->
+<div id="errorModal" class="media-modal" style="display:none;z-index:10000" onclick="if(event.target===this)closeErrorModal()">
+  <div class="media-modal-inner" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;width:min(620px,92vw)">
+    <div class="settings-label" style="display:block;margin-bottom:6px;color:var(--red)">Error</div>
+    <div id="errorModalText" class="error-modal-text"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="btn-sm" id="errorModalCopy" onclick="copyErrorModal()">Copy</button>
+      <button class="btn-sm" onclick="closeErrorModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="imgModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeImgModal()">
   <div class="media-modal-inner">
     <button class="media-modal-close" onclick="closeImgModal()"></button>
