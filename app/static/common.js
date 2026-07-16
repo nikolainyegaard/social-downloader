@@ -1015,12 +1015,76 @@ function closeImgModal() {
 let _carouselUrls = [];
 let _carouselIdx  = 0;
 
+// Story mode: same modal plus per-slide progress bars, auto-advance, and tap
+// zones, with the nav arrows and video controls hidden. openStorySlides turns
+// it on; closeCarousel tears it down so normal carousels are unaffected.
+const _STORY_IMAGE_SECS = 5;
+let _storyMode  = false;
+let _storyTimer = null;
+
 function openCarouselSlides(slides) {
   if (!slides || !slides.length) return;
   _carouselUrls = slides;
   _showCarouselSlide(0);
   document.getElementById('carouselModal').style.display = 'flex';
   _lockScroll();
+}
+
+function openStorySlides(slides) {
+  if (!slides || !slides.length) return;
+  _storyMode = true;
+  document.getElementById('carouselModal').classList.add('story-mode');
+  const bar = document.getElementById('storyProgress');
+  bar.innerHTML = slides.map(() =>
+    '<span class="story-progress-seg"><span class="story-progress-fill"></span></span>').join('');
+  bar.style.display = '';
+  openCarouselSlides(slides);
+}
+
+function _storyClearTimer() {
+  if (_storyTimer) { clearTimeout(_storyTimer); _storyTimer = null; }
+}
+
+function _storyAdvance() {
+  _storyClearTimer();
+  if (_carouselIdx >= _carouselUrls.length - 1) closeCarousel();
+  else _showCarouselSlide(_carouselIdx + 1);
+}
+
+function _storyBeginSlide(idx, isVid, vid) {
+  _storyClearTimer();
+  const fills = document.querySelectorAll('#storyProgress .story-progress-fill');
+  fills.forEach((f, i) => {
+    f.style.transition = 'none';
+    f.style.width      = i < idx ? '100%' : '0';
+  });
+  const fill = fills[idx];
+  const run  = secs => {
+    if (fill) {
+      void fill.offsetWidth;  // land the reset width before the animated one
+      fill.style.transition = `width ${secs}s linear`;
+      fill.style.width      = '100%';
+    }
+    _storyTimer = setTimeout(_storyAdvance, secs * 1000);
+  };
+  if (!isVid) { run(_STORY_IMAGE_SECS); return; }
+  // Video slides: the bar tracks the video duration and advance follows the
+  // ended event; a video that errors advances instead of stalling the story
+  vid.onended = () => { if (_storyMode) _storyAdvance(); };
+  vid.onerror = () => { if (_storyMode) _storyAdvance(); };
+  vid.onloadedmetadata = () => {
+    if (!_storyMode) return;
+    _storyClearTimer();
+    const secs = (isFinite(vid.duration) && vid.duration > 0) ? vid.duration : 30;
+    if (fill) {
+      fill.style.transition = `width ${secs}s linear`;
+      fill.style.width      = '100%';
+    }
+    // Fallback in case ended never fires (stalled stream)
+    _storyTimer = setTimeout(_storyAdvance, (secs + 5) * 1000);
+  };
+  // Until metadata arrives (or if it never does), do not stall forever
+  _storyTimer = setTimeout(_storyAdvance, 15 * 1000);
 }
 
 function _showCarouselSlide(idx) {
@@ -1031,6 +1095,7 @@ function _showCarouselSlide(idx) {
   const img   = document.getElementById('carouselImg');
   const vid   = document.getElementById('carouselVid');
   vid.pause();
+  vid.controls = !_storyMode;
   if (isVid) {
     img.style.display = 'none';
     img.src = '';
@@ -1044,21 +1109,37 @@ function _showCarouselSlide(idx) {
     img.src = url;
   }
   document.getElementById('carouselCounter').textContent =
-    _carouselUrls.length > 1 ? `${idx + 1} / ${_carouselUrls.length}` : '';
+    (!_storyMode && _carouselUrls.length > 1) ? `${idx + 1} / ${_carouselUrls.length}` : '';
   document.getElementById('carouselPrev').disabled = idx === 0;
   document.getElementById('carouselNext').disabled = idx === _carouselUrls.length - 1;
+  if (_storyMode) _storyBeginSlide(idx, isVid, vid);
 }
 
 function carouselStep(dir) {
   const next = _carouselIdx + dir;
-  if (next < 0 || next >= _carouselUrls.length) return;
+  if (next < 0) return;
+  if (next >= _carouselUrls.length) {
+    // Tapping forward on the last story slide closes, like the platforms do
+    if (_storyMode) closeCarousel();
+    return;
+  }
   _showCarouselSlide(next);
 }
 
 function closeCarousel() {
+  _storyClearTimer();
   const vid = document.getElementById('carouselVid');
+  vid.onended = vid.onerror = vid.onloadedmetadata = null;
   vid.pause();
   vid.src = '';
+  vid.controls = true;
+  if (_storyMode) {
+    _storyMode = false;
+    document.getElementById('carouselModal').classList.remove('story-mode');
+    const bar = document.getElementById('storyProgress');
+    bar.innerHTML = '';
+    bar.style.display = 'none';
+  }
   document.getElementById('carouselModal').style.display = 'none';
   document.getElementById('carouselImg').src = '';
   _carouselUrls = [];

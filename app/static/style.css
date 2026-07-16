@@ -1260,6 +1260,53 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   pointer-events: none;
 }
 
+/* ── Story mode: progress bars, tap zones, chrome hidden ─────────────────── */
+
+.story-progress {
+  position: absolute;
+  top: 8px; left: 46px; right: 46px;
+  display: flex; gap: 4px;
+  z-index: 4;
+}
+.story-progress-seg {
+  flex: 1; height: 3px;
+  background: rgba(255,255,255,.25);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.story-progress-fill {
+  display: block; width: 0; height: 100%;
+  background: #fff;
+  border-radius: 2px;
+}
+.story-tap-zone { display: none; }
+.story-mode .story-tap-zone {
+  display: block;
+  position: absolute;
+  top: 0; bottom: 0;
+  z-index: 3;
+  cursor: pointer;
+}
+.story-mode .story-tap-prev { left: 0;  width: 34%; }
+.story-mode .story-tap-next { right: 0; width: 66%; }
+.story-mode .carousel-nav { display: none; }
+.story-mode .media-modal-close { z-index: 5; }
+
+/* ── Live story ring around avatars ──────────────────────────────────────── */
+
+.story-ring { cursor: pointer; }
+.story-ring::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(from 30deg, var(--accent), #b06ef0, var(--green), var(--accent));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  pointer-events: none;
+}
+.avatar-wrap.story-ring { box-shadow: none; }
+
 /* ── Dashboard: stat strip, then recent feed beside loop + add history ───── */
 
 .stat-strip {

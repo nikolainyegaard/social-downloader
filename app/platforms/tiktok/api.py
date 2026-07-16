@@ -271,6 +271,22 @@ async def _warmup(api):
         pass
 
 
+async def get_session_cookies(api) -> dict:
+    """Cookie jar of the live browser session (name -> value), TikTok domains only.
+
+    Story CDN URLs are signed against the session's current tt_chain_token, so
+    downloads must present the browser's cookies. cookies.txt goes stale the
+    moment the profile refreshes its session, which made story downloads 403
+    intermittently. Best-effort: an empty dict means fall back to cookies.txt.
+    """
+    try:
+        cookies = await api.sessions[0].page.context.cookies()
+        return {c["name"]: c["value"] for c in cookies
+                if "tiktok" in (c.get("domain") or "")}
+    except Exception:
+        return {}
+
+
 class UserBannedException(Exception):
     """Raised when TikTok returns a ban/removal/restriction status code.
 

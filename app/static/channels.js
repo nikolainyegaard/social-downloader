@@ -347,6 +347,23 @@ function initChannelApp(cfg) {
     openCarouselSlides(data.files);
   });
 
+  // Open a creator's live stories in the story viewer, oldest first. Reached
+  // from the ringed avatars; the ring only renders when live_stories > 0, but
+  // a story can expire between the poll and the click, hence the fallback.
+  X('OpenStories', async channelId => {
+    const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(channelId)}/stories`);
+    if (!ok) return;
+    const live = (data || []).filter(s => s.live).reverse();
+    if (!live.length) {
+      showToast('No live stories right now.');
+      return;
+    }
+    openStorySlides(live.map(s => ({
+      url:  s.url,
+      type: s.content_type === 'photo' ? 'image' : 'video',
+    })));
+  });
+
   // ── Detail modal config ───────────────────────────────────────────────────
 
   const VCOLS = [
@@ -1102,11 +1119,11 @@ function initChannelApp(cfg) {
            onclick="if(!event.target.closest('button'))${P}OpenModal('${esc(ch.channel_id)}')"
            role="button" tabindex="0">
         <div class="user-card-top">
-          <div class="avatar-wrap">
+          <div class="avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="event.stopPropagation();${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
             <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
             ${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" alt=""
                  onerror="this.style.display='none'"
-                 onclick="event.stopPropagation();openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')">` : ''}
+                 ${ch.live_stories ? '' : `onclick="event.stopPropagation();openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}
           </div>
           <div class="user-identity">
             <div class="user-display-name">${_isPrivateAccount(ch) ? LOCK_SVG : ''}${esc(ch.display_name || ch.handle)}</div>
@@ -1416,11 +1433,11 @@ function initChannelApp(cfg) {
     })();
 
     _el('ModalHeader').innerHTML = `
-      <div class="modal-avatar-wrap">
+      <div class="modal-avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
         <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
         ${ch.avatar_cached ? `<img class="modal-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar" alt=""
              onerror="this.style.display='none'"
-             onclick="openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')">` : ''}
+             ${ch.live_stories ? '' : `onclick="openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}
       </div>
       <div class="modal-user-body">
         <div class="modal-name-row">

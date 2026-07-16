@@ -952,6 +952,9 @@
 <!-- Photo carousel modal -->
 <div id="carouselModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeCarousel()">
   <div class="carousel-inner">
+    <div class="story-progress" id="storyProgress" style="display:none"></div>
+    <div class="story-tap-zone story-tap-prev" onclick="carouselStep(-1)"></div>
+    <div class="story-tap-zone story-tap-next" onclick="carouselStep(1)"></div>
     <button class="media-modal-close" onclick="closeCarousel()"></button>
     <button class="carousel-nav" id="carouselPrev" onclick="carouselStep(-1)"><svg width="20" height="20" viewBox="-4.5 0 20 20" fill="currentColor" fill-rule="evenodd" xmlns="http://www.w3.org/2000/svg"><g transform="translate(-289,-6519)"><path d="M299.633777,6519.29231 C299.228878,6518.90256 298.573377,6518.90256 298.169513,6519.29231 L289.606572,6527.55587 C288.797809,6528.33636 288.797809,6529.60253 289.606572,6530.38301 L298.231646,6538.70754 C298.632403,6539.09329 299.27962,6539.09828 299.685554,6538.71753 C300.100809,6538.32879 300.104951,6537.68821 299.696945,6537.29347 L291.802968,6529.67648 C291.398069,6529.28574 291.398069,6528.65315 291.802968,6528.26241 L299.633777,6520.70538 C300.038676,6520.31563 300.038676,6519.68305 299.633777,6519.29231"/></g></svg></button>
     <img id="carouselImg" src="" alt="">

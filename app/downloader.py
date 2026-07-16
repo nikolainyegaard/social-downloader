@@ -219,6 +219,7 @@ def download_photos(*, video_id: str, username: str,
 
 def download_story(*, story_id: str, username: str, platform: str,
                    media_url: str, content_type: str, posted_at: int | None,
+                   cookies: dict | None = None,
                    cookies_path: str | None = None,
                    headers: dict | None = None,
                    proxy: str | None = None) -> str | None:
@@ -237,7 +238,10 @@ def download_story(*, story_id: str, username: str, platform: str,
 
     stamp   = (datetime.fromtimestamp(posted_at).strftime("%Y%m%d_%H%M%S")
                if posted_at else datetime.now().strftime("%Y%m%d_%H%M%S"))
-    cookies = _load_cookies(cookies_path) if cookies_path else {}
+    # A live cookies dict (the fetching session's jar) wins over cookies.txt:
+    # TikTok's CDN signs story URLs against the session's tt_chain_token
+    if not cookies:
+        cookies = _load_cookies(cookies_path) if cookies_path else {}
 
     # TikTok's story CDN often 403s a plain library client; a browser-shaped
     # request with a Referer gets through (same treatment as the page scrapes)

@@ -20,6 +20,7 @@ from platforms.tiktok.api import (
     create_tiktok_session,
     get_user_info, get_user_videos, get_user_videos_with_stats,
     fetch_sound_video_ids, get_video_details, get_user_stories, parse_story_item,
+    get_session_cookies,
     UserBannedException, UserPrivateException, UserBlockedException,
 )
 from downloader import download_video, download_photos, rename_creator_folder
@@ -131,7 +132,11 @@ async def _check_user_stories(user: dict, api, username: str,
     if not stories:
         return len(items)
     try:
+        # The CDN validates tt_chain_token against the URL signature, so the
+        # download must carry the browser session's live cookies, not cookies.txt
+        session_cookies = await get_session_cookies(api)
         save_new_stories(db, "tiktok", channel_id, username, stories, log,
+                         cookies=session_cookies or None,
                          cookies_path=COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
                          proxy=get_proxy())
     except Exception as e:

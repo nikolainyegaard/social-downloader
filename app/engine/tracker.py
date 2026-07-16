@@ -26,13 +26,16 @@ _ABORT_AFTER_FAILURES = 3  # consecutive channel failures that abort the session
 
 def save_new_stories(db, platform: str, channel_id: str, handle: str,
                      stories: list[dict], log: Callable[[str], None],
+                     cookies: dict | None = None,
                      cookies_path: str | None = None,
                      proxy: str | None = None) -> int:
     """Download and record stories not yet in the DB. Returns the saved count.
 
     Story dicts: {story_id, content_type 'video'|'photo', posted_at,
     expires_at, media_url, headers?}. Used by the generic tracker below and by
-    platform trackers with a session override (TikTok).
+    platform trackers with a session override (TikTok). A cookies dict wins
+    over cookies_path; pass the fetching session's live cookies when the CDN
+    ties URLs to them.
     """
     from downloader import download_story
 
@@ -43,7 +46,7 @@ def save_new_stories(db, platform: str, channel_id: str, handle: str,
         path = download_story(
             story_id=s["story_id"], username=handle, platform=platform,
             media_url=s["media_url"], content_type=s.get("content_type", "video"),
-            posted_at=s.get("posted_at"), cookies_path=cookies_path,
+            posted_at=s.get("posted_at"), cookies=cookies, cookies_path=cookies_path,
             headers=s.get("headers"), proxy=proxy,
         )
         if not path:
