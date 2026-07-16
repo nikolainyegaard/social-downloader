@@ -241,6 +241,12 @@ async def create_tiktok_session(api, ms_token: str | None = None,
         if release:
             release()
         raise
+    # TikTokApi's internal session recovery cannot work here: the persistent
+    # profile is still locked by the very context that died, so recovery only
+    # floods the log with retry warnings before failing anyway. Fail fast
+    # instead; the tracker relaunches the browser itself on a lost session.
+    if hasattr(api, "_session_recovery_enabled"):
+        api._session_recovery_enabled = False
     await _warmup(api)
 
 
@@ -360,21 +366,40 @@ def _normalise_user_info(data: dict, username: str | None = None) -> dict:
     }
 
 
+def _degrade_page_relation(info: dict) -> dict:
+    """Relation as rendered into the profile page blob is trustworthy when
+    nonzero, but TikTok serves 0 for some logged-in views even when the
+    cookies account follows the user (confirmed in production: a followed
+    private account with fetchable stories rendered relation=0). Map 0 to
+    None (unknown) so the store's COALESCE keeps the last known value and
+    the tracker falls back to it instead of concluding "not following"."""
+    if not info.get("relation"):
+        info["relation"] = None
+    return info
+
+
 async def _fetch_page_user_detail(api, username: str) -> dict | None:
-    """Load @{username}'s profile page in the open session's browser and read
-    the embedded __UNIVERSAL_DATA_FOR_REHYDRATION__ script tag (the same blob
-    get_video_details parses off video pages with curl_cffi). Returns the
-    webapp.user-detail scope, which carries the same statusCode/userInfo shape
-    as the /api/user/detail/ JSON endpoint, or None when no blob is readable
-    (consent or verification wall, timeout, page layout change) so the caller
-    falls back to the endpoint. Misses are printed (terminal only): they are
-    expected to be rare, and a silent miss would make every fallback failure
-    look like an endpoint problem."""
+    """Load @{username}'s profile page in a fresh tab of the open session's
+    browser and read the embedded __UNIVERSAL_DATA_FOR_REHYDRATION__ script
+    tag (the same blob get_video_details parses off video pages with
+    curl_cffi). Returns the webapp.user-detail scope, which carries the same
+    statusCode/userInfo shape as the /api/user/detail/ JSON endpoint, or None
+    when no blob is readable (consent or verification wall, timeout, page
+    layout change) so the caller falls back to the endpoint. Misses are
+    printed (terminal only): they are expected to be rare, and a silent miss
+    would make every fallback failure look like an endpoint problem.
+
+    A separate tab, never the session's own page: navigating the page that
+    carries the request signer races TikTokApi's in-flight evaluates, and a
+    navigation landing mid-evaluate destroys the execution context, which
+    makes the library mark the whole session dead (seen in production as
+    "No sessions created" restarts mid-loop)."""
+    tab = None
     try:
-        page = api.sessions[0].page
-        await page.goto(f"https://www.tiktok.com/@{username}",
-                        wait_until="domcontentloaded")
-        blob = await page.evaluate(
+        tab = await api.sessions[0].page.context.new_page()
+        await tab.goto(f"https://www.tiktok.com/@{username}",
+                       wait_until="domcontentloaded")
+        blob = await tab.evaluate(
             """() => {
                 const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
                 return el ? el.textContent : null;
@@ -382,18 +407,21 @@ async def _fetch_page_user_detail(api, username: str) -> dict | None:
         )
         if not blob:
             print(f"Profile page read for @{username}: no rehydration blob, "
-                  f"likely a verification or consent wall (url: {page.url})")
+                  f"likely a verification or consent wall (url: {tab.url})")
             return None
         detail = json.loads(blob).get("__DEFAULT_SCOPE__", {}).get("webapp.user-detail")
     except Exception as exc:
         print(f"Profile page read for @{username} failed: {exc}")
         return None
+    finally:
+        if tab:
+            try:
+                await tab.close()
+            except Exception:
+                pass
     if not isinstance(detail, dict):
         print(f"Profile page read for @{username}: blob has no webapp.user-detail scope")
         return None
-    # The navigation replaced the page that carried the request signer; wait
-    # for it to come back so the session's next signed call (item_list) works.
-    await _wait_for_signer(page, attempts=10)
     return detail
 
 
@@ -476,7 +504,7 @@ async def get_user_info(api, username: str | None = None,
         u = page_detail.get("userInfo", {}).get("user", {})
         if u.get("id") and (not sec_uid or u.get("secUid") == sec_uid):
             _raise_for_user_status(page_detail, f"@{username}")
-            return _normalise_user_info(page_detail, username)
+            return _degrade_page_relation(_normalise_user_info(page_detail, username))
         if not sec_uid:
             # No stored sec_uid means the handle is the identity, so the
             # page's status (banned, private, stale login) is authoritative.
@@ -502,7 +530,7 @@ async def get_user_info(api, username: str | None = None,
                     u = renamed_detail.get("userInfo", {}).get("user", {})
                     if u.get("id") and u.get("secUid") == sec_uid:
                         _raise_for_user_status(renamed_detail, f"@{handle}")
-                        return _normalise_user_info(renamed_detail, handle)
+                        return _degrade_page_relation(_normalise_user_info(renamed_detail, handle))
             if page_detail is not None:
                 # Nothing listable and no endpoint: the page's ban/private
                 # status is the best signal left. A renamed account with
@@ -777,12 +805,15 @@ def parse_story_item(item: dict) -> dict | None:
 
 async def _sniff_music_item_list(page, sound_id: str,
                                  max_count: int = 3000) -> tuple[list[str], bool]:
-    """Drive the music page and capture the /api/music/item_list/ responses
-    TikTok's own frontend requests while scrolling. No library-built API
-    calls: the page JS does all the signing itself, so TikTok answers these
-    even while constructed requests get empty bodies. (The music page's
-    rehydration blob carries no item list, so there is nothing to read the
-    way the profile page read does; sniffing is the page-level equivalent.)
+    """Drive the music page in the given tab and capture the
+    /api/music/item_list/ responses TikTok's own frontend requests while
+    scrolling. No library-built API calls: the page JS does all the signing
+    itself, so TikTok answers these even while constructed requests get empty
+    bodies. (The music page's rehydration blob carries no item list, so there
+    is nothing to read the way the profile page read does; sniffing is the
+    page-level equivalent.) The caller passes a dedicated tab, never the
+    session's signer page: navigating that page races TikTokApi's in-flight
+    evaluates and can kill the session (see _fetch_page_user_detail).
 
     Returns (video_ids, complete). complete is True when the listing reached
     its natural end or max_count. The end signal is an item_list page with no
@@ -870,7 +901,14 @@ async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
 
     async with TikTokApi() as api:
         await create_tiktok_session(api, ms_token, cookies_flat)
-        ids, complete = await _sniff_music_item_list(api.sessions[0].page, sound_id)
+        tab = await api.sessions[0].page.context.new_page()
+        try:
+            ids, complete = await _sniff_music_item_list(tab, sound_id)
+        finally:
+            try:
+                await tab.close()
+            except Exception:
+                pass
         if complete:
             return ids
         try:

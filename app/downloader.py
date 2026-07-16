@@ -230,6 +230,8 @@ def download_story(*, story_id: str, username: str, platform: str,
     Files are named {YYYYMMDD_HHMMSS}_{story_id}.{ext} from the post time.
     Returns the saved path, or None on failure.
     """
+    from curl_cffi import requests as curl_requests
+
     stories_dir = os.path.join(MEDIA_DIR, platform, f"@{username}", "stories")
     os.makedirs(stories_dir, exist_ok=True)
 
@@ -237,10 +239,20 @@ def download_story(*, story_id: str, username: str, platform: str,
                if posted_at else datetime.now().strftime("%Y%m%d_%H%M%S"))
     cookies = _load_cookies(cookies_path) if cookies_path else {}
 
+    # TikTok's story CDN often 403s a plain library client; a browser-shaped
+    # request with a Referer gets through (same treatment as the page scrapes)
+    _headers = {
+        "Referer":         "https://www.tiktok.com/",
+        "Accept-Language": "en-US,en;q=0.9",
+        **(headers or {}),
+    }
+
     try:
-        resp = requests.get(media_url, cookies=cookies, headers=headers or {},
-                            proxies={"http": proxy, "https": proxy} if proxy else None,
-                            timeout=60)
+        resp = curl_requests.get(
+            media_url, cookies=cookies, headers=_headers,
+            impersonate="chrome120", timeout=60,
+            **({"proxies": {"http": proxy, "https": proxy}} if proxy else {}),
+        )
         resp.raise_for_status()
     except Exception as e:
         print(f"[{_ts()}] Failed to download story {story_id}: {e}")

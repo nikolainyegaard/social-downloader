@@ -408,6 +408,13 @@ class TikTokStore:
                   avatar_url, raw_channel_data, relation,
                   int(time.time()), channel_id))
 
+    def set_channel_relation(self, channel_id, relation: int):
+        """Persist a follow relation proven by evidence (e.g. fetchable
+        stories) when the profile source failed to render it."""
+        with self.db.get_db() as conn:
+            conn.execute("UPDATE channels SET relation = ? WHERE channel_id = ?",
+                         (relation, channel_id))
+
     def update_channel_from_item_list(self, channel_id, handle, display_name,
                                       description, sec_uid=None, avatar_url=None):
         """Update profile fields recoverable from item_list author data.

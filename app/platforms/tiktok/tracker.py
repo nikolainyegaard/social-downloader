@@ -62,7 +62,28 @@ def _start_bot_cooldown() -> int:
 
 
 class _BotDetectedError(Exception):
-    """Raised when TikTok detects the session as a bot. Triggers a full session restart."""
+    """Raised when TikTok detects the session as a bot. Triggers a full session
+    restart with a cooldown sleep."""
+
+
+class _SessionLostError(_BotDetectedError):
+    """The browser session died (page, context, or browser gone) rather than
+    TikTok pushing back. Same relaunch, but immediately: there is nothing to
+    cool down from, and the 5-minute bot sleep would just stall the loop.
+    Subclasses _BotDetectedError so paths that only know the parent still
+    restart the browser."""
+
+
+def _is_dead_session_error(exc: Exception) -> bool:
+    # TikTokApi's wording for an empty or invalidated session pool
+    msg = str(exc).lower()
+    return "no sessions created" in msg or "no valid sessions" in msg
+
+
+def _restart_error(exc: Exception) -> _BotDetectedError:
+    """Map a session-level failure to the right restart exception."""
+    cls = _SessionLostError if _is_dead_session_error(exc) else _BotDetectedError
+    return cls(str(exc))
 
 
 def _is_bot_error(exc: Exception) -> bool:
@@ -91,27 +112,31 @@ def _npost(n: int) -> str:
 # ── User tracking ─────────────────────────────────────────────────────────────
 
 async def _check_user_stories(user: dict, api, username: str,
-                              log, logd) -> None:
-    """Fetch and save any live stories for a user. Never raises: the story
-    endpoint is newer and less proven than item_list, so a failure here must
-    not fail the user's whole check or trip the bot-detection recovery."""
+                              log, logd) -> int:
+    """Fetch and save any live stories for a user. Returns the number of live
+    stories the endpoint listed (saved or already known): only a follower can
+    list a private account's stories, so a nonzero count doubles as proof of
+    access. Never raises: the story endpoint is newer and less proven than
+    item_list, so a failure here must not fail the user's whole check or trip
+    the bot-detection recovery."""
     channel_id = user["channel_id"]
     try:
         items = await get_user_stories(api, channel_id)
     except Exception as e:
         logd(f"  [{channel_id}] story fetch error: {e}")
-        return
+        return 0
     if not items:
-        return
+        return 0
     stories = [s for s in (parse_story_item(i) for i in items) if s]
     if not stories:
-        return
+        return len(items)
     try:
         save_new_stories(db, "tiktok", channel_id, username, stories, log,
                          cookies_path=COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
                          proxy=get_proxy())
     except Exception as e:
         logd(f"  [{channel_id}] story save error: {e}")
+    return len(items)
 
 
 async def process_single_user(
@@ -265,7 +290,7 @@ async def process_single_user(
                 break
             except Exception as e:
                 if _is_bot_error(e):
-                    raise _BotDetectedError(str(e)) from e
+                    raise _restart_error(e) from e
                 if _attempt == 0:
                     log(f"  Profile fetch failed, retrying in {_PROFILE_FAIL_SLEEP}s")
                     await asyncio.sleep(_PROFILE_FAIL_SLEEP)
@@ -283,7 +308,7 @@ async def process_single_user(
             return _profile_ok, _deletion_detected
 
         # ── Stories: fetch any currently live stories, save new ones ─────────
-        await _check_user_stories(user, api, username, log, logd)
+        _stories_live = await _check_user_stories(user, api, username, log, logd)
 
         # ── Primary: item_list (has stats, paginated with inter-page delay) ──
         # sec_uid is required: without it the library calls self.info() to
@@ -302,7 +327,7 @@ async def process_single_user(
                 logd(f"  [{channel_id}] {len(item_list_map)} videos via item_list (sec_uid={sec_uid})")
             except Exception as e:
                 if _is_bot_error(e):
-                    raise _BotDetectedError(str(e)) from e
+                    raise _restart_error(e) from e
                 log(f"  Video fetch failed, trying fallback...")
                 logd(f"  [{channel_id}] item_list error: {e}")
 
@@ -342,12 +367,25 @@ async def process_single_user(
             # Still stamp last_checked so the card reflects when this account was last visited.
             store.touch_last_checked(channel_id)
 
-        # Inaccessible private account: relation not in (1, 2) means we don't follow them.
-        # relation enum: 0=none, 1=we follow them, 2=mutual/friends, 6=they follow us only.
-        # Accessible private accounts with 0 videos fall through to the diff so
-        # deletion tracking of any previously-downloaded videos still runs.
+        # Do we follow this account? relation enum: 0=none, 1=we follow them,
+        # 2=mutual/friends, 6=they follow us only. The page blob's relation is
+        # unknown (None) when it rendered 0, so fall back to the last stored
+        # value, and let this run's stories prove access outright: only a
+        # follower can list a private account's stories.
+        _rel = info.get("relation") if info else None
+        if _rel is None:
+            _rel = user.get("relation") or 0
+        _followed = _rel in (1, 2) or _stories_live > 0
+        # Story evidence proves a follow the page blob failed to render;
+        # persist it so future checks without live stories stay accessible.
+        if _stories_live > 0 and _rel not in (1, 2):
+            store.set_channel_relation(channel_id, 1)
+
+        # Inaccessible private account. Accessible private accounts with 0
+        # videos fall through to the diff so deletion tracking of any
+        # previously-downloaded videos still runs.
         if not item_list_map and is_private is True and info:
-            if (info.get("relation") or 0) not in (1, 2):
+            if not _followed:
                 log(f"  Private account, cannot be accessed")
                 store.update_privacy_status(channel_id, "private_blocked")
                 return _profile_ok, _deletion_detected
@@ -363,7 +401,7 @@ async def process_single_user(
         # Only runs when item_list returned nothing (failed or no sec_uid).
         # Skipped for accessible private accounts with 0 videos -- yt-dlp cannot
         # access private content and would incorrectly trigger private_blocked.
-        if not item_list_map and not (is_private and info and (info.get("relation") or 0) in (1, 2)):
+        if not item_list_map and not (is_private and info and _followed):
             _profile_video_count = info.get("video_count") if info else None
             # Already flagged blocked and the profile still reports videos we cannot
             # list: nothing has changed, don't burn a yt-dlp attempt every cycle.
@@ -654,7 +692,7 @@ async def process_user_session(
                         params={"secUid": _val_sec_uid, "uniqueId": ""},
                     )
                 except Exception as _val_err:
-                    if _is_bot_error(_val_err):
+                    if _is_bot_error(_val_err) or _is_dead_session_error(_val_err):
                         raise  # treated as a failed attempt; loop will retry or give up
                     # non-bot errors (empty response, unexpected shape) are fine
                 return True
@@ -675,6 +713,7 @@ async def process_user_session(
     total_completed       = 0
     start_idx             = 0
     bot_retry_counts: dict[int, int] = {}  # {user_idx: restart_count} -- per-user bot retries
+    lost_retry_counts: dict[int, int] = {} # {user_idx: relaunches} -- dead-session relaunches
     session_create_failed = False   # True if the most recent _make_session call failed
     cooldown_pending      = False
     cooldown_sleep        = 0
@@ -748,6 +787,20 @@ async def process_user_session(
                     _large_deletion    = _result[2] if isinstance(_result, tuple) and len(_result) > 2 else False
                     _user_processed = True
                 except _BotDetectedError as exc:
+                    # A dead browser session is not TikTok pushing back: skip
+                    # the cooldown sleep and relaunch right away, up to twice
+                    # per user. A third loss on the same user falls through to
+                    # the bot path, so a browser that cannot stay alive still
+                    # backs off instead of crash-looping.
+                    if (isinstance(exc, _SessionLostError)
+                            and lost_retry_counts.get(idx, 0) < 2):
+                        lost_retry_counts[idx] = lost_retry_counts.get(idx, 0) + 1
+                        logd(f"  [{user['channel_id']}] session lost: {exc}")
+                        log(f"  Browser session lost -- relaunching and retrying @{user['handle']}...")
+                        total_completed  += completed
+                        start_idx         = idx
+                        break_for_restart = True
+                        break
                     logd(f"  [{user['channel_id']}] bot detection: {exc}")
                     _retry_count = bot_retry_counts.get(idx, 0)
                     if _retry_count < 2:
