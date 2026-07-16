@@ -154,28 +154,56 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── VPN proxy ─────────────────────────────────────────────────────────────────
-// Settings > Accounts > TikTok: route all TikTok traffic through an HTTP proxy
-// (e.g. a gluetun VPN container). URL and toggle persist in the TikTok settings.
+// Settings > Network > TikTok: route all TikTok traffic through an HTTP proxy.
+// Gluetun mode uses the fixed sidecar address and shows the WireGuard panel;
+// custom mode takes any proxy URL. Everything persists in the TikTok settings.
+
+let _ttProxyCustomUrl = '';   // last saved custom URL, restored when leaving gluetun mode
+let _ttProxyGluetunUrl = 'http://gluetun:8888';
+
+function _ttProxyApplyMode(mode) {
+  const gluetun = mode === 'gluetun';
+  const input   = document.getElementById('ttProxyUrl');
+  document.getElementById('ttProxyMode').value            = mode;
+  document.getElementById('ttProxySaveBtn').style.display = gluetun ? 'none' : '';
+  document.getElementById('ttWgGroup').style.display      = gluetun ? '' : 'none';
+  input.disabled = gluetun;
+  input.value    = gluetun ? _ttProxyGluetunUrl : _ttProxyCustomUrl;
+}
 
 async function ttProxyLoad() {
   const { ok, data } = await apiJSON('/api/tiktok/proxy');
   if (!ok) return;
-  document.getElementById('ttProxyUrl').value       = data.url || '';
+  _ttProxyCustomUrl  = data.url || '';
+  _ttProxyGluetunUrl = data.gluetun_url || _ttProxyGluetunUrl;
+  _ttProxyApplyMode(data.mode);
   document.getElementById('ttProxyEnabled').checked = !!data.enabled;
+  ttWgLoad();
 }
 
-function _ttProxyStatus(msg, isError) {
+function _ttProxyStatus(msg, tone) {
   const el = document.getElementById('ttProxyStatus');
   el.style.display = msg ? '' : 'none';
   el.textContent   = msg || '';
-  el.style.color   = isError ? 'var(--red)' : 'var(--green)';
+  el.style.color   = { ok: 'var(--green)', error: 'var(--red)', warn: 'var(--orange)' }[tone] || '';
+}
+
+async function ttProxyModeChange() {
+  const mode = document.getElementById('ttProxyMode').value;
+  const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ mode }) });
+  if (!ok) { _ttProxyStatus((data && data.error) || 'Could not switch the proxy mode', 'error'); ttProxyLoad(); return; }
+  _ttProxyApplyMode(mode);
+  _ttProxyStatus(mode === 'gluetun'
+    ? 'Gluetun mode: the proxy address is fixed, paste the WireGuard config below.'
+    : 'Other proxy mode: enter the proxy address and save.', 'ok');
 }
 
 async function ttProxySave() {
   const url = document.getElementById('ttProxyUrl').value.trim();
   const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ url }) });
-  if (!ok) { _ttProxyStatus((data && data.error) || 'Could not save the proxy URL', true); return; }
-  _ttProxyStatus('Saved. Takes effect from the next browser session.', false);
+  if (!ok) { _ttProxyStatus((data && data.error) || 'Could not save the proxy URL', 'error'); return; }
+  _ttProxyCustomUrl = url;
+  _ttProxyStatus('Saved. Takes effect from the next browser session.', 'ok');
 }
 
 async function ttProxyToggle() {
@@ -184,11 +212,30 @@ async function ttProxyToggle() {
   const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ enabled }) });
   if (!ok) {
     box.checked = !enabled;
-    _ttProxyStatus((data && data.error) || 'Could not change proxy routing', true);
+    _ttProxyStatus((data && data.error) || 'Could not change proxy routing', 'error');
     return;
   }
   _ttProxyStatus(enabled ? 'Proxy routing is on for all TikTok traffic.'
-                         : 'Proxy routing is off. TikTok uses the server\'s own IP.', false);
+                         : 'Proxy routing is off. TikTok uses the server\'s own IP.', 'ok');
+}
+
+async function ttProxyTest() {
+  const btn = document.getElementById('ttProxyTestBtn');
+  btn.disabled = true;
+  _ttProxyStatus('Testing the connection…');
+  const { ok, data } = await apiJSON('/api/tiktok/proxy/test', { method: 'POST' });
+  btn.disabled = false;
+  if (!ok || !data.ok) {
+    _ttProxyStatus('Test failed: ' + ((data && data.error) || 'request error'), 'error');
+    return;
+  }
+  let msg = `Proxy works. Exit IP ${data.proxy_ip}, ${data.latency_ms} ms.`;
+  if (data.same_ip) {
+    msg += ' Warning: that is the same IP the server has directly, so the proxy is not changing the exit address.';
+  } else if (data.direct_ip) {
+    msg += ` The server's own IP is ${data.direct_ip}.`;
+  }
+  _ttProxyStatus(msg, data.same_ip ? 'warn' : 'ok');
 }
 
 // WireGuard config for the gluetun container: saved under the app's data
@@ -1061,7 +1108,7 @@ function switchSettingsSection(name) {
   _settingsSection = name;
   // Every settings section needs an entry here or its ssec-* div will never be shown.
   // When adding a new section: add the id to this list AND add ssec-*/snav-* elements in index.html.
-  ['accounts', 'schedules', 'jobs', 'diag', 'database', 'access'].forEach(s => {
+  ['accounts', 'schedules', 'network', 'jobs', 'diag', 'database', 'access'].forEach(s => {
     document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
     document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
   });
@@ -1069,7 +1116,8 @@ function switchSettingsSection(name) {
   // The global platform selector applies to every section except Access
   const ptabs = document.getElementById('settingsPlatformTabs');
   if (ptabs) ptabs.style.display = name === 'access' ? 'none' : '';
-  if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); ttProxyLoad(); ttWgLoad(); }
+  if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); }
+  if (name === 'network')   { ttProxyLoad(); }  // also refreshes the WireGuard meta
   if (name === 'schedules') { loadSettings(); loadYtSettings(); _scheduleSettingsLoad('twitter', 'twSettings'); _scheduleSettingsLoad('instagram', 'igSettings'); }
   if (name === 'access')    { loadAuthSettings(); }
   if (name === 'jobs')      { _avifLoadStatus(); _startJobsPoll(); }

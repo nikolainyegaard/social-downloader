@@ -28,24 +28,48 @@ STATS_REFRESH_DAYS        = int(os.environ.get("TIKTOK_STATS_REFRESH_DAYS", 7))
 SESSION_GAP_MEAN_SECS     = int(os.environ.get("TIKTOK_SESSION_GAP_MEAN_SECS", 90))
 
 
-def get_proxy() -> str | None:
-    """URL of the proxy all TikTok traffic routes through, or None when off.
+# The fixed address of a gluetun sidecar's HTTP proxy in gluetun mode. Assumes
+# the container is reachable as "gluetun" on the Docker network, which the
+# README compose example provides; other setups use custom mode instead.
+GLUETUN_PROXY_URL = "http://gluetun:8888"
 
-    Toggle and URL live in the TikTok DB settings (Settings > Accounts >
-    TikTok); the TIKTOK_PROXY env var seeds the URL and enables routing until
-    the UI writes its own values. Read per use, so a toggle applies from the
-    next browser session or request without a restart.
+
+def get_proxy_settings() -> dict:
+    """The proxy settings with all defaults applied: {mode, url, enabled}.
+
+    mode is "gluetun" (fixed GLUETUN_PROXY_URL, WireGuard config managed in
+    the UI) or "custom" (user-entered url). Settings live in the TikTok DB
+    (Settings > Network > TikTok); the TIKTOK_PROXY env var seeds a custom
+    url and enables routing until the UI writes its own values. Installs that
+    saved a url before modes existed keep it via the custom default.
     """
     env_url = os.environ.get("TIKTOK_PROXY", "")
     try:
         # Lazy import: the registry imports this module while building engines
         from platforms.registry import ENGINES
         db = ENGINES["tiktok"].db
-        enabled = db.get_setting("proxy_enabled", "1" if env_url else "0")
-        url = db.get_setting("proxy_url", env_url) or ""
+        url     = (db.get_setting("proxy_url", env_url) or "").strip()
+        mode    = db.get_setting("proxy_mode", "custom" if url else "gluetun")
+        enabled = db.get_setting("proxy_enabled", "1" if env_url else "0") == "1"
     except Exception:
-        enabled, url = ("1" if env_url else "0"), env_url
-    return (url.strip() or None) if enabled == "1" else None
+        url     = env_url.strip()
+        mode    = "custom" if url else "gluetun"
+        enabled = bool(env_url)
+    return {"mode": mode, "url": url, "enabled": enabled}
+
+
+def get_proxy() -> str | None:
+    """URL all TikTok traffic routes through, or None when routing is off.
+
+    Read per use, so a settings change applies from the next browser session
+    or request without a restart.
+    """
+    s = get_proxy_settings()
+    if not s["enabled"]:
+        return None
+    if s["mode"] == "gluetun":
+        return GLUETUN_PROXY_URL
+    return s["url"] or None
 
 
 def get_ms_token() -> str | None:

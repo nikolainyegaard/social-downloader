@@ -56,6 +56,7 @@
       <div class="settings-nav-group">Platforms</div>
       <div class="settings-nav-item active" id="snav-accounts"  onclick="switchSettingsSection('accounts')">Accounts</div>
       <div class="settings-nav-item"        id="snav-schedules" onclick="switchSettingsSection('schedules')">Schedules</div>
+      <div class="settings-nav-item"        id="snav-network"   onclick="switchSettingsSection('network')">Network</div>
       <div class="settings-nav-group">Tools</div>
       <div class="settings-nav-item" id="snav-jobs"     onclick="switchSettingsSection('jobs')">Jobs</div>
       <div class="settings-nav-item" id="snav-diag"     onclick="switchSettingsSection('diag')">Diagnostics</div>
@@ -100,43 +101,6 @@
               start a QR login or trigger a check first, then watch and interact here.
             </div>
             <button class="btn-sm" id="ttViewerBtn" onclick="ttViewerOpen()">Open browser view</button>
-          </div>
-          <div class="settings-group">
-            <span class="settings-label">VPN proxy</span>
-            <div class="settings-note">
-              Routes all TikTok traffic (the browser, page fetches, and downloads)
-              through an HTTP proxy, for example a gluetun VPN container on the same
-              Docker network. Useful when TikTok rate limits your own IP. Applies from
-              the next browser session, no restart needed. See the README for a
-              gluetun example.
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:500px">
-              <input type="text" id="ttProxyUrl" class="text-input" style="flex:1;min-width:220px" placeholder="http://gluetun:8888" autocomplete="off" spellcheck="false">
-              <button class="btn-sm" id="ttProxySaveBtn" onclick="ttProxySave()">Save</button>
-            </div>
-            <label style="display:flex;align-items:center;gap:10px;margin-top:10px;cursor:pointer">
-              <input type="checkbox" id="ttProxyEnabled" style="accent-color:var(--accent);width:16px;height:16px" onchange="ttProxyToggle()">
-              <span style="font-size:13px">Route TikTok through the proxy</span>
-            </label>
-            <div class="settings-note" id="ttProxyStatus" style="display:none;margin-top:8px"></div>
-          </div>
-          <div class="settings-group">
-            <span class="settings-label">WireGuard config (gluetun)</span>
-            <div class="settings-note">
-              Paste the WireGuard config for the gluetun container here (ProtonVPN: account
-              page &gt; Downloads &gt; WireGuard configuration) and it is saved to
-              <code>data/gluetun/wireguard/wg0.conf</code>. Point gluetun's volume at
-              <code>./data/gluetun:/gluetun</code> so it reads the same file. Gluetun only
-              loads the config at startup, so restart that container after saving.
-              The saved config is never shown again; pasting a new one replaces it.
-            </div>
-            <div class="settings-note" id="ttWgMeta" style="margin-bottom:8px"></div>
-            <textarea id="ttWgConfig" class="db-query-input" style="height:150px" placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = ...&#10;&#10;[Peer]&#10;PublicKey = ...&#10;Endpoint = ...&#10;AllowedIPs = 0.0.0.0/0" spellcheck="false"></textarea>
-            <div style="display:flex;gap:8px;align-items:center">
-              <button class="btn-sm" onclick="ttWgSave()">Save config</button>
-              <button class="btn-danger" id="ttWgDeleteBtn" onclick="ttWgDelete()" style="display:none">Remove</button>
-            </div>
-            <div class="settings-note" id="ttWgStatus" style="display:none;margin-top:8px"></div>
           </div>
         </div>
 
@@ -400,6 +364,70 @@
           <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
             <button class="btn-primary btn-sm" onclick="twSaveLoopSettings()">Save</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Network: per-platform proxy and VPN routing -->
+      <div id="ssec-network" style="display:none">
+        <div class="settings-section-title">Network</div>
+        <p class="settings-note">How each platform's traffic leaves the server.</p>
+
+        <div id="network-tiktok">
+          <div class="settings-group">
+            <span class="settings-label">Proxy</span>
+            <div class="settings-note">
+              With routing enabled, all TikTok traffic (the browser, page fetches, and
+              downloads) leaves through a proxy instead of the server's own connection.
+              The rest of the app is unaffected. Gluetun mode routes through a VPN: it
+              expects the gluetun container from the README example, reachable as
+              <code>gluetun:8888</code> on the Docker network, and manages its WireGuard
+              credentials below. Other proxy mode takes any HTTP proxy address instead.
+              Changes apply from the next browser session, no restart needed.
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:500px">
+              <select id="ttProxyMode" style="min-width:200px" onchange="ttProxyModeChange()">
+                <option value="gluetun">Gluetun VPN container</option>
+                <option value="custom">Other proxy</option>
+              </select>
+              <input type="text" id="ttProxyUrl" class="text-input" style="flex:1;min-width:220px" placeholder="http://gluetun:8888" autocomplete="off" spellcheck="false">
+              <button class="btn-sm" id="ttProxySaveBtn" onclick="ttProxySave()">Save</button>
+              <button class="btn-sm" id="ttProxyTestBtn" onclick="ttProxyTest()">Test connection</button>
+            </div>
+            <label style="display:flex;align-items:center;gap:10px;margin-top:10px;cursor:pointer">
+              <input type="checkbox" id="ttProxyEnabled" style="accent-color:var(--accent);width:16px;height:16px" onchange="ttProxyToggle()">
+              <span style="font-size:13px">Route TikTok through the proxy</span>
+            </label>
+            <div class="settings-note" id="ttProxyStatus" style="display:none;margin-top:8px"></div>
+          </div>
+          <div class="settings-group" id="ttWgGroup">
+            <span class="settings-label">WireGuard config (gluetun)</span>
+            <div class="settings-note">
+              The VPN credentials for the gluetun container behind the proxy above.
+              Paste a WireGuard config (ProtonVPN: account page &gt; Downloads &gt;
+              WireGuard configuration) and it is saved to
+              <code>data/gluetun/wireguard/wg0.conf</code>. Point gluetun's volume at
+              <code>./data/gluetun:/gluetun</code> so it reads the same file. Gluetun only
+              loads the config at startup, so restart that container after saving.
+              The saved config is never shown again; pasting a new one replaces it.
+            </div>
+            <div class="settings-note" id="ttWgMeta" style="margin-bottom:8px"></div>
+            <textarea id="ttWgConfig" class="db-query-input" style="height:150px" placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = ...&#10;&#10;[Peer]&#10;PublicKey = ...&#10;Endpoint = ...&#10;AllowedIPs = 0.0.0.0/0" spellcheck="false"></textarea>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn-sm" onclick="ttWgSave()">Save config</button>
+              <button class="btn-danger" id="ttWgDeleteBtn" onclick="ttWgDelete()" style="display:none">Remove</button>
+            </div>
+            <div class="settings-note" id="ttWgStatus" style="display:none;margin-top:8px"></div>
+          </div>
+        </div>
+
+        <div id="network-youtube" style="display:none">
+          <div class="settings-note">YouTube traffic uses the server's own connection. Proxy routing is currently a TikTok-only setting.</div>
+        </div>
+        <div id="network-twitter" style="display:none">
+          <div class="settings-note">Twitter traffic uses the server's own connection. Proxy routing is currently a TikTok-only setting.</div>
+        </div>
+        <div id="network-instagram" style="display:none">
+          <div class="settings-note">Instagram traffic uses the server's own connection. Proxy routing is currently a TikTok-only setting.</div>
         </div>
       </div>
 

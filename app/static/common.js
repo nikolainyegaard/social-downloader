@@ -50,10 +50,10 @@ function switchPlatform(name) {
 // ── Settings platform selector ───────────────────────────────────────────────
 // One global platform switcher for the whole settings modal: switching it
 // swaps the {section}-{platform} pane in every platform-varying section at
-// once, so the chosen platform follows you between Accounts, Schedules, Jobs,
-// Diagnostics, and Database.
+// once, so the chosen platform follows you between Accounts, Schedules,
+// Network, Jobs, Diagnostics, and Database.
 
-const _SETTINGS_PLATFORM_SECTIONS = ['accounts', 'schedules', 'jobs', 'diag', 'database'];
+const _SETTINGS_PLATFORM_SECTIONS = ['accounts', 'schedules', 'network', 'jobs', 'diag', 'database'];
 let _settingsPlatform = PLATFORMS[0].id;
 
 function initSettingsPlatformTabs() {

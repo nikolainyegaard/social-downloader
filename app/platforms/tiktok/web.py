@@ -93,29 +93,60 @@ def register_tiktok_routes(bp, engine) -> None:
         return jsonify({"ok": True, "message": msg})
 
     # Proxy routing: all TikTok traffic (browser, page fetches, downloads) can
-    # go through an HTTP proxy, e.g. a gluetun VPN container. See the README.
-    _PROXY_ENV = os.environ.get("TIKTOK_PROXY", "")
+    # go through an HTTP proxy. Two modes: "gluetun" uses the fixed sidecar
+    # address and manages its WireGuard config below; "custom" takes any URL.
+    from platforms.tiktok.config import get_proxy_settings, GLUETUN_PROXY_URL
 
     @bp.route("/proxy", methods=["GET"])
     def tiktok_proxy_get():
-        return jsonify({
-            "url":     db.get_setting("proxy_url", _PROXY_ENV) or "",
-            "enabled": db.get_setting("proxy_enabled", "1" if _PROXY_ENV else "0") == "1",
-        })
+        return jsonify({**get_proxy_settings(), "gluetun_url": GLUETUN_PROXY_URL})
 
     @bp.route("/proxy", methods=["PATCH"])
     def tiktok_proxy_set():
         body = request.get_json(silent=True) or {}
+        if "mode" in body:
+            if body["mode"] not in ("gluetun", "custom"):
+                return jsonify({"error": "mode must be gluetun or custom"}), 400
+            db.set_setting("proxy_mode", body["mode"])
         if "url" in body:
             url = str(body["url"]).strip()
             if url and not url.startswith(("http://", "https://", "socks5://")):
                 return jsonify({"error": "The proxy URL must start with http://, https://, or socks5://"}), 400
             db.set_setting("proxy_url", url)
-        if body.get("enabled") and not (db.get_setting("proxy_url", _PROXY_ENV) or "").strip():
-            return jsonify({"error": "Set a proxy URL before enabling routing"}), 400
         if "enabled" in body:
+            s = get_proxy_settings()
+            if body["enabled"] and s["mode"] == "custom" and not s["url"]:
+                return jsonify({"error": "Set a proxy URL before enabling routing"}), 400
             db.set_setting("proxy_enabled", "1" if body["enabled"] else "0")
         return jsonify({"ok": True})
+
+    @bp.route("/proxy/test", methods=["POST"])
+    def tiktok_proxy_test():
+        """Fetch an IP echo through the configured proxy, whether or not
+        routing is enabled, so the path can be verified before flipping the
+        toggle. Compares against the server's direct IP: the same address on
+        both sides means the proxy is not actually changing the exit."""
+        import requests as _requests
+        s = get_proxy_settings()
+        proxy = GLUETUN_PROXY_URL if s["mode"] == "gluetun" else s["url"]
+        if not proxy:
+            return jsonify({"ok": False, "error": "No proxy address configured"})
+        echo = "https://api.ipify.org"
+        try:
+            t0 = time.time()
+            resp = _requests.get(echo, proxies={"http": proxy, "https": proxy}, timeout=15)
+            resp.raise_for_status()
+            proxy_ip   = resp.text.strip()
+            latency_ms = int((time.time() - t0) * 1000)
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"})
+        try:
+            direct_ip = _requests.get(echo, timeout=10).text.strip()
+        except Exception:
+            direct_ip = None
+        return jsonify({"ok": True, "proxy_ip": proxy_ip, "direct_ip": direct_ip,
+                        "latency_ms": latency_ms,
+                        "same_ip": bool(direct_ip) and direct_ip == proxy_ip})
 
     # WireGuard config for the gluetun VPN container. The app writes wg0.conf
     # under its own data volume; gluetun mounts that folder (./data/gluetun) as

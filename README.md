@@ -107,7 +107,7 @@ The viewer rides the app's own web interface, so it needs no extra port and is p
 
 ### Routing TikTok through a VPN (gluetun)
 
-If TikTok rate limits or flags your server's IP, all TikTok traffic (the browser, page fetches, and downloads) can be routed through an HTTP proxy while the rest of the app, including the web UI and the other platforms, stays on your normal connection. Set the proxy URL in **Settings > Accounts > TikTok > VPN proxy** and flip the toggle; it applies from the next browser session with no restart. The `TIKTOK_PROXY` env var seeds the same setting for fresh installs.
+If TikTok rate limits or flags your server's IP, all TikTok traffic (the browser, page fetches, and downloads) can be routed through a proxy while the rest of the app, including the web UI and the other platforms, stays on your normal connection. **Settings > Network > TikTok** has two modes: **Gluetun VPN container** targets the gluetun sidecar below at its fixed address (`http://gluetun:8888`) and manages its WireGuard credentials in the same panel, while **Other proxy** takes any HTTP proxy address (a residential proxy, a phone sharing mobile data, or a gluetun container under a different name). Flip the routing toggle and it applies from the next browser session with no restart. The Test connection button verifies the path regardless of the toggle: it fetches the exit IP through the proxy, compares it with the server's own IP, and warns when they match (the proxy is reachable but not changing the address). The `TIKTOK_PROXY` env var seeds a custom proxy address for fresh installs.
 
 The intended pairing is a [gluetun](https://github.com/qdm12/gluetun) container with its built-in HTTP proxy enabled, on the same Docker network as the app:
 
@@ -128,9 +128,9 @@ services:
     restart: unless-stopped
 ```
 
-With that service in the app's docker-compose.yml (or both containers on one shared network), the proxy URL is `http://gluetun:8888`. The proxy port never needs to be published on the host; the app reaches it over the Docker network.
+With that service in the app's docker-compose.yml (or both containers on one shared network), gluetun mode reaches it automatically; the service must be named `gluetun` for the fixed address to resolve. The proxy port never needs to be published on the host; the app reaches it over the Docker network.
 
-With `VPN_SERVICE_PROVIDER=custom`, the WireGuard credentials do not go in the environment: gluetun reads a standard WireGuard config from `/gluetun/wireguard/wg0.conf` inside its volume. With the volume above (`./data/gluetun`, inside the app's data folder), you can paste the config straight into **Settings > Accounts > TikTok > WireGuard config** and the app writes it to that path for you; download one from your VPN provider first (ProtonVPN: account page > Downloads > WireGuard configuration). Gluetun only loads the config at startup, so restart the gluetun container after saving. Managing the file by hand at `data/gluetun/wireguard/wg0.conf` works the same.
+With `VPN_SERVICE_PROVIDER=custom`, the WireGuard credentials do not go in the environment: gluetun reads a standard WireGuard config from `/gluetun/wireguard/wg0.conf` inside its volume. With the volume above (`./data/gluetun`, inside the app's data folder), you can paste the config straight into **Settings > Network > TikTok > WireGuard config** and the app writes it to that path for you; download one from your VPN provider first (ProtonVPN: account page > Downloads > WireGuard configuration). Gluetun only loads the config at startup, so restart the gluetun container after saving. Managing the file by hand at `data/gluetun/wireguard/wg0.conf` works the same.
 
 Generate a dedicated config for this container rather than reusing one from another gluetun instance; a WireGuard server keeps one session per key, so two tunnels on the same config kick each other off. If the app cannot reach the proxy, set `FIREWALL_OUTBOUND_SUBNETS` to the Docker network's subnet so gluetun's firewall allows replies to it.
 
