@@ -37,20 +37,23 @@ def save_new_stories(db, platform: str, channel_id: str, handle: str,
     over cookies_path; pass the fetching session's live cookies when the CDN
     ties URLs to them.
     """
-    from downloader import download_story
+    from downloader import download_story, StoryDownloadError
 
     known = db.get_known_story_ids(channel_id)
     fresh = [s for s in stories if s["story_id"] not in known]
     saved = 0
     for s in fresh:
-        path = download_story(
-            story_id=s["story_id"], username=handle, platform=platform,
-            media_url=s["media_url"], content_type=s.get("content_type", "video"),
-            posted_at=s.get("posted_at"), cookies=cookies, cookies_path=cookies_path,
-            headers=s.get("headers"), proxy=proxy,
-        )
-        if not path:
-            log(f"  Story {s['story_id']} download failed")
+        try:
+            path = download_story(
+                story_id=s["story_id"], username=handle, platform=platform,
+                media_url=s["media_url"], media_urls=s.get("media_urls"),
+                content_type=s.get("content_type", "video"),
+                posted_at=s.get("posted_at"), cookies=cookies, cookies_path=cookies_path,
+                headers=s.get("headers"), proxy=proxy,
+            )
+        except Exception as e:
+            reason = str(e) if isinstance(e, StoryDownloadError) else type(e).__name__
+            log(f"  Story {s['story_id']} download failed ({reason}), details in the run log")
             continue
         db.add_story(s["story_id"], channel_id, s.get("content_type", "video"),
                      s.get("posted_at"), s.get("expires_at"), path)

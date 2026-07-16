@@ -217,20 +217,30 @@ def download_photos(*, video_id: str, username: str,
     return first_path
 
 
+class StoryDownloadError(Exception):
+    """All URL candidates for a story failed. The message is a short reason
+    fit for the UI log; per-candidate detail goes to the run log."""
+
+
 def download_story(*, story_id: str, username: str, platform: str,
                    media_url: str, content_type: str, posted_at: int | None,
+                   media_urls: list[str] | None = None,
                    cookies: dict | None = None,
                    cookies_path: str | None = None,
                    headers: dict | None = None,
-                   proxy: str | None = None) -> str | None:
+                   proxy: str | None = None) -> str:
     """
     Download one story item (video or image) into the creator's stories folder.
 
     Stories live on expiring CDN URLs that yt-dlp cannot resolve (story pages
     404 for logged-out clients), so this is a direct GET like photo posts.
-    Files are named {YYYYMMDD_HHMMSS}_{story_id}.{ext} from the post time.
-    Returns the saved path, or None on failure.
+    media_urls carries every URL candidate the platform offered (TikTok items
+    list up to three hosts per video); each is tried in order because a single
+    CDN host 403ing is common. Files are named {YYYYMMDD_HHMMSS}_{story_id}.{ext}
+    from the post time. Returns the saved path; raises StoryDownloadError with
+    a short reason when every candidate fails.
     """
+    from urllib.parse import urlparse
     from curl_cffi import requests as curl_requests
 
     stories_dir = os.path.join(MEDIA_DIR, platform, f"@{username}", "stories")
@@ -252,16 +262,40 @@ def download_story(*, story_id: str, username: str, platform: str,
         **(headers or {}),
     }
 
-    try:
-        resp = curl_requests.get(
-            media_url, cookies=cookies, headers=_headers,
-            impersonate="chrome120", timeout=60,
-            **({"proxies": {"http": proxy, "https": proxy}} if proxy else {}),
-        )
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"[{_ts()}] Failed to download story {story_id}: {e}")
-        return None
+    candidates  = [u for u in (media_urls or []) if u] or [media_url]
+    cookie_note = f"cookies: {', '.join(sorted(cookies)[:10]) or 'none'}"
+    resp        = None
+    last_reason = "no URL candidates"
+    for i, url in enumerate(candidates, 1):
+        host = urlparse(url).netloc
+        try:
+            r = curl_requests.get(
+                url, cookies=cookies, headers=_headers,
+                impersonate="chrome120", timeout=60,
+                **({"proxies": {"http": proxy, "https": proxy}} if proxy else {}),
+            )
+        except Exception as e:
+            last_reason = type(e).__name__
+            print(f"[{_ts()}] Story {story_id} candidate {i}/{len(candidates)} ({host}): "
+                  f"{type(e).__name__}: {e} ({cookie_note})")
+            continue
+        if r.status_code != 200:
+            last_reason = f"HTTP {r.status_code}"
+            body_head = (r.content or b"")[:120]
+            print(f"[{_ts()}] Story {story_id} candidate {i}/{len(candidates)} ({host}): "
+                  f"HTTP {r.status_code}, body {body_head!r} ({cookie_note})")
+            continue
+        if not r.content:
+            last_reason = "empty body"
+            print(f"[{_ts()}] Story {story_id} candidate {i}/{len(candidates)} ({host}): "
+                  f"HTTP 200 with empty body ({cookie_note})")
+            continue
+        resp = r
+        if i > 1:
+            print(f"[{_ts()}] Story {story_id} saved via fallback candidate {i} ({host})")
+        break
+    if resp is None:
+        raise StoryDownloadError(last_reason)
 
     if content_type == "photo":
         jpg_path  = os.path.join(stories_dir, f"{stamp}_{story_id}.jpg")

@@ -782,40 +782,50 @@ def parse_story_item(item: dict) -> dict | None:
     if expires_at is None and posted_at:
         expires_at = posted_at + 24 * 3600
 
+    # Every URL the item offers becomes a download candidate: a story video
+    # lists two CDN hosts plus a www.tiktok.com/aweme/v1/play endpoint per
+    # bitrate, and any single host 403ing is common. Order: primary playAddr,
+    # its UrlList siblings, then the bitrate variants (highest quality first).
+    candidates: list[str] = []
+
+    def _add(url):
+        if url and url not in candidates:
+            candidates.append(url)
+
     image_post = item.get("imagePost")
     if image_post:
-        urls = [
-            img["imageURL"]["urlList"][0]
-            for img in image_post.get("images", [])
-            if img.get("imageURL", {}).get("urlList")
-        ]
-        if not urls:
+        images = image_post.get("images") or []
+        if images:
+            for url in (images[0].get("imageURL", {}).get("urlList") or []):
+                _add(url)
+        if not candidates:
             return None
         return {
             "story_id":     str(sid),
             "content_type": "photo",
             "posted_at":    posted_at,
             "expires_at":   expires_at,
-            "media_url":    urls[0],
+            "media_url":    candidates[0],
+            "media_urls":   candidates,
         }
 
     video_meta = item.get("video") or {}
-    play_addr  = video_meta.get("playAddr") or video_meta.get("downloadAddr")
-    if not play_addr:
-        bitrates = video_meta.get("bitrateInfo") or []
-        for b in bitrates:
-            url_list = (b.get("PlayAddr") or {}).get("UrlList") or []
-            if url_list:
-                play_addr = url_list[0]
-                break
-    if not play_addr:
+    _add(video_meta.get("playAddr"))
+    for url in ((video_meta.get("PlayAddrStruct") or {}).get("UrlList") or []):
+        _add(url)
+    for b in (video_meta.get("bitrateInfo") or []):
+        for url in ((b.get("PlayAddr") or {}).get("UrlList") or []):
+            _add(url)
+    _add(video_meta.get("downloadAddr"))
+    if not candidates:
         return None
     return {
         "story_id":     str(sid),
         "content_type": "video",
         "posted_at":    posted_at,
         "expires_at":   expires_at,
-        "media_url":    play_addr,
+        "media_url":    candidates[0],
+        "media_urls":   candidates,
     }
 
 
