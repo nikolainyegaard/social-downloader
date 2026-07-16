@@ -54,6 +54,10 @@ EXPOSE 5000
 # python as PID 1, same as before. The app falls back to headless without
 # DISPLAY, so a failed Xvfb degrades instead of breaking.
 #
+# The rm clears the previous run's display lock and socket: /tmp survives a
+# docker restart (only a container recreation resets it), and Xvfb refuses to
+# start over a stale lock whose pid matches any live process.
+#
 # xdotool injects mouse input into that display at the X server level, which
 # backs the in-app browser viewer (Settings > TikTok) used to solve captchas.
-CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & exec python app/main.py"]
+CMD ["sh", "-c", "rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 && Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & exec python app/main.py"]

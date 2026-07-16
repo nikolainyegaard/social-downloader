@@ -99,6 +99,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel takes the full row; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
+- A docker restart no longer breaks every TikTok browser use (QR login, checks, the browser viewer) with a browser launch error: the restarted container inherited the previous run's X display lock and socket in /tmp, which kept the virtual display from starting while still looking alive. The container now cleans those up at startup, and the app verifies the display actually responds before launching the browser headed, falling back to headless otherwise
 - The User/Sound loop switcher in the TikTok Loops panel highlights the selected pill again; it switched the view but left the slider on the previous pill
 - TikTok story expiry now reads the millisecond ExpiredAt field TikTok actually sends instead of relying on the post-time-plus-24h fallback
 - The Uploaded column in the creator modal shows the time of day again on TikTok, Twitter, and Instagram; the engine fold-in had switched every platform to YouTube's date-only format, even though those three APIs provide full timestamps

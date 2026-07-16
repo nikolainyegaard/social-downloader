@@ -69,16 +69,29 @@ def _profile_context_factory():
 def _headed() -> bool:
     """Run the browser headed when a working X display exists (in Docker that
     is the Xvfb the container starts). Headed Chrome drops the entire headless
-    fingerprint class. Checks the X socket, not just DISPLAY: the env var is
-    baked into the image, so a dead Xvfb must degrade to headless instead of
-    launching Chrome at a display that is not there."""
+    fingerprint class. Connects to the X socket instead of trusting DISPLAY or
+    the socket file: the env var is baked into the image, and the socket file
+    in /tmp survives a docker restart while the Xvfb process does not, so only
+    a listening server proves the display is alive. Anything less must degrade
+    to headless instead of launching Chrome at a display that is not there."""
     # ponytail: local dev on a Linux desktop gets visible Chrome windows, add
     # an env opt-out if that annoys
+    import socket
+
     display = os.environ.get("DISPLAY", "")
     if not display.startswith(":"):
         return bool(display)  # remote display forms: trust the env var
     num = display[1:].split(".")[0]
-    return os.path.exists(f"/tmp/.X11-unix/X{num}")
+    path = f"/tmp/.X11-unix/X{num}"
+    if not os.path.exists(path):
+        return False
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            s.connect(path)
+        return True
+    except OSError:
+        return False
 
 
 def reset_browser_profile() -> tuple[bool, str]:
