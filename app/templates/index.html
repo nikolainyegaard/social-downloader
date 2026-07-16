@@ -375,48 +375,74 @@
         <div id="network-tiktok">
           <div class="settings-group">
             <span class="settings-label">Proxy</span>
-            <div class="settings-note">
-              With routing enabled, all TikTok traffic (the browser, page fetches, and
-              downloads) leaves through a proxy instead of the server's own connection.
-              The rest of the app is unaffected. Gluetun mode routes through a VPN: it
-              expects the gluetun container from the README example, reachable as
-              <code>gluetun:8888</code> on the Docker network, and manages its WireGuard
-              credentials below. Other proxy mode takes any HTTP proxy address instead.
-              Changes apply from the next browser session, no restart needed.
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:500px">
-              <select id="ttProxyMode" style="min-width:200px" onchange="ttProxyModeChange()">
-                <option value="gluetun">Gluetun VPN container</option>
-                <option value="custom">Other proxy</option>
-              </select>
-              <input type="text" id="ttProxyUrl" class="text-input" style="flex:1;min-width:220px" placeholder="http://gluetun:8888" autocomplete="off" spellcheck="false">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;max-width:560px">
+              <div class="filter-pills multi">
+                <button class="filter-pill" id="ttProxyModeGluetun" onclick="ttProxySetMode('gluetun')">Gluetun VPN</button>
+                <button class="filter-pill" id="ttProxyModeCustom" onclick="ttProxySetMode('custom')">Other proxy</button>
+              </div>
+              <input type="text" id="ttProxyUrl" class="text-input" style="flex:1;min-width:200px" placeholder="http://proxy:8888" autocomplete="off" spellcheck="false">
               <button class="btn-sm" id="ttProxySaveBtn" onclick="ttProxySave()">Save</button>
               <button class="btn-sm" id="ttProxyTestBtn" onclick="ttProxyTest()">Test connection</button>
             </div>
-            <label style="display:flex;align-items:center;gap:10px;margin-top:10px;cursor:pointer">
-              <input type="checkbox" id="ttProxyEnabled" style="accent-color:var(--accent);width:16px;height:16px" onchange="ttProxyToggle()">
-              <span style="font-size:13px">Route TikTok through the proxy</span>
+            <label class="tracking-toggle" style="margin-top:12px">
+              <input type="checkbox" id="ttProxyEnabled" onchange="ttProxyToggle()">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-label" style="font-size:13px;color:var(--text)">Send all TikTok traffic through the proxy</span>
             </label>
             <div class="settings-note" id="ttProxyStatus" style="display:none;margin-top:8px"></div>
+            <span class="hdr-link" style="margin-top:8px;display:inline-block" onclick="_ttHelpToggle('ttProxyHelp')">How this works</span>
+            <div class="settings-note" id="ttProxyHelp" style="display:none;margin-top:8px">
+              With the toggle on, all TikTok traffic (the browser, page fetches, and
+              downloads) leaves through the proxy instead of the server's own connection.
+              The rest of the app is unaffected. Gluetun VPN mode expects the gluetun
+              container from the README example, reachable as <code>gluetun:8888</code>
+              on the Docker network, and manages its WireGuard credentials below. Other
+              proxy mode takes any HTTP proxy address instead. Changes apply from the
+              next browser session, no restart needed. Test connection works either way
+              and shows the exit IP the proxy provides.
+            </div>
           </div>
           <div class="settings-group" id="ttWgGroup">
             <span class="settings-label">WireGuard config (gluetun)</span>
-            <div class="settings-note">
-              The VPN credentials for the gluetun container behind the proxy above.
-              Paste a WireGuard config (ProtonVPN: account page &gt; Downloads &gt;
-              WireGuard configuration) and it is saved to
-              <code>data/gluetun/wireguard/wg0.conf</code>. Point gluetun's volume at
-              <code>./data/gluetun:/gluetun</code> so it reads the same file. Gluetun only
-              loads the config at startup, so restart that container after saving.
-              The saved config is never shown again; pasting a new one replaces it.
+            <div class="settings-note" id="ttWgMeta" style="margin-bottom:10px"></div>
+            <div style="display:flex;flex-direction:column;gap:12px;max-width:500px">
+              <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+                <span>Private key</span>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input type="password" id="ttWgPrivateKey" class="text-input" style="flex:1" placeholder="from the [Interface] section" autocomplete="new-password" spellcheck="false">
+                  <button class="btn-sm" id="ttWgKeyEye" onclick="ttWgToggleKey()" title="Show the key" style="flex-shrink:0;padding:5px 8px"></button>
+                </div>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+                <span>Address</span>
+                <input type="text" id="ttWgAddress" class="text-input" placeholder="10.2.0.2/32" autocomplete="off" spellcheck="false">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+                <span>Server public key</span>
+                <input type="text" id="ttWgPublicKey" class="text-input" placeholder="from the [Peer] section" autocomplete="off" spellcheck="false">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+                <span>Server endpoint</span>
+                <input type="text" id="ttWgEndpoint" class="text-input" placeholder="146.70.170.18:51820" autocomplete="off" spellcheck="false">
+              </label>
             </div>
-            <div class="settings-note" id="ttWgMeta" style="margin-bottom:8px"></div>
-            <textarea id="ttWgConfig" class="db-query-input" style="height:150px" placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = ...&#10;&#10;[Peer]&#10;PublicKey = ...&#10;Endpoint = ...&#10;AllowedIPs = 0.0.0.0/0" spellcheck="false"></textarea>
-            <div style="display:flex;gap:8px;align-items:center">
+            <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+              <button class="btn-sm" onclick="ttWgParseOpen()">Paste full config</button>
               <button class="btn-sm" onclick="ttWgSave()">Save config</button>
               <button class="btn-danger" id="ttWgDeleteBtn" onclick="ttWgDelete()" style="display:none">Remove</button>
             </div>
             <div class="settings-note" id="ttWgStatus" style="display:none;margin-top:8px"></div>
+            <span class="hdr-link" style="margin-top:8px;display:inline-block" onclick="_ttHelpToggle('ttWgHelp')">How this works</span>
+            <div class="settings-note" id="ttWgHelp" style="display:none;margin-top:8px">
+              These are the VPN credentials for the gluetun container behind the proxy
+              above, from a WireGuard config file (ProtonVPN: account page &gt; Downloads
+              &gt; WireGuard configuration). Paste full config fills the fields from a
+              pasted file, keeping only what gluetun needs; comments and IPv6 entries are
+              discarded automatically. Saving writes a clean
+              <code>data/gluetun/wireguard/wg0.conf</code>, where gluetun's
+              <code>./data/gluetun:/gluetun</code> volume reads it. Gluetun only loads the
+              config at startup, so restart that container after saving.
+            </div>
           </div>
         </div>
 
@@ -878,6 +904,23 @@
     <div id="ttViewerStatus" class="settings-note" style="color:#fff;margin-bottom:6px"></div>
     <img id="ttViewerImg" src="" alt="TikTok browser" draggable="false"
          style="cursor:crosshair;touch-action:none;user-select:none">
+  </div>
+</div>
+
+<!-- WireGuard parse modal: paste a full config, the needed fields are extracted -->
+<div id="ttWgParse" class="media-modal" style="display:none;z-index:400" onclick="if(event.target===this)ttWgParseClose()">
+  <div class="media-modal-inner" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;width:min(620px,92vw)">
+    <div class="settings-label" style="display:block;margin-bottom:6px">Paste a WireGuard config</div>
+    <div class="settings-note">
+      The private key, address, server public key, and endpoint are picked out
+      automatically; comments and IPv6 entries are discarded.
+    </div>
+    <textarea id="ttWgParseText" class="db-query-input" style="height:220px" placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = ...&#10;&#10;[Peer]&#10;PublicKey = ...&#10;AllowedIPs = ...&#10;Endpoint = ..." spellcheck="false"></textarea>
+    <div class="settings-note" id="ttWgParseStatus" style="display:none;color:var(--red)"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn-sm" onclick="ttWgParseClose()">Cancel</button>
+      <button class="btn-sm" onclick="ttWgParseApply()">Parse</button>
+    </div>
   </div>
 </div>
 

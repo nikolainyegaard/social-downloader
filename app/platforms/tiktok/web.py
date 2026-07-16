@@ -148,42 +148,65 @@ def register_tiktok_routes(bp, engine) -> None:
                         "latency_ms": latency_ms,
                         "same_ip": bool(direct_ip) and direct_ip == proxy_ip})
 
-    # WireGuard config for the gluetun VPN container. The app writes wg0.conf
-    # under its own data volume; gluetun mounts that folder (./data/gluetun) as
-    # /gluetun and reads the file at startup. The private key is never echoed
-    # back, only presence and the non-secret lines.
+    # WireGuard config for the gluetun VPN container, managed as four values
+    # (private key, address, server public key, endpoint) instead of a raw
+    # file: the app composes a canonical wg0.conf itself, so AllowedIPs and
+    # keepalive are constants and IPv6 entries (which gluetun rejects when the
+    # host has no IPv6) can never reach the file. Written under the app's data
+    # volume; gluetun mounts that folder (./data/gluetun) as /gluetun and
+    # reads it at startup. The private key is returned by GET for the UI's
+    # reveal toggle; it already sits in plaintext on disk for gluetun.
     _WG_PATH = os.path.join(DATA_DIR, "gluetun", "wireguard", "wg0.conf")
+    _WG_FIELDS = ("private_key", "address", "public_key", "endpoint")
 
     @bp.route("/proxy/wireguard", methods=["GET"])
     def tiktok_wireguard_get():
         if not os.path.exists(_WG_PATH):
             return jsonify({"present": False})
-        endpoint = address = None
+        fields = {f: None for f in _WG_FIELDS}
+        keymap = {"privatekey": "private_key", "address": "address",
+                  "publickey": "public_key", "endpoint": "endpoint"}
         try:
             with open(_WG_PATH, encoding="utf-8", errors="ignore") as f:
                 for line in f:
                     key, _, val = line.partition("=")
-                    if key.strip().lower() == "endpoint":
-                        endpoint = val.strip()
-                    elif key.strip().lower() == "address":
-                        address = val.strip()
+                    name = keymap.get(key.strip().lower())
+                    if name:
+                        fields[name] = val.strip()
             updated = int(os.path.getmtime(_WG_PATH))
         except OSError:
             updated = None
-        return jsonify({"present": True, "endpoint": endpoint,
-                        "address": address, "updated_at": updated})
+        return jsonify({"present": True, "updated_at": updated, **fields})
 
     @bp.route("/proxy/wireguard", methods=["POST"])
     def tiktok_wireguard_set():
         body = request.get_json(silent=True) or {}
-        conf = str(body.get("config", "")).strip()
-        low  = conf.lower()
-        if "[interface]" not in low or "privatekey" not in low or "[peer]" not in low:
-            return jsonify({"error": "That does not look like a WireGuard config "
-                            "(needs [Interface] with PrivateKey and a [Peer] section)"}), 400
+        vals = {}
+        for f in _WG_FIELDS:
+            v = str(body.get(f, "")).strip()
+            if not v or "\n" in v or "\r" in v:
+                return jsonify({"error": f"{f.replace('_', ' ')} is required"}), 400
+            vals[f] = v
+        # Keep only the IPv4 entries of a comma-separated address list
+        v4 = [a.strip() for a in vals["address"].split(",")
+              if a.strip() and ":" not in a]
+        if not v4:
+            return jsonify({"error": "The address needs an IPv4 entry like 10.2.0.2/32 "
+                            "(gluetun does not support IPv6)"}), 400
+        if ":" not in vals["endpoint"] or vals["endpoint"].startswith("["):
+            return jsonify({"error": "The endpoint must be an IPv4 host:port pair"}), 400
+        conf = ("[Interface]\n"
+                f"PrivateKey = {vals['private_key']}\n"
+                f"Address = {', '.join(v4)}\n"
+                "\n"
+                "[Peer]\n"
+                f"PublicKey = {vals['public_key']}\n"
+                "AllowedIPs = 0.0.0.0/0\n"
+                f"Endpoint = {vals['endpoint']}\n"
+                "PersistentKeepalive = 25\n")
         os.makedirs(os.path.dirname(_WG_PATH), exist_ok=True)
         with open(_WG_PATH, "w", encoding="utf-8") as f:
-            f.write(conf + "\n")
+            f.write(conf)
         try:
             os.chmod(_WG_PATH, 0o600)
         except OSError:

@@ -147,9 +147,14 @@ document.addEventListener('DOMContentLoaded', () => {
   img.addEventListener('pointerdown', (ev) => { ev.preventDefault(); _viewerDown = true; _viewerSend('down', ev, true); });
   img.addEventListener('pointermove', (ev) => { if (_viewerDown) _viewerSend('move', ev, false); });
   window.addEventListener('pointerup', (ev) => { if (_viewerDown) { _viewerDown = false; _viewerSend('up', ev, true); } });
-  // Escape closes the viewer first (capture, before the shared overlay handlers)
+  // Escape closes the topmost TikTok overlay first (capture, before the
+  // shared overlay handlers): the WireGuard parse modal sits above all, then
+  // the browser viewer
   document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && _viewerOn) { ev.stopPropagation(); ttViewerClose(); }
+    if (ev.key !== 'Escape') return;
+    const parse = document.getElementById('ttWgParse');
+    if (parse && parse.style.display !== 'none') { ev.stopPropagation(); ttWgParseClose(); return; }
+    if (_viewerOn) { ev.stopPropagation(); ttViewerClose(); }
   }, true);
 });
 
@@ -161,10 +166,16 @@ document.addEventListener('DOMContentLoaded', () => {
 let _ttProxyCustomUrl = '';   // last saved custom URL, restored when leaving gluetun mode
 let _ttProxyGluetunUrl = 'http://gluetun:8888';
 
+function _ttHelpToggle(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
 function _ttProxyApplyMode(mode) {
   const gluetun = mode === 'gluetun';
   const input   = document.getElementById('ttProxyUrl');
-  document.getElementById('ttProxyMode').value            = mode;
+  document.getElementById('ttProxyModeGluetun').classList.toggle('active', gluetun);
+  document.getElementById('ttProxyModeCustom').classList.toggle('active', !gluetun);
   document.getElementById('ttProxySaveBtn').style.display = gluetun ? 'none' : '';
   document.getElementById('ttWgGroup').style.display      = gluetun ? '' : 'none';
   input.disabled = gluetun;
@@ -188,14 +199,11 @@ function _ttProxyStatus(msg, tone) {
   el.style.color   = { ok: 'var(--green)', error: 'var(--red)', warn: 'var(--orange)' }[tone] || '';
 }
 
-async function ttProxyModeChange() {
-  const mode = document.getElementById('ttProxyMode').value;
+async function ttProxySetMode(mode) {
   const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ mode }) });
   if (!ok) { _ttProxyStatus((data && data.error) || 'Could not switch the proxy mode', 'error'); ttProxyLoad(); return; }
   _ttProxyApplyMode(mode);
-  _ttProxyStatus(mode === 'gluetun'
-    ? 'Gluetun mode: the proxy address is fixed, paste the WireGuard config below.'
-    : 'Other proxy mode: enter the proxy address and save.', 'ok');
+  _ttProxyStatus('');
 }
 
 async function ttProxySave() {
@@ -238,46 +246,112 @@ async function ttProxyTest() {
   _ttProxyStatus(msg, data.same_ip ? 'warn' : 'ok');
 }
 
-// WireGuard config for the gluetun container: saved under the app's data
-// volume, which gluetun mounts as /gluetun. The config is write-only in the
-// UI; the meta line shows the non-secret parts of what is on disk.
+// WireGuard config for the gluetun container, managed as four fields; the
+// backend composes a clean wg0.conf under the app's data volume, which
+// gluetun mounts as /gluetun. "Paste full config" fills the fields from a
+// pasted file, discarding comments and IPv6.
 
-function _ttWgStatus(msg, isError) {
+const _WG_FIELD_IDS = { private_key: 'ttWgPrivateKey', address: 'ttWgAddress',
+                        public_key: 'ttWgPublicKey', endpoint: 'ttWgEndpoint' };
+const _eyeIcon    = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const _eyeOffIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function _ttWgStatus(msg, tone) {
   const el = document.getElementById('ttWgStatus');
   el.style.display = msg ? '' : 'none';
   el.textContent   = msg || '';
-  el.style.color   = isError ? 'var(--red)' : 'var(--green)';
+  el.style.color   = { ok: 'var(--green)', error: 'var(--red)' }[tone] || '';
+}
+
+function ttWgToggleKey() {
+  const input = document.getElementById('ttWgPrivateKey');
+  const eye   = document.getElementById('ttWgKeyEye');
+  const show  = input.type === 'password';
+  input.type    = show ? 'text' : 'password';
+  eye.innerHTML = show ? _eyeOffIcon : _eyeIcon;
+  eye.title     = show ? 'Hide the key' : 'Show the key';
 }
 
 async function ttWgLoad() {
+  const eye = document.getElementById('ttWgKeyEye');
+  if (eye && !eye.innerHTML) eye.innerHTML = _eyeIcon;
   const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard');
   if (!ok) return;
   const meta = document.getElementById('ttWgMeta');
   document.getElementById('ttWgDeleteBtn').style.display = data.present ? '' : 'none';
-  if (!data.present) { meta.textContent = 'No config saved yet.'; return; }
-  const parts = ['Config saved'];
-  if (data.endpoint)   parts.push('endpoint ' + data.endpoint);
-  if (data.updated_at) parts.push('updated ' + fmtDateShort(data.updated_at));
-  meta.textContent = parts.join(', ');
+  for (const [field, id] of Object.entries(_WG_FIELD_IDS)) {
+    document.getElementById(id).value = (data.present && data[field]) || '';
+  }
+  meta.textContent = data.present
+    ? 'Config saved' + (data.updated_at ? ', updated ' + fmtDateShort(data.updated_at) : '')
+    : 'No config saved yet. Fill the fields or use Paste full config.';
 }
 
 async function ttWgSave() {
-  const box    = document.getElementById('ttWgConfig');
-  const config = box.value.trim();
-  if (!config) { _ttWgStatus('Paste a WireGuard config first', true); return; }
-  const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'POST', body: JSON.stringify({ config }) });
-  if (!ok) { _ttWgStatus((data && data.error) || 'Could not save the config', true); return; }
-  box.value = '';
-  _ttWgStatus('Saved. Restart the gluetun container to apply it.', false);
+  const body = {};
+  for (const [field, id] of Object.entries(_WG_FIELD_IDS)) {
+    body[field] = document.getElementById(id).value.trim();
+  }
+  const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'POST', body: JSON.stringify(body) });
+  if (!ok) { _ttWgStatus((data && data.error) || 'Could not save the config', 'error'); return; }
+  _ttWgStatus('Saved. Restart the gluetun container to apply it.', 'ok');
   ttWgLoad();
 }
 
 async function ttWgDelete() {
   if (!confirm('Remove the saved WireGuard config? Gluetun keeps using it until that container restarts.')) return;
   const { ok } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'DELETE' });
-  if (!ok) { _ttWgStatus('Could not remove the config', true); return; }
-  _ttWgStatus('Removed.', false);
+  if (!ok) { _ttWgStatus('Could not remove the config', 'error'); return; }
+  _ttWgStatus('Removed.', 'ok');
   ttWgLoad();
+}
+
+// Parse modal: extract the four fields from a pasted WireGuard config
+
+function ttWgParseOpen() {
+  document.getElementById('ttWgParse').style.display = 'flex';
+  document.getElementById('ttWgParseStatus').style.display = 'none';
+  _lockScroll();
+  document.getElementById('ttWgParseText').focus();
+}
+
+function ttWgParseClose() {
+  document.getElementById('ttWgParse').style.display = 'none';
+  document.getElementById('ttWgParseText').value = '';
+  _unlockScroll();
+}
+
+function ttWgParseApply() {
+  const text  = document.getElementById('ttWgParseText').value;
+  const found = {};
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.split('#')[0].trim();   // comments end the line
+    const eq   = line.indexOf('=');
+    if (eq < 1) continue;
+    const key = line.slice(0, eq).trim().toLowerCase();
+    const val = line.slice(eq + 1).trim();
+    if (!val) continue;
+    if (key === 'privatekey') found.private_key = val;
+    else if (key === 'publickey') found.public_key = val;
+    else if (key === 'address') {
+      // keep only the IPv4 entries of a comma-separated list
+      const v4 = val.split(',').map(a => a.trim()).filter(a => a && !a.includes(':'));
+      if (v4.length) found.address = v4.join(', ');
+    }
+    else if (key === 'endpoint' && !val.startsWith('[')) found.endpoint = val;
+  }
+  const missing = Object.keys(_WG_FIELD_IDS).filter(f => !found[f]);
+  if (missing.length) {
+    const el = document.getElementById('ttWgParseStatus');
+    el.style.display = '';
+    el.textContent   = 'Could not find: ' + missing.map(f => f.replace('_', ' ')).join(', ');
+    return;
+  }
+  for (const [field, id] of Object.entries(_WG_FIELD_IDS)) {
+    document.getElementById(id).value = found[field];
+  }
+  ttWgParseClose();
+  _ttWgStatus('Fields filled from the pasted config. Review them and press Save config.', 'ok');
 }
 
 // ── Sounds state ──────────────────────────────────────────────────────────────
