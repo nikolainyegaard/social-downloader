@@ -235,10 +235,12 @@ def create_channel_blueprint(engine) -> Blueprint:
         all_ph_counts = db.get_all_profile_history_counts()
         all_ph        = db.get_all_profile_history_for_search()
         live_stories  = db.get_live_story_counts() if adapter.has_stories else {}
+        story_counts  = db.get_all_story_counts()  if adapter.has_stories else {}
         for ch in channels:
             cid   = ch["channel_id"]
             stats = all_stats.get(cid, {})
             ch["live_stories"]          = live_stories.get(cid, 0)
+            ch["story_count"]           = story_counts.get(cid, 0)
             ch["video_total"]           = stats.get("video_total",      0)
             ch["video_downloaded"]      = stats.get("video_downloaded",  0)
             ch["video_deleted"]         = stats.get("video_deleted",     0)

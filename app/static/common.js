@@ -1251,6 +1251,9 @@ function _mRenderToolbar(cfg, vids) {
     const pfn = cfg.phistBtnFn || 'openProfileHistory';
     html += `<button class="filter-pill toolbar-phist-btn" onclick="${pfn}()">Profile history</button>`;
   }
+  if (cfg.storiesBtnFn && cfg.storiesCount && cfg.storiesCount() > 0) {
+    html += `<button class="filter-pill toolbar-phist-btn" onclick="${cfg.storiesBtnFn}()">Stories (${cfg.storiesCount().toLocaleString()})</button>`;
+  }
   html += `</div>`
     + `<div class="toolbar-filter-wrap${cfg.st.toolbarExpanded ? '' : ' collapsed'}">`
     + `<div class="filter-pills multi">`

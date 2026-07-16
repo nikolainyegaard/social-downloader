@@ -981,6 +981,15 @@ class ChannelDB:
         return {r[0]: r[1] for r in rows}
 
 
+    def get_all_story_counts(self) -> dict:
+        """{channel_id: total saved story count}, live and expired alike."""
+        with self.get_db() as conn:
+            rows = conn.execute(
+                "SELECT channel_id, COUNT(*) FROM stories GROUP BY channel_id"
+            ).fetchall()
+        return {r[0]: r[1] for r in rows}
+
+
     def get_story_day_counts(self, channel_id: str) -> dict:
         """{'YYYY-MM-DD': story count} across all saved stories of a channel."""
         with self.get_db() as conn:

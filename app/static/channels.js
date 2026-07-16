@@ -235,6 +235,7 @@ function initChannelApp(cfg) {
     <div class="modal-header"     id="${P}ModalHeader"></div>
     <div class="modal-toolbar"    id="${P}ModalToolbar"></div>
     <div class="phist-panel"      id="${P}PhistPanel" style="display:none"></div>
+    <div class="stories-panel"    id="${P}StoriesPanel" style="display:none"></div>
     <div class="modal-video-list" id="${P}ModalVideoList"></div>
   </div>
 </div>`;
@@ -412,6 +413,8 @@ function initChannelApp(cfg) {
     gridId:       `${P}VideoGrid`,
     hasPhistBtn:  true,
     phistBtnFn:   `${P}OpenProfileHistory`,
+    storiesBtnFn: `${P}OpenStoriesPanel`,
+    storiesCount: () => (modalCreator && modalCreator.story_count) || 0,
     thumbCellFn:  _thumbCell,
     actionBtnsFn: _videoActionBtns,
     previewFn:    `${P}OpenImgModal`,
@@ -1342,6 +1345,7 @@ function initChannelApp(cfg) {
     phistField = new Set();
     phistChId  = null;
     _el('PhistPanel').style.display     = 'none';
+    _destroyStoriesPanel();
     _el('ModalVideoList').style.display = '';
 
     _el('ModalBackdrop').style.display = 'flex';
@@ -1558,6 +1562,7 @@ function initChannelApp(cfg) {
       return;
     }
 
+    _destroyStoriesPanel();
     vidList.style.display = 'none';
     panel.style.display   = '';
 
@@ -1580,6 +1585,104 @@ function initChannelApp(cfg) {
     phistData  = [];
     phistField = new Set();
   });
+
+  // ── Stories history calendar (Cal-Heatmap month intensity view) ───────────
+
+  let _storyCal = null;
+
+  function _destroyStoriesPanel() {
+    if (_storyCal) { try { _storyCal.destroy(); } catch { /* already gone */ } _storyCal = null; }
+    const panel = _el('StoriesPanel');
+    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+  }
+
+  X('OpenStoriesPanel', async () => {
+    if (!modalCreatorId) return;
+    const panel   = _el('StoriesPanel');
+    const vidList = _el('ModalVideoList');
+    if (!panel || !vidList) return;
+
+    if (panel.style.display !== 'none') {
+      window[`${P}CloseStoriesPanel`]();
+      return;
+    }
+
+    window[`${P}CloseProfileHistory`]();
+    vidList.style.display = 'none';
+    panel.style.display   = '';
+    panel.innerHTML       = '<div class="vlist-loading">Loading stories…</div>';
+
+    const chId = modalCreatorId;
+    const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(chId)}/stories/calendar`);
+    if (!ok || chId !== modalCreatorId) return;
+    _renderStoriesPanel(data || {});
+  });
+
+  X('CloseStoriesPanel', () => {
+    _destroyStoriesPanel();
+    const vidList = _el('ModalVideoList');
+    if (vidList) vidList.style.display = '';
+  });
+
+  X('StoriesCalStep', dir => {
+    if (!_storyCal) return;
+    if (dir < 0) _storyCal.previous();
+    else _storyCal.next();
+  });
+
+  X('PlayStoriesOfDay', async day => {
+    if (!modalCreatorId) return;
+    const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(modalCreatorId)}/stories`);
+    if (!ok) return;
+    const slides = (data || [])
+      .filter(s => s.posted_at && new Date(s.posted_at * 1000).toLocaleDateString('sv') === day)
+      .sort((a, b) => a.posted_at - b.posted_at)
+      .map(s => ({ url: s.url, type: s.content_type === 'photo' ? 'image' : 'video' }));
+    if (slides.length) openStorySlides(slides);
+  });
+
+  function _renderStoriesPanel(dayCounts) {
+    const panel = _el('StoriesPanel');
+    if (!panel) return;
+    if (typeof CalHeatmap === 'undefined') {
+      panel.innerHTML = '<div class="vlist-loading">Calendar library failed to load.</div>';
+      return;
+    }
+    const total = Object.values(dayCounts).reduce((a, b) => a + b, 0);
+    panel.innerHTML = `
+      <div class="stories-cal-hdr">
+        <span class="stories-cal-title">${total.toLocaleString()} ${total === 1 ? 'story' : 'stories'} saved · click a day to play it</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="filter-pill" onclick="${P}StoriesCalStep(-1)" title="Earlier months">←</button>
+          <button class="filter-pill" onclick="${P}StoriesCalStep(1)" title="Later months">→</button>
+          <button class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="${P}CloseStoriesPanel()">Back to ${ITEMS}</button>
+        </div>
+      </div>
+      <div class="stories-cal" id="${P}StoriesCal"></div>`;
+
+    let accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(accent)) accent = '#4f8ef7';
+    const source = Object.entries(dayCounts).map(([date, value]) => ({ date, value }));
+    const start  = new Date();
+    start.setDate(1);
+    start.setMonth(start.getMonth() - 3);
+
+    _storyCal = new CalHeatmap();
+    _storyCal.paint({
+      itemSelector: `#${P}StoriesCal`,
+      theme:     'dark',
+      domain:    { type: 'month', gutter: 14, label: { text: 'MMM YYYY', textAlign: 'start', position: 'top' } },
+      subDomain: { type: 'day', radius: 2, width: 13, height: 13, gutter: 3 },
+      date:      { start, highlight: [new Date()] },
+      range:     4,
+      data:      { source, x: 'date', y: 'value' },
+      scale:     { color: { type: 'threshold', domain: [1, 2, 4], range: [`${accent}44`, `${accent}88`, `${accent}bb`, accent] } },
+    });
+    _storyCal.on('click', (event, timestamp) => {
+      const day = new Date(timestamp).toLocaleDateString('sv');
+      if (dayCounts[day]) window[`${P}PlayStoriesOfDay`](day);
+    });
+  }
 
   const _PHIST_STATUS_LABELS = {
     active:              'Active',
