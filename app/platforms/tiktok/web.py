@@ -232,7 +232,15 @@ def register_tiktok_routes(bp, engine) -> None:
         README); the UI only offers the action when restart_available from
         the GET above is true. Stdlib HTTP over the unix socket, since
         requests cannot speak to one and the docker package would be a heavy
-        dependency for a single call."""
+        dependency for one route.
+
+        The Docker API only addresses containers by name or id, not by the
+        network alias the proxy URL uses, and the container name is
+        deployment-specific (compose defaults to project-gluetun-1, setups
+        with several gluetun stacks name them apart). So the right container
+        is found by resolving the gluetun DNS name on the shared network and
+        matching that IP against the running containers; exact name and a
+        lone compose service label are the fallbacks when DNS fails."""
         import http.client
         import socket as _socket
 
@@ -247,22 +255,53 @@ def register_tiktok_routes(bp, engine) -> None:
                 self.sock.settimeout(self.timeout)
                 self.sock.connect(_DOCKER_SOCK)
 
-        # t=5: Docker sends SIGTERM, waits up to 5 s, then kills. The request
-        # blocks until the container is up again, hence the generous timeout.
-        conn = _DockerSockConnection("localhost", timeout=30)
+        def docker_request(method, path):
+            conn = _DockerSockConnection("localhost", timeout=30)
+            try:
+                conn.request(method, path)
+                resp = conn.getresponse()
+                return resp.status, resp.read().decode("utf-8", errors="ignore")
+            finally:
+                conn.close()
+
         try:
-            conn.request("POST", "/containers/gluetun/restart?t=5")
-            resp = conn.getresponse()
-            status = resp.status
-            detail = resp.read().decode("utf-8", errors="ignore").strip()
+            try:
+                gluetun_ip = _socket.gethostbyname("gluetun")
+            except OSError:
+                gluetun_ip = None
+            status, body = docker_request("GET", "/containers/json")
+            if status != 200:
+                return jsonify({"error": f"Docker returned {status}: {body.strip()}"}), 502
+            containers = json.loads(body)
+
+            # The container the app actually talks to: the one holding the IP
+            # the gluetun DNS name resolves to on the shared network
+            target = None
+            for c in containers:
+                nets = (c.get("NetworkSettings") or {}).get("Networks") or {}
+                if gluetun_ip and any(n.get("IPAddress") == gluetun_ip for n in nets.values()):
+                    target = c["Id"]
+                    break
+            if not target:
+                by_name  = [c for c in containers if "/gluetun" in (c.get("Names") or [])]
+                by_label = [c for c in containers
+                            if (c.get("Labels") or {}).get("com.docker.compose.service") == "gluetun"]
+                if by_name:
+                    target = by_name[0]["Id"]
+                elif len(by_label) == 1:
+                    target = by_label[0]["Id"]
+            if not target:
+                return jsonify({"error": "Could not find a running gluetun container "
+                                "on a network shared with the app"}), 404
+
+            # t=5: Docker sends SIGTERM, waits up to 5 s, then kills. The
+            # request blocks until the container is up again, hence the
+            # generous connection timeout.
+            status, body = docker_request("POST", f"/containers/{target}/restart?t=5")
+            if status >= 300:
+                return jsonify({"error": f"Docker returned {status}: {body.strip()}"}), 502
         except Exception as e:
             return jsonify({"error": f"Docker API request failed: {type(e).__name__}: {e}"}), 502
-        finally:
-            conn.close()
-        if status == 404:
-            return jsonify({"error": "Docker has no container named gluetun"}), 404
-        if status >= 300:
-            return jsonify({"error": f"Docker returned {status}: {detail}"}), 502
         return jsonify({"ok": True})
 
     # Live view of the headed browser display: grab frames and inject mouse
