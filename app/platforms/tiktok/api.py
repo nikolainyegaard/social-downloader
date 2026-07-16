@@ -775,20 +775,116 @@ def parse_story_item(item: dict) -> dict | None:
     }
 
 
+async def _sniff_music_item_list(page, sound_id: str,
+                                 max_count: int = 3000) -> tuple[list[str], bool]:
+    """Drive the music page and capture the /api/music/item_list/ responses
+    TikTok's own frontend requests while scrolling. No library-built API
+    calls: the page JS does all the signing itself, so TikTok answers these
+    even while constructed requests get empty bodies. (The music page's
+    rehydration blob carries no item list, so there is nothing to read the
+    way the profile page read does; sniffing is the page-level equivalent.)
+
+    Returns (video_ids, complete). complete is True when the listing reached
+    its natural end or max_count. The end signal is an item_list page with no
+    items: TikTok's hasMore flag stays true on that final empty page (verified
+    against a live sound), so it cannot be trusted; the page's own frontend
+    also stops requesting only after the empty page. An incomplete listing
+    must never feed the caller's deletion tracking, which would read every
+    unseen association as a missing video, so the caller treats it as a
+    failure.
+    """
+    ids:  list[str] = []
+    seen: set[str]  = set()
+    state = {"exhausted": False, "responses": 0}
+
+    async def on_response(resp):
+        if "/api/music/item_list/" not in resp.url:
+            return
+        try:
+            data = await resp.json()
+        except Exception:
+            return
+        if data.get("statusCode") not in (0, None):
+            return
+        state["responses"] += 1
+        items = data.get("itemList") or []
+        if not items or not data.get("hasMore"):
+            state["exhausted"] = True
+        for item in items:
+            vid = str(item.get("id") or "")
+            if vid and vid not in seen:
+                seen.add(vid)
+                ids.append(vid)
+
+    page.on("response", on_response)
+    try:
+        await page.goto(f"https://www.tiktok.com/music/x-{sound_id}",
+                        wait_until="domcontentloaded")
+        # Wheel events land on the element under the cursor, and the video
+        # grid is an inner scroll container: at the default (0, 0) the wheel
+        # hits the fixed sidebar and nothing scrolls. Park the mouse over
+        # the grid first.
+        await page.mouse.move(700, 420)
+        # The page requests its first item_list page on its own; scrolling
+        # pulls the rest. Stop at the natural end, the cap, or after ~8
+        # quiet seconds without a new response (wall, layout change, or the
+        # grid simply refusing to grow).
+        idle_rounds   = 0
+        last_progress = (-1, -1)
+        for _ in range(400):
+            await asyncio.sleep(random.uniform(1.2, 2.0))
+            progress = (state["responses"], len(ids))
+            if progress == last_progress:
+                idle_rounds += 1
+                if idle_rounds >= 5:
+                    break
+            else:
+                idle_rounds     = 0
+                last_progress   = progress
+            if state["exhausted"] or len(ids) >= max_count:
+                break
+            await page.mouse.wheel(0, random.randint(900, 1600))
+    finally:
+        page.remove_listener("response", on_response)
+
+    complete = state["exhausted"] or len(ids) >= max_count
+    return ids[:max_count], complete
+
+
 async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
                                 cookies_flat: dict | None = None) -> list[str]:
-    """Fetch all video IDs that use a given TikTok sound.
-    Returns a list of video ID strings (up to ~3000).
+    """Fetch all video IDs that use a given TikTok sound (up to ~3000).
     Opens its own TikTokApi session.
+
+    Primary path: load the music page in the session's browser and sniff the
+    item_list responses the page itself requests while scrolling.
+
+    Fallback path: the old TikTokApi sound.videos() endpoint, kept so the
+    code self-heals if TikTok starts answering constructed requests again.
+
+    Raises when neither source yields a complete listing: a truncated result
+    must not reach the caller, whose deletion tracking reads every unseen
+    association as a missing video.
     """
     from TikTokApi import TikTokApi
 
-    video_ids: list[str] = []
     async with TikTokApi() as api:
         await create_tiktok_session(api, ms_token, cookies_flat)
-        async for video in api.sound(id=sound_id).videos(count=3000):
-            video_ids.append(str(video.id))
-    return video_ids
+        ids, complete = await _sniff_music_item_list(api.sessions[0].page, sound_id)
+        if complete:
+            return ids
+        try:
+            video_ids: list[str] = []
+            async for video in api.sound(id=sound_id).videos(count=3000):
+                video_ids.append(str(video.id))
+            return video_ids
+        except Exception as exc:
+            if ids:
+                raise RuntimeError(
+                    f"music page listing stalled at {len(ids)} video(s) with "
+                    f"more remaining, and the JSON endpoint fallback failed: {exc}"
+                ) from exc
+            raise
 
 
 def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
