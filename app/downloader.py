@@ -39,7 +39,8 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
                    upload_date: int, download_date: int,
                    platform: str = "tiktok",
                    url: str | None = None,
-                   cookies_path: str | None = None) -> dict | None:
+                   cookies_path: str | None = None,
+                   proxy: str | None = None) -> dict | None:
     """
     Download a video using yt-dlp and embed metadata into the file.
     Returns {'file_path': ..., 'ytdlp_data': ...} on success, None on failure.
@@ -69,6 +70,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
         "retries":        3,
         "quiet":          True,
         "no_warnings":    False,
+        **({"proxy": proxy} if proxy else {}),
         **({"cookiefile": cookies_path} if cookies_path and os.path.exists(cookies_path) else {}),
         "postprocessors": [
             {"key": "FFmpegMetadata", "add_metadata": True},
@@ -168,7 +170,8 @@ def _load_cookies(cookies_path: str) -> dict[str, str]:
 def download_photos(*, video_id: str, username: str,
                     image_urls: list[str], upload_date: int,
                     platform: str = "tiktok",
-                    cookies_path: str | None = None) -> str | None:
+                    cookies_path: str | None = None,
+                    proxy: str | None = None) -> str | None:
     """
     Download each image from a TikTok photo post directly.
     Files are saved as {video_id}_01.jpg, {video_id}_02.jpg, ...
@@ -178,6 +181,7 @@ def download_photos(*, video_id: str, username: str,
     os.makedirs(author_folder, exist_ok=True)
 
     cookies    = _load_cookies(cookies_path) if cookies_path else {}
+    proxies    = {"http": proxy, "https": proxy} if proxy else None
     first_path: str | None = None
     total      = len(image_urls)
 
@@ -185,7 +189,7 @@ def download_photos(*, video_id: str, username: str,
         jpg_path  = os.path.join(author_folder, f"{video_id}_{i:02d}.jpg")
         avif_path = os.path.join(author_folder, f"{video_id}_{i:02d}.avif")
         try:
-            resp = requests.get(url, cookies=cookies, timeout=30)
+            resp = requests.get(url, cookies=cookies, proxies=proxies, timeout=30)
             resp.raise_for_status()
             with open(jpg_path, "wb") as f:
                 f.write(resp.content)
@@ -216,7 +220,8 @@ def download_photos(*, video_id: str, username: str,
 def download_story(*, story_id: str, username: str, platform: str,
                    media_url: str, content_type: str, posted_at: int | None,
                    cookies_path: str | None = None,
-                   headers: dict | None = None) -> str | None:
+                   headers: dict | None = None,
+                   proxy: str | None = None) -> str | None:
     """
     Download one story item (video or image) into the creator's stories folder.
 
@@ -233,7 +238,9 @@ def download_story(*, story_id: str, username: str, platform: str,
     cookies = _load_cookies(cookies_path) if cookies_path else {}
 
     try:
-        resp = requests.get(media_url, cookies=cookies, headers=headers or {}, timeout=60)
+        resp = requests.get(media_url, cookies=cookies, headers=headers or {},
+                            proxies={"http": proxy, "https": proxy} if proxy else None,
+                            timeout=60)
         resp.raise_for_status()
     except Exception as e:
         print(f"[{_ts()}] Failed to download story {story_id}: {e}")

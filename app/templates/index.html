@@ -101,6 +101,25 @@
             </div>
             <button class="btn-sm" id="ttViewerBtn" onclick="ttViewerOpen()">Open browser view</button>
           </div>
+          <div class="settings-group">
+            <span class="settings-label">VPN proxy</span>
+            <div class="settings-note">
+              Routes all TikTok traffic (the browser, page fetches, and downloads)
+              through an HTTP proxy, for example a gluetun VPN container on the same
+              Docker network. Useful when TikTok rate limits your own IP. Applies from
+              the next browser session, no restart needed. See the README for a
+              gluetun example.
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:500px">
+              <input type="text" id="ttProxyUrl" class="text-input" style="flex:1;min-width:220px" placeholder="http://gluetun:8888" autocomplete="off" spellcheck="false">
+              <button class="btn-sm" id="ttProxySaveBtn" onclick="ttProxySave()">Save</button>
+            </div>
+            <label style="display:flex;align-items:center;gap:10px;margin-top:10px;cursor:pointer">
+              <input type="checkbox" id="ttProxyEnabled" style="accent-color:var(--accent);width:16px;height:16px" onchange="ttProxyToggle()">
+              <span style="font-size:13px">Route TikTok through the proxy</span>
+            </label>
+            <div class="settings-note" id="ttProxyStatus" style="display:none;margin-top:8px"></div>
+          </div>
         </div>
 
         <div id="accounts-twitter" style="display:none">

@@ -92,6 +92,31 @@ def register_tiktok_routes(bp, engine) -> None:
             return jsonify({"error": msg}), 409
         return jsonify({"ok": True, "message": msg})
 
+    # Proxy routing: all TikTok traffic (browser, page fetches, downloads) can
+    # go through an HTTP proxy, e.g. a gluetun VPN container. See the README.
+    _PROXY_ENV = os.environ.get("TIKTOK_PROXY", "")
+
+    @bp.route("/proxy", methods=["GET"])
+    def tiktok_proxy_get():
+        return jsonify({
+            "url":     db.get_setting("proxy_url", _PROXY_ENV) or "",
+            "enabled": db.get_setting("proxy_enabled", "1" if _PROXY_ENV else "0") == "1",
+        })
+
+    @bp.route("/proxy", methods=["PATCH"])
+    def tiktok_proxy_set():
+        body = request.get_json(silent=True) or {}
+        if "url" in body:
+            url = str(body["url"]).strip()
+            if url and not url.startswith(("http://", "https://", "socks5://")):
+                return jsonify({"error": "The proxy URL must start with http://, https://, or socks5://"}), 400
+            db.set_setting("proxy_url", url)
+        if body.get("enabled") and not (db.get_setting("proxy_url", _PROXY_ENV) or "").strip():
+            return jsonify({"error": "Set a proxy URL before enabling routing"}), 400
+        if "enabled" in body:
+            db.set_setting("proxy_enabled", "1" if body["enabled"] else "0")
+        return jsonify({"ok": True})
+
     # Live view of the headed browser display: grab frames and inject mouse
     # input so the user can solve a captcha or verification wall in the UI
     from platforms.tiktok import screen as browser_screen

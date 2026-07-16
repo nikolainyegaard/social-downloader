@@ -28,6 +28,26 @@ STATS_REFRESH_DAYS        = int(os.environ.get("TIKTOK_STATS_REFRESH_DAYS", 7))
 SESSION_GAP_MEAN_SECS     = int(os.environ.get("TIKTOK_SESSION_GAP_MEAN_SECS", 90))
 
 
+def get_proxy() -> str | None:
+    """URL of the proxy all TikTok traffic routes through, or None when off.
+
+    Toggle and URL live in the TikTok DB settings (Settings > Accounts >
+    TikTok); the TIKTOK_PROXY env var seeds the URL and enables routing until
+    the UI writes its own values. Read per use, so a toggle applies from the
+    next browser session or request without a restart.
+    """
+    env_url = os.environ.get("TIKTOK_PROXY", "")
+    try:
+        # Lazy import: the registry imports this module while building engines
+        from platforms.registry import ENGINES
+        db = ENGINES["tiktok"].db
+        enabled = db.get_setting("proxy_enabled", "1" if env_url else "0")
+        url = db.get_setting("proxy_url", env_url) or ""
+    except Exception:
+        enabled, url = ("1" if env_url else "0"), env_url
+    return (url.strip() or None) if enabled == "1" else None
+
+
 def get_ms_token() -> str | None:
     """
     Return the msToken value for TikTokApi sessions.

@@ -10,7 +10,7 @@ import time
 from typing import Callable
 
 from platforms.tiktok.config import (
-    get_ms_token, get_cookies_flat, COOKIES_PATH,
+    get_ms_token, get_cookies_flat, get_proxy, COOKIES_PATH,
     SESSION_GAP_MEAN_SECS,
     HIGH_PRIORITY_CHECK_HOURS, ACTIVE_CHECK_HOURS,
 )
@@ -99,7 +99,8 @@ async def _check_user_stories(user: dict, api, username: str,
         return
     try:
         save_new_stories(db, "tiktok", channel_id, username, stories, log,
-                         cookies_path=COOKIES_PATH if os.path.exists(COOKIES_PATH) else None)
+                         cookies_path=COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
+                         proxy=get_proxy())
     except Exception as e:
         logd(f"  [{channel_id}] story save error: {e}")
 
@@ -478,6 +479,7 @@ async def process_single_user(
                     upload_date=details["upload_date"],
                     platform="tiktok",
                     cookies_path=COOKIES_PATH,
+                    proxy=get_proxy(),
                 )
                 if path:
                     thumb = generate_thumbnail(vid_id, path)
@@ -496,6 +498,7 @@ async def process_single_user(
                     download_date=int(time.time()),
                     platform="tiktok",
                     cookies_path=COOKIES_PATH,
+                    proxy=get_proxy(),
                 )
             _audio_only = isinstance(dl_result, dict) and dl_result.get("audio_only")
             if dl_result and not _audio_only:
@@ -969,6 +972,7 @@ def save_video_by_id(vid_id: str, cookies, log: Callable[[str], None]) -> str | 
             upload_date=details["upload_date"],
             platform="tiktok",
             cookies_path=COOKIES_PATH,
+            proxy=get_proxy(),
         )
         if path:
             thumb = generate_thumbnail(vid_id, path)
@@ -987,6 +991,7 @@ def save_video_by_id(vid_id: str, cookies, log: Callable[[str], None]) -> str | 
             download_date=int(time.time()),
             platform="tiktok",
             cookies_path=COOKIES_PATH,
+            proxy=get_proxy(),
         )
 
     _audio_only = isinstance(dl_result, dict) and dl_result.get("audio_only")

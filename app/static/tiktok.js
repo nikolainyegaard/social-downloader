@@ -153,6 +153,44 @@ document.addEventListener('DOMContentLoaded', () => {
   }, true);
 });
 
+// ── VPN proxy ─────────────────────────────────────────────────────────────────
+// Settings > Accounts > TikTok: route all TikTok traffic through an HTTP proxy
+// (e.g. a gluetun VPN container). URL and toggle persist in the TikTok settings.
+
+async function ttProxyLoad() {
+  const { ok, data } = await apiJSON('/api/tiktok/proxy');
+  if (!ok) return;
+  document.getElementById('ttProxyUrl').value       = data.url || '';
+  document.getElementById('ttProxyEnabled').checked = !!data.enabled;
+}
+
+function _ttProxyStatus(msg, isError) {
+  const el = document.getElementById('ttProxyStatus');
+  el.style.display = msg ? '' : 'none';
+  el.textContent   = msg || '';
+  el.style.color   = isError ? 'var(--red)' : 'var(--green)';
+}
+
+async function ttProxySave() {
+  const url = document.getElementById('ttProxyUrl').value.trim();
+  const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ url }) });
+  if (!ok) { _ttProxyStatus((data && data.error) || 'Could not save the proxy URL', true); return; }
+  _ttProxyStatus('Saved. Takes effect from the next browser session.', false);
+}
+
+async function ttProxyToggle() {
+  const box     = document.getElementById('ttProxyEnabled');
+  const enabled = box.checked;
+  const { ok, data } = await apiJSON('/api/tiktok/proxy', { method: 'PATCH', body: JSON.stringify({ enabled }) });
+  if (!ok) {
+    box.checked = !enabled;
+    _ttProxyStatus((data && data.error) || 'Could not change proxy routing', true);
+    return;
+  }
+  _ttProxyStatus(enabled ? 'Proxy routing is on for all TikTok traffic.'
+                         : 'Proxy routing is off. TikTok uses the server\'s own IP.', false);
+}
+
 // ── Sounds state ──────────────────────────────────────────────────────────────
 
 let sounds          = [];
@@ -989,7 +1027,7 @@ function switchSettingsSection(name) {
   // The global platform selector applies to every section except Access
   const ptabs = document.getElementById('settingsPlatformTabs');
   if (ptabs) ptabs.style.display = name === 'access' ? 'none' : '';
-  if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); }
+  if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); ttProxyLoad(); }
   if (name === 'schedules') { loadSettings(); loadYtSettings(); _scheduleSettingsLoad('twitter', 'twSettings'); _scheduleSettingsLoad('instagram', 'igSettings'); }
   if (name === 'access')    { loadAuthSettings(); }
   if (name === 'jobs')      { _avifLoadStatus(); _startJobsPoll(); }

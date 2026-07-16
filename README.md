@@ -105,6 +105,33 @@ If TikTok serves a rotate captcha or a verification wall, you can solve it by ha
 
 The viewer rides the app's own web interface, so it needs no extra port and is protected by whatever authentication you already have in front of the app. It refreshes a few times a second rather than at full video rate, which is fine for the slow deliberate drag a captcha needs.
 
+### Routing TikTok through a VPN (gluetun)
+
+If TikTok rate limits or flags your server's IP, all TikTok traffic (the browser, page fetches, and downloads) can be routed through an HTTP proxy while the rest of the app, including the web UI and the other platforms, stays on your normal connection. Set the proxy URL in **Settings > Accounts > TikTok > VPN proxy** and flip the toggle; it applies from the next browser session with no restart. The `TIKTOK_PROXY` env var seeds the same setting for fresh installs.
+
+The intended pairing is a [gluetun](https://github.com/qdm12/gluetun) container with its built-in HTTP proxy enabled, on the same Docker network as the app:
+
+```yaml
+services:
+  gluetun:
+    image: qmcgaw/gluetun:v3.40
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - ./gluetun:/gluetun
+    environment:
+      - VPN_SERVICE_PROVIDER=custom
+      - VPN_TYPE=wireguard
+      - HTTPPROXY=on
+    restart: unless-stopped
+```
+
+With that service in the app's docker-compose.yml (or both containers on one shared network), the proxy URL is `http://gluetun:8888`. The proxy port never needs to be published on the host; the app reaches it over the Docker network.
+
+Two caveats. VPN exit IPs are datacenter IPs, which TikTok tends to score worse than residential ones, so treat this as an escape hatch for a flagged home IP rather than a default. And the proxy changes what IP TikTok sees for an existing session, so expect extra scrutiny right after toggling; pairing a proxy change with **Reset session** and a fresh QR sign-in gives the new IP a clean identity.
+
 X/Twitter requires a `cookies.txt` from a logged-in x.com session (must include `auth_token` and `ct0`), uploaded from the **Settings > Twitter** cookies panel. Profile lookups work without it, but timelines and downloads do not.
 
 Instagram uses a username/password login from the **Settings > Instagram** panel instead of a cookies file; only the resulting session cookie is stored, never the password.

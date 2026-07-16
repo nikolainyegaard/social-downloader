@@ -47,8 +47,10 @@ def _profile_context_factory():
         _PROFILE_LOCK.release()
 
     async def factory(playwright):
+        from platforms.tiktok.config import get_proxy
         profile = _profile_dir()
         os.makedirs(profile, exist_ok=True)
+        proxy = get_proxy()
         context = await playwright.chromium.launch_persistent_context(
             profile,
             # Headed on a display, otherwise Chrome's new headless mode via
@@ -56,6 +58,7 @@ def _profile_context_factory():
             headless=False,
             args=[] if _headed() else ["--headless=new"],
             executable_path=CHROME_EXECUTABLE,
+            **({"proxy": {"server": proxy}} if proxy else {}),
         )
         context.on("close", lambda _ctx: release())
         return context
@@ -153,7 +156,7 @@ async def create_tiktok_session(api, ms_token: str | None = None,
     (an add lookup or diagnostics probe while a loop runs) fall back to the old
     ephemeral context so they never fail on the profile lock.
     """
-    from platforms.tiktok.config import CHROME_EXECUTABLE
+    from platforms.tiktok.config import CHROME_EXECUTABLE, get_proxy
 
     factory, release = _profile_context_factory()
     kwargs = dict(
@@ -163,10 +166,14 @@ async def create_tiktok_session(api, ms_token: str | None = None,
         cookies=[cookies] if cookies else None,
     )
     if factory:
+        # The factory launches with the proxy itself (persistent context)
         kwargs["browser_context_factory"] = factory
     else:
         kwargs["executable_path"] = CHROME_EXECUTABLE
         kwargs["headless"] = not _headed()
+        proxy = get_proxy()
+        if proxy:
+            kwargs["context_options"] = {"proxy": {"server": proxy}}
     if _patchright_active():
         kwargs["page_factory"] = _plain_page
     kwargs.update(overrides)
@@ -381,6 +388,7 @@ def get_user_videos(tiktok_id: str, sec_uid: str | None = None,
     Returns [{video_id, description, upload_date}].
     """
     import yt_dlp
+    from platforms.tiktok.config import get_proxy
 
     ydl_opts = {
         "quiet":        True,
@@ -389,6 +397,9 @@ def get_user_videos(tiktok_id: str, sec_uid: str | None = None,
     }
     if cookies_path:
         ydl_opts["cookiefile"] = cookies_path
+    proxy = get_proxy()
+    if proxy:
+        ydl_opts["proxy"] = proxy
 
     # sec_uid is the "channel_id" in yt-dlp terms. Using it directly avoids the
     # "Unable to extract secondary user ID" error yt-dlp raises when it can't
@@ -631,8 +642,10 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
     Returns {type, description, upload_date, image_urls}.
     """
     from curl_cffi import requests as curl_requests
+    from platforms.tiktok.config import get_proxy
 
     url = f"https://www.tiktok.com/@{username}/video/{video_id}"
+    proxy = get_proxy()
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -646,6 +659,7 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
     resp = curl_requests.get(
         url, headers=headers, cookies=cookies,
         impersonate="chrome120", timeout=30,
+        **({"proxies": {"http": proxy, "https": proxy}} if proxy else {}),
     )
 
     if resp.status_code != 200:
