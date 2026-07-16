@@ -239,8 +239,12 @@ def register_tiktok_routes(bp, engine) -> None:
         deployment-specific (compose defaults to project-gluetun-1, setups
         with several gluetun stacks name them apart). So the right container
         is found by resolving the gluetun DNS name on the shared network and
-        matching that IP against the running containers; exact name and a
-        lone compose service label are the fallbacks when DNS fails."""
+        matching that IP against the running containers. DNS fails exactly
+        when the restart is most needed, though: a gluetun crash-looping on a
+        bad config has no network presence. The fallback therefore searches
+        all containers (any state) for the compose service label or literal
+        name gluetun, narrowed to this container's own networks and compose
+        project so another stack's gluetun is never the one restarted."""
         import http.client
         import socket as _socket
 
@@ -264,12 +268,15 @@ def register_tiktok_routes(bp, engine) -> None:
             finally:
                 conn.close()
 
+        def networks_of(c):
+            return set(((c.get("NetworkSettings") or {}).get("Networks") or {}).keys())
+
         try:
             try:
                 gluetun_ip = _socket.gethostbyname("gluetun")
             except OSError:
                 gluetun_ip = None
-            status, body = docker_request("GET", "/containers/json")
+            status, body = docker_request("GET", "/containers/json?all=true")
             if status != 200:
                 return jsonify({"error": f"Docker returned {status}: {body.strip()}"}), 502
             containers = json.loads(body)
@@ -277,22 +284,48 @@ def register_tiktok_routes(bp, engine) -> None:
             # The container the app actually talks to: the one holding the IP
             # the gluetun DNS name resolves to on the shared network
             target = None
-            for c in containers:
-                nets = (c.get("NetworkSettings") or {}).get("Networks") or {}
-                if gluetun_ip and any(n.get("IPAddress") == gluetun_ip for n in nets.values()):
-                    target = c["Id"]
-                    break
+            if gluetun_ip:
+                for c in containers:
+                    nets = (c.get("NetworkSettings") or {}).get("Networks") or {}
+                    if any(n.get("IPAddress") == gluetun_ip for n in nets.values()):
+                        target = c["Id"]
+                        break
+
             if not target:
-                by_name  = [c for c in containers if "/gluetun" in (c.get("Names") or [])]
-                by_label = [c for c in containers
-                            if (c.get("Labels") or {}).get("com.docker.compose.service") == "gluetun"]
-                if by_name:
-                    target = by_name[0]["Id"]
-                elif len(by_label) == 1:
-                    target = by_label[0]["Id"]
+                cands = [c for c in containers
+                         if "/gluetun" in (c.get("Names") or [])
+                         or (c.get("Labels") or {}).get("com.docker.compose.service") == "gluetun"]
+                # Narrow multiple matches using this container's own networks
+                # and compose project (best effort: the default hostname is
+                # the container id, so Docker can tell us who we are)
+                self_networks, self_project = set(), None
+                try:
+                    status, body = docker_request("GET", f"/containers/{_socket.gethostname()}/json")
+                    if status == 200:
+                        me = json.loads(body)
+                        self_networks = networks_of(me)
+                        self_project = ((me.get("Config") or {}).get("Labels") or {}).get(
+                            "com.docker.compose.project")
+                except Exception:
+                    pass
+                if self_networks:
+                    # Ours has to share a network with us, whatever its state;
+                    # a candidate that does not belongs to some other stack
+                    cands = [c for c in cands if networks_of(c) & self_networks]
+                if len(cands) > 1 and self_project:
+                    scoped = [c for c in cands
+                              if (c.get("Labels") or {}).get("com.docker.compose.project") == self_project]
+                    cands = scoped or cands
+                if len(cands) == 1:
+                    target = cands[0]["Id"]
+                elif len(cands) > 1:
+                    names = ", ".join((c.get("Names") or ["?"])[0].lstrip("/") for c in cands)
+                    return jsonify({"error": f"Several gluetun containers match ({names}) and "
+                                    "none could be tied to this app; restart yours by hand"}), 409
             if not target:
-                return jsonify({"error": "Could not find a running gluetun container "
-                                "on a network shared with the app"}), 404
+                return jsonify({"error": "No gluetun container found on this app's Docker "
+                                "networks; check that the gluetun service is defined next to "
+                                "the app and see its state with docker ps -a"}), 404
 
             # t=5: Docker sends SIGTERM, waits up to 5 s, then kills. The
             # request blocks until the container is up again, hence the
