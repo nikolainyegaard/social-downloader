@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+from datetime import timezone
 from typing import Generator
 
 import instaloader
@@ -120,6 +121,49 @@ def iter_profile_posts(user_id: str) -> Generator[tuple[dict, object], None, Non
             "view_count":   post.video_view_count if post.is_video else None,
             "content_type": "video" if post.is_video else "image",
         }, post
+
+
+def _story_item_to_dict(item) -> dict | None:
+    """Map an instaloader StoryItem to the engine story dict contract.
+    Returns None when the item carries no downloadable media URL."""
+    def _utc_ts(dt):
+        try:
+            return int(dt.replace(tzinfo=timezone.utc).timestamp())
+        except Exception:
+            return None
+
+    posted_at  = _utc_ts(item.date_utc) if getattr(item, "date_utc", None) else None
+    exp        = getattr(item, "expiring_utc", None)
+    expires_at = _utc_ts(exp) if exp is not None else None
+    if expires_at is None and posted_at:
+        expires_at = posted_at + 24 * 3600
+
+    media_url = item.video_url if item.is_video else item.url
+    if not media_url:
+        return None
+    return {
+        "story_id":     str(item.mediaid),
+        "content_type": "video" if item.is_video else "photo",
+        "posted_at":    posted_at,
+        "expires_at":   expires_at,
+        "media_url":    media_url,
+    }
+
+
+def fetch_stories(user_id: str) -> list[dict]:
+    """Currently live stories of a profile, mapped to the engine story
+    contract. Requires the logged-in session: instaloader refuses story
+    access anonymously, so without one this returns [] instead of raising
+    on every check."""
+    if not _L.context.is_logged_in:
+        return []
+    stories: list[dict] = []
+    for story in _L.get_stories(userids=[int(user_id)]):
+        for item in story.get_items():
+            d = _story_item_to_dict(item)
+            if d:
+                stories.append(d)
+    return stories
 
 
 def download_post_media(post, dest_dir: str) -> str | None:

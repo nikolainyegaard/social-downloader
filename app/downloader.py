@@ -244,10 +244,11 @@ def download_story(*, story_id: str, username: str, platform: str,
         cookies = _load_cookies(cookies_path) if cookies_path else {}
 
     # TikTok's story CDN often 403s a plain library client; a browser-shaped
-    # request with a Referer gets through (same treatment as the page scrapes)
+    # request with a Referer gets through (same treatment as the page scrapes).
+    # Other platforms' story CDNs get no cross-site Referer.
     _headers = {
-        "Referer":         "https://www.tiktok.com/",
         "Accept-Language": "en-US,en;q=0.9",
+        **({"Referer": "https://www.tiktok.com/"} if platform == "tiktok" else {}),
         **(headers or {}),
     }
 

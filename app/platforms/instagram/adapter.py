@@ -40,6 +40,10 @@ def _download_item(engine, channel_id, handle, display_name, vid_id, post, raw_p
         log(f"  Failed to download {vid_id} (recorded in DB)")
 
 
+def _fetch_stories(engine, channel) -> list[dict]:
+    return api.fetch_stories(channel["channel_id"])
+
+
 def _register_extra_routes(bp, engine) -> None:
     import instaloader
     from flask import jsonify, request
@@ -103,6 +107,8 @@ instagram_adapter = ChannelAdapter(
     item_noun="post",
     quick_limit=30,
     has_banner=False,
+    has_stories=True,
+    fetch_stories=_fetch_stories,
     normalize_handle=api.normalize_handle,
     lookup_profile=api.fetch_profile_info,
     fetch_profile=_fetch_profile,
