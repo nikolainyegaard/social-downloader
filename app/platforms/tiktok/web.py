@@ -591,7 +591,7 @@ def register_tiktok_routes(bp, engine) -> None:
 
     def _story_repair_redownload() -> None:
         from engine.tracker import scan_afflicted_stories
-        from platforms.tiktok.tracker import redownload_story_row
+        from platforms.tiktok.tracker import recover_story_rows
         with _story_repair_lock:
             if _story_repair_state["running"]:
                 return
@@ -609,15 +609,14 @@ def register_tiktok_routes(bp, engine) -> None:
                     "missing":    sum(1 for r in afflicted if r["ailment"] == "missing"),
                     "live_video": len(live_video), "live_photo": live_photo, "expired": expired,
                 })
-            recovered = failing = 0
-            for r in live_video:
-                if redownload_story_row(db, r, log=lambda m: print(f"[story-recovery]{m}")):
-                    recovered += 1
-                else:
-                    failing += 1
+
+            def _progress(recovered: int, failing: int) -> None:
                 with _story_repair_lock:
                     _story_repair_state.update({"recovered": recovered, "still_failing": failing})
-                time.sleep(2)
+
+            recovered, failing = recover_story_rows(
+                db, live_video, log=lambda m: print(f"[story-recovery]{m}"),
+                on_progress=_progress)
             print(f"[story-recovery] Re-download done: {recovered} recovered, {failing} failed, "
                   f"{expired} expired.")
         except Exception as e:
