@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 from yt_dlp.utils import DownloadError
 
-from config import MEDIA_DIR, _ts
+from config import MEDIA_DIR, DATA_DIR, _ts
 from thumbnailer import generate_thumbnail
 from photo_converter import encode_avif, CRF_PHOTO
 
@@ -223,6 +223,44 @@ class StoryDownloadError(Exception):
     fit for the UI log; per-candidate detail goes to the run log."""
 
 
+_STORY_QUARANTINE_DIR = os.path.join(DATA_DIR, "story_debug")
+_STORY_QUARANTINE_KEEP = 60
+
+
+def _quarantine_story(story_id: str, kind: str, data: bytes, trace: dict) -> None:
+    """Preserve a rejected story download plus a full context trace instead of
+    deleting it, so a real corrupt sample can be inspected and sent for
+    diagnosis rather than reasoned about from source. Bounded to the last
+    _STORY_QUARANTINE_KEEP files so it cannot grow without limit. Best-effort:
+    a failure here never affects the download flow."""
+    try:
+        os.makedirs(_STORY_QUARANTINE_DIR, exist_ok=True)
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        base  = os.path.join(_STORY_QUARANTINE_DIR, f"{stamp}_{kind}_{story_id}")
+        trace = {
+            **trace,
+            "story_id": story_id, "kind": kind,
+            "bytes": len(data),
+            "magic": data[:16].hex(),
+            "head":  data[:200].decode("latin-1", "replace"),
+        }
+        with open(base + ".bin", "wb") as f:
+            f.write(data[:2_000_000])  # cap: the header is all we need to classify
+        with open(base + ".json", "w") as f:
+            json.dump(trace, f, indent=2, default=str)
+        files = sorted(
+            f for f in os.listdir(_STORY_QUARANTINE_DIR) if f.endswith((".bin", ".json"))
+        )
+        while len(files) > _STORY_QUARANTINE_KEEP * 2:
+            try:
+                os.remove(os.path.join(_STORY_QUARANTINE_DIR, files.pop(0)))
+            except OSError:
+                break
+        print(f"[{_ts()}] Story {story_id} quarantined a rejected {kind} download to {base}.bin")
+    except Exception as e:
+        print(f"[{_ts()}] Story {story_id} quarantine failed: {type(e).__name__}: {e}")
+
+
 def _probe_media_file(path: str) -> str | None:
     """ffprobe gate for downloaded story videos. Returns None when the file is
     a valid, decodable video, or a short reason string when it is not. TikTok's
@@ -290,6 +328,14 @@ def _download_story_via_ytdlp(*, story_id: str, page_url: str, stories_dir: str,
                 kb = os.path.getsize(path) // 1024
                 print(f"[{_ts()}] Story {story_id} yt-dlp produced an invalid file "
                       f"({kb} KB, {reason}), discarding and falling back to CDN")
+                try:
+                    with open(path, "rb") as f:
+                        _quarantine_story(story_id, "ytdlp", f.read(), {
+                            "page_url": page_url, "ext": ext, "reason": reason,
+                            "size_bytes": os.path.getsize(path), "proxy": bool(proxy),
+                        })
+                except OSError:
+                    pass
                 try:
                     os.remove(path)
                 except OSError:
@@ -369,20 +415,51 @@ def download_story(*, story_id: str, username: str, platform: str,
                 **({"proxies": {"http": proxy, "https": proxy}} if proxy else {}),
             )
         except Exception as e:
+            # curl raises IncompleteRead when a declared Content-Length is not
+            # fully delivered: the clearest possible truncation signal, so
+            # record it with the same trace as the other rejections.
             last_reason = type(e).__name__
             print(f"[{_ts()}] Story {story_id} candidate {i}/{len(candidates)} ({host}): "
                   f"{type(e).__name__}: {e} ({cookie_note})")
+            _quarantine_story(story_id, "cdn", b"", {
+                "candidate": f"{i}/{len(candidates)}", "host": host, "url": url,
+                "reason": f"transfer error: {type(e).__name__}", "error_detail": str(e),
+                "cookies": sorted(cookies), "proxy": bool(proxy),
+            })
             continue
+        # Content-Length vs bytes actually received bisects the failure: a
+        # short read is a transfer truncated mid-stream (network, proxy,
+        # timeout); a full read that still will not decode is the CDN serving
+        # genuinely bad bytes (or a non-video error page).
+        clen = r.headers.get("Content-Length") or r.headers.get("content-length")
+        got  = len(r.content or b"")
+        try:
+            clen_int = int(clen) if clen is not None else None
+        except ValueError:
+            clen_int = None
+        xfer = ("short read" if clen_int and got < clen_int
+                else "size ok" if clen_int else "no content-length")
+        transfer_note = f"CL={clen or '?'} got={got} ({xfer})"
+
+        def _quarantine(reason):
+            _quarantine_story(story_id, "cdn", r.content or b"", {
+                "candidate": f"{i}/{len(candidates)}", "host": host, "url": url,
+                "http_status": r.status_code, "reason": reason,
+                "content_length": clen, "content_type_header": r.headers.get("Content-Type"),
+                "transfer": xfer, "cookies": sorted(cookies), "proxy": bool(proxy),
+            })
+
         if r.status_code != 200:
             last_reason = f"HTTP {r.status_code}"
             body_head = (r.content or b"")[:120]
             print(f"[{_ts()}] Story {story_id} candidate {i}/{len(candidates)} ({host}): "
                   f"HTTP {r.status_code}, body {body_head!r} ({cookie_note})")
+            _quarantine(f"HTTP {r.status_code}")
             continue
         if not r.content:
             last_reason = "empty body"
             print(f"[{_ts()}] Story {story_id} candidate {i}/{len(candidates)} ({host}): "
-                  f"HTTP 200 with empty body ({cookie_note})")
+                  f"HTTP 200 with empty body, {transfer_note} ({cookie_note})")
             continue
         if content_type != "photo":
             # A 200 is not proof of a valid video: TikTok's CDN sometimes
@@ -399,8 +476,9 @@ def download_story(*, story_id: str, username: str, platform: str,
                 except OSError:
                     pass
                 print(f"[{_ts()}] Story {story_id} candidate {i}/{len(candidates)} ({host}): "
-                      f"HTTP 200 but invalid video data ({len(r.content) // 1024} KB, "
+                      f"HTTP 200 but invalid video data ({got // 1024} KB, {transfer_note}, "
                       f"{probe_reason}, {cookie_note})")
+                _quarantine(probe_reason)
                 continue
             if posted_at:
                 os.utime(mp4_path, (posted_at, posted_at))
