@@ -839,7 +839,8 @@ def parse_story_item(item: dict) -> dict | None:
 
 
 async def _sniff_item_list(page, page_url: str, api_path: str, extract,
-                           max_count: int, stop_event=None) -> tuple[list, bool]:
+                           max_count: int, stop_event=None,
+                           on_loaded=None) -> tuple[list, bool]:
     """Drive a TikTok listing page in the given tab and capture the item_list
     responses the page's own frontend requests while scrolling. No
     library-built API calls: the page JS does all the signing itself, so
@@ -850,7 +851,9 @@ async def _sniff_item_list(page, page_url: str, api_path: str, extract,
 
     extract(raw_item) maps one item_list entry to the collected value, or
     None to skip it; entries are deduped on item id first since scrolling can
-    re-serve pages.
+    re-serve pages. on_loaded(page), when given, runs right after navigation
+    (e.g. to read the page's rehydration blob); its failure is printed but
+    never fails the sniff.
 
     Returns (values, complete). complete is True when the listing reached its
     natural end or max_count. The end signal is an item_list page with no
@@ -889,6 +892,11 @@ async def _sniff_item_list(page, page_url: str, api_path: str, extract,
     page.on("response", on_response)
     try:
         await page.goto(page_url, wait_until="domcontentloaded")
+        if on_loaded:
+            try:
+                await on_loaded(page)
+            except Exception as exc:
+                print(f"item_list sniff on_loaded hook failed ({page_url}): {exc}")
         # Wheel events land on the element under the cursor, and on pages
         # where the video grid is an inner scroll container (the music page)
         # a wheel at the default (0, 0) hits the fixed sidebar and nothing
@@ -938,6 +946,56 @@ async def _sniff_music_item_list(page, sound_id: str,
     )
 
 
+async def _read_profile_blob_items(tab) -> list[dict]:
+    """Read any post items embedded in the profile page's rehydration blob.
+
+    The page server-renders the top of the video grid (pinned posts and the
+    newest rows) from this blob, and its own item_list requests continue from
+    there, so a pure response sniff can miss exactly those top items. That is
+    not a cosmetic gap: the quick-window position diff reads a missing top
+    item as a deletion (seen in production as pinned posts flagged possibly
+    deleted every quick check and reverted by the next full run). The scope
+    name carrying the items has moved across layout versions, so every
+    __DEFAULT_SCOPE__ value is scanned for itemList arrays instead of
+    trusting one path. Returns [] when the page embeds nothing (wall,
+    private account, layout change).
+    """
+    try:
+        blob = await tab.evaluate(
+            """() => {
+                const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+                return el ? el.textContent : null;
+            }"""
+        )
+        if not blob:
+            return []
+        scopes = json.loads(blob).get("__DEFAULT_SCOPE__") or {}
+    except Exception as exc:
+        print(f"Profile blob item read failed: {exc}")
+        return []
+
+    items: list[dict] = []
+    seen:  set[str]   = set()
+
+    def _walk(node):
+        if isinstance(node, dict):
+            lst = node.get("itemList")
+            if isinstance(lst, list):
+                for it in lst:
+                    vid = str(it.get("id") or "") if isinstance(it, dict) else ""
+                    if vid and vid not in seen:
+                        seen.add(vid)
+                        items.append(it)
+            for v in node.values():
+                _walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                _walk(v)
+
+    _walk(scopes)
+    return items
+
+
 async def get_user_videos_browser(api, username: str, sec_uid: str,
                                   max_count: int = 2000,
                                   expected_count: int | None = None,
@@ -968,6 +1026,18 @@ async def get_user_videos_browser(api, username: str, sec_uid: str,
             return None
         return _normalise_item_list_entry(item)
 
+    # Items server-rendered into the page's rehydration blob: the grid's top
+    # (pinned posts and the newest rows), which the page's own item_list
+    # requests may skip. See _read_profile_blob_items for why they must be
+    # merged in.
+    seed: list[dict] = []
+
+    async def _harvest_blob(tab_):
+        for item in await _read_profile_blob_items(tab_):
+            value = _extract(item)
+            if value is not None:
+                seed.append(value)
+
     tab = await api.sessions[0].page.context.new_page()
     try:
         videos, complete = await _sniff_item_list(
@@ -977,12 +1047,22 @@ async def get_user_videos_browser(api, username: str, sec_uid: str,
             _extract,
             max_count,
             stop_event=stop_event,
+            on_loaded=_harvest_blob,
         )
     finally:
         try:
             await tab.close()
         except Exception:
             pass
+
+    # Blob items lead: they are the grid's visual top, so the merged order
+    # matches what the profile shows (and what the endpoint listing returns,
+    # pinned first). Sniffed responses may or may not overlap with them.
+    if seed:
+        seed_ids = {v["video_id"] for v in seed}
+        videos   = (seed + [v for v in videos if v["video_id"] not in seed_ids])[:max_count]
+        if not complete and len(videos) >= max_count:
+            complete = True
     if not complete and expected_count and len(videos) >= expected_count:
         complete = True
     return videos, complete

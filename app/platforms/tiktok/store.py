@@ -603,26 +603,39 @@ class TikTokStore:
 
     # Scheduling extras (quick video ID memory, refresh batches)
 
-    def get_last_quick_video_ids(self, channel_id: str) -> list:
-        """Return the ordered video ID list from the last quick-mode fetch, or []."""
+    def get_last_quick_video_ids(self, channel_id: str) -> tuple[list, str]:
+        """Return (ordered video ID list, listing source) from the last
+        quick-window fetch, or ([], ""). The source tags which listing path
+        produced the window ('sniff' or 'item_list'): the two paths anchor
+        the window differently, so the position diff must only compare
+        same-source windows. Legacy plain-array rows predate the tag and were
+        all produced by the item_list endpoint."""
         with self.db.get_db() as conn:
             row = conn.execute(
                 "SELECT last_quick_video_ids FROM channels WHERE channel_id = ?",
                 (channel_id,),
             ).fetchone()
         if not row or not row[0]:
-            return []
+            return [], ""
         try:
-            return json.loads(row[0])
+            data = json.loads(row[0])
         except Exception:
-            return []
+            return [], ""
+        if isinstance(data, dict):
+            return list(data.get("ids") or []), str(data.get("source") or "")
+        if isinstance(data, list):
+            return data, "item_list"
+        return [], ""
 
-    def set_last_quick_video_ids(self, channel_id: str, ordered_ids: list) -> None:
-        """Store the ordered list of video IDs from the last quick-mode fetch."""
+    def set_last_quick_video_ids(self, channel_id: str, ordered_ids: list,
+                                 source: str = "") -> None:
+        """Store the ordered video ID window from the last quick-window fetch,
+        tagged with the listing source that produced it."""
+        payload = json.dumps({"source": source, "ids": ordered_ids}) if ordered_ids else None
         with self.db.get_db() as conn:
             conn.execute(
                 "UPDATE channels SET last_quick_video_ids = ? WHERE channel_id = ?",
-                (json.dumps(ordered_ids) if ordered_ids else None, channel_id),
+                (payload, channel_id),
             )
 
     def touch_last_checked(self, channel_id: str) -> None:

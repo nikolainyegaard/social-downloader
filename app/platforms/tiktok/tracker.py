@@ -372,6 +372,12 @@ async def process_single_user(
         item_list_map: dict = {}
         ydlp_map:      dict = {}
 
+        # Which listing path produced curr_ordered. The sniff and the
+        # endpoint anchor the 30-video window differently (the sniff's top
+        # comes from the page blob merge), so the quick position diff must
+        # only compare same-source windows; the baseline is tagged with this.
+        _listing_source = ""
+
         if sec_uid:
             _max_count = 30 if mode == "quick" else 2000
             item_list_videos: list = []
@@ -389,7 +395,8 @@ async def process_single_user(
                 # feed the deletion diff and falls through to the endpoint.
                 if _complete or (stop_event and stop_event.is_set()):
                     item_list_videos = _sniffed
-                    _listing_ok = True
+                    _listing_ok      = True
+                    _listing_source  = "sniff"
                     logd(f"  [{channel_id}] {len(_sniffed)} videos via profile page sniff")
                 else:
                     logd(f"  [{channel_id}] page sniff incomplete ({len(_sniffed)} videos), trying item_list endpoint")
@@ -405,7 +412,8 @@ async def process_single_user(
                     item_list_videos = await get_user_videos_with_stats(
                         api, sec_uid=sec_uid, max_count=_max_count, stop_event=stop_event, logd=log
                     )
-                    _listing_ok = True
+                    _listing_ok     = True
+                    _listing_source = "item_list"
                     logd(f"  [{channel_id}] {len(item_list_videos)} videos via item_list (sec_uid={sec_uid})")
                 except Exception as e:
                     if _is_bot_error(e):
@@ -557,10 +565,21 @@ async def process_single_user(
         # Any deleted video (confirmed or not) that's visible again: revert or undelete.
         undeleted_ids = (known_ids - active_ids) & remote_ids
 
-        # Position-aware deletion detection for quick mode.
+        # Position-aware deletion detection for quick mode. Only compares
+        # same-source windows: a baseline written by the other listing path
+        # anchors its 30-video window differently, and diffing across the two
+        # reads the membership drift as deletions (seen in production as
+        # pinned posts flagged possibly deleted, reverted by the next full
+        # run). On a source switch the diff is skipped once and the baseline
+        # below is rewritten under the new source.
         quick_deleted_ids: set = set()
         if mode == "quick" and curr_ordered:
-            prev_ordered = store.get_last_quick_video_ids(channel_id)
+            prev_ordered, prev_source = store.get_last_quick_video_ids(channel_id)
+            if prev_ordered and prev_source != _listing_source:
+                logd(f"  [{channel_id}] quick window baseline is from"
+                     f" {prev_source or 'an untagged listing'}, current from"
+                     f" {_listing_source}; skipping position diff this run")
+                prev_ordered = []
             if prev_ordered:
                 prev_set = set(prev_ordered)
                 curr_set = set(curr_ordered)
@@ -719,9 +738,9 @@ async def process_single_user(
         # Skip if the fetch was interrupted: a partial list would corrupt the detection baseline.
         if not _fetch_interrupted:
             if mode == "quick" and curr_ordered:
-                store.set_last_quick_video_ids(channel_id, curr_ordered)
+                store.set_last_quick_video_ids(channel_id, curr_ordered, source=_listing_source)
             elif mode == "full" and curr_ordered:
-                store.set_last_quick_video_ids(channel_id, curr_ordered[:30])
+                store.set_last_quick_video_ids(channel_id, curr_ordered[:30], source=_listing_source)
 
         return _profile_ok, _deletion_detected, _large_deletion_spike
 
