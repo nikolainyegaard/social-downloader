@@ -62,107 +62,40 @@ def _start_bot_cooldown() -> int:
     return hours
 
 
-def recover_story_rows(db, rows, log=print, on_progress=None) -> tuple[int, int]:
-    """Re-download afflicted live TikTok stories by re-listing them live.
+def redownload_story_row(db, row, log=print) -> bool:
+    """Re-download one afflicted live TikTok video story via yt-dlp on its page.
 
-    A story can only be recovered the way it was first saved: the stories table
-    stores no media URL (TikTok signs them with a short expiry), and the
-    /@handle/story/{id} page is not a yt-dlp-supported URL (TikTok 302s it to
-    the feed), so reconstructing a URL cannot work. Instead this re-lists the
-    user's currently live stories via the story/item_list endpoint and downloads
-    the matching id from its fresh signed CDN URLs with the session's live
-    cookies, exactly like the loop's first save. A story past its 24h window is
-    gone from that listing and is reported as unrecoverable.
-
-    rows: afflicted rows from scan_afflicted_stories. Video only (photo stories
-    have no separate recovery path; the loop's next check re-fetches those) and
-    live only (expired stories are gone). One browser session covers everything,
-    grouped by channel so each user is listed once. on_progress(recovered,
-    failing) fires after each row for live UI updates. Returns
-    (recovered, failing). Shared by the story-recovery job and the standalone
-    redownload_stories script."""
-    from TikTokApi import TikTokApi
-
-    video_rows = [r for r in rows if r.get("live") and r.get("content_type") != "photo"]
-    if not video_rows:
-        return 0, 0
-
-    by_channel: dict[str, list[dict]] = {}
-    for r in video_rows:
-        by_channel.setdefault(r["channel_id"], []).append(r)
-
-    cookies   = get_cookies_flat()
-    ms_token  = get_ms_token()
-    recovered = failing = 0
-
-    async def _run() -> None:
-        nonlocal recovered, failing
-        async with TikTokApi() as api:
-            try:
-                await create_tiktok_session(api, ms_token, cookies)
-                await asyncio.sleep(3)
-            except Exception as e:
-                log(f"  session creation failed: {e}")
-                failing = len(video_rows)
-                if on_progress:
-                    on_progress(recovered, failing)
-                return
-            session_cookies = await get_session_cookies(api)
-            for channel_id, chan_rows in by_channel.items():
-                handle = chan_rows[0]["handle"]
-                try:
-                    items = await get_user_stories(api, channel_id)
-                    fresh = {s["story_id"]: s
-                             for s in (parse_story_item(i) for i in items) if s}
-                except Exception as e:
-                    log(f"  @{handle} story listing failed: {e}")
-                    fresh = {}
-                for r in chan_rows:
-                    if _recover_one_story(db, r, fresh, session_cookies, log):
-                        recovered += 1
-                    else:
-                        failing += 1
-                    if on_progress:
-                        on_progress(recovered, failing)
-                    await asyncio.sleep(2)
-
-    asyncio.run(_run())
-    return recovered, failing
-
-
-def _recover_one_story(db, row, fresh: dict, session_cookies: dict, log) -> bool:
-    """Download one afflicted story from a freshly re-listed live story dict.
-    Clears the old file first, replaces the row on success."""
+    A video story's page is at https://www.tiktok.com/@{handle}/video/{id} (the
+    id shares the video id space), which yt-dlp's TikTok extractor fetches and
+    downloads self-consistently: the media URL is signed for yt-dlp's own
+    request, so no cookies and no CDN 403s. It must be /video/, not /story/,
+    which yt-dlp does not match. Clears the corrupt/missing file first, records
+    the fresh one on success. Video only: photo stories have no such page (the
+    loop's next check recovers those). Returns True when recovered. Shared by
+    the story-recovery job and the standalone redownload_stories script."""
     from downloader import download_story, StoryDownloadError
 
     sid, handle = row["story_id"], row["handle"]
-    story = fresh.get(sid)
-    if not story:
-        log(f"  story {sid} (@{handle}) is no longer live; cannot recover")
-        return False
     old = os.path.abspath(row["file_path"]) if row.get("file_path") else None
     if old and os.path.exists(old):
         try:
             os.remove(old)
         except OSError:
             pass
+    page_url = f"https://www.tiktok.com/@{handle}/video/{sid}"
     try:
         path = download_story(
             story_id=sid, username=handle, platform="tiktok",
-            media_url=story.get("media_url", ""), media_urls=story.get("media_urls"),
-            page_url=story.get("page_url"),
-            content_type=story.get("content_type", "video"),
-            posted_at=story.get("posted_at"),
-            cookies=session_cookies or None,
+            media_url="", media_urls=[], page_url=page_url,
+            content_type="video", posted_at=row.get("posted_at"),
             cookies_path=COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
             proxy=get_proxy(),
         )
     except StoryDownloadError as e:
         log(f"  story {sid} (@{handle}) re-download failed: {e}")
         return False
-    db.add_story(sid, row["channel_id"], story.get("content_type", "video"),
-                 story.get("posted_at") or row.get("posted_at"),
-                 story.get("expires_at") or row.get("expires_at"), path)
+    db.add_story(sid, row["channel_id"], "video", row.get("posted_at"),
+                 row.get("expires_at"), path)
     log(f"  recovered story {sid} (@{handle})")
     return True
 

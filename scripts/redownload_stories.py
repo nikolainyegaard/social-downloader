@@ -2,45 +2,43 @@
 """Re-download afflicted TikTok stories on the server, outside the running app.
 
 The stories table stores no media URL (TikTok signs them with a short expiry,
-so a saved one would be dead), and the /@{handle}/story/{id} page is not a
-yt-dlp-supported URL (TikTok 302s it to the feed). So a story can only be
-recovered the way it was first saved: re-list the user's currently live stories
-via the story/item_list endpoint and download the matching id from its fresh
-signed CDN URLs with the session's live cookies. This tool handles video stories
-only; photo stories have no separate recovery path and are left for the app's
-next check.
+so a saved one would be dead). It does store the story_id, and a video story's
+page is at https://www.tiktok.com/@{handle}/video/{id} (story ids share the
+video id space), which yt-dlp's TikTok extractor fetches and downloads
+self-consistently: the media URL is signed for yt-dlp's own request, so no
+cookies and no CDN 403s. It must be /video/, not /story/, which yt-dlp does not
+match. This tool handles video stories only; photo stories have no such page
+and are left for the app's next check.
 
 Hard limit: stories expire 24h after posting. Anything past expires_at is gone
-from TikTok's listing and cannot be recovered; this tool can only report or
-purge those.
+from TikTok and cannot be recovered; this tool can only report or purge those.
 
 Afflicted = a story row whose file is missing OR whose file fails ffprobe. The
 missing-file class is also retried by the app's normal loop (a failed download
 leaves no row, so it re-fetches as new); the corrupt-but-present class is not
 (the row exists and the file is present), so this tool is the way to repair it.
 
-Run inside the container so it shares the app's env, cookies, and browser:
+Run inside the container so it shares the app's env, cookies, and yt-dlp:
   docker compose exec social-downloader python3 /app/scripts/redownload_stories.py            # dry run, reports only
   docker compose exec social-downloader python3 /app/scripts/redownload_stories.py --run       # actually re-download live afflicted videos
   docker compose exec social-downloader python3 /app/scripts/redownload_stories.py --run --purge-expired   # also delete unrecoverable corrupt rows+files
 
-Recovery opens a TikTokApi browser session (the only path that works). Safe to
-run while the app is running: SQLite WAL allows a concurrent writer, and an
-overlapping session falls back to an ephemeral browser context rather than
-contending for the loop's persistent profile lock.
+Safe to run while the app is running: SQLite WAL allows a concurrent writer, and
+the yt-dlp path uses no browser, so it never contends for the profile lock.
 """
 from __future__ import annotations
 
 import argparse
 import os
 import sys
+import time
 
 APP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app")
 sys.path.insert(0, APP)
 
 from engine.database import ChannelDB                      # noqa: E402
 from engine.tracker import scan_afflicted_stories          # noqa: E402
-from platforms.tiktok.tracker import recover_story_rows    # noqa: E402
+from platforms.tiktok.tracker import redownload_story_row  # noqa: E402
 
 
 def main() -> int:
@@ -48,6 +46,7 @@ def main() -> int:
     ap.add_argument("--run", action="store_true", help="actually re-download (default: dry run)")
     ap.add_argument("--purge-expired", action="store_true",
                     help="delete rows + files for unrecoverable (expired) afflicted stories")
+    ap.add_argument("--gap", type=float, default=3.0, help="seconds between downloads (default 3)")
     args = ap.parse_args()
 
     db  = ChannelDB("tiktok")
@@ -71,7 +70,13 @@ def main() -> int:
                   f"add --purge-expired to remove their rows and files.")
         return 0
 
-    ok, fail = recover_story_rows(db, live_vid, log=print)
+    ok = fail = 0
+    for r in live_vid:
+        if redownload_story_row(db, r, log=print):
+            ok += 1
+        else:
+            fail += 1
+        time.sleep(args.gap)
 
     if args.purge_expired and expired:
         purged = 0

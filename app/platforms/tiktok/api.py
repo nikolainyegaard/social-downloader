@@ -819,9 +819,13 @@ def parse_story_item(item: dict) -> dict | None:
     _add(video_meta.get("downloadAddr"))
     if not candidates:
         return None
-    # The story page URL lets yt-dlp fetch and download self-consistently
-    # (the "user" placeholder redirects to the canonical handle, same trick
-    # as get_video_details)
+    # The /video/{id} page URL lets yt-dlp fetch and download self-consistently
+    # (the media URL is signed for the client that requests it, so no cookies
+    # and no CDN 403s). It must be /video/, not /story/: yt-dlp's TikTok
+    # extractor only matches /@handle/video/{id}, and /story/{id} falls through
+    # to the generic extractor, which TikTok 302s to the feed ("Unsupported
+    # URL"). Story item ids live in the same id space as video ids, so the
+    # /video/ page resolves the story while it is live.
     author = (item.get("author") or {}).get("uniqueId") or "user"
     return {
         "story_id":     str(sid),
@@ -830,7 +834,7 @@ def parse_story_item(item: dict) -> dict | None:
         "expires_at":   expires_at,
         "media_url":    candidates[0],
         "media_urls":   candidates,
-        "page_url":     f"https://www.tiktok.com/@{author}/story/{sid}",
+        "page_url":     f"https://www.tiktok.com/@{author}/video/{sid}",
     }
 
 
