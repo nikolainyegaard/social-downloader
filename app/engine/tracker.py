@@ -24,6 +24,39 @@ _CONFIRM_THRESHOLD    = 2
 _ABORT_AFTER_FAILURES = 3  # consecutive channel failures that abort the session (rate limit or auth wall)
 
 
+def scan_afflicted_stories(db) -> list[dict]:
+    """Story rows whose saved file is missing, or (for videos) fails ffprobe.
+
+    Each returned row carries the owning channel's handle, an `ailment`
+    ('missing' or 'corrupt'), and `live` (expires_at still in the future, i.e.
+    re-downloadable before TikTok drops it). Photos are checked by presence
+    only; ffprobe is a video gate. Used by the story recovery job and the
+    standalone re-download script so both classify identically."""
+    import os
+    from downloader import _probe_media_file
+
+    now = int(time.time())
+    with db.get_db() as conn:
+        rows = [dict(r) for r in conn.execute("""
+            SELECT s.story_id, s.channel_id, s.content_type, s.posted_at,
+                   s.expires_at, s.file_path, c.handle
+            FROM stories s JOIN channels c ON c.channel_id = s.channel_id
+            ORDER BY s.posted_at DESC
+        """).fetchall()]
+    out = []
+    for r in rows:
+        path = os.path.abspath(r["file_path"]) if r["file_path"] else None
+        if not path or not os.path.exists(path):
+            r["ailment"] = "missing"
+        elif r["content_type"] != "photo" and _probe_media_file(path):
+            r["ailment"] = "corrupt"
+        else:
+            continue
+        r["live"] = (r["expires_at"] or 0) > now
+        out.append(r)
+    return out
+
+
 def save_new_stories(db, platform: str, channel_id: str, handle: str,
                      stories: list[dict], log: Callable[[str], None],
                      cookies: dict | None = None,

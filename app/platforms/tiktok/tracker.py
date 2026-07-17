@@ -62,6 +62,40 @@ def _start_bot_cooldown() -> int:
     return hours
 
 
+def redownload_story_row(db, row, log=print) -> bool:
+    """Re-download one afflicted TikTok video story via yt-dlp on its page URL.
+
+    Clears the corrupt/missing file first, records the fresh one on success.
+    Video only: photo stories have no standalone page to re-fetch (the loop's
+    next check recovers those). Returns True when recovered. Shared by the
+    story-recovery job and the standalone redownload_stories script."""
+    from downloader import download_story, StoryDownloadError
+
+    sid, handle = row["story_id"], row["handle"]
+    old = os.path.abspath(row["file_path"]) if row.get("file_path") else None
+    if old and os.path.exists(old):
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+    page_url = f"https://www.tiktok.com/@{handle}/story/{sid}"
+    try:
+        path = download_story(
+            story_id=sid, username=handle, platform="tiktok",
+            media_url="", media_urls=[], page_url=page_url,
+            content_type="video", posted_at=row.get("posted_at"),
+            cookies_path=COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
+            proxy=get_proxy(),
+        )
+    except StoryDownloadError as e:
+        log(f"  story {sid} (@{handle}) re-download failed: {e}")
+        return False
+    db.add_story(sid, row["channel_id"], "video", row.get("posted_at"),
+                 row.get("expires_at"), path)
+    log(f"  recovered story {sid} (@{handle})")
+    return True
+
+
 class _BotDetectedError(Exception):
     """Raised when TikTok detects the session as a bot. Triggers a full session
     restart with a cooldown sleep."""

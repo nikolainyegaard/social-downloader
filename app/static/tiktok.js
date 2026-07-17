@@ -1522,6 +1522,81 @@ async function triggerFilePurge() {
   _startFilecheckPoll();
 }
 
+// ── Corrupted story recovery (toast-only; no inline status on the card) ─────
+let _storyfixPoll = null;
+
+function _setStoryfixBtns(disabled) {
+  document.getElementById('job-storyfix-scan-btn').disabled = disabled;
+  document.getElementById('job-storyfix-redl-btn').disabled = disabled;
+}
+
+const _nStory = n => `${n} ${n === 1 ? 'story' : 'stories'}`;
+
+function _storyfixPollUntilDone(mode, toast) {
+  if (_storyfixPoll) clearInterval(_storyfixPoll);
+  _storyfixPoll = setInterval(async () => {
+    const { ok, data } = await apiJSON('/api/tiktok/jobs/story-recovery/status');
+    if (!ok) return;
+    if (data.running) {
+      if (mode === 'redownload' && (data.recovered || data.still_failing)) {
+        toast.update(`Re-downloading stories… ${data.recovered} done`,
+                     { type: 'info', duration: 0, spinner: true });
+      }
+      return;
+    }
+    clearInterval(_storyfixPoll); _storyfixPoll = null;
+    _setStoryfixBtns(false);
+
+    if (mode === 'scan') {
+      const afflicted = (data.corrupt || 0) + (data.missing || 0);
+      if (!afflicted) {
+        toast.update('No corrupted or missing stories found.', { type: 'success' });
+        return;
+      }
+      const parts = [];
+      if (data.live_video) parts.push(`${data.live_video} live video re-downloadable`);
+      if (data.live_photo) parts.push(`${data.live_photo} live photo (recovered on next check)`);
+      if (data.expired)    parts.push(`${data.expired} expired`);
+      toast.update(`${_nStory(afflicted)} corrupted or missing: ${parts.join(', ')}.`,
+                   { type: 'warning', duration: 0 });
+      return;
+    }
+
+    // redownload
+    if (data.recovered) {
+      toast.update(`${_nStory(data.recovered)} re-downloaded.`, { type: 'success' });
+    } else {
+      toast.dismiss();
+    }
+    const bad = [];
+    if (data.still_failing) bad.push(`${_nStory(data.still_failing)} failed to re-download`);
+    if (data.expired)       bad.push(`${data.expired} expired and unrecoverable`);
+    if (bad.length) showToast(`${bad.join('; ')}.`, { type: 'error', duration: 0 });
+    else if (!data.recovered) {
+      const note = data.live_photo
+        ? `No video stories to re-download; ${data.live_photo} live photo left for the next check.`
+        : 'No corrupted stories to re-download.';
+      showToast(note, { type: 'info' });
+    }
+  }, 1500);
+}
+
+async function triggerStoryScan() {
+  _setStoryfixBtns(true);
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/story-recovery/scan', { method: 'POST' });
+  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setStoryfixBtns(false); return; }
+  const toast = showToast('Scanning saved stories…', { spinner: true, duration: 0 });
+  _storyfixPollUntilDone('scan', toast);
+}
+
+async function triggerStoryRedownload() {
+  _setStoryfixBtns(true);
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/story-recovery/redownload', { method: 'POST' });
+  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setStoryfixBtns(false); return; }
+  const toast = showToast('Re-downloading corrupted stories…', { spinner: true, duration: 0 });
+  _storyfixPollUntilDone('redownload', toast);
+}
+
 // ── Diagnostics ────────────────────────────────────────────────────────────────
 
 const _DIAG_ACTIONS = {

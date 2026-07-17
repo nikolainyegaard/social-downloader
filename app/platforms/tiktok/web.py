@@ -375,6 +375,21 @@ def register_tiktok_routes(bp, engine) -> None:
         "last_run":    None,
     }
 
+    # Corrupted story recovery state
+    _story_repair_lock  = threading.Lock()
+    _story_repair_state: dict = {
+        "running":       False,
+        "mode":          None,   # "scan" | "redownload"
+        "corrupt":       0,
+        "missing":       0,
+        "live_video":    0,
+        "live_photo":    0,
+        "expired":       0,
+        "recovered":     0,
+        "still_failing": 0,
+        "last_run":      None,
+    }
+
     # Audio file cleanup state
     _audio_cleanup_lock  = threading.Lock()
     _audio_cleanup_state: dict = {
@@ -544,6 +559,73 @@ def register_tiktok_routes(bp, engine) -> None:
             with _audio_cleanup_lock:
                 _audio_cleanup_state["running"]  = False
                 _audio_cleanup_state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _story_repair_scan() -> None:
+        from engine.tracker import scan_afflicted_stories
+        with _story_repair_lock:
+            if _story_repair_state["running"]:
+                return
+            _story_repair_state.update({"running": True, "mode": "scan", "recovered": 0,
+                                        "still_failing": 0})
+        print("[story-recovery] Scanning saved stories for missing or corrupt files...")
+        try:
+            afflicted = scan_afflicted_stories(db)
+            counts = {
+                "corrupt":    sum(1 for r in afflicted if r["ailment"] == "corrupt"),
+                "missing":    sum(1 for r in afflicted if r["ailment"] == "missing"),
+                "live_video": sum(1 for r in afflicted if r["live"] and r["content_type"] != "photo"),
+                "live_photo": sum(1 for r in afflicted if r["live"] and r["content_type"] == "photo"),
+                "expired":    sum(1 for r in afflicted if not r["live"]),
+            }
+            with _story_repair_lock:
+                _story_repair_state.update(counts)
+            print(f"[story-recovery] Scan done: {len(afflicted)} afflicted "
+                  f"({counts['live_video']} live video, {counts['live_photo']} live photo, "
+                  f"{counts['expired']} expired).")
+        except Exception as e:
+            print(f"[story-recovery] Scan error: {e}")
+        finally:
+            with _story_repair_lock:
+                _story_repair_state["running"]  = False
+                _story_repair_state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _story_repair_redownload() -> None:
+        from engine.tracker import scan_afflicted_stories
+        from platforms.tiktok.tracker import redownload_story_row
+        with _story_repair_lock:
+            if _story_repair_state["running"]:
+                return
+            _story_repair_state.update({"running": True, "mode": "redownload",
+                                        "recovered": 0, "still_failing": 0})
+        print("[story-recovery] Re-downloading afflicted live video stories...")
+        try:
+            afflicted  = scan_afflicted_stories(db)
+            live_video = [r for r in afflicted if r["live"] and r["content_type"] != "photo"]
+            live_photo = sum(1 for r in afflicted if r["live"] and r["content_type"] == "photo")
+            expired    = sum(1 for r in afflicted if not r["live"])
+            with _story_repair_lock:
+                _story_repair_state.update({
+                    "corrupt":    sum(1 for r in afflicted if r["ailment"] == "corrupt"),
+                    "missing":    sum(1 for r in afflicted if r["ailment"] == "missing"),
+                    "live_video": len(live_video), "live_photo": live_photo, "expired": expired,
+                })
+            recovered = failing = 0
+            for r in live_video:
+                if redownload_story_row(db, r, log=lambda m: print(f"[story-recovery]{m}")):
+                    recovered += 1
+                else:
+                    failing += 1
+                with _story_repair_lock:
+                    _story_repair_state.update({"recovered": recovered, "still_failing": failing})
+                time.sleep(2)
+            print(f"[story-recovery] Re-download done: {recovered} recovered, {failing} failed, "
+                  f"{expired} expired.")
+        except Exception as e:
+            print(f"[story-recovery] Re-download error: {e}")
+        finally:
+            with _story_repair_lock:
+                _story_repair_state["running"]  = False
+                _story_repair_state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
     # ── Channel extras ────────────────────────────────────────────────────────
 
@@ -882,6 +964,27 @@ def register_tiktok_routes(bp, engine) -> None:
             if _file_check_state["running"]:
                 return jsonify({"error": "Already running"}), 409
         threading.Thread(target=_run_file_purge, daemon=True, name="file-check").start()
+        return jsonify({"ok": True})
+
+    @bp.route("/jobs/story-recovery/status", methods=["GET"])
+    def get_story_recovery_status():
+        with _story_repair_lock:
+            return jsonify(dict(_story_repair_state))
+
+    @bp.route("/jobs/story-recovery/scan", methods=["POST"])
+    def start_story_scan():
+        with _story_repair_lock:
+            if _story_repair_state["running"]:
+                return jsonify({"error": "Already running"}), 409
+        threading.Thread(target=_story_repair_scan, daemon=True, name="story-recovery").start()
+        return jsonify({"ok": True})
+
+    @bp.route("/jobs/story-recovery/redownload", methods=["POST"])
+    def start_story_redownload():
+        with _story_repair_lock:
+            if _story_repair_state["running"]:
+                return jsonify({"error": "Already running"}), 409
+        threading.Thread(target=_story_repair_redownload, daemon=True, name="story-recovery").start()
         return jsonify({"ok": True})
 
     # ── Utilities ─────────────────────────────────────────────────────────────
