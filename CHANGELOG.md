@@ -107,6 +107,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel takes the full row; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
+- Clicking a loop trigger button (Next, Starred, Half, All) when no creators qualify now shows a toast explaining that nothing is due and no run started, logs the same line to the loop console and run log, and frees the button again; previously nothing happened and the button stayed stuck disabled until the next loop state change
 - The page-sniffed TikTok video listing now also reads the posts TikTok embeds in the profile page itself (pinned posts and the newest rows), which the page's own listing requests can skip; without them the quick check misread those top posts as deletions and the next full run had to revert them
 - The quick check's position diff no longer compares windows produced by different listing paths (page sniff vs the API endpoint fallback): the two anchor the 30-video window differently, so a source switch now skips the diff once and rebuilds the baseline instead of flagging phantom deletions
 - A TikTok user whose profile fetch failed on both attempts crashed out of its check with an internal error (unbound variable) after the video listing but before any downloads or deletion tracking ran; the check now completes on profile-less data like it was always meant to

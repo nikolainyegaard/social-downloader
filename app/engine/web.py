@@ -735,6 +735,18 @@ def create_channel_blueprint(engine) -> Blueprint:
         from config import get_path_issues
         return get_path_issues(), loop.is_running()
 
+    def _trigger_nothing_to_run(mode: str, detail: str):
+        """Respond to a manual trigger that has nothing to process.
+
+        The trigger event is deliberately NOT fired: an empty run would only
+        wake the scheduler to skip. Without a run the loop state never
+        changes, so no status event reaches the page; the message in the
+        response is the frontend's cue to toast and re-enable the button,
+        and the log line is the trail in the loop console and run log."""
+        message = f"Manual {mode} trigger: {detail}; loop not started"
+        loop._log(message)
+        return jsonify({"ok": True, "queued": 0, "mode": mode, "message": message})
+
     @bp.route("/trigger/next", methods=["POST"])
     def trigger_next_now():
         issues, running = _check_trigger_preconditions()
@@ -744,6 +756,8 @@ def create_channel_blueprint(engine) -> Blueprint:
             return jsonify({"error": "Loop is already running"}), 409
         from scheduling import get_channels_due_for_check
         due = get_channels_due_for_check(db, int(time.time()))
+        if not due:
+            return _trigger_nothing_to_run("next", f"no {adapter.creator_noun}s are due for a check")
         loop.set_trigger_scope("next")
         loop.trigger_event.set()
         return jsonify({"ok": True, "queued": len(due), "mode": "next"})
@@ -757,6 +771,8 @@ def create_channel_blueprint(engine) -> Blueprint:
             return jsonify({"error": "Loop is already running"}), 409
         from scheduling import prime_starred_channels
         n = prime_starred_channels(db)
+        if not n:
+            return _trigger_nothing_to_run("starred", f"no starred {adapter.creator_noun}s to check")
         loop.set_trigger_scope("starred")
         loop.trigger_event.set()
         return jsonify({"ok": True, "queued": n, "mode": "starred"})
@@ -770,6 +786,8 @@ def create_channel_blueprint(engine) -> Blueprint:
             return jsonify({"error": "Loop is already running"}), 409
         from scheduling import prime_half_channels
         n = prime_half_channels(db)
+        if not n:
+            return _trigger_nothing_to_run("half", f"no enabled {adapter.creator_noun}s to check")
         loop.set_trigger_scope("half")
         loop.trigger_event.set()
         return jsonify({"ok": True, "queued": n, "mode": "half"})
@@ -783,6 +801,8 @@ def create_channel_blueprint(engine) -> Blueprint:
             return jsonify({"error": "Loop is already running"}), 409
         from scheduling import prime_all_channels
         n = prime_all_channels(db)
+        if not n:
+            return _trigger_nothing_to_run("all", f"no enabled {adapter.creator_noun}s to check")
         loop.set_trigger_scope("all")
         loop.trigger_event.set()
         return jsonify({"ok": True, "queued": n, "mode": "all"})

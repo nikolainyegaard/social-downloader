@@ -187,7 +187,12 @@ function _renderSessionPills(el, sessions, running, manualRun) {
 function _makeTriggerToast(noun) {
   return d => {
     const n = d.queued ?? 0;
-    if (n === 0) return;
+    if (n === 0) {
+      const msg = d.message || `No ${noun}s are due for a check; loop not started`;
+      console.info(msg);
+      showToast(msg);
+      return;
+    }
     showToast(`${n} ${noun}${n === 1 ? '' : 's'} queued for check`);
   };
 }
@@ -983,7 +988,12 @@ async function _triggerLoop(btnId, apiPath, errMsg, onSuccess) {
   if (btn) btn.disabled = true;
   const { ok, data } = await apiJSON(apiPath, { method: 'POST' });
   if (!ok) { showToast(data.error || errMsg, { type: 'error' }); if (btn) btn.disabled = false; }
-  else if (onSuccess) onSuccess(data);
+  else {
+    if (onSuccess) onSuccess(data);
+    // Nothing queued means no run will start, so no status change will ever
+    // re-enable the button; free it here.
+    if (btn && data && data.queued === 0) btn.disabled = false;
+  }
 }
 
 // ── Image preview modal ───────────────────────────────────────────────────────
