@@ -223,17 +223,31 @@ class StoryDownloadError(Exception):
     fit for the UI log; per-candidate detail goes to the run log."""
 
 
-def _valid_media_file(path: str) -> bool:
-    """ffprobe gate for downloaded story videos. TikTok's CDN sometimes
-    answers 200 with a truncated body, which used to save as a corrupt mp4
-    (moov atom missing) that no browser can play."""
+def _probe_media_file(path: str) -> str | None:
+    """ffprobe gate for downloaded story videos. Returns None when the file is
+    a valid, decodable video, or a short reason string when it is not. TikTok's
+    CDN sometimes answers 200 with a truncated body, which saves as a corrupt
+    mp4 (moov atom missing) that no browser can play. Beyond a clean exit we
+    also require at least one video stream, so an audio-only or empty container
+    is rejected too."""
     try:
-        r = subprocess.run(["ffprobe", "-v", "error", path],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           timeout=30)
-        return r.returncode == 0
-    except Exception:
-        return False
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=30,
+        )
+    except Exception as e:
+        return f"ffprobe failed to run: {type(e).__name__}"
+    if r.returncode != 0:
+        err = (r.stderr or "").strip().splitlines()
+        return err[-1] if err else f"ffprobe exit {r.returncode}"
+    if not (r.stdout or "").strip():
+        return "no video stream"
+    return None
+
+
+def _valid_media_file(path: str) -> bool:
+    return _probe_media_file(path) is None
 
 
 def _download_story_via_ytdlp(*, story_id: str, page_url: str, stories_dir: str,
@@ -267,6 +281,20 @@ def _download_story_via_ytdlp(*, story_id: str, page_url: str, stories_dir: str,
     for ext in ("mp4", "webm", "mkv", "mov"):
         path = os.path.join(stories_dir, f"{stamp}_{story_id}.{ext}")
         if os.path.exists(path):
+            # Validate before accepting: yt-dlp can leave a truncated or
+            # half-merged file behind without raising, and this path runs
+            # before the CDN candidates, so an unchecked bad file here is
+            # exactly how corrupt stories keep slipping through.
+            reason = _probe_media_file(path)
+            if reason:
+                kb = os.path.getsize(path) // 1024
+                print(f"[{_ts()}] Story {story_id} yt-dlp produced an invalid file "
+                      f"({kb} KB, {reason}), discarding and falling back to CDN")
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+                return None
             if posted_at:
                 os.utime(path, (posted_at, posted_at))
             print(f"[{_ts()}] Story {story_id} saved via yt-dlp -> {path}")
@@ -363,14 +391,16 @@ def download_story(*, story_id: str, username: str, platform: str,
             mp4_path = os.path.join(stories_dir, f"{stamp}_{story_id}.mp4")
             with open(mp4_path, "wb") as f:
                 f.write(r.content)
-            if not _valid_media_file(mp4_path):
+            probe_reason = _probe_media_file(mp4_path)
+            if probe_reason:
                 last_reason = "invalid video data"
                 try:
                     os.remove(mp4_path)
                 except OSError:
                     pass
                 print(f"[{_ts()}] Story {story_id} candidate {i}/{len(candidates)} ({host}): "
-                      f"HTTP 200 but invalid video data ({len(r.content) // 1024} KB, {cookie_note})")
+                      f"HTTP 200 but invalid video data ({len(r.content) // 1024} KB, "
+                      f"{probe_reason}, {cookie_note})")
                 continue
             if posted_at:
                 os.utime(mp4_path, (posted_at, posted_at))
