@@ -19,6 +19,7 @@ from scheduling import set_channel_next_check, set_channel_last_full
 from platforms.tiktok.api import (
     create_tiktok_session,
     get_user_info, get_user_videos, get_user_videos_with_stats,
+    get_user_videos_browser,
     fetch_sound_video_ids, get_video_details, get_user_stories, parse_story_item,
     get_session_cookies,
     UserBannedException, UserPrivateException, UserBlockedException,
@@ -207,6 +208,12 @@ async def process_single_user(
 
         is_private: bool | None = None
 
+        # Empty until the profile fetch fills it. Must exist even when both
+        # fetch attempts fail: the video fetch and relation checks below read
+        # it, and an unbound name there is a NameError that kills the whole
+        # user check.
+        info: dict = {}
+
         # Best sec_uid we have: from DB initially, refreshed if profile fetch returns a newer one
         sec_uid = user.get("sec_uid")
 
@@ -354,26 +361,61 @@ async def process_single_user(
         # ── Stories: fetch any currently live stories, save new ones ─────────
         _stories_live = await _check_user_stories(user, api, username, log, logd)
 
-        # ── Primary: item_list (has stats, paginated with inter-page delay) ──
-        # sec_uid is required: without it the library calls self.info() to
-        # resolve it, making a redundant round-trip that can return 0 results.
+        # ── Primary: sniff item_list off the profile page ────────────────────
+        # Drive the user's profile page in a fresh tab and capture the
+        # /api/post/item_list/ responses its own frontend requests (the same
+        # shape as the profile page read and the sound loop's music page
+        # sniff): TikTok answers page-initiated requests even while
+        # constructed ones get empty bodies. sec_uid is required either way:
+        # the sniff pins items to it, and the endpoint fallback without it
+        # makes a redundant self.info() round-trip that can return 0 results.
         item_list_map: dict = {}
         ydlp_map:      dict = {}
 
         if sec_uid:
+            _max_count = 30 if mode == "quick" else 2000
+            item_list_videos: list = []
+            _listing_ok = False
             try:
-                _max_count = 30 if mode == "quick" else 2000
-                item_list_videos = await get_user_videos_with_stats(
-                    api, sec_uid=sec_uid, max_count=_max_count, stop_event=stop_event, logd=log
+                _sniffed, _complete = await get_user_videos_browser(
+                    api, username=username, sec_uid=sec_uid,
+                    max_count=_max_count,
+                    expected_count=info.get("video_count") if info else None,
+                    stop_event=stop_event,
                 )
-                curr_ordered  = [v["video_id"] for v in item_list_videos]
-                item_list_map = {v["video_id"]: v for v in item_list_videos}
-                logd(f"  [{channel_id}] {len(item_list_map)} videos via item_list (sec_uid={sec_uid})")
+                # A stop mid-fetch yields a partial list the code below
+                # already handles (_fetch_interrupted skips the diff), so it
+                # counts as usable; any other incomplete listing must not
+                # feed the deletion diff and falls through to the endpoint.
+                if _complete or (stop_event and stop_event.is_set()):
+                    item_list_videos = _sniffed
+                    _listing_ok = True
+                    logd(f"  [{channel_id}] {len(_sniffed)} videos via profile page sniff")
+                else:
+                    logd(f"  [{channel_id}] page sniff incomplete ({len(_sniffed)} videos), trying item_list endpoint")
             except Exception as e:
                 if _is_bot_error(e):
                     raise _restart_error(e) from e
-                log(f"  Video fetch failed, trying fallback...")
-                logd(f"  [{channel_id}] item_list error: {e}")
+                logd(f"  [{channel_id}] page sniff error: {e}")
+
+            # Fallback: the constructed item_list endpoint, kept so the code
+            # self-heals if TikTok starts answering it again.
+            if not _listing_ok and not (stop_event and stop_event.is_set()):
+                try:
+                    item_list_videos = await get_user_videos_with_stats(
+                        api, sec_uid=sec_uid, max_count=_max_count, stop_event=stop_event, logd=log
+                    )
+                    _listing_ok = True
+                    logd(f"  [{channel_id}] {len(item_list_videos)} videos via item_list (sec_uid={sec_uid})")
+                except Exception as e:
+                    if _is_bot_error(e):
+                        raise _restart_error(e) from e
+                    log(f"  Video fetch failed, trying fallback...")
+                    logd(f"  [{channel_id}] item_list error: {e}")
+
+            if _listing_ok:
+                curr_ordered  = [v["video_id"] for v in item_list_videos]
+                item_list_map = {v["video_id"]: v for v in item_list_videos}
 
         # For 10222 accounts: recover username, display name, bio, and avatar from
         # item_list author data. Follower/video counts remain unavailable.

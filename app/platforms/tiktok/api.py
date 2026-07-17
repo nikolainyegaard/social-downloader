@@ -838,33 +838,34 @@ def parse_story_item(item: dict) -> dict | None:
     }
 
 
-async def _sniff_music_item_list(page, sound_id: str,
-                                 max_count: int = 3000) -> tuple[list[str], bool]:
-    """Drive the music page in the given tab and capture the
-    /api/music/item_list/ responses TikTok's own frontend requests while
-    scrolling. No library-built API calls: the page JS does all the signing
-    itself, so TikTok answers these even while constructed requests get empty
-    bodies. (The music page's rehydration blob carries no item list, so there
-    is nothing to read the way the profile page read does; sniffing is the
-    page-level equivalent.) The caller passes a dedicated tab, never the
-    session's signer page: navigating that page races TikTokApi's in-flight
-    evaluates and can kill the session (see _fetch_page_user_detail).
+async def _sniff_item_list(page, page_url: str, api_path: str, extract,
+                           max_count: int, stop_event=None) -> tuple[list, bool]:
+    """Drive a TikTok listing page in the given tab and capture the item_list
+    responses the page's own frontend requests while scrolling. No
+    library-built API calls: the page JS does all the signing itself, so
+    TikTok answers these even while constructed requests get empty bodies.
+    The caller passes a dedicated tab, never the session's signer page:
+    navigating that page races TikTokApi's in-flight evaluates and can kill
+    the session (see _fetch_page_user_detail).
 
-    Returns (video_ids, complete). complete is True when the listing reached
-    its natural end or max_count. The end signal is an item_list page with no
-    items: TikTok's hasMore flag stays true on that final empty page (verified
-    against a live sound), so it cannot be trusted; the page's own frontend
-    also stops requesting only after the empty page. An incomplete listing
-    must never feed the caller's deletion tracking, which would read every
-    unseen association as a missing video, so the caller treats it as a
-    failure.
+    extract(raw_item) maps one item_list entry to the collected value, or
+    None to skip it; entries are deduped on item id first since scrolling can
+    re-serve pages.
+
+    Returns (values, complete). complete is True when the listing reached its
+    natural end or max_count. The end signal is an item_list page with no
+    items: TikTok's hasMore flag stays true on that final empty page
+    (verified against a live sound), so it cannot be trusted; the page's own
+    frontend also stops requesting only after the empty page. An incomplete
+    listing must never feed the caller's deletion tracking, which would read
+    every unseen video as a missing one, so callers treat it as a failure.
     """
-    ids:  list[str] = []
-    seen: set[str]  = set()
+    results: list  = []
+    seen: set[str] = set()
     state = {"exhausted": False, "responses": 0}
 
     async def on_response(resp):
-        if "/api/music/item_list/" not in resp.url:
+        if api_path not in resp.url:
             return
         try:
             data = await resp.json()
@@ -878,28 +879,33 @@ async def _sniff_music_item_list(page, sound_id: str,
             state["exhausted"] = True
         for item in items:
             vid = str(item.get("id") or "")
-            if vid and vid not in seen:
-                seen.add(vid)
-                ids.append(vid)
+            if not vid or vid in seen:
+                continue
+            seen.add(vid)
+            value = extract(item)
+            if value is not None:
+                results.append(value)
 
     page.on("response", on_response)
     try:
-        await page.goto(f"https://www.tiktok.com/music/x-{sound_id}",
-                        wait_until="domcontentloaded")
-        # Wheel events land on the element under the cursor, and the video
-        # grid is an inner scroll container: at the default (0, 0) the wheel
-        # hits the fixed sidebar and nothing scrolls. Park the mouse over
-        # the grid first.
+        await page.goto(page_url, wait_until="domcontentloaded")
+        # Wheel events land on the element under the cursor, and on pages
+        # where the video grid is an inner scroll container (the music page)
+        # a wheel at the default (0, 0) hits the fixed sidebar and nothing
+        # scrolls. Park the mouse over the grid first; on pages that scroll
+        # the document (profile pages) the position is harmless.
         await page.mouse.move(700, 420)
         # The page requests its first item_list page on its own; scrolling
-        # pulls the rest. Stop at the natural end, the cap, or after ~8
-        # quiet seconds without a new response (wall, layout change, or the
-        # grid simply refusing to grow).
+        # pulls the rest. Stop at the natural end, the cap, a stop request,
+        # or after ~8 quiet seconds without a new response (wall, layout
+        # change, or the grid simply refusing to grow).
         idle_rounds   = 0
         last_progress = (-1, -1)
         for _ in range(400):
             await asyncio.sleep(random.uniform(1.2, 2.0))
-            progress = (state["responses"], len(ids))
+            if stop_event and stop_event.is_set():
+                break
+            progress = (state["responses"], len(results))
             if progress == last_progress:
                 idle_rounds += 1
                 if idle_rounds >= 5:
@@ -907,14 +913,79 @@ async def _sniff_music_item_list(page, sound_id: str,
             else:
                 idle_rounds     = 0
                 last_progress   = progress
-            if state["exhausted"] or len(ids) >= max_count:
+            if state["exhausted"] or len(results) >= max_count:
                 break
             await page.mouse.wheel(0, random.randint(900, 1600))
     finally:
         page.remove_listener("response", on_response)
 
-    complete = state["exhausted"] or len(ids) >= max_count
-    return ids[:max_count], complete
+    complete = state["exhausted"] or len(results) >= max_count
+    return results[:max_count], complete
+
+
+async def _sniff_music_item_list(page, sound_id: str,
+                                 max_count: int = 3000) -> tuple[list[str], bool]:
+    """Sniff /api/music/item_list/ off the music page. The music page's
+    rehydration blob carries no item list, so there is nothing to read the
+    way the profile page read does; sniffing is the page-level equivalent.
+    Returns (video_ids, complete); see _sniff_item_list for the semantics."""
+    return await _sniff_item_list(
+        page,
+        f"https://www.tiktok.com/music/x-{sound_id}",
+        "/api/music/item_list/",
+        lambda item: str(item.get("id")),
+        max_count,
+    )
+
+
+async def get_user_videos_browser(api, username: str, sec_uid: str,
+                                  max_count: int = 2000,
+                                  expected_count: int | None = None,
+                                  stop_event=None) -> tuple[list[dict], bool]:
+    """List a user's videos by driving their profile page in a fresh tab of
+    the open session's browser and sniffing the /api/post/item_list/
+    responses the page itself requests while scrolling. The browser-level
+    counterpart of get_user_videos_with_stats, for the same reason the
+    profile fetch reads the page: TikTok answers page-initiated requests even
+    while constructed ones get empty bodies.
+
+    Items are pinned to sec_uid via the author field, so a redirected or
+    unexpected page can never feed another account's posts into the caller's
+    diff. Returns (videos, complete) with videos in the same normalised shape
+    as get_user_videos_with_stats; complete=False means the listing stalled
+    before its natural end and must not drive deletion tracking.
+
+    expected_count (the profile's video_count when known) upgrades a stalled
+    listing to complete when at least that many videos were captured: the
+    page's frontend stops requesting once the grid is fully built, so a full
+    catalog can end on silence rather than an empty item_list page. It never
+    cuts the scroll short, so a stale-low count cannot truncate the tail; a
+    stale-high count just falls back to the endpoint, which is safe.
+    """
+    def _extract(item):
+        author = item.get("author") or {}
+        if author.get("secUid") and author["secUid"] != sec_uid:
+            return None
+        return _normalise_item_list_entry(item)
+
+    tab = await api.sessions[0].page.context.new_page()
+    try:
+        videos, complete = await _sniff_item_list(
+            tab,
+            f"https://www.tiktok.com/@{username}",
+            "/api/post/item_list/",
+            _extract,
+            max_count,
+            stop_event=stop_event,
+        )
+    finally:
+        try:
+            await tab.close()
+        except Exception:
+            pass
+    if not complete and expected_count and len(videos) >= expected_count:
+        complete = True
+    return videos, complete
 
 
 async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
