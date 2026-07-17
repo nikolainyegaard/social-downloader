@@ -1613,7 +1613,7 @@ async function triggerThumbnailRepair() {
     if (!ok) return;
     if (data.running) {
       toast.update(`Fixing thumbnails… ${data.scanned}/${data.total} scanned, ${data.repaired} fixed`,
-                   { type: 'info', duration: 0, spinner: true });
+                   { type: 'info', duration: 0 });
       return;
     }
     clearInterval(_thumbfixPoll); _thumbfixPoll = null;

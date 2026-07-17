@@ -914,7 +914,7 @@ function _attachGridSentinel(gridEl, callback) {
 }
 
 // Horizontal-scroll edge fade: toggles fade-l/fade-r classes on a scrollable
-// row so the clipped edge gets a fade-out mask (see .filter-control-group).
+// row so the clipped edge gets a fade-out mask (see the .edge-fade class).
 function _attachEdgeFade(el) {
   if (!el) return;
   const update = () => {

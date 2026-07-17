@@ -97,17 +97,19 @@ function initChannelApp(cfg) {
   <div class="panel-card recent-card">
     <div class="panel-header">
       <span class="section-title">Recent activity</span>
-      <div class="filter-pills multi hdr-pills" onpointerenter="${P}PrefetchFeedKinds()">
-        <button class="filter-pill active" id="${P}Rf_all"     onclick="${P}SetRecentFilter('all')">All</button>
-        <button class="filter-pill"        id="${P}Rf_saved"   onclick="${P}SetRecentFilter('saved')">Saved</button>
-        <button class="filter-pill"        id="${P}Rf_deleted" onclick="${P}SetRecentFilter('deleted')">Deleted</button>
-        <button class="filter-pill"        id="${P}Rf_changed" onclick="${P}SetRecentFilter('changed')">Changes</button>
-        <button class="filter-pill" id="${P}Rf_banned" onclick="${P}SetRecentFilter('banned')">Bans</button>
+      <div class="edge-fade hdr-filter" id="${P}RecentFilterRow">
+        <div class="filter-pills multi hdr-pills" onpointerenter="${P}PrefetchFeedKinds()">
+          <button class="filter-pill active" id="${P}Rf_all"     onclick="${P}SetRecentFilter('all')">All</button>
+          <button class="filter-pill"        id="${P}Rf_saved"   onclick="${P}SetRecentFilter('saved')">Saved</button>
+          <button class="filter-pill"        id="${P}Rf_deleted" onclick="${P}SetRecentFilter('deleted')">Deleted</button>
+          <button class="filter-pill"        id="${P}Rf_changed" onclick="${P}SetRecentFilter('changed')">Changes</button>
+          <button class="filter-pill" id="${P}Rf_banned" onclick="${P}SetRecentFilter('banned')">Bans</button>
+        </div>
+        <span style="display:flex;gap:4px;flex-shrink:0">
+          <button class="btn-star" id="${P}RfStar" onclick="${P}ToggleRfStar()" title="Only starred ${CREATORS}">☆</button>
+          <button class="btn-bookmark" id="${P}RfBook" onclick="${P}ToggleRfBook()" title="Only bookmarked ${CREATORS}">${_bmOutline}</button>
+        </span>
       </div>
-      <span style="display:flex;gap:4px">
-        <button class="btn-star" id="${P}RfStar" onclick="${P}ToggleRfStar()" title="Only starred ${CREATORS}">☆</button>
-        <button class="btn-bookmark" id="${P}RfBook" onclick="${P}ToggleRfBook()" title="Only bookmarked ${CREATORS}">${_bmOutline}</button>
-      </span>
     </div>
     <div class="recent-feed" id="${P}RecentFeed"><div class="rf-empty">Loading…</div></div>
   </div>
@@ -162,7 +164,7 @@ function initChannelApp(cfg) {
         <span id="${P}Count" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
         <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)">
       </div>
-      <div id="${P}Controls" class="filter-control-group" style="margin-top:10px">
+      <div id="${P}Controls" class="filter-control-group edge-fade" style="margin-top:10px">
         ${EXTRA_FILTER_GROUPS.map(g => `
         <div class="filter-row">
           <span class="filter-row-label">${g.label}</span>
@@ -202,7 +204,7 @@ function initChannelApp(cfg) {
           </div>
         </div>
       </div>
-      ${EXTRA_VIEWS.map(v => `<div id="${P}Controls_${v.key}" class="filter-control-group" style="display:none;margin-top:10px">${v.controlsHtml || ''}</div>`).join('')}
+      ${EXTRA_VIEWS.map(v => `<div id="${P}Controls_${v.key}" class="filter-control-group edge-fade" style="display:none;margin-top:10px">${v.controlsHtml || ''}</div>`).join('')}
     </div>
     <div class="users-grid" id="${P}Grid">
       ${Array(6).fill('<div class="user-card skeleton-card" aria-hidden="true"></div>').join('')}
@@ -1337,7 +1339,11 @@ function initChannelApp(cfg) {
     Object.assign(_creatorState, {
       videos: [], filter: new Set(), typeFilter: new Set(), search: '',
       sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
-      view: window.innerWidth <= 640 ? 'grid' : 'list',
+      // Mobile defaults to the grid view; use the real grid view key (e.g.
+      // 'videos'), not the literal 'grid', so the toggle marks it active.
+      view: window.innerWidth <= 640
+        ? (MODAL_CFG.viewKeys.find(k => k.key !== 'list') || MODAL_CFG.viewKeys[0]).key
+        : 'list',
     });
     if (_creatorState.obs) { _creatorState.obs.disconnect(); _creatorState.obs = null; }
 
@@ -1584,6 +1590,13 @@ function initChannelApp(cfg) {
     if (vidList) vidList.style.display = '';
     phistData  = [];
     phistField = new Set();
+    // If history was opened before the videos finished loading (e.g. from a
+    // Recent activity profile-change entry), _loadModalVideos skipped rendering
+    // the list because the panel was open, leaving it on the loading
+    // placeholder. Render it now that we are back on it. A still-in-flight load
+    // re-renders itself on completion since the panel is closed again.
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);
+    _mRenderList(MODAL_CFG);
   });
 
   // ── Stories history calendar (Cal-Heatmap month intensity view) ───────────
@@ -1950,6 +1963,7 @@ function initChannelApp(cfg) {
 
   _attachEdgeFade(_el('Controls'));
   EXTRA_VIEWS.forEach(v => _attachEdgeFade(_el(`Controls_${v.key}`)));
+  _attachEdgeFade(_el('RecentFilterRow'));
 
   // While this tab is active, everything arrives over SSE: status and queue
   // as pushed snapshots, creators / stats / recent (and platform extras) as
