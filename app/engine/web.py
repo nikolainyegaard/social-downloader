@@ -196,17 +196,26 @@ def create_channel_blueprint(engine) -> Blueprint:
                 _cleanup_state["current"] = "Scanning thumbnails..."
             video_ids   = db.get_all_video_ids()
             thumb_count = 0
+            thumb_bytes = 0
             for thumbs_dir in _glob.glob(os.path.join(MEDIA_DIR, platform, "*", "thumbs")):
                 for thumb in _glob.glob(os.path.join(thumbs_dir, "*.avif")):
                     vid_id = os.path.splitext(os.path.basename(thumb))[0]
                     if vid_id not in video_ids:
                         try:
+                            sz = os.path.getsize(thumb)
                             os.remove(thumb)
                             thumb_count += 1
+                            thumb_bytes += sz
                         except OSError:
                             pass
             n = thumb_count
-            steps.append(f"Removed {n} orphaned thumbnail{'s' if n != 1 else ''}")
+
+            def _fmt_size(b: int) -> str:
+                mb = b / 1_048_576
+                return f"{mb / 1024:.2f} GB" if mb >= 1024 else f"{mb:.1f} MB"
+
+            steps.append(f"Removed {n} orphaned thumbnail{'s' if n != 1 else ''}"
+                         + (f" ({_fmt_size(thumb_bytes)} freed)" if thumb_bytes else ""))
             removed += n
             with _cleanup_lock:
                 _cleanup_state["steps"] = list(steps)
@@ -216,14 +225,16 @@ def create_channel_blueprint(engine) -> Blueprint:
             size_before = os.path.getsize(db.DB_PATH) if os.path.exists(db.DB_PATH) else 0
             db.vacuum()
             size_after  = os.path.getsize(db.DB_PATH) if os.path.exists(db.DB_PATH) else 0
+            db_freed    = max(0, size_before - size_after)
 
-            def _fmt_mb(b: int) -> str:
-                return f"{b / 1_048_576:.1f} MB"
-
-            if size_before != size_after:
-                steps.append(f"Database vacuumed ({_fmt_mb(size_before)} -> {_fmt_mb(size_after)})")
+            if db_freed:
+                steps.append(f"Database vacuumed ({_fmt_size(size_before)} -> {_fmt_size(size_after)})")
             else:
                 steps.append("Database vacuumed (no size change)")
+
+            # The missing-file steps free no disk (those files are already gone);
+            # the real reclamation is the deleted thumbnails plus the vacuum.
+            steps.append(f"Reclaimed {_fmt_size(thumb_bytes + db_freed)} of disk space")
             with _cleanup_lock:
                 _cleanup_state["steps"] = list(steps)
 
