@@ -18,6 +18,7 @@ GPU acceleration:
 from __future__ import annotations
 
 import concurrent.futures
+import glob as _glob
 import hashlib
 import os
 import shutil
@@ -270,7 +271,15 @@ def generate_thumbnail(video_id: str, file_path: str) -> str | None:
     avif_encode_args = [
         # scale to target width, keep aspect ratio, force even height (-2).
         # format=yuv420p normalises the pixel format for libaom-av1.
-        "-vf", f"scale={THUMB_WIDTH}:-2,format=yuv420p",
+        # setparams stamps valid BT.709 colour tags on the frame: TikTok's HEVC
+        # sources carry reserved/unspecified CICP, and without this the encoder
+        # writes those reserved values into the AVIF colr box. Firefox's decoder
+        # rejects an AVIF with reserved CICP and renders a 0x0 (blank) image,
+        # while Chrome tolerates it. Reserved is displayed as BT.709 anyway, so
+        # tagging it in the filter graph (where all three tags reliably stick,
+        # unlike the output -color_* flags) is lossless and decodable everywhere.
+        "-vf", f"scale={THUMB_WIDTH}:-2,format=yuv420p,"
+               "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709",
         "-c:v", "libaom-av1",
         "-still-picture", "1",
         "-crf", str(CRF_THUMB),
@@ -424,3 +433,106 @@ def backfill_thumbnails() -> None:
         f"[{_ts()}] Thumbnail backfill complete:"
         f" {len(missing) - failed} generated, {failed} failed ({elapsed:.1f}s)."
     )
+
+
+# ── Broken-colour thumbnail repair ────────────────────────────────────────────
+#
+# Thumbnails encoded before the colour-tag fix inherited their source's
+# reserved/unspecified CICP, which Firefox refuses to decode (renders a 0x0
+# blank image while Chrome tolerates it). They exist on disk and are valid to
+# ffprobe, so the backfill (an existence check) never touches them. This job
+# finds them by reading the AVIF colr box and regenerates each from its source
+# with the fixed encoder.
+
+_repair_lock = threading.Lock()
+_repair_state: dict = {
+    "running": False, "scanned": 0, "total": 0,
+    "broken": 0, "repaired": 0, "failed": 0, "done": False,
+}
+_repair_stop = threading.Event()
+
+_CICP_BAD = {0, 2, 3}  # 0/3 reserved, 2 unspecified -- all rejected or ambiguous
+
+
+def get_repair_state() -> dict:
+    with _repair_lock:
+        return dict(_repair_state)
+
+
+def _colr_reserved(path: str) -> bool:
+    """True if the AVIF's nclx colr box carries reserved/unspecified colour tags
+    that Firefox will not decode. Reads only the header, so it is cheap enough
+    to run over every thumbnail. A file with no nclx box (or unreadable) is
+    treated as fine: the fixed encoder always writes a valid one."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(8192)
+    except OSError:
+        return False
+    i = head.find(b"colrnclx")
+    if i < 0 or i + 14 > len(head):
+        return False
+    vals = [int.from_bytes(head[i + 8 + 2 * k:i + 10 + 2 * k], "big") for k in range(3)]
+    return any(v in _CICP_BAD for v in vals)
+
+
+def _source_for_thumb(thumb_path: str, video_id: str) -> str | None:
+    """The media file a thumbnail was generated from: {video_id}.* or
+    {video_id}_NN.* sitting in the creator folder (the thumbs dir's parent)."""
+    creator_dir = os.path.dirname(os.path.dirname(thumb_path))
+    try:
+        names = sorted(os.listdir(creator_dir))
+    except OSError:
+        return None
+    for name in names:
+        if name == "thumbs":
+            continue
+        stem = os.path.splitext(name)[0]
+        if stem == video_id or stem.startswith(f"{video_id}_"):
+            return os.path.join(creator_dir, name)
+    return None
+
+
+def repair_broken_thumbnails() -> dict:
+    """Scan every platform's thumbnails and regenerate the ones with reserved
+    colour tags. Deletes each broken thumbnail and rebuilds it from its source
+    with the fixed encoder. Updates _repair_state for the polling job."""
+    from platforms.registry import ENGINES
+
+    _repair_stop.clear()
+    thumbs: list[str] = []
+    for p in ENGINES:
+        thumbs += _glob.glob(os.path.join(MEDIA_DIR, p, "*", "thumbs", "*.avif"))
+
+    with _repair_lock:
+        _repair_state.update({"running": True, "scanned": 0, "total": len(thumbs),
+                              "broken": 0, "repaired": 0, "failed": 0, "done": False})
+    print(f"[{_ts()}] [thumb-repair] Scanning {len(thumbs)} thumbnails for reserved colour tags...")
+
+    broken = repaired = failed = 0
+    try:
+        for idx, thumb in enumerate(thumbs, 1):
+            if _repair_stop.is_set():
+                break
+            if _colr_reserved(thumb):
+                broken += 1
+                vid = os.path.splitext(os.path.basename(thumb))[0]
+                src = _source_for_thumb(thumb, vid)
+                ok = False
+                if src and os.path.exists(src):
+                    _try_remove(thumb)
+                    ok = bool(generate_thumbnail(vid, src))
+                repaired += ok
+                failed += (not ok)
+            if idx % 200 == 0 or idx == len(thumbs):
+                with _repair_lock:
+                    _repair_state.update({"scanned": idx, "broken": broken,
+                                          "repaired": repaired, "failed": failed})
+    finally:
+        with _repair_lock:
+            _repair_state.update({"scanned": len(thumbs) if not _repair_stop.is_set() else _repair_state["scanned"],
+                                  "broken": broken, "repaired": repaired, "failed": failed,
+                                  "running": False, "done": True})
+            result = dict(_repair_state)
+    print(f"[{_ts()}] [thumb-repair] Done: {broken} broken, {repaired} repaired, {failed} failed")
+    return result

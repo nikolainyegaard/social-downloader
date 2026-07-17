@@ -932,6 +932,23 @@ def register_tiktok_routes(bp, engine) -> None:
             return jsonify({"error": "Already running"}), 409
         return jsonify({"ok": True})
 
+    @bp.route("/jobs/thumbnail-repair/status", methods=["GET"])
+    def thumbnail_repair_status():
+        from thumbnailer import get_repair_state
+        return jsonify(get_repair_state())
+
+    @bp.route("/jobs/thumbnail-repair/start", methods=["POST"])
+    def thumbnail_repair_start():
+        # Regenerates thumbnails (all platforms) whose AVIF colour tags are
+        # reserved/unspecified, which Firefox renders blank. Covers every
+        # platform since thumbnail generation is shared.
+        from thumbnailer import get_repair_state, repair_broken_thumbnails
+        if get_repair_state()["running"]:
+            return jsonify({"error": "Already running"}), 409
+        threading.Thread(target=repair_broken_thumbnails, daemon=True,
+                         name="thumbnail-repair").start()
+        return jsonify({"ok": True})
+
     @bp.route("/jobs/audio-cleanup/status", methods=["GET"])
     def get_audio_cleanup_status():
         with _audio_cleanup_lock:

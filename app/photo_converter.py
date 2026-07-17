@@ -78,6 +78,10 @@ def encode_avif(src: str, dst: str, crf: int) -> bool:
             [
                 "ffmpeg", "-y",
                 "-i", src,
+                # Stamp valid BT.709 colour tags: a source with reserved/unspecified
+                # CICP would otherwise pass through into the AVIF colr box, which
+                # Firefox rejects (renders a 0x0 blank image). See generate_thumbnail.
+                "-vf", "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709",
                 "-c:v", "libaom-av1",
                 "-still-picture", "1",
                 "-crf", str(crf),

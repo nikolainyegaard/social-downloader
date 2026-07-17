@@ -588,6 +588,23 @@
           <div class="job-card">
             <div class="job-card-hdr">
               <div style="flex:1">
+                <div class="job-card-title">Fix blank thumbnails</div>
+                <div class="job-card-desc">
+                  Rebuilds thumbnails (all apps) that show up blank in Firefox. TikTok's
+                  source videos carry reserved colour tags that older thumbnails inherited,
+                  and Firefox refuses to decode them (Chrome tolerates it). Scans every
+                  thumbnail and regenerates only the affected ones from their source.
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
+                <button class="btn-primary" id="job-thumbfix-btn" onclick="triggerThumbnailRepair()">Fix</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="job-card">
+            <div class="job-card-hdr">
+              <div style="flex:1">
                 <div class="job-card-title">Remove audio-only files</div>
                 <div class="job-card-desc">
                   Scans the videos folder for audio-only files (.mp3, .m4a, etc.) that were

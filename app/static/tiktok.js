@@ -1597,6 +1597,35 @@ async function triggerStoryRedownload() {
   _storyfixPollUntilDone('redownload', toast);
 }
 
+// ── Fix blank thumbnails (toast-only; no inline status on the card) ─────────
+let _thumbfixPoll = null;
+const _nThumb = n => `${n} ${n === 1 ? 'thumbnail' : 'thumbnails'}`;
+
+async function triggerThumbnailRepair() {
+  const btn = document.getElementById('job-thumbfix-btn');
+  btn.disabled = true;
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/thumbnail-repair/start', { method: 'POST' });
+  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); btn.disabled = false; return; }
+  const toast = showToast('Scanning thumbnails…', { spinner: true, duration: 0 });
+  if (_thumbfixPoll) clearInterval(_thumbfixPoll);
+  _thumbfixPoll = setInterval(async () => {
+    const { ok, data } = await apiJSON('/api/tiktok/jobs/thumbnail-repair/status');
+    if (!ok) return;
+    if (data.running) {
+      toast.update(`Fixing thumbnails… ${data.scanned}/${data.total} scanned, ${data.repaired} fixed`,
+                   { type: 'info', duration: 0, spinner: true });
+      return;
+    }
+    clearInterval(_thumbfixPoll); _thumbfixPoll = null;
+    btn.disabled = false;
+    if (data.repaired) toast.update(`${_nThumb(data.repaired)} fixed.`, { type: 'success' });
+    else if (!data.broken) toast.update('No blank thumbnails found.', { type: 'success' });
+    else toast.dismiss();
+    if (data.failed) showToast(`${_nThumb(data.failed)} could not be rebuilt (source file missing).`,
+                               { type: 'error', duration: 0 });
+  }, 1500);
+}
+
 // ── Diagnostics ────────────────────────────────────────────────────────────────
 
 const _DIAG_ACTIONS = {
