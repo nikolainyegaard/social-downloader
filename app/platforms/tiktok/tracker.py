@@ -79,6 +79,23 @@ def _listing_untrustworthy(remote_count: int, profile_video_count: int | None) -
     return expected > 0 and remote_count < expected * 0.5
 
 
+def _should_run_deletion(ydlp_ok: bool, fetch_interrupted: bool,
+                         present_count: int, profile_video_count: int | None,
+                         has_saved: bool) -> bool:
+    """Whether the deletion diff may run this check.
+
+    yt-dlp is the sole deletion authority (see the tracker): the diff only
+    runs when its listing arrived (ydlp_ok), the run was not interrupted, and
+    the listing is trustworthy relative to the profile's reported count. A
+    failed, interrupted, or too-incomplete listing never flags deletions.
+    """
+    if not ydlp_ok or fetch_interrupted:
+        return False
+    if has_saved and _listing_untrustworthy(present_count, profile_video_count):
+        return False
+    return True
+
+
 def redownload_story_row(db, row, log=print) -> bool:
     """Re-download one afflicted live TikTok video story via yt-dlp on its page.
 
@@ -237,7 +254,6 @@ async def process_single_user(
         _profile_ok           = False  # set True on any valid TikTok response (success or ban)
         _deletion_detected    = False  # set True in full mode when deletion candidates are found
         _large_deletion_spike = False  # set True when first-pass missing count >= threshold
-        curr_ordered: list    = []     # ordered video IDs from this fetch (item_list only)
 
         for _attempt in range(2):
             try:
@@ -377,27 +393,34 @@ async def process_single_user(
         # ── Stories: fetch any currently live stories, save new ones ─────────
         _stories_live = await _check_user_stories(user, api, username, log, logd)
 
-        # ── Primary: sniff item_list off the profile page ────────────────────
+        # ── Deletion source: yt-dlp lists the full current video set ─────────
+        # yt-dlp is the reliable "what exists right now" source and the sole
+        # authority for deletion detection, on every check (Quick and Full).
+        # It gets the logged-in cookies, so it lists followed-private accounts
+        # too. Launch it now so it runs in a thread alongside the browser stats
+        # fetch below instead of adding to the wall-clock; awaited before the
+        # diff. Cancelled on the inaccessible-private early return.
+        _ydlp_task = asyncio.create_task(
+            asyncio.to_thread(get_user_videos, channel_id,
+                              sec_uid=sec_uid, cookies_path=COOKIES_PATH)
+        )
+
+        # ── Stats enrichment: sniff item_list off the profile page ───────────
         # Drive the user's profile page in a fresh tab and capture the
-        # /api/post/item_list/ responses its own frontend requests (the same
-        # shape as the profile page read and the sound loop's music page
-        # sniff): TikTok answers page-initiated requests even while
-        # constructed ones get empty bodies. sec_uid is required either way:
-        # the sniff pins items to it, and the endpoint fallback without it
-        # makes a redundant self.info() round-trip that can return 0 results.
+        # /api/post/item_list/ responses its own frontend requests: TikTok
+        # answers page-initiated requests even while constructed ones get empty
+        # bodies. This is the source of view/like counts and new-video details
+        # that yt-dlp does not provide; it no longer drives deletion detection
+        # (yt-dlp does), so an incomplete or failed sniff here is not fatal.
+        # sec_uid pins sniffed items to this author; without it the endpoint
+        # fallback makes a redundant self.info() round-trip that returns 0.
         item_list_map: dict = {}
         ydlp_map:      dict = {}
 
         # The count the profile currently reports it has posted. Ground truth
-        # for how many videos should be listable, used both by the yt-dlp
-        # fallback and the deletion-diff trust check below.
+        # for how many videos should be listable; feeds the deletion-diff trust
+        # check below.
         _profile_video_count = info.get("video_count") if info else None
-
-        # Which listing path produced curr_ordered. The sniff and the
-        # endpoint anchor the 30-video window differently (the sniff's top
-        # comes from the page blob merge), so the quick position diff must
-        # only compare same-source windows; the baseline is tagged with this.
-        _listing_source = ""
 
         if sec_uid:
             _max_count = 30 if mode == "quick" else 2000
@@ -417,7 +440,6 @@ async def process_single_user(
                 if _complete or (stop_event and stop_event.is_set()):
                     item_list_videos = _sniffed
                     _listing_ok      = True
-                    _listing_source  = "sniff"
                     logd(f"  [{channel_id}] {len(_sniffed)} videos via profile page sniff")
                 else:
                     logd(f"  [{channel_id}] page sniff incomplete ({len(_sniffed)} videos), trying item_list endpoint")
@@ -434,16 +456,13 @@ async def process_single_user(
                         api, sec_uid=sec_uid, max_count=_max_count, stop_event=stop_event, logd=log
                     )
                     _listing_ok     = True
-                    _listing_source = "item_list"
                     logd(f"  [{channel_id}] {len(item_list_videos)} videos via item_list (sec_uid={sec_uid})")
                 except Exception as e:
                     if _is_bot_error(e):
                         raise _restart_error(e) from e
-                    log(f"  Video fetch failed, trying fallback...")
-                    logd(f"  [{channel_id}] item_list error: {e}")
+                    logd(f"  [{channel_id}] item_list enrichment error: {e}")
 
             if _listing_ok:
-                curr_ordered  = [v["video_id"] for v in item_list_videos]
                 item_list_map = {v["video_id"]: v for v in item_list_videos}
 
         # For 10222 accounts: recover username, display name, bio, and avatar from
@@ -501,6 +520,11 @@ async def process_single_user(
         # previously-downloaded videos still runs.
         if not item_list_map and is_private is True and info:
             if not _followed:
+                _ydlp_task.cancel()
+                try:
+                    await _ydlp_task
+                except BaseException:
+                    pass
                 log(f"  Private account, cannot be accessed")
                 store.update_privacy_status(channel_id, "private_blocked")
                 return _profile_ok, _deletion_detected
@@ -512,48 +536,37 @@ async def process_single_user(
                 # endpoint hiccup should not count toward the rate-limit failure counter
                 _profile_ok = True
 
-        # ── Fallback: yt-dlp flat extraction ─────────────────────────────────
-        # Only runs when item_list returned nothing (failed or no sec_uid).
-        # Skipped for accessible private accounts with 0 videos -- yt-dlp cannot
-        # access private content and would incorrectly trigger private_blocked.
-        if not item_list_map and not (is_private and info and _followed):
-            # Already flagged blocked and the profile still reports videos we cannot
-            # list: nothing has changed, don't burn a yt-dlp attempt every cycle.
-            if user.get("privacy_status") == "blocked" and (_profile_video_count or 0) > 0:
-                log(f"  Cookies account still blocked by this user, skipping")
-                store.touch_last_checked(channel_id)
-                return _profile_ok, _deletion_detected
-            try:
-                ydlp_videos = get_user_videos(channel_id, sec_uid=sec_uid,
-                                              cookies_path=COOKIES_PATH)
-                ydlp_map = {v["video_id"]: v for v in ydlp_videos}
-                log(f"  {_npost(len(ydlp_map))} found")
-                logd(f"  [{channel_id}] {len(ydlp_map)} videos via yt-dlp fallback")
-            except Exception as e:
-                logd(f"  [{channel_id}] yt-dlp fallback error: {e}")
-                if "does not have any videos" in str(e) and (_profile_video_count or 0) > 0:
-                    # Profile reports videos but neither source can list any: the
-                    # account has most likely blocked the cookies account.
-                    log(f"  Profile reports {_profile_video_count} videos but none are listable; cookies account is likely blocked by this user")
-                    store.update_privacy_status(channel_id, "blocked")
-                    store.touch_last_checked(channel_id)
-                    return _profile_ok, _deletion_detected
-                if "does not have any videos" in str(e) and _profile_video_count == 0:
-                    # Genuinely empty account (profile confirms 0 videos): continue to
-                    # the diff so deletion tracking of saved videos still runs.
-                    log(f"  Account has no videos posted")
-                else:
-                    log(f"  Video fetch failed -- skipping user")
-                    if "private" in str(e).lower():
-                        store.update_privacy_status(channel_id, "private_blocked")
-                    return _profile_ok, _deletion_detected  # both sources failed; propagate profile result
+        # ── Collect the yt-dlp deletion source (launched in parallel above) ──
+        # yt-dlp is the sole authority for deletion detection; the browser
+        # item_list only enriches stats and new-video details now. Its result
+        # here is the current-video set the diff below trusts.
+        _ydlp_ok = False
+        try:
+            ydlp_videos = await _ydlp_task
+            ydlp_map = {v["video_id"]: v for v in ydlp_videos}
+            _ydlp_ok = True
+            log(f"  {_npost(len(ydlp_map))} listed (yt-dlp)")
+        except Exception as e:
+            logd(f"  [{channel_id}] yt-dlp listing failed: {e}")
+            if ("does not have any videos" in str(e)
+                    and (_profile_video_count or 0) > 0 and not item_list_map):
+                # Profile reports videos but neither yt-dlp nor the browser can
+                # list any: the cookies account is most likely blocked by this user.
+                log(f"  Profile reports {_profile_video_count} videos but none are listable; cookies account is likely blocked by this user")
+                store.update_privacy_status(channel_id, "blocked")
+            elif not item_list_map:
+                log(f"  Video fetch failed")
 
         # If stop was requested during the item_list fetch, the result is partial.
         # Treat it the same as quick mode: skip the full deletion diff and don't
         # update the stored ordered IDs, to avoid falsely flagging un-fetched videos.
         _fetch_interrupted = bool(stop_event and stop_event.is_set())
 
-        remote_ids = set(item_list_map) | set(ydlp_map)
+        # remote_ids: union of both sources, used to spot NEW videos and
+        # undeletions (a video present in either source counts). present_ids:
+        # the yt-dlp listing only, the sole authority for deletion detection.
+        remote_ids  = set(item_list_map) | set(ydlp_map)
+        present_ids = set(ydlp_map)
 
         if is_private is True:
             store.update_privacy_status(channel_id, "private_accessible")
@@ -575,50 +588,28 @@ async def process_single_user(
 
         new_ids = remote_ids - known_ids
 
-        # Full deletion diff: active videos not in the API response are possibly deleted.
-        # pending_ids (seen missing once) that are still absent get confirmed.
-        # Both skipped in quick mode (partial fetch) and on interrupted fetches.
-        _full_diff = mode == "full" and not _fetch_interrupted
-
-        # Deletion detection needs a trustworthy full listing (see
-        # _listing_untrustworthy). Skip the diff this run when the fetch came
-        # back empty or truncated so a blocked/partial listing cannot flag the
-        # whole catalog as deleted; the next check verifies.
-        if _full_diff and (active_ids or pending_ids) and _listing_untrustworthy(len(remote_ids), _profile_video_count):
-            log(f"  Video fetch incomplete ({len(remote_ids)} listed"
+        # Deletion detection runs on every check (Quick and Full) off the
+        # yt-dlp listing, the reliable source for what currently exists.
+        # pending_ids (seen missing once) still absent get confirmed. Skipped
+        # when yt-dlp failed, the run was interrupted, or the listing came back
+        # too incomplete vs the profile's count, so a bad listing never flags
+        # the whole catalog as deleted. yt-dlp is the sole authority here: the
+        # browser list is never a deletion fallback.
+        _run_deletion = _should_run_deletion(
+            _ydlp_ok, _fetch_interrupted, len(present_ids),
+            _profile_video_count, bool(active_ids or pending_ids),
+        )
+        if (not _run_deletion and _ydlp_ok and not _fetch_interrupted
+                and (active_ids or pending_ids)):
+            log(f"  yt-dlp listing incomplete ({len(present_ids)} listed"
                 f"{f', profile reports {_profile_video_count}' if _profile_video_count else ''}); "
                 f"skipping deletion check this run")
-            _full_diff = False
 
-        deleted_ids = (active_ids - remote_ids) if _full_diff else set()
-        confirm_ids = (pending_ids - remote_ids) if _full_diff else set()
+        deleted_ids = (active_ids - present_ids) if _run_deletion else set()
+        confirm_ids = (pending_ids - present_ids) if _run_deletion else set()
 
         # Any deleted video (confirmed or not) that's visible again: revert or undelete.
         undeleted_ids = (known_ids - active_ids) & remote_ids
-
-        # Position-aware deletion detection for quick mode. Only compares
-        # same-source windows: a baseline written by the other listing path
-        # anchors its 30-video window differently, and diffing across the two
-        # reads the membership drift as deletions (seen in production as
-        # pinned posts flagged possibly deleted, reverted by the next full
-        # run). On a source switch the diff is skipped once and the baseline
-        # below is rewritten under the new source.
-        quick_deleted_ids: set = set()
-        if mode == "quick" and curr_ordered:
-            prev_ordered, prev_source = store.get_last_quick_video_ids(channel_id)
-            if prev_ordered and prev_source != _listing_source:
-                logd(f"  [{channel_id}] quick window baseline is from"
-                     f" {prev_source or 'an untagged listing'}, current from"
-                     f" {_listing_source}; skipping position diff this run")
-                prev_ordered = []
-            if prev_ordered:
-                prev_set = set(prev_ordered)
-                curr_set = set(curr_ordered)
-                n_new    = len(curr_set - prev_set)
-                if n_new < len(prev_ordered):
-                    expected_dropoffs = set(prev_ordered[-n_new:]) if n_new > 0 else set()
-                    # Include both active (first sighting) and pending (confirmation) videos
-                    quick_deleted_ids = ((prev_set - curr_set) - expected_dropoffs) & (active_ids | pending_ids)
 
         if new_ids:
             log(f"  New: {len(new_ids)}")
@@ -626,11 +617,9 @@ async def process_single_user(
             log(f"  Missing (checking for deletion): {len(deleted_ids)}")
         if confirm_ids:
             log(f"  Confirming deletion: {len(confirm_ids)}")
-        if quick_deleted_ids:
-            log(f"  Missing from quick window: {len(quick_deleted_ids)}")
         if undeleted_ids:
             log(f"  Back on TikTok: {len(undeleted_ids)}")
-        if not (new_ids or deleted_ids or confirm_ids or quick_deleted_ids or undeleted_ids):
+        if not (new_ids or deleted_ids or confirm_ids or undeleted_ids):
             log("  No changes.")
 
         for vid_id in new_ids:
@@ -736,14 +725,6 @@ async def process_single_user(
         if len(deleted_ids) >= _LARGE_DELETION_THRESHOLD:
             _large_deletion_spike = True
 
-        for vid_id in quick_deleted_ids:
-            if vid_id in pending_ids:
-                store.confirm_video_deletion(vid_id)
-                log(f"  Confirmed deleted: {vid_id}")
-            else:
-                store.mark_video_possibly_deleted(vid_id)
-                log(f"  Possibly deleted: {vid_id}")
-
         for vid_id in undeleted_ids:
             result = store.revert_or_undelete_video(vid_id)
             if result == "undeleted":
@@ -765,13 +746,6 @@ async def process_single_user(
                         details.get("repost_count"),
                     )
 
-        # Update the stored ordered ID list for the next position-aware quick check.
-        # Skip if the fetch was interrupted: a partial list would corrupt the detection baseline.
-        if not _fetch_interrupted:
-            if mode == "quick" and curr_ordered:
-                store.set_last_quick_video_ids(channel_id, curr_ordered, source=_listing_source)
-            elif mode == "full" and curr_ordered:
-                store.set_last_quick_video_ids(channel_id, curr_ordered[:30], source=_listing_source)
 
         return _profile_ok, _deletion_detected, _large_deletion_spike
 
