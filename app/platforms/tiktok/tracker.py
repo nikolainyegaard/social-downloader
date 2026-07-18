@@ -63,6 +63,22 @@ def _start_bot_cooldown() -> int:
     return hours
 
 
+def _listing_untrustworthy(remote_count: int, profile_video_count: int | None) -> bool:
+    """Whether a full listing is too incomplete to run deletion detection against.
+
+    A run that listed nothing, or far fewer than the count the profile still
+    reports, was blocked or truncated rather than a mass deletion. Diffing the
+    whole catalog against it flags every video as deleted (the @geaa.010 "0
+    videos, all marked deleted" bug). A genuinely emptied account reports
+    video_count 0, which is trustworthy (its saved videos should be flagged).
+    """
+    expected = profile_video_count or 0
+    if remote_count == 0 and profile_video_count != 0:
+        return True
+    # ponytail: 0.5 floor catches truncated fetches; tighten if false skips appear
+    return expected > 0 and remote_count < expected * 0.5
+
+
 def redownload_story_row(db, row, log=print) -> bool:
     """Re-download one afflicted live TikTok video story via yt-dlp on its page.
 
@@ -372,6 +388,11 @@ async def process_single_user(
         item_list_map: dict = {}
         ydlp_map:      dict = {}
 
+        # The count the profile currently reports it has posted. Ground truth
+        # for how many videos should be listable, used both by the yt-dlp
+        # fallback and the deletion-diff trust check below.
+        _profile_video_count = info.get("video_count") if info else None
+
         # Which listing path produced curr_ordered. The sniff and the
         # endpoint anchor the 30-video window differently (the sniff's top
         # comes from the page blob merge), so the quick position diff must
@@ -496,7 +517,6 @@ async def process_single_user(
         # Skipped for accessible private accounts with 0 videos -- yt-dlp cannot
         # access private content and would incorrectly trigger private_blocked.
         if not item_list_map and not (is_private and info and _followed):
-            _profile_video_count = info.get("video_count") if info else None
             # Already flagged blocked and the profile still reports videos we cannot
             # list: nothing has changed, don't burn a yt-dlp attempt every cycle.
             if user.get("privacy_status") == "blocked" and (_profile_video_count or 0) > 0:
@@ -559,6 +579,17 @@ async def process_single_user(
         # pending_ids (seen missing once) that are still absent get confirmed.
         # Both skipped in quick mode (partial fetch) and on interrupted fetches.
         _full_diff = mode == "full" and not _fetch_interrupted
+
+        # Deletion detection needs a trustworthy full listing (see
+        # _listing_untrustworthy). Skip the diff this run when the fetch came
+        # back empty or truncated so a blocked/partial listing cannot flag the
+        # whole catalog as deleted; the next check verifies.
+        if _full_diff and (active_ids or pending_ids) and _listing_untrustworthy(len(remote_ids), _profile_video_count):
+            log(f"  Video fetch incomplete ({len(remote_ids)} listed"
+                f"{f', profile reports {_profile_video_count}' if _profile_video_count else ''}); "
+                f"skipping deletion check this run")
+            _full_diff = False
+
         deleted_ids = (active_ids - remote_ids) if _full_diff else set()
         confirm_ids = (pending_ids - remote_ids) if _full_diff else set()
 
