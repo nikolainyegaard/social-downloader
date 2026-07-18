@@ -1128,44 +1128,49 @@ async function _trackUser(tiktokId, username) {
     overlay.innerHTML = `<div class="modal-untracked-error">${esc(data?.error || 'Failed to start tracking')}</div>`;
     return;
   }
-  _pollUntilTracked(tiktokId, data.handle, overlay);
-}
 
-function _pollUntilTracked(tiktokId, username, overlay) {
-  const iv = setInterval(async () => {
-    const { ok: qOk, data: queue } = await apiJSON('/api/tiktok/queue');
-    if (!qOk) return;
-    const entry = queue[username];
-    if (entry?.status === 'error') {
-      clearInterval(iv);
-      overlay.innerHTML = `<div class="modal-untracked-error">${esc(entry.message || 'Tracking failed')}</div>`;
+  // The /track POST feeds the engine add queue. Rather than poll, ride the live
+  // queue snapshots (SSE-pushed on the active tab, poll fallback otherwise) and
+  // finish when this handle resolves. A resolved add stays in the queue as
+  // status 'ok' -- that is the completion signal, not the entry disappearing
+  // (the old poll waited for it to vanish, which never happened, so the spinner
+  // hung forever).
+  const handle = data.handle;
+  let unsub = null;
+  const onQueue = async (queue) => {
+    const entry = queue[handle];
+    if (!entry) return;                                              // not in the snapshot yet
+    if (entry.status !== 'ok' && entry.status !== 'error') return;   // still pending
+    if (unsub) unsub();
+    const ov = document.getElementById('untrackedOverlay');
+    if (!ov) return;                                                 // modal was closed
+    if (entry.status === 'error') {
+      ov.innerHTML = `<div class="modal-untracked-error">${esc(entry.message || 'Tracking failed')}</div>`;
       return;
     }
-    if (!entry) {
-      clearInterval(iv);
-      await tt.loadCreators();
-      const u = tt.getCreators().find(u => u.channel_id === tiktokId);
-      if (u) {
-        tt.setModalCreator(u);
-        const hdr = tt.el('ModalHeader');
-        tt.renderModalHeader(u);  // replaces innerHTML; overlay detached, class + position:relative kept
-        const fadeEl = document.createElement('div');
-        fadeEl.className = 'modal-untracked-overlay';
-        hdr.appendChild(fadeEl);
-        requestAnimationFrame(() => {
-          fadeEl.style.transition = 'opacity 0.3s';
-          fadeEl.style.opacity    = '0';
-        });
-        setTimeout(() => {
-          fadeEl.remove();
-          hdr.classList.remove('modal-header-untracked');
-        }, 320);
-        tt.loadModalVideos(tiktokId);
-      } else {
-        overlay.innerHTML = '<div class="modal-untracked-error">User data not found after tracking.</div>';
-      }
+    await tt.loadCreators();
+    const u = tt.getCreators().find(c => c.channel_id === tiktokId);
+    if (!u) {
+      ov.innerHTML = '<div class="modal-untracked-error">User data not found after tracking.</div>';
+      return;
     }
-  }, 2000);
+    tt.setModalCreator(u);
+    const hdr = tt.el('ModalHeader');
+    tt.renderModalHeader(u);  // replaces innerHTML; overlay detached, class + position:relative kept
+    const fadeEl = document.createElement('div');
+    fadeEl.className = 'modal-untracked-overlay';
+    hdr.appendChild(fadeEl);
+    requestAnimationFrame(() => {
+      fadeEl.style.transition = 'opacity 0.3s';
+      fadeEl.style.opacity    = '0';
+    });
+    setTimeout(() => {
+      fadeEl.remove();
+      hdr.classList.remove('modal-header-untracked');
+    }, 320);
+    tt.loadModalVideos(tiktokId);
+  };
+  unsub = tt.onQueue(onQueue);
 }
 
 // ── Settings modal ────────────────────────────────────────────────────────────

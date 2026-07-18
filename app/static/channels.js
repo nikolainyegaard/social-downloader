@@ -885,6 +885,11 @@ function initChannelApp(cfg) {
   });
 
   let _queueSig = null;
+  // Extras (the untracked-user modal) can watch queue snapshots to react when
+  // an add/track resolves, instead of running their own poll. Fired from this
+  // one funnel, so subscribers work over SSE pushes and the poll fallback alike.
+  const _queueSubs = new Set();
+
   function _syncQueue(data) {
     addToasts.sync(data);
     // Any queue state change (new pending, resolution, retry) is also a
@@ -894,6 +899,7 @@ function initChannelApp(cfg) {
       if (_queueSig !== null) loadAddHistory(true);
       _queueSig = sig;
     }
+    _queueSubs.forEach(cb => cb(data));
   }
 
   const loadQueue = X('LoadQueue', async () => {
@@ -2005,5 +2011,8 @@ function initChannelApp(cfg) {
     // True while the SSE stream is open (active tab): platform extras use it
     // to demote their own polls to a no-stream fallback
     isLive:            () => !!_es,
+    // Subscribe to add/track queue snapshots (SSE-pushed, poll fallback).
+    // Returns an unsubscribe function.
+    onQueue:           cb => { _queueSubs.add(cb); return () => _queueSubs.delete(cb); },
   };
 }
