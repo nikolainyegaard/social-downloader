@@ -41,6 +41,7 @@ def _iter_messages(url: str):
 
 def normalize_handle(handle: str) -> str:
     handle = handle.strip().lstrip("@")
+    handle = handle.split("?", 1)[0].split("#", 1)[0]
     if "/" in handle:
         handle = handle.rstrip("/").rsplit("/", 1)[-1].lstrip("@")
     return handle
