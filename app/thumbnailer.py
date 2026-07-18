@@ -451,7 +451,12 @@ _repair_state: dict = {
 }
 _repair_stop = threading.Event()
 
-_CICP_BAD = {0, 2, 3}  # 0/3 reserved, 2 unspecified -- all rejected or ambiguous
+# Only the reserved CICP code points (0 and 3) are invalid and rejected by
+# Firefox. 2 (unspecified) is valid and renders fine -- it is also the default
+# for untagged sources, i.e. almost every old thumbnail, so flagging it here
+# made the repair job regenerate the entire library instead of the few genuinely
+# broken (reserved) thumbnails.
+_CICP_BAD = {0, 3}
 
 
 def get_repair_state() -> dict:
@@ -460,10 +465,10 @@ def get_repair_state() -> dict:
 
 
 def _colr_reserved(path: str) -> bool:
-    """True if the AVIF's nclx colr box carries reserved/unspecified colour tags
-    that Firefox will not decode. Reads only the header, so it is cheap enough
-    to run over every thumbnail. A file with no nclx box (or unreadable) is
-    treated as fine: the fixed encoder always writes a valid one."""
+    """True if the AVIF's nclx colr box carries reserved colour tags that
+    Firefox will not decode. Reads only the header, so it is cheap enough to run
+    over every thumbnail. A file with no nclx box (or unreadable) is treated as
+    fine, as is unspecified (2) colour, which Firefox renders correctly."""
     try:
         with open(path, "rb") as f:
             head = f.read(8192)
