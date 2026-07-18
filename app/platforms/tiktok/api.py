@@ -866,18 +866,26 @@ async def _sniff_item_list(page, page_url: str, api_path: str, extract,
     results: list  = []
     seen: set[str] = set()
     state = {"exhausted": False, "responses": 0}
+    diag  = {"other": set(), "last_items": None, "last_hasmore": None, "unparsed": 0}
 
     async def on_response(resp):
         if api_path not in resp.url:
+            # Endpoint-drift probe: note listing-shaped URLs the page fetched
+            # that this sniff does not match (pagination may have moved paths).
+            if any(p in resp.url for p in ("item_list", "/api/music/", "/api/post/")):
+                diag["other"].add(resp.url.split("?")[0])
             return
         try:
             data = await resp.json()
         except Exception:
+            diag["unparsed"] += 1
             return
         if data.get("statusCode") not in (0, None):
             return
         state["responses"] += 1
         items = data.get("itemList") or []
+        diag["last_items"]   = len(items)
+        diag["last_hasmore"] = data.get("hasMore")
         if not items or not data.get("hasMore"):
             state["exhausted"] = True
         for item in items:
@@ -928,6 +936,12 @@ async def _sniff_item_list(page, page_url: str, api_path: str, extract,
         page.remove_listener("response", on_response)
 
     complete = state["exhausted"] or len(results) >= max_count
+    if not complete:
+        print(f"[sniff-diag] {page_url}: incomplete after {state['responses']} "
+              f"matched response(s), {len(results)} item(s); last page "
+              f"items={diag['last_items']} hasMore={diag['last_hasmore']}; "
+              f"unparsed={diag['unparsed']}; other listing endpoints seen: "
+              f"{sorted(diag['other']) or 'none'}")
     return results[:max_count], complete
 
 

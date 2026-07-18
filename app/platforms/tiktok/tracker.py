@@ -530,7 +530,7 @@ async def process_single_user(
                 return _profile_ok, _deletion_detected
 
         if item_list_map:
-            log(f"  {_npost(len(item_list_map))} found")
+            logd(f"  [{channel_id}] {len(item_list_map)} via browser (stats enrichment)")
             if not _profile_ok:
                 # item_list returned data so the session is responsive; the profile
                 # endpoint hiccup should not count toward the rate-limit failure counter
@@ -545,7 +545,7 @@ async def process_single_user(
             ydlp_videos = await _ydlp_task
             ydlp_map = {v["video_id"]: v for v in ydlp_videos}
             _ydlp_ok = True
-            log(f"  {_npost(len(ydlp_map))} listed (yt-dlp)")
+            log(f"  {_npost(len(ydlp_map))} found")
         except Exception as e:
             logd(f"  [{channel_id}] yt-dlp listing failed: {e}")
             if ("does not have any videos" in str(e)
