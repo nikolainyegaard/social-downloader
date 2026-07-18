@@ -866,7 +866,8 @@ async def _sniff_item_list(page, page_url: str, api_path: str, extract,
     results: list  = []
     seen: set[str] = set()
     state = {"exhausted": False, "responses": 0}
-    diag  = {"other": set(), "last_items": None, "last_hasmore": None, "unparsed": 0}
+    diag  = {"other": set(), "last_items": None, "last_hasmore": None,
+             "unparsed": 0, "pages": []}
 
     async def on_response(resp):
         if api_path not in resp.url:
@@ -886,6 +887,8 @@ async def _sniff_item_list(page, page_url: str, api_path: str, extract,
         items = data.get("itemList") or []
         diag["last_items"]   = len(items)
         diag["last_hasmore"] = data.get("hasMore")
+        if items:
+            diag["pages"].append(len(items))
         if not items or not data.get("hasMore"):
             state["exhausted"] = True
         for item in items:
@@ -936,12 +939,24 @@ async def _sniff_item_list(page, page_url: str, api_path: str, extract,
         page.remove_listener("response", on_response)
 
     complete = state["exhausted"] or len(results) >= max_count
+    # TikTok can end a listing by tapering to a small final page and then
+    # halting requests, without the terminal empty page this loop waits for
+    # (seen on a music page: 5 pages, last just 1 item, hasMore stuck true).
+    # A final page smaller than the largest one seen means the listing reached
+    # its natural end; a mid-stream throttle instead cuts off after full pages,
+    # so that stays incomplete. Downstream 2-strike deletion confirmation
+    # absorbs a rare misjudgement.
+    # ponytail: tapering heuristic; a throttle returning one partial page then
+    # stopping could false-complete, but it takes two such runs to confirm a deletion.
+    pages = diag["pages"]
+    if (not complete and not (stop_event and stop_event.is_set())
+            and len(pages) >= 2 and pages[-1] < max(pages)):
+        complete = True
     if not complete:
         print(f"[sniff-diag] {page_url}: incomplete after {state['responses']} "
-              f"matched response(s), {len(results)} item(s); last page "
-              f"items={diag['last_items']} hasMore={diag['last_hasmore']}; "
-              f"unparsed={diag['unparsed']}; other listing endpoints seen: "
-              f"{sorted(diag['other']) or 'none'}")
+              f"matched response(s), {len(results)} item(s); pages={pages}; "
+              f"last hasMore={diag['last_hasmore']}; unparsed={diag['unparsed']}; "
+              f"other listing endpoints seen: {sorted(diag['other']) or 'none'}")
     return results[:max_count], complete
 
 
