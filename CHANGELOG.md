@@ -45,6 +45,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The TikTok Loops panel now toggles between the User and Sound loops with pills in the panel header, so the panel is the same height as on the other apps instead of stacking both loops
 
 ### Changed
+- Add history rows show the retry and discard buttons only on hover now, overlaid on the right with the row's text fading out behind them, so the date sits at the end of every row and failed adds stay uncluttered until you reach for an action
+- The handle in an Add history row and the creator name in a Recent activity row now grow to use the free space beside them and only truncate when the status or detail next to them actually needs the room, instead of always cutting off at a fixed width
 - The video Description in a creator's video list can be clicked to expand it and read the whole thing, then clicked again to collapse, the same as the bio on the creator modal
 - The Recent activity panel's filter pills now scroll sideways with a fade at the clipped edge when the panel is too narrow to fit them, instead of overflowing; the panel title stays put
 - The TikTok user check now lists videos by driving the user's profile page in the browser and capturing the listing responses the page itself requests while scrolling, the same way the sound loop reads music pages. TikTok has been answering these page-initiated requests while returning empty bodies to the constructed API calls the listing used before; the old API path stays as an automatic fallback, with yt-dlp behind it

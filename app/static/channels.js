@@ -920,12 +920,14 @@ function initChannelApp(cfg) {
       ? `<button class="ah-btn" title="Try again" onclick="${P}AhRetry(${e.id})">${_triggerIcon}</button>
          <button class="ah-btn ah-btn-danger" title="Discard" onclick="${P}AhDiscard(${e.id})">✕</button>`
       : '';
-    return `<div class="ah-row">
-      <span class="ah-icon ah-${esc(e.status)}">${icon}</span>
-      <span class="ah-handle">@${esc(e.handle)}</span>
-      ${status}
-      <span class="ah-time">${_recentDate(e.updated_at)}</span>
-      <span class="ah-actions">${actions}</span>
+    return `<div class="ah-row${actions ? ' has-actions' : ''}">
+      <div class="ah-row-content">
+        <span class="ah-icon ah-${esc(e.status)}">${icon}</span>
+        <span class="ah-handle">@${esc(e.handle)}</span>
+        ${status}
+        <span class="ah-time">${_recentDate(e.updated_at)}</span>
+      </div>
+      ${actions ? `<span class="ah-actions">${actions}</span>` : ''}
     </div>`;
   }
 
