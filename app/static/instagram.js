@@ -19,6 +19,7 @@ initChannelApp({
   addPlaceholder:    '@username or profile URL',
   addAriaLabel:      'Instagram username',
   profileUrl:        h => `https://www.instagram.com/${h}`,
+  hasStories:        true,
 });
 
 // ── Settings (session login + schedule) ───────────────────────────────────────

@@ -616,6 +616,7 @@ const tt = initChannelApp({
   addPlaceholder:    '@username, sound ID, or URL',
   addAriaLabel:      'TikTok username, sound ID, or URL',
   profileUrl:        h => `https://www.tiktok.com/@${h}`,
+  hasStories:        true,
   fieldLabels: {
     username: 'Handle', handle: 'Handle', display_name: 'Display name',
     bio: 'Bio', description: 'Bio', bio_link: 'Bio link', avatar: 'Avatar',

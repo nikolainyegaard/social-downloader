@@ -42,6 +42,7 @@
  * @property {Object<string, () => void>} [extraDomainLoaders]  Platform panels refetched on SSE 'changed' domains (TikTok: sounds)
  * @property {(state: Object) => boolean} [statusActive]  Extra 'running' signal for the header badge
  * @property {(state: Object) => {iso: string, label: string}[]} [nextRunCandidates]
+ * @property {boolean} [hasStories]     Platform saves stories: adds the Stories card stat and sort option
  * @property {(s: Object) => Object[]} [statsRows]      Rows for the stat strip
  * @property {(item: Object) => string} [recentFallback]  Recent-feed line for disabled creators
  * @property {(ch: Object) => string} [gridClassFn]
@@ -195,6 +196,7 @@ function initChannelApp(cfg) {
               <option value="subscriber_count">${cfg.subLabelSort}</option>
               <option value="video_total">Saved ${ITEMS}</option>
               <option value="video_deleted">Deleted ${ITEMS}</option>
+              ${cfg.hasStories ? '<option value="story_count">Stories</option>' : ''}
               <option value="added_at">Date added</option>
               <option value="last_checked">Last checked</option>
               <option value="last_saved">Last saved</option>
@@ -279,6 +281,7 @@ function initChannelApp(cfg) {
     subscriber_count: { asc: 'Low → High',   desc: 'High → Low'   },
     video_total:      { asc: 'Low → High',   desc: 'High → Low'   },
     video_deleted:    { asc: 'Low → High',   desc: 'High → Low'   },
+    story_count:      { asc: 'Low → High',   desc: 'High → Low'   },
     added_at:         { asc: 'Oldest first', desc: 'Newest first' },
     last_checked:     { asc: 'Oldest first', desc: 'Newest first' },
     last_saved:       { asc: 'Oldest first', desc: 'Newest first' },
@@ -1152,7 +1155,7 @@ function initChannelApp(cfg) {
           <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${ch.video_total || 0}</span></span>
           ${(ch.video_deleted || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${ch.video_deleted}</span></span>` : ''}
           ${ch.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:var(--orange)">${ch.video_missing}</span></span>` : ''}
-          ${ch.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${ch.video_undeleted}</span></span>` : ''}
+          ${cfg.hasStories && ch.story_count ? `<span class="stat-item"><span class="stat-item-label">stories</span><span class="stat-item-value" style="color:var(--purple)">${ch.story_count}</span></span>` : ''}
         </div>
 
         ${rescanBadge}
