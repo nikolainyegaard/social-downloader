@@ -12,6 +12,7 @@ import json as _json
 import os
 import queue as _queue_module
 import re as _re
+import shutil
 import threading
 import time
 from flask import Blueprint, Response, jsonify, request, send_file
@@ -328,7 +329,13 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     @bp.route("/channels/<channel_id>", methods=["DELETE"])
     def remove_channel(channel_id: str):
+        # ?delete_media=1 also deletes the creator's media folder from disk.
+        # Default (no flag) keeps the files, matching the historical behaviour.
+        delete_media = request.args.get("delete_media") == "1"
+        ch = db.get_channel(channel_id) if delete_media else None
         db.remove_channel(channel_id)
+        if delete_media and ch and ch.get("handle"):
+            shutil.rmtree(os.path.join(MEDIA_DIR, platform, f"@{ch['handle']}"), ignore_errors=True)
         return jsonify({"ok": True})
 
     @bp.route("/channels/<channel_id>/storage", methods=["GET"])

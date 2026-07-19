@@ -961,6 +961,12 @@
   <div class="media-modal-inner confirm-card">
     <div class="confirm-title" id="confirmTitle"></div>
     <div class="confirm-message" id="confirmMessage"></div>
+    <label class="tracking-toggle confirm-check" id="confirmCheckWrap" style="display:none">
+      <input type="checkbox" id="confirmCheck">
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span class="toggle-label" id="confirmCheckLabel"></span>
+    </label>
+    <div class="confirm-warn" id="confirmWarn" style="display:none"></div>
     <input class="confirm-input" id="confirmInput" style="display:none" onkeydown="if(event.key==='Enter')_confirmAccept()">
     <div class="confirm-actions">
       <button class="btn-sm" onclick="_confirmDismiss()">Cancel</button>

@@ -1250,6 +1250,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   font-size: 13px; font-family: inherit; outline: none;
 }
 .confirm-input:focus { border-color: var(--accent); }
+.confirm-check { margin-top: 16px; }
+.confirm-warn { margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--red); line-height: 1.45; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 .confirm-ok { background: var(--accent); border-color: var(--accent); color: #fff; }
 .confirm-ok.danger { background: var(--red); border-color: var(--red); }

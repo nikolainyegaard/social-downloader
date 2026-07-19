@@ -375,11 +375,28 @@ let _confirmState = null;
 
 function _openDialog(o) {
   return new Promise(resolve => {
-    _confirmState = { resolve, isPrompt: !!o.isPrompt };
+    _confirmState = { resolve, isPrompt: !!o.isPrompt, hasCheckbox: !!o.checkbox };
     document.getElementById('confirmTitle').textContent = o.title || '';
     const msgEl = document.getElementById('confirmMessage');
     msgEl.textContent   = o.message || '';
     msgEl.style.display = o.message ? '' : 'none';
+
+    const chkWrap = document.getElementById('confirmCheckWrap');
+    const chk     = document.getElementById('confirmCheck');
+    const warn    = document.getElementById('confirmWarn');
+    if (o.checkbox) {
+      chkWrap.style.display = '';
+      document.getElementById('confirmCheckLabel').textContent = o.checkbox.label || '';
+      chk.checked   = false;
+      warn.textContent   = o.checkbox.warn || '';
+      warn.style.display = 'none';
+      // Reveal the red warning only while the option is on.
+      chk.onchange = () => { warn.style.display = chk.checked && o.checkbox.warn ? '' : 'none'; };
+    } else {
+      chkWrap.style.display = 'none';
+      warn.style.display    = 'none';
+    }
+
     const inp = document.getElementById('confirmInput');
     if (o.isPrompt) {
       inp.style.display = '';
@@ -405,10 +422,19 @@ function openPrompt({ title = '', message = '', value = '', placeholder = '', co
   return _openDialog({ title, message, value, placeholder, confirmLabel, danger: false, isPrompt: true });
 }
 
+// Confirm with an extra opt-in checkbox. Resolves { confirmed, checked }.
+// checkboxWarn is shown in red only while the box is ticked.
+function openConfirmOption({ title = 'Are you sure?', message = '', confirmLabel = 'Confirm', danger = true, checkboxLabel = '', checkboxWarn = '' } = {}) {
+  return _openDialog({ title, message, confirmLabel, danger, checkbox: { label: checkboxLabel, warn: checkboxWarn } });
+}
+
 function _confirmAccept() {
   const s = _confirmState;
   if (!s) return;
-  const result = s.isPrompt ? document.getElementById('confirmInput').value : true;
+  let result;
+  if (s.hasCheckbox)    result = { confirmed: true, checked: document.getElementById('confirmCheck').checked };
+  else if (s.isPrompt)  result = document.getElementById('confirmInput').value;
+  else                  result = true;
   _confirmClose();
   s.resolve(result);
 }
@@ -417,7 +443,8 @@ function _confirmDismiss() {
   const s = _confirmState;
   if (!s) return;
   _confirmClose();
-  s.resolve(s.isPrompt ? null : false);
+  if (s.hasCheckbox)   s.resolve({ confirmed: false, checked: false });
+  else                 s.resolve(s.isPrompt ? null : false);
 }
 
 function _confirmClose() {
@@ -1753,8 +1780,31 @@ async function _creatorRunProfile(apiPath, id, getQueue, setQueue, render) {
 }
 
 async function _creatorRemove(apiPath, id, label, load) {
-  if (!await openConfirm({ title: `Stop tracking ${label}?`, message: 'Downloaded files will not be deleted.', confirmLabel: 'Stop tracking' })) return;
-  await apiJSON(`${apiPath}/${id}`, { method: 'DELETE' });
+  // Size the media folder up front so the opt-in warning can quote a real figure.
+  const { ok: szOk, data: szData } = await apiJSON(`${apiPath}/${id}/storage`);
+  const bytes   = szOk && szData ? (szData.bytes || 0) : 0;
+  const sizeStr = _fmtBytes(bytes);
+
+  const res = await openConfirmOption({
+    title:        `Delete ${label}?`,
+    message:      `This stops tracking and removes ${label} from your list. Downloaded media is kept unless you choose otherwise.`,
+    confirmLabel: 'Delete',
+    checkboxLabel: 'Also delete downloaded media files',
+    checkboxWarn:  `${sizeStr} of downloaded media will be permanently deleted from disk.`,
+  });
+  if (!res.confirmed) return;
+
+  // A second, unambiguous gate only when media is actually being destroyed.
+  if (res.checked) {
+    const sure = await openConfirm({
+      title:        `Permanently delete ${sizeStr}?`,
+      message:      `${label} and its ${sizeStr} of downloaded files will be erased from disk. This cannot be undone.`,
+      confirmLabel: "Yes, delete everything",
+    });
+    if (!sure) return;
+  }
+
+  await apiJSON(`${apiPath}/${id}${res.checked ? '?delete_media=1' : ''}`, { method: 'DELETE' });
   load();
 }
 
