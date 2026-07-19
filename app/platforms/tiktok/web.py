@@ -684,6 +684,18 @@ def register_tiktok_routes(bp, engine) -> None:
         threading.Thread(target=_worker, daemon=True).start()
         return jsonify({"ok": True, "video_id": vid_id, "queued": True}), 202
 
+    @bp.route("/resolve-url", methods=["POST"])
+    def resolve_url():
+        """Expand a TikTok share/short link to its canonical URL so the add bar
+        can route it (profile vs post). The browser cannot follow a cross-origin
+        redirect itself."""
+        body = request.get_json(silent=True) or {}
+        url  = (body.get("url") or "").strip()
+        if not re.match(r"https?://(?:vm|vt)\.tiktok\.com/|https?://(?:www\.)?tiktok\.com/t/", url):
+            return jsonify({"error": "Not a TikTok share link"}), 400
+        from platforms.tiktok.api import resolve_share_url
+        return jsonify({"ok": True, "url": resolve_share_url(url)})
+
     @bp.route("/channels/<channel_id>/avatar-history/<filename>", methods=["GET"])
     def channel_avatar_history(channel_id: str, filename: str):
         if not re.fullmatch(r"[0-9]+_[0-9]+\.(jpg|avif)", filename):

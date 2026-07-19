@@ -1140,6 +1140,34 @@ async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
             raise
 
 
+def resolve_share_url(url: str) -> str:
+    """Follow a TikTok share/short link (vm./vt.tiktok.com, tiktok.com/t/...) to
+    its canonical URL. Returns the final URL, or the input unchanged on failure.
+    Runs server-side because the browser cannot read a cross-origin redirect.
+    """
+    from curl_cffi import requests as curl_requests
+    from platforms.tiktok.config import get_proxy
+
+    proxy = get_proxy()
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    try:
+        resp = curl_requests.get(
+            url, headers=headers, impersonate="chrome120", timeout=30,
+            allow_redirects=True,
+            **({"proxies": {"http": proxy, "https": proxy}} if proxy else {}),
+        )
+        return str(resp.url) or url
+    except Exception:
+        return url
+
+
 def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
     """Fetch type and image URLs for a single video by parsing the TikTok page HTML.
     Returns {type, description, upload_date, image_urls}.

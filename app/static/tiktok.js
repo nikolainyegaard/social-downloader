@@ -440,6 +440,19 @@ function _isSoundInput(val) {
 }
 
 async function _ttAddHandler(val, addToasts) {
+  // Share/short links (vm./vt.tiktok.com, tiktok.com/t/...) hide the real path
+  // behind a redirect the browser cannot follow cross-origin; expand them
+  // server-side first, then the URL matching below routes the canonical URL.
+  if (/^https?:\/\/(?:vm|vt)\.tiktok\.com\/|^https?:\/\/(?:www\.)?tiktok\.com\/t\//.test(val)) {
+    const t = showToast('Resolving link…', { spinner: true, duration: 0 });
+    const { ok, data } = await apiJSON('/api/tiktok/resolve-url', {
+      method: 'POST',
+      body: JSON.stringify({ url: val }),
+    });
+    if (ok && data.url) { val = data.url; t.dismiss(); }
+    else { t.update('Could not resolve that TikTok link.', { type: 'error' }); return true; }
+  }
+
   if (_isSoundInput(val)) {
     const t = showToast('Adding sound…', { spinner: true, duration: 0 });
     const { ok, data } = await apiJSON('/api/tiktok/sounds', {
