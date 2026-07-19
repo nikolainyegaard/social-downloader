@@ -475,6 +475,9 @@ function initChannelApp(cfg) {
   function renderStats(s) {
     _renderStatGrid(`${P}StatsGrid`, _statsRows(s));
   }
+  // Render the strip with zero/placeholder values immediately so it reserves
+  // its final height and the page does not shift down when the fetch lands.
+  renderStats({});
 
   let _statsSig = null;
   const loadStats = X('LoadStats', async () => {
@@ -894,7 +897,7 @@ function initChannelApp(cfg) {
     const raw = handleInput.textContent.trim();
     if (!raw) return;
     handleInput.textContent = '';
-    handleInput.focus();
+    handleInput.blur();
 
     // Platform hook: returns true when it fully handled the input
     // (e.g. TikTok routing sound IDs/URLs to the sound tracker)
@@ -1447,11 +1450,10 @@ function initChannelApp(cfg) {
   X('MSort',   f => _mMobSort(MODAL_CFG, f));
   X('MStatus', k => _mMobStatus(MODAL_CFG, k));
   X('MType',   k => _mMobType(MODAL_CFG, k));
-  X('MToggleField', (field, btn) => {
-    phistField.has(field) ? phistField.delete(field) : phistField.add(field);
-    const on = phistField.has(field);
-    btn.classList.toggle('active', on);
-    const s = btn.querySelector('span'); if (s) s.textContent = on ? '✓' : '';
+  // Single-choice: pick one field, or click the active one again to clear.
+  X('MToggleField', field => {
+    phistField = phistField.has(field) ? new Set() : new Set([field]);
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // rebuild the Fields dropdown
     _renderPhistPanel();
   });
   function _mobileFieldsDd() {
@@ -1969,8 +1971,9 @@ function initChannelApp(cfg) {
     </div>`;
   }
 
+  // Single-choice: pick one field, or click the active one again to clear.
   X('PhistSetField', field => {
-    phistField.has(field) ? phistField.delete(field) : phistField.add(field);
+    phistField = phistField.has(field) ? new Set() : new Set([field]);
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // reflect active pill on the toolbar
     _renderPhistPanel();
   });
