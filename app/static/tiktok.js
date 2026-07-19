@@ -935,7 +935,7 @@ const _SOUND_MODAL_CFG = {
       : `<span class="author-chip untracked" onclick="event.stopPropagation();closeSoundModal();openUntrackedUserModal('${esc(v.channel_id)}','${esc(name)}')">@${esc(name)}</span>`;
   },
   hasSearch: true, hasViewToggle: true, viewFn: 'setSoundModalView',
-  gridId: 'soundVideoGrid', hasPhistBtn: false,
+  gridId: 'soundVideoGrid',
   thumbCellFn:  v => _soundThumbCell(v),
   actionBtnsFn: v => _ttVideoActionBtns(v),
   previewFn:    'ttOpenImgModal',

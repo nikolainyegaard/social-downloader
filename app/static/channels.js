@@ -389,6 +389,23 @@ function initChannelApp(cfg) {
     toolbarExpanded: false, view: 'list',
   };
 
+  // View-tab icons for the two extra modal views (History and Stories) that sit
+  // alongside the platform's media views (List/Grid) in the toolbar toggle.
+  const _historyIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3.5 2"/></svg>`;
+  const _storiesTabIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke-dasharray="3.2 2.6"/><polygon points="10,8.5 16.5,12 10,15.5" fill="currentColor" stroke="none"/></svg>`;
+  const _baseViewKeys = cfg.viewKeys || [
+    { key: 'list',   icon: _listViewIcon, title: 'List view' },
+    { key: 'videos', icon: _gridViewIcon, title: 'Grid view' },
+  ];
+  // Built per open: History is always offered; Stories only when the creator
+  // has saved stories on a stories-capable platform.
+  const _modalViewKeys = () => {
+    const keys = [..._baseViewKeys, { key: 'history', icon: _historyIcon, title: 'Profile history' }];
+    if (cfg.hasStories && modalCreator && modalCreator.story_count)
+      keys.push({ key: 'stories', icon: _storiesTabIcon, title: 'Stories' });
+    return keys;
+  };
+
   const MODAL_CFG = {
     st:             _creatorState,
     listElId:       `${P}ModalVideoList`,
@@ -408,18 +425,14 @@ function initChannelApp(cfg) {
     hasSearch:    true,
     hasViewToggle: true,
     viewFn:       `${P}SetModalView`,
-    viewKeys: cfg.viewKeys || [
-      { key: 'list',   icon: _listViewIcon, title: 'List view' },
-      { key: 'videos', icon: _gridViewIcon, title: 'Grid view' },
-    ],
+    viewKeys:     _modalViewKeys,
+    // History view swaps the post filters for its profile-change field pills,
+    // rendered into the toolbar's context-filter area.
+    contextFilters: v => v === 'history' ? _phistFieldPillsHtml() : '',
     viewVideoFilter: cfg.viewVideoFilter || ((view, vids) => vids),
     gridClassFn:     cfg.gridClassFn || (() => ''),
     typeIconFn:      cfg.typeIconFn || (v => _isMulti(v) ? _vgridPhotoIcon : (v.type === 'photo' || _isImage(v)) ? _vgridImageIcon : _vgridPlayIcon),
     gridId:       `${P}VideoGrid`,
-    hasPhistBtn:  true,
-    phistBtnFn:   `${P}OpenProfileHistory`,
-    storiesBtnFn: `${P}OpenStoriesPanel`,
-    storiesCount: () => (modalCreator && modalCreator.story_count) || 0,
     thumbCellFn:  _thumbCell,
     actionBtnsFn: _videoActionBtns,
     previewFn:    `${P}OpenImgModal`,
@@ -1353,7 +1366,7 @@ function initChannelApp(cfg) {
       // Mobile defaults to the grid view; use the real grid view key (e.g.
       // 'videos'), not the literal 'grid', so the toggle marks it active.
       view: window.innerWidth <= 640
-        ? (MODAL_CFG.viewKeys.find(k => k.key !== 'list') || MODAL_CFG.viewKeys[0]).key
+        ? (_baseViewKeys.find(k => k.key !== 'list') || _baseViewKeys[0]).key
         : 'list',
     });
     if (_creatorState.obs) { _creatorState.obs.disconnect(); _creatorState.obs = null; }
@@ -1385,7 +1398,8 @@ function initChannelApp(cfg) {
 
   X('OpenModalWithHistory', (channelId, field) => {
     window[`${P}OpenModal`](channelId);
-    window[`${P}OpenProfileHistory`](field);
+    if (field) phistField = new Set([field]);
+    window[`${P}SetModalView`]('history');
   });
 
   X('CloseModal', () => {
@@ -1419,18 +1433,17 @@ function initChannelApp(cfg) {
         row.addEventListener('mouseenter', () => row.classList.remove('video-row-highlight'), { once: true });
       }
     } else {
-      const historyOpen = _el('PhistPanel').style.display !== 'none';
-      if (!historyOpen) {
-        _mRenderToolbar(MODAL_CFG, _creatorState.videos);
+      // On History/Stories the list stays hidden; still refresh the toolbar so
+      // the tab set and post counts reflect the loaded videos.
+      _mRenderToolbar(MODAL_CFG, _creatorState.videos);
+      if (_creatorState.view !== 'history' && _creatorState.view !== 'stories')
         _mRenderList(MODAL_CFG);
-      }
     }
   }
 
   function _renderModalHeader(ch) {
     const isInactive  = ch.tracking_enabled === 0;
     const { cls: trackingCls, label: trackingLbl } = _trackingBadge(ch.tracking_enabled);
-    const checked     = _fmtLastChecked(ch.last_checked);
     const extUrl      = cfg.profileUrl(esc(ch.handle));
     const busy        = runQueue.includes(ch.channel_id) || runCurrent === ch.channel_id;
     const runDisabled = busy ? 'disabled' : '';
@@ -1447,64 +1460,80 @@ function initChannelApp(cfg) {
       return `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} until inactive`;
     })();
 
-    const nextCheckStr = (() => {
-      if (ch.enabled === 0 || ch.tracking_enabled === 0) return '';
-      if (!ch.next_check_at || ch.next_check_at * 1000 <= Date.now()) return 'Next check: at next session';
-      return `Next check ${fmt.relFuture(new Date(ch.next_check_at * 1000).toISOString())}`;
-    })();
+    const _iso = u => new Date(u * 1000).toISOString();
+    const nextCheckVal = (ch.enabled === 0 || ch.tracking_enabled === 0) ? '—'
+      : (!ch.next_check_at || ch.next_check_at * 1000 <= Date.now()) ? 'next session'
+      : fmt.relFuture(_iso(ch.next_check_at));
+
+    // Dates box (2x2) + stats box (paired chips). Stats are collected only from the
+    // fields this platform actually has, then chunked into pairs, so the layout
+    // stays even across TikTok / YouTube / Twitter / Instagram.
+    const dateTiles = [
+      { v: fmtDateOnly(ch.added_at),                                   l: 'Added' },
+      { v: ch.last_checked ? fmt.rel(_iso(ch.last_checked)) : 'never', l: 'Last checked' },
+      { v: ch.last_saved   ? fmt.rel(_iso(ch.last_saved))   : 'never', l: 'Last saved' },
+      { v: nextCheckVal,                                               l: 'Next check' },
+    ];
+    const statTiles = [];
+    if (ch.subscriber_count != null) statTiles.push({ v: _fmtLarge(ch.subscriber_count || 0), l: cfg.subLabelModal });
+    if (ch.following_count  != null) statTiles.push({ v: _fmtLarge(ch.following_count),       l: 'Following' });
+    if (ch.video_count      != null) statTiles.push({ v: _fmtLarge(ch.video_count || 0),      l: `On ${esc(platformLabel)}` });
+    statTiles.push({ v: _fmtLarge(ch.video_total || 0), l: 'Saved' });
+    if ((ch.video_deleted || 0) > 0) statTiles.push({ v: ch.video_deleted,   l: 'Deleted',  cls: 'tred' });
+    if (ch.video_undeleted)          statTiles.push({ v: ch.video_undeleted, l: 'Restored', cls: 'tyellow' });
+    if (cfg.hasStories && ch.story_count) statTiles.push({ v: _fmtLarge(ch.story_count), l: 'Stories' });
+    if (ch.profile_history_count)    statTiles.push({ v: ch.profile_history_count, l: 'Updates', click: `${P}SetModalView('history')` });
+
+    const _tile = t => `<div class="tile${t.cls ? ' ' + t.cls : ''}${t.click ? ' tlink' : ''}"${t.click ? ` onclick="${t.click}" title="Open profile change history"` : ''}><span class="tv">${t.v}</span><span class="tl">${t.l}</span></div>`;
+    let statPairs = '';
+    for (let i = 0; i < statTiles.length; i += 2) statPairs += `<div class="stat-pair">${statTiles.slice(i, i + 2).map(_tile).join('')}</div>`;
 
     _el('ModalHeader').innerHTML = `
-      <div class="modal-avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
-        <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
-        ${ch.avatar_cached ? `<img class="modal-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar" alt=""
-             onerror="this.style.display='none'"
-             ${ch.live_stories ? '' : `onclick="openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}
-      </div>
-      <div class="modal-user-body">
-        <div class="modal-name-row">
-          <span class="modal-name">${_isPrivateAccount(ch) ? LOCK_SVG : ''}${esc(ch.display_name || ch.handle)}</span>
-          ${ch.verified ? '<span class="modal-verified">✓ Verified</span>' : ''}
-          <span class="account-status ${trackingCls}">${trackingLbl}</span>
-          ${_relationPill(ch)}
-          <label class="tracking-toggle" title="${isInactive ? `${ItemsCap} tracking off (profile changes still tracked)` : `${ItemsCap} tracking on`}">
-            <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="${P}SetTracking('${esc(ch.channel_id)}', this.checked)">
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            <span class="toggle-label">Track ${ITEMS}</span>
-          </label>
+      <div class="modal-header-left">
+        <div class="modal-avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
+          <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
+          ${ch.avatar_cached ? `<img class="modal-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar" alt=""
+               onerror="this.style.display='none'"
+               ${ch.live_stories ? '' : `onclick="openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}
         </div>
-        <div class="modal-handle">
-          <a href="${extUrl}" target="_blank" rel="noopener" class="tt-link">@${esc(ch.handle)}</a>${_oldNamesTag(ch)}
-          <span style="color:var(--muted);font-size:12px;margin-left:6px">${esc(ch.channel_id)}${joinStr}${nextCheckStr ? ` · ${nextCheckStr}` : ''}</span>
-        </div>
-        ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
-        <div class="modal-stats-row">
-          ${ch.subscriber_count != null ? `<span><strong>${(ch.subscriber_count || 0).toLocaleString()}</strong> ${cfg.subLabelModal}</span>` : ''}
-          ${ch.following_count != null ? `<span><strong>${ch.following_count.toLocaleString()}</strong> following</span>` : ''}
-          ${ch.video_count != null ? `<span><strong>${(ch.video_count || 0).toLocaleString()}</strong> on ${esc(platformLabel)}</span>` : ''}
-          <span><strong>${ch.video_total || 0}</strong> saved locally</span>
-          ${(ch.video_deleted || 0) > 0 ? `<span style="color:var(--red)"><strong>${ch.video_deleted}</strong> deleted</span>` : ''}
-          ${ch.video_undeleted ? `<span style="color:var(--yellow)"><strong>${ch.video_undeleted}</strong> restored</span>` : ''}
-          ${ch.profile_history_count ? `<span style="cursor:pointer;text-decoration:underline dotted" onclick="${P}OpenProfileHistory()" title="Open profile change history"><strong>${ch.profile_history_count}</strong> profile ${ch.profile_history_count === 1 ? 'update' : 'updates'}</span>` : ''}
-          <span style="color:var(--muted)">${esc(checked)}</span>
-        </div>
-        ${ch.description ? `<div class="modal-bio" onclick="this.classList.toggle('expanded')">${esc(ch.description)}</div>` : ''}
-        ${ch.bio_link ? `<div class="modal-bio-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
-        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
-          <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
-          ${_bookmarkBtn(ch, false)}
-          <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
-          <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">&#x2022;&#x2022;&#x2022;</button>
-        </div>
-        <div id="${P}ModalNoteArea" style="display:${ch.comment ? '' : 'none'};margin-top:8px">
-          <textarea placeholder="Add a note about this ${CREATOR}…"
-            onblur="${P}SaveComment('${esc(ch.channel_id)}', this.value)"
-            style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
-                   background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
-                   color:var(--text);font-family:inherit;line-height:1.5"
-          >${esc(ch.comment || '')}</textarea>
+        <div class="modal-user-body">
+          <div class="modal-name-row">
+            <span class="modal-name">${_isPrivateAccount(ch) ? LOCK_SVG : ''}${esc(ch.display_name || ch.handle)}</span>
+            ${ch.verified ? '<span class="modal-verified">✓ Verified</span>' : ''}
+            <span class="account-status ${trackingCls}">${trackingLbl}</span>
+            ${_relationPill(ch)}
+            <label class="tracking-toggle" title="${isInactive ? `${ItemsCap} tracking off (profile changes still tracked)` : `${ItemsCap} tracking on`}">
+              <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="${P}SetTracking('${esc(ch.channel_id)}', this.checked)">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-label">Track ${ITEMS}</span>
+            </label>
+          </div>
+          <div class="modal-handle">
+            <a href="${extUrl}" target="_blank" rel="noopener" class="tt-link">@${esc(ch.handle)}</a>${_oldNamesTag(ch)}
+            <span style="color:var(--muted);font-size:12px;margin-left:6px">${esc(ch.channel_id)}${joinStr}</span>
+          </div>
+          ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
+          ${ch.description ? `<div class="modal-bio"><span class="modal-bio-line" onclick="${P}OpenBio(this.parentNode)">${esc(ch.description)}</span><div class="modal-bio-pop" onclick="event.stopPropagation()"><button class="modal-bio-close" onclick="${P}CloseBio(this)" aria-label="Close"><svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 1L9 9M9 1L1 9"/></svg></button>${esc(ch.description)}</div></div>` : ''}
+          ${ch.bio_link ? `<div class="modal-bio-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
+            ${_bookmarkBtn(ch, false)}
+            <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
+            <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
+            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">&#x2022;&#x2022;&#x2022;</button>
+          </div>
+          <div id="${P}ModalNoteArea" style="display:${ch.comment ? '' : 'none'};margin-top:8px">
+            <textarea placeholder="Add a note about this ${CREATOR}…"
+              onblur="${P}SaveComment('${esc(ch.channel_id)}', this.value)"
+              style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
+                     background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
+                     color:var(--text);font-family:inherit;line-height:1.5"
+            >${esc(ch.comment || '')}</textarea>
+          </div>
         </div>
       </div>
+      <div class="modal-header-meta">${dateTiles.map(_tile).join('')}</div>
+      <div class="modal-header-stats">${statPairs}</div>
     `;
 
     if (cfg.hasBanner) {
@@ -1544,20 +1573,42 @@ function initChannelApp(cfg) {
     if (show) area.querySelector('textarea')?.focus();
   });
 
+  // Bio popover: the full description opens over the content instead of expanding
+  // inline. Clicks inside the popover don't close it (so the text stays selectable);
+  // the X button or an outside click dismisses it.
+  X('OpenBio',  el  => el.classList.add('open'));
+  X('CloseBio', btn => btn.closest('.modal-bio')?.classList.remove('open'));
+  const _w = /** @type {any} */ (window);
+  if (!_w._bioOutsideClose) {
+    _w._bioOutsideClose = true;
+    document.addEventListener('click', e => {
+      document.querySelectorAll('.modal-bio.open').forEach(b => {
+        if (!b.contains(/** @type {Node} */ (e.target))) b.classList.remove('open');
+      });
+    });
+  }
+
   // Modal engine delegates
 
   X('SetModalFilter',     f => _mSetFilter(MODAL_CFG, f));
   X('SetModalTypeFilter', t => _mSetTypeFilter(MODAL_CFG, t));
   X('ToggleModalToolbar', () => _mToggleToolbar(MODAL_CFG));
   X('SetModalSort',       f => _mSetSort(MODAL_CFG, f));
-  X('SetModalView', view => {
+  // Single entry point for the modal's view toggle. List/Grid show the post
+  // list; History and Stories swap in their own panels and lazily load data.
+  X('SetModalView', async view => {
     _creatorState.view = view;
-    const toolbar = _el('ModalToolbar');
-    toolbar.querySelectorAll('[data-view-key]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.viewKey === view);
-    });
-    toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
-    _mRenderList(MODAL_CFG);
+    const vidList = _el('ModalVideoList');
+    const phist   = _el('PhistPanel');
+    const stories = _el('StoriesPanel');
+    if (view !== 'stories') _destroyStoriesPanel();
+    if (vidList) vidList.style.display = (view === 'history' || view === 'stories') ? 'none' : '';
+    if (phist)   phist.style.display   = view === 'history' ? '' : 'none';
+    if (stories) stories.style.display = view === 'stories' ? '' : 'none';
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);
+    if (view === 'history')      await _loadPhist();
+    else if (view === 'stories') await _loadStories();
+    else _mRenderList(MODAL_CFG);
   });
   X('OnModalSearch', val => {
     _creatorState.search = val.trim();
@@ -1565,50 +1616,36 @@ function initChannelApp(cfg) {
     _mRenderList(MODAL_CFG);
   });
 
-  // ── Profile history panel ─────────────────────────────────────────────────
+  // ── Profile history view ──────────────────────────────────────────────────
+  // Fetches once per creator (cached by phistChId); the field filter pills live
+  // on the toolbar (cfg.contextFilters) so they re-render there after the load.
 
-  X('OpenProfileHistory', async field => {
-    if (!modalCreatorId) return;
-    const panel   = _el('PhistPanel');
-    const vidList = _el('ModalVideoList');
-    if (!panel || !vidList) return;
-
-    // Toggle off if already open (e.g. clicking the profile-updates stat again)
-    if (panel.style.display !== 'none' && !field) {
-      window[`${P}CloseProfileHistory`]();
-      return;
+  async function _loadPhist() {
+    const panel = _el('PhistPanel');
+    if (!panel || !modalCreatorId) return;
+    if (phistChId !== modalCreatorId) {
+      phistChId = modalCreatorId;
+      phistData = [];
+      panel.innerHTML = '<div class="vlist-loading">Loading history…</div>';
+      const { ok, data } = await apiJSON(`${API}/channels/${modalCreatorId}/profile-history`);
+      if (!ok || phistChId !== modalCreatorId || _creatorState.view !== 'history') return;
+      phistData = data;
+      _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // field pills now known
     }
-
-    _destroyStoriesPanel();
-    vidList.style.display = 'none';
-    panel.style.display   = '';
-
-    phistField = field ? new Set([field]) : new Set();
-    phistChId  = modalCreatorId;
-
-    panel.innerHTML = '<div class="vlist-loading">Loading history…</div>';
-
-    const { ok, data } = await apiJSON(`${API}/channels/${modalCreatorId}/profile-history`);
-    if (!ok || phistChId !== modalCreatorId) return;
-    phistData = data;
     _renderPhistPanel();
-  });
+  }
 
-  X('CloseProfileHistory', () => {
-    const panel   = _el('PhistPanel');
-    const vidList = _el('ModalVideoList');
-    if (panel)   panel.style.display   = 'none';
-    if (vidList) vidList.style.display = '';
-    phistData  = [];
-    phistField = new Set();
-    // If history was opened before the videos finished loading (e.g. from a
-    // Recent activity profile-change entry), _loadModalVideos skipped rendering
-    // the list because the panel was open, leaving it on the loading
-    // placeholder. Render it now that we are back on it. A still-in-flight load
-    // re-renders itself on completion since the panel is closed again.
-    _mRenderToolbar(MODAL_CFG, _creatorState.videos);
-    _mRenderList(MODAL_CFG);
-  });
+  // Field filter pills for the History view, injected into the toolbar's
+  // context-filter area by cfg.contextFilters.
+  function _phistFieldPillsHtml() {
+    const fields = [...new Set(phistData.map(e => e.field))];
+    if (!fields.length) return '';
+    const pills = fields.map(f => {
+      const active = phistField.has(f) ? ' active' : '';
+      return `<button class="filter-pill${active}" onclick="${P}PhistSetField('${esc(f)}')">${FIELD_LABELS[f] || f}</button>`;
+    }).join('');
+    return `<span class="col-hdr" style="margin-right:2px">Fields</span><div class="filter-pills multi">${pills}</div>`;
+  }
 
   // ── Stories history calendar (Cal-Heatmap month intensity view) ───────────
 
@@ -1620,33 +1657,16 @@ function initChannelApp(cfg) {
     if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
   }
 
-  X('OpenStoriesPanel', async () => {
-    if (!modalCreatorId) return;
-    const panel   = _el('StoriesPanel');
-    const vidList = _el('ModalVideoList');
-    if (!panel || !vidList) return;
-
-    if (panel.style.display !== 'none') {
-      window[`${P}CloseStoriesPanel`]();
-      return;
-    }
-
-    window[`${P}CloseProfileHistory`]();
-    vidList.style.display = 'none';
-    panel.style.display   = '';
-    panel.innerHTML       = '<div class="vlist-loading">Loading stories…</div>';
-
+  async function _loadStories() {
+    const panel = _el('StoriesPanel');
+    if (!panel || !modalCreatorId) return;
+    panel.style.display = '';
+    panel.innerHTML     = '<div class="vlist-loading">Loading stories…</div>';
     const chId = modalCreatorId;
     const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(chId)}/stories/calendar`);
-    if (!ok || chId !== modalCreatorId) return;
+    if (!ok || chId !== modalCreatorId || _creatorState.view !== 'stories') return;
     _renderStoriesPanel(data || {});
-  });
-
-  X('CloseStoriesPanel', () => {
-    _destroyStoriesPanel();
-    const vidList = _el('ModalVideoList');
-    if (vidList) vidList.style.display = '';
-  });
+  }
 
   X('StoriesCalStep', dir => {
     if (!_storyCal) return;
@@ -1679,7 +1699,6 @@ function initChannelApp(cfg) {
         <div style="display:flex;gap:6px;align-items:center">
           <button class="filter-pill" onclick="${P}StoriesCalStep(-1)" title="Earlier months">←</button>
           <button class="filter-pill" onclick="${P}StoriesCalStep(1)" title="Later months">→</button>
-          <button class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="${P}CloseStoriesPanel()">Back to ${ITEMS}</button>
         </div>
       </div>
       <div class="stories-cal" id="${P}StoriesCal"></div>`;
@@ -1751,25 +1770,11 @@ function initChannelApp(cfg) {
       ? phistData.filter(e => phistField.has(e.field))
       : phistData;
 
-    const fields  = [...new Set(phistData.map(e => e.field))];
-    const fieldPills = fields.map(f => {
-      const active = phistField.has(f) ? ' active' : '';
-      const label  = FIELD_LABELS[f] || f;
-      return `<button class="filter-pill${active}" onclick="${P}PhistSetField('${esc(f)}')">${label}</button>`;
-    }).join('');
-
     const newValMap = _phistNewValMap();
 
-    panel.innerHTML = `
-      <div class="phist-hdr" style="display:flex;align-items:center;gap:8px;padding:8px 0 12px;border-bottom:1px solid var(--border);margin-bottom:12px">
-        <div class="filter-pills multi" style="flex:1">${fieldPills}</div>
-        <button class="btn-ghost" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="${P}CloseProfileHistory()">Back to ${ITEMS}</button>
-      </div>
-      ${entries.length
-        ? entries.map(e => _phistEntryHtml(e, newValMap.get(e))).join('')
-        : `<div style="color:var(--muted);font-size:13px;padding:12px 0">No profile changes recorded${phistField.size ? ' for the selected fields' : ''}.</div>`}
-    `;
-    panel.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    panel.innerHTML = entries.length
+      ? entries.map(e => _phistEntryHtml(e, newValMap.get(e))).join('')
+      : `<div style="color:var(--muted);font-size:13px;padding:12px 0">No profile changes recorded${phistField.size ? ' for the selected fields' : ''}.</div>`;
   }
 
   function _phistEntryHtml(e, newVal) {
@@ -1815,6 +1820,7 @@ function initChannelApp(cfg) {
 
   X('PhistSetField', field => {
     phistField.has(field) ? phistField.delete(field) : phistField.add(field);
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // reflect active pill on the toolbar
     _renderPhistPanel();
   });
 

@@ -925,6 +925,21 @@ function _attachEdgeFade(el) {
   el.addEventListener('scroll', update, { passive: true });
   new ResizeObserver(update).observe(el);
   update();
+  return update;
+}
+
+// Attach the edge fade to a modal toolbar once, then re-run its update after
+// every re-render (innerHTML changes the scroll width but not the element size,
+// so the ResizeObserver alone would not catch it).
+const _toolbarFadeUpdaters = new WeakMap();
+function _mEnsureToolbarFade(el) {
+  let update = _toolbarFadeUpdaters.get(el);
+  if (!update) {
+    el.classList.add('edge-fade');
+    update = _attachEdgeFade(el) || (() => {});
+    _toolbarFadeUpdaters.set(el, update);
+  }
+  update();
 }
 
 // ── Toolbar helpers ───────────────────────────────────────────────────────────
@@ -1233,20 +1248,22 @@ function _mRenderToolbar(cfg, vids) {
   const hasMultipleTypes = typeCounts.video > 0 && typeCounts.photo > 0;
   const pill     = (key, label) => _pill(key, label, cfg.st.filter,     cfg.filterFn,     counts);
   const typePill = (key, label) => _typePill(key, label, cfg.st.typeFilter, cfg.typeFilterFn);
+  // History and Stories are non-media views: they hide the post search/filters
+  // and (History) swap in their own field filters via cfg.contextFilters, which
+  // sits in the same context-filter area of the nav bar as the post filters.
+  const isMedia = cfg.st.view !== 'history' && cfg.st.view !== 'stories';
   const shown = _mFiltered(cfg).length;
   const total = _mFiltered(cfg, true).length;
   const countLabel = cfg.st.search
     ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
     : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
-  const hasActiveFilters = cfg.st.filter.size > 0 || cfg.st.typeFilter.size > 0;
-  const toggleLabel = (cfg.st.toolbarExpanded ? '▲' : '▼') + (hasActiveFilters ? ' Filters •' : ' Filters');
   const toolbar = document.getElementById(cfg.toolbarElId);
-  const searchWasFocused = cfg.hasSearch &&
+  const searchWasFocused = cfg.hasSearch && isMedia &&
     document.activeElement === toolbar.querySelector('#modalVideoSearch');
   const searchSelEnd = searchWasFocused ? document.activeElement.selectionEnd : 0;
   let html = `<div class="toolbar-main-row">`;
   if (cfg.hasViewToggle) {
-    const viewKeys = cfg.viewKeys || [
+    const viewKeys = (typeof cfg.viewKeys === 'function' ? cfg.viewKeys() : cfg.viewKeys) || [
       { key: 'list', icon: _listViewIcon, title: 'List view' },
       { key: 'grid', icon: _gridViewIcon, title: 'Grid view' },
     ];
@@ -1256,38 +1273,37 @@ function _mRenderToolbar(cfg, vids) {
         ).join('')
       + `</div>`;
   }
-  html += `<button class="filter-pill toolbar-toggle" onclick="${cfg.toggleFn}()">${toggleLabel}</button>`
-    + `<span class="modal-vid-count">${countLabel}</span>`;
-  if (cfg.hasSearch) {
-    html += `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${esc(cfg.st.search)}" placeholder="Search videos…" oninput="${cfg.searchFn}(this.value)">`;
-  }
-  if (cfg.hasPhistBtn) {
-    const pfn = cfg.phistBtnFn || 'openProfileHistory';
-    html += `<button class="filter-pill toolbar-phist-btn" onclick="${pfn}()">Profile history</button>`;
-  }
-  if (cfg.storiesBtnFn && cfg.storiesCount && cfg.storiesCount() > 0) {
-    html += `<button class="filter-pill toolbar-phist-btn" onclick="${cfg.storiesBtnFn}()">Stories (${cfg.storiesCount().toLocaleString()})</button>`;
+  if (isMedia) {
+    html += `<span class="modal-vid-count">${countLabel}</span>`;
+    if (cfg.hasSearch) {
+      html += `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${esc(cfg.st.search)}" placeholder="Search videos…" oninput="${cfg.searchFn}(this.value)">`;
+    }
   }
   html += `</div>`
-    + `<div class="toolbar-filter-wrap${cfg.st.toolbarExpanded ? '' : ' collapsed'}">`
-    + `<div class="filter-pills multi">`
-    + pill('active', 'Active')
-    + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
-    + (counts.restored ? pill('restored', 'Restored') : '')
-    + `</div>`
-    + (hasMultipleTypes
-        ? `<div class="filter-pills multi">`
-          + typePill('video', `Videos (${typeCounts.video.toLocaleString()})`)
-          + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
-          + `</div>`
-        : '')
-    + `</div>`;
+    + `<div class="toolbar-filter-wrap">`;
+  if (isMedia) {
+    html += `<div class="filter-pills multi">`
+      + pill('active', 'Active')
+      + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
+      + (counts.restored ? pill('restored', 'Restored') : '')
+      + `</div>`
+      + (hasMultipleTypes
+          ? `<div class="filter-pills multi">`
+            + typePill('video', `Videos (${typeCounts.video.toLocaleString()})`)
+            + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
+            + `</div>`
+          : '');
+  } else if (cfg.contextFilters) {
+    html += cfg.contextFilters(cfg.st.view);
+  }
+  html += `</div>`;
   toolbar.innerHTML = html;
   toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
   if (searchWasFocused) {
     const el = toolbar.querySelector('#modalVideoSearch');
     if (el) { el.focus(); el.setSelectionRange(searchSelEnd, searchSelEnd); }
   }
+  _mEnsureToolbarFade(toolbar);
 }
 
 function _mSetFilter(cfg, key) {

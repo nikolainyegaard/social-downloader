@@ -797,10 +797,11 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   padding: 20px 24px;
   border-bottom: 1px solid var(--border);
   display: flex;
-  gap: 16px;
-  align-items: flex-start;
+  gap: 22px;
+  align-items: stretch;
   flex-shrink: 0;
 }
+.modal-header-left { display: flex; gap: 16px; align-items: flex-start; flex: 1; min-width: 0; }
 
 .modal-avatar-wrap {
   position: relative;
@@ -827,8 +828,24 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .modal-avatar:hover { opacity: .75; }
 
-.modal-user-body  { flex: 1; min-width: 0; padding-right: 32px; }
+.modal-user-body  { flex: 1; min-width: 0; }
 .modal-name-row   { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Two-box header cluster: a dates box and a paired-stat box, each behind a hairline rule */
+.modal-header-meta, .modal-header-stats { flex-shrink: 0; padding-left: 22px; border-left: 1px solid var(--border); padding-top: 22px; }
+.modal-header-meta  { display: grid; grid-template-columns: auto auto; column-gap: 22px; row-gap: 14px; align-content: start; }
+.modal-header-stats { display: flex; gap: 12px; align-items: start; }
+.stat-pair { display: flex; flex-direction: column; gap: 8px; padding: 7px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--surface2) 45%, transparent); }
+.modal-header .tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.modal-header .tile .tv { font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+.modal-header .tile .tl { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.modal-header-meta  .tv { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.modal-header-stats .tv { font-size: 15px; font-weight: 700; color: var(--text); }
+.modal-header .tile.tred .tv        { color: var(--red); }
+.modal-header .tile.tyellow .tv     { color: var(--yellow); }
+.modal-header .tile.tlink           { cursor: pointer; }
+.modal-header .tile.tlink .tv       { text-decoration: underline dotted; text-underline-offset: 2px; }
+.modal-header .tile.tlink:hover .tv { color: var(--accent); }
 .modal-user-meta  { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 
 /* Untracked user: blur overlay covering the header until profile fetch completes */
@@ -857,9 +874,21 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .modal-handle     { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
 .modal-id-line        { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
 .modal-ban-countdown  { font-size: 11px; color: var(--muted); margin-top: 4px; }
-.modal-bio        { font-size: 13px; color: var(--text-dim); margin-top: 8px; line-height: 1.5;
-                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-.modal-bio.expanded { white-space: normal; overflow: visible; cursor: default; }
+.modal-bio        { position: relative; font-size: 13px; color: var(--text-dim); margin-top: 8px; line-height: 1.5; max-width: 100%; }
+.modal-bio-line   { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+/* Full bio pops over the content instead of expanding inline; the offsets cancel the
+   popover's border+padding so the text lands exactly over the original line. */
+.modal-bio-pop    { display: none; position: absolute; top: -9px; left: -12px; z-index: 30;
+                    min-width: calc(100% + 24px); max-width: min(460px, 58vw);
+                    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+                    box-shadow: var(--shadow-2); padding: 8px 26px 8px 11px; white-space: normal; line-height: 1.5;
+                    color: var(--text); user-select: text; }
+.modal-bio.open .modal-bio-pop { display: block; animation: bio-fade .1s ease; }
+@keyframes bio-fade { from { opacity: 0; } }
+.modal-bio-close  { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; padding: 0; border: 0;
+                    background: transparent; color: var(--muted); cursor: pointer; display: flex;
+                    align-items: center; justify-content: center; border-radius: 4px; }
+.modal-bio-close:hover { background: var(--border); color: var(--text); }
 .modal-bio-link   { font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal-bio-link a { color: var(--accent); text-decoration: none; }
 .modal-bio-link a:hover { text-decoration: underline; }
@@ -993,9 +1022,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .glider { position: absolute; z-index: 1; background: var(--accent); border-radius: var(--radius-pill); transition: left .2s ease, width .2s ease; pointer-events: none; }
 
 .modal-vid-count { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
-.toolbar-main-row  { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.toolbar-main-row  { display: flex; align-items: center; gap: 10px; flex: 1 0 auto; min-width: 0; }
 .toolbar-main-row .modal-vid-count { margin-left: 0; }
-.toolbar-filter-wrap { display: flex; align-items: center; gap: 10px; }
+.toolbar-filter-wrap { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .toolbar-toggle { display: none; }
 .modal-video-search {
   width: 140px; font-size: 12px; padding: 3px 8px;
@@ -1966,13 +1995,18 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   }
 
   /* Creator modal header: compact avatar and name, tighter padding */
-  .modal-header { padding: 12px 16px; gap: 12px; }
+  .modal-header { padding: 12px 16px; gap: 12px; flex-wrap: wrap; }
   .modal-header .modal-avatar-wrap,
   .modal-header .modal-avatar { width: 44px; height: 44px; }
   .modal-header .modal-avatar-wrap .avatar-letter { font-size: 18px; }
   .modal-header .modal-name { font-size: 16px; }
   .modal-bio { margin-top: 4px; }
   .modal-stats-row { margin-top: 4px; gap: 10px; }
+  /* Header cluster stacks below the identity on narrow screens (full mobile
+     rework pending); drop the hairline rules and top offset when stacked. */
+  .modal-header-left { flex: 1 1 100%; }
+  .modal-header-meta, .modal-header-stats { border-left: 0; padding-left: 0; padding-top: 8px; }
+  .modal-header-stats { flex-wrap: wrap; }
 
   /* Fix 1fr column so max-content is identical in header and every row,
      then let min-width: max-content expand elements to full grid width */
