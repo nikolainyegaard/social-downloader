@@ -2064,6 +2064,41 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .yt-body { flex: 1; min-width: 0; padding-top: 1px; }
   .yt-title { font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .yt-meta { font-size: 12.5px; color: var(--text-dim); margin-top: 5px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+
+  /* Mobile creator-modal header: avatar+names, info block, actions bar */
+  .mh { display: flex; flex-direction: column; gap: 14px; flex: 1 1 100%; min-width: 0; }
+  .mh-top { display: flex; gap: 14px; align-items: center; }
+  .mh-id { min-width: 0; }
+  .mh-name { font-size: 18px; font-weight: 700; line-height: 1.2; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; word-break: break-word; }
+  .mh-name .modal-verified { font-size: 12px; }
+  .mh-handle { margin-top: 3px; font-size: 13px; }
+  .mh-handle a { color: var(--accent); text-decoration: none; }
+  .mh-uid { margin-top: 2px; font-size: 11px; color: var(--muted); word-break: break-all; }
+  .mh-info { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+  .mh-more { background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; }
+  .mh-link { margin-top: 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mh-link a { color: var(--accent); text-decoration: none; }
+  .mh-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+  /* About modal: floats over the creator modal (opened from ...more) */
+  .about-modal { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(4,6,10,.55); }
+  .about-card { position: relative; width: min(440px, 92%); max-height: 82%; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); padding: 18px; }
+  .about-close { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-dim); font-size: 13px; cursor: pointer; }
+  .about-close:hover { background: var(--border); color: var(--text); }
+  .about-title { margin: 0 0 12px; font-size: 15px; font-weight: 700; }
+  .about-bio { font-size: 13px; color: var(--text-dim); line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+  .about-link { display: inline-block; margin-top: 10px; font-size: 13px; color: var(--accent); text-decoration: none; word-break: break-all; }
+  .about-link:hover { text-decoration: underline; }
+  .about-sub { margin: 18px 0 10px; font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .about-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 10px; }
+  .about-grid .tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .about-grid .tv { font-size: 16px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .about-grid .tl { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .about-dates .tv { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+  .about-grid .tile.tred .tv { color: var(--red); }
+  .about-grid .tile.tyellow .tv { color: var(--yellow); }
+  .about-grid .tile.tlink { cursor: pointer; }
+  .about-grid .tile.tlink .tv { text-decoration: underline dotted; text-underline-offset: 2px; }
 }
 
 /* ── Platform tabs ────────────────────────────────────────────────────────── */

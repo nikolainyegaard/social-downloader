@@ -243,6 +243,13 @@ function initChannelApp(cfg) {
     <div class="modal-video-list" id="${P}ModalVideoList"></div>
     <button class="back-to-top modal-top" id="${P}ModalTop" style="display:none" onclick="${P}ScrollModalTop()" title="Back to top">↑</button>
   </div>
+  <div class="about-modal" id="${P}AboutModal" style="display:none" onclick="if(event.target===this)${P}CloseAbout()">
+    <div class="about-card">
+      <button class="about-close" onclick="${P}CloseAbout()" aria-label="Close">✕</button>
+      <h3 class="about-title">About</h3>
+      <div id="${P}AboutBody"></div>
+    </div>
+  </div>
 </div>`;
   }
 
@@ -1447,6 +1454,41 @@ function initChannelApp(cfg) {
     return _mDd('Fields', menu);
   }
 
+  // About modal (mobile): full bio, link, and all stats + activity dates.
+  X('OpenAbout', () => {
+    const ch = modalCreator; if (!ch) return;
+    const platformLabel = (PLATFORMS.find(p => p.id === cfg.id) || {}).label || cfg.id;
+    const _iso = u => new Date(u * 1000).toISOString();
+    const nextCheckVal = (ch.enabled === 0 || ch.tracking_enabled === 0) ? '—'
+      : (!ch.next_check_at || ch.next_check_at * 1000 <= Date.now()) ? 'next session'
+      : fmt.relFuture(_iso(ch.next_check_at));
+    const dateTiles = [
+      { v: fmtDateOnly(ch.added_at),                                   l: 'Added' },
+      { v: ch.last_checked ? fmt.rel(_iso(ch.last_checked)) : 'never', l: 'Last checked' },
+      { v: ch.last_saved   ? fmt.rel(_iso(ch.last_saved))   : 'never', l: 'Last saved' },
+      { v: nextCheckVal,                                               l: 'Next check' },
+    ];
+    const statTiles = [];
+    if (ch.subscriber_count != null) statTiles.push({ v: _fmtLarge(ch.subscriber_count || 0), l: cfg.subLabelModal });
+    if (ch.following_count  != null) statTiles.push({ v: _fmtLarge(ch.following_count),       l: 'Following' });
+    if (ch.video_count      != null) statTiles.push({ v: _fmtLarge(ch.video_count || 0),      l: `On ${esc(platformLabel)}` });
+    statTiles.push({ v: _fmtLarge(ch.video_total || 0), l: 'Saved' });
+    if ((ch.video_deleted || 0) > 0) statTiles.push({ v: ch.video_deleted,   l: 'Deleted',  cls: 'tred' });
+    if (ch.video_undeleted)          statTiles.push({ v: ch.video_undeleted, l: 'Restored', cls: 'tyellow' });
+    if (cfg.hasStories && ch.story_count) statTiles.push({ v: _fmtLarge(ch.story_count), l: 'Stories' });
+    if (ch.profile_history_count)    statTiles.push({ v: ch.profile_history_count, l: 'Updates', click: `${P}CloseAbout();${P}SetModalView('history')` });
+    const tile = t => `<div class="tile${t.cls ? ' ' + t.cls : ''}${t.click ? ' tlink' : ''}"${t.click ? ` onclick="${t.click}"` : ''}><span class="tv">${t.v}</span><span class="tl">${t.l}</span></div>`;
+    _el('AboutBody').innerHTML = `
+      ${ch.description ? `<div class="about-bio">${esc(ch.description)}</div>` : ''}
+      ${ch.bio_link ? `<a class="about-link" href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a>` : ''}
+      <div class="about-sub">Stats</div>
+      <div class="about-grid">${statTiles.map(tile).join('')}</div>
+      <div class="about-sub">Activity</div>
+      <div class="about-grid about-dates">${dateTiles.map(tile).join('')}</div>`;
+    _el('AboutModal').style.display = 'flex';
+  });
+  X('CloseAbout', () => { const a = _el('AboutModal'); if (a) a.style.display = 'none'; });
+
   X('CloseModal', () => {
     _el('ModalBackdrop').style.display = 'none';
     _unlockScroll();
@@ -1487,6 +1529,7 @@ function initChannelApp(cfg) {
   }
 
   function _renderModalHeader(ch) {
+    if (_mIsMobile()) { _renderModalHeaderMobile(ch); _renderModalBanner(ch); return; }
     const isInactive  = ch.tracking_enabled === 0;
     const { cls: trackingCls, label: trackingLbl } = _trackingBadge(ch.tracking_enabled);
     const extUrl      = cfg.profileUrl(esc(ch.handle));
@@ -1581,22 +1624,78 @@ function initChannelApp(cfg) {
       <div class="modal-header-stats">${statPairs}</div>
     `;
 
-    if (cfg.hasBanner) {
-      const bannerEl = _el('ModalBanner');
-      if (bannerEl) {
-        if (ch.banner_cached) {
-          bannerEl.style.display = '';
-          bannerEl.style.backgroundImage = `url('${API}/channels/${esc(ch.channel_id)}/banner')`;
-          bannerEl.style.cursor = 'pointer';
-          bannerEl.onclick = () => openImgModalUrl(`${API}/channels/${ch.channel_id}/banner`);
-        } else {
-          bannerEl.style.display = 'none';
-          bannerEl.style.backgroundImage = '';
-          bannerEl.style.cursor = '';
-          bannerEl.onclick = null;
-        }
-      }
+    _renderModalBanner(ch);
+  }
+
+  function _renderModalBanner(ch) {
+    if (!cfg.hasBanner) return;
+    const bannerEl = _el('ModalBanner');
+    if (!bannerEl) return;
+    if (ch.banner_cached) {
+      bannerEl.style.display = '';
+      bannerEl.style.backgroundImage = `url('${API}/channels/${esc(ch.channel_id)}/banner')`;
+      bannerEl.style.cursor = 'pointer';
+      bannerEl.onclick = () => openImgModalUrl(`${API}/channels/${ch.channel_id}/banner`);
+    } else {
+      bannerEl.style.display = 'none';
+      bannerEl.style.backgroundImage = '';
+      bannerEl.style.cursor = '';
+      bannerEl.onclick = null;
     }
+  }
+
+  // Mobile creator-modal header: avatar + names, a bio/links info block with a
+  // ...more that opens the About modal (full bio, link, stats), then actions.
+  function _renderModalHeaderMobile(ch) {
+    const isInactive  = ch.tracking_enabled === 0;
+    const extUrl      = cfg.profileUrl(esc(ch.handle));
+    const busy        = runQueue.includes(ch.channel_id) || runCurrent === ch.channel_id;
+    const runDisabled = busy ? 'disabled' : '';
+    const banCountdownStr = (() => {
+      if (ch.account_status !== 'banned' || !ch.banned_at || ch.tracking_enabled === 0) return '';
+      const daysLeft = 14 - Math.floor((Date.now() / 1000 - ch.banned_at) / 86400);
+      return daysLeft > 0 ? `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} until inactive` : '';
+    })();
+    const N = 90, desc = ch.description || '', long = desc.length > N;
+    const bioText = desc ? (long ? esc(desc.slice(0, N).trim()) + '… ' : esc(desc) + ' ') : '';
+    const moreLbl = long ? '…more' : 'Details';
+    _el('ModalHeader').innerHTML = `
+      <div class="mh">
+        <div class="mh-top">
+          <div class="modal-avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
+            <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
+            ${ch.avatar_cached ? `<img class="modal-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar" alt="" onerror="this.style.display='none'"${ch.live_stories ? '' : ` onclick="openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}
+          </div>
+          <div class="mh-id">
+            <div class="mh-name">${_isPrivateAccount(ch) ? LOCK_SVG : ''}${esc(ch.display_name || ch.handle)}${ch.verified ? '<span class="modal-verified">✓</span>' : ''}${_relationPill(ch)}</div>
+            <div class="mh-handle"><a href="${extUrl}" target="_blank" rel="noopener" class="tt-link">@${esc(ch.handle)}</a>${_oldNamesTag(ch)}</div>
+            <div class="mh-uid">${esc(ch.channel_id)}</div>
+            ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
+          </div>
+        </div>
+        <div class="mh-info">
+          <div class="mh-bio">${bioText}<button class="mh-more" onclick="${P}OpenAbout()">${moreLbl}</button></div>
+          ${ch.bio_link ? `<div class="mh-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
+        </div>
+        <div class="mh-actions">
+          <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
+          ${_bookmarkBtn(ch, false)}
+          <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
+          <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">&#x2022;&#x2022;&#x2022;</button>
+          <label class="tracking-toggle" title="${isInactive ? `${ItemsCap} tracking off (profile changes still tracked)` : `${ItemsCap} tracking on`}" style="margin-left:auto">
+            <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="${P}SetTracking('${esc(ch.channel_id)}', this.checked)">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">Track</span>
+          </label>
+        </div>
+        <div id="${P}ModalNoteArea" style="display:${ch.comment ? '' : 'none'};margin-top:4px">
+          <textarea placeholder="Add a note about this ${CREATOR}…"
+            onblur="${P}SaveComment('${esc(ch.channel_id)}', this.value)"
+            style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;line-height:1.5"
+          >${esc(ch.comment || '')}</textarea>
+        </div>
+      </div>`;
   }
 
   X('SaveComment', async (id, value) => {
