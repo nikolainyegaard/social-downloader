@@ -406,11 +406,12 @@ function initChannelApp(cfg) {
     { key: 'list',   icon: _listViewIcon, title: 'List view', label: 'Videos' },
     { key: 'videos', icon: _gridViewIcon, title: 'Grid view', label: 'Grid' },
   ];
-  // Built per open: History is always offered; Stories only when the creator
-  // has saved stories on a stories-capable platform. label is the mobile tab text.
+  // History is always offered; Stories on any stories-capable platform (even
+  // with no saved stories yet). label is the mobile tab text.
   const _modalViewKeys = () => {
     const keys = [..._baseViewKeys, { key: 'history', icon: _historyIcon, title: 'Profile history', label: 'History' }];
-    if (cfg.hasStories && modalCreator && modalCreator.story_count)
+    // Stories tab shows on any stories-capable platform, even with no saved stories yet.
+    if (cfg.hasStories)
       keys.push({ key: 'stories', icon: _storiesTabIcon, title: 'Stories', label: 'Stories' });
     return keys;
   };
