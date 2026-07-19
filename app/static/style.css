@@ -2032,12 +2032,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .creator-modal .modal-video-list,
   .creator-modal .phist-panel,
   .creator-modal .stories-panel { flex: none; overflow: visible; }
-  /* Reserve a constant top gap for the floating filter row (matches .m-filters
-     height + its border) so it never covers the first item at rest; the gap is
-     fixed, so hiding the row still causes no shift. Stories has no filter row. */
-  .creator-modal .modal-video-list,
-  .creator-modal .phist-panel { padding-top: 43px; }
-  .creator-modal .modal-toolbar { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 0; gap: 0; overflow: visible; }
+  .creator-modal .modal-toolbar { position: sticky; top: 0; z-index: 7; background: var(--bg); padding: 0; gap: 0; overflow: visible; }
   .modal-top { z-index: 260; }  /* modal back-to-top sits above the modal (z 200) */
 
   /* Mobile toolbar: text tabs over an auto-hiding filter/sort dropdown row */
@@ -2045,11 +2040,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .m-tab { flex: 1; background: none; border: none; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--text-dim); font-size: 13px; font-weight: 600; padding: 10px 4px; cursor: pointer; transition: color .15s, border-color .15s; }
   .m-tab:hover { color: var(--text); }
   .m-tab.active { color: var(--accent); border-bottom-color: var(--accent); text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent); }
-  /* The filter row floats over the top of the list (absolute), so hiding it
-     never reflows the toolbar or shifts the list. It slides up behind the
-     opaque tab bar (which sits at a higher z-index). */
-  .m-filters { display: flex; align-items: center; gap: 7px; height: 42px; padding: 0 12px; background: var(--bg); position: absolute; top: 100%; left: 0; right: 0; z-index: 1; border-bottom: 1px solid var(--border); transition: transform .22s ease, opacity .18s ease; }
-  .creator-modal .modal-toolbar.filters-hidden .m-filters { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+  /* Filter row is a sticky element in the scroll flow (a sibling after the tab
+     bar): its own slot provides the space and scrolls away naturally, so there
+     is no shift and no blank gap. It pins just below the tab bar (top = tab
+     height), and quick-return hides it upward behind the tabs (higher z-index).
+     JS only adds filters-hidden once the tab bar is actually pinned. */
+  .m-filters { display: flex; align-items: center; gap: 7px; height: 42px; padding: 0 12px; background: var(--bg); position: sticky; top: 38px; z-index: 6; border-bottom: 1px solid var(--border); transition: transform .22s ease, opacity .18s ease; }
+  .m-filters.filters-hidden { transform: translateY(-100%); opacity: 0; pointer-events: none; }
   .m-dd { position: relative; }
   .m-dd-btn { display: inline-flex; align-items: center; gap: 4px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: var(--radius-pill); white-space: nowrap; cursor: pointer; }
   .m-dd-btn:hover { background: var(--border); }

@@ -1236,6 +1236,8 @@ function _mFiltered(cfg, skipSearch = false) {
 
 function _mRenderToolbar(cfg, vids) {
   if (cfg.mobileToolbar && _mIsMobile()) { _mRenderToolbarMobile(cfg, vids); return; }
+  const _fh = cfg.filtersHostId && document.getElementById(cfg.filtersHostId);
+  if (_fh) { _fh.innerHTML = ''; _fh.style.display = 'none'; }  // desktop: no separate filter row
   const counts     = { all: 0, active: 0, deleted: 0, restored: 0 };
   const typeCounts = { video: 0, photo: 0 };
   vids.forEach(v => {
@@ -1366,7 +1368,16 @@ function _mRenderToolbarMobile(cfg, vids) {
   } else if (cfg.mobileFilters) {
     filters = cfg.mobileFilters(cfg.st.view);
   }
-  toolbar.innerHTML = `<div class="m-tabs">${tabs}</div>` + (filters ? `<div class="m-filters">${filters}</div>` : '');
+  toolbar.innerHTML = `<div class="m-tabs">${tabs}</div>`;
+  // Filter row lives in its own element in the scroll flow (a sibling after the
+  // toolbar), so its slot scrolls away naturally and hiding it never shifts the
+  // list or leaves a blank gap.
+  const fh = cfg.filtersHostId && document.getElementById(cfg.filtersHostId);
+  if (fh) {
+    fh.classList.remove('filters-hidden');
+    fh.innerHTML = filters;
+    fh.style.display = filters ? 'flex' : 'none';
+  }
 }
 
 function _mSetFilter(cfg, key) {

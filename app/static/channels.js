@@ -238,6 +238,7 @@ function initChannelApp(cfg) {
     ${cfg.hasBanner ? `<div class="yt-modal-banner" id="${P}ModalBanner" style="display:none"></div>` : ''}
     <div class="modal-header"     id="${P}ModalHeader"></div>
     <div class="modal-toolbar"    id="${P}ModalToolbar"></div>
+    <div class="m-filters"        id="${P}ModalFilters" style="display:none"></div>
     <div class="phist-panel"      id="${P}PhistPanel" style="display:none"></div>
     <div class="stories-panel"    id="${P}StoriesPanel" style="display:none"></div>
     <div class="modal-video-list" id="${P}ModalVideoList"></div>
@@ -434,6 +435,7 @@ function initChannelApp(cfg) {
     hasViewToggle: true,
     mobileRows:   true,   // render the list as YouTube-style card rows on mobile
     mobileToolbar: true,  // text tabs + filter/sort dropdowns on mobile
+    filtersHostId: `${P}ModalFilters`,  // mobile filter row lives in its own scroll-flow element
     mSortFn:      `${P}MSort`,
     mStatusFn:    `${P}MStatus`,
     mTypeFn:      `${P}MType`,
@@ -1422,15 +1424,19 @@ function initChannelApp(cfg) {
   // scroll container); on desktop the inner list scrolls, so this stays hidden.
   X('ScrollModalTop', () => { const m = _el('ModalBase'); if (m) m.scrollTo({ top: 0, behavior: 'smooth' }); });
   {
-    const mb = _el('ModalBase'), top = _el('ModalTop'), tb = _el('ModalToolbar');
+    const mb = _el('ModalBase'), top = _el('ModalTop'), tabsHost = _el('ModalToolbar'), filt = _el('ModalFilters');
     let lastY = 0;
     if (mb) mb.addEventListener('scroll', () => {
       const y = mb.scrollTop;
       if (top) top.style.display = y > 200 ? 'flex' : 'none';
-      if (tb && _mIsMobile()) {  // hide the filter row scrolling down, show it scrolling up
-        if (y <= 64) tb.classList.remove('filters-hidden');
-        else if (y > lastY + 8) tb.classList.add('filters-hidden');
-        else if (y < lastY - 8) tb.classList.remove('filters-hidden');
+      if (filt && _mIsMobile()) {
+        const tabs = tabsHost && tabsHost.querySelector('.m-tabs');
+        // Quick-return: only hide once the toolbar is pinned at the top (the
+        // header has scrolled away). Until then the filter row scrolls off with
+        // the page on its own, so there is no shift and no blank gap.
+        const pinned = tabs && tabs.getBoundingClientRect().top <= mb.getBoundingClientRect().top + 1;
+        if (!pinned || y < lastY - 6) filt.classList.remove('filters-hidden');
+        else if (y > lastY + 6) filt.classList.add('filters-hidden');
       }
       lastY = y;
     }, { passive: true });
