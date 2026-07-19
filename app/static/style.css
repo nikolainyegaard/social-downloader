@@ -2032,7 +2032,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .creator-modal .modal-video-list,
   .creator-modal .phist-panel,
   .creator-modal .stories-panel { flex: none; overflow: visible; }
-  .creator-modal .modal-toolbar { position: sticky; top: 0; z-index: 7; background: var(--bg); padding: 0; gap: 0; overflow: visible; }
+  .creator-modal .modal-toolbar { position: sticky; top: 0; z-index: 7; background: var(--bg); padding: 0; gap: 0; overflow: visible; border-bottom: 0; }
   .modal-top { z-index: 260; }  /* modal back-to-top sits above the modal (z 200) */
 
   /* Mobile toolbar: text tabs over an auto-hiding filter/sort dropdown row */
