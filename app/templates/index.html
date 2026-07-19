@@ -630,9 +630,10 @@
                   saved without triggering a profile change event. Banned users are excluded by
                   default; their avatars cannot be re-fetched from TikTok.
                 </div>
-                <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.85em;cursor:pointer">
+                <label class="tracking-toggle" style="margin-top:8px">
                   <input type="checkbox" id="util-clear-avatars-include-banned">
-                  Include banned users
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  <span class="toggle-label">Include banned users</span>
                 </label>
               </div>
               <button class="btn-danger" id="util-clear-avatars-btn" onclick="triggerClearAvatars()" style="flex-shrink:0;align-self:flex-start">Delete</button>
@@ -763,14 +764,18 @@
           </div>
 
           <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-            <select id="diagSource" onchange="diagSourceChanged()" style="flex:1;min-width:160px">
-              <option value="get_video_details">get_video_details</option>
-              <option value="ytdlp">yt-dlp</option>
-              <option value="tiktokapi">TikTokApi</option>
-            </select>
-            <select id="diagAction" onchange="diagActionChanged()" style="flex:1;min-width:160px">
-              <option value="">(paste a URL below)</option>
-            </select>
+            <div class="dd" id="diagSource" data-value="get_video_details" style="flex:1;min-width:160px">
+              <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">get_video_details</span><span class="dd-caret">▾</span></button>
+              <div class="dd-menu" role="listbox">
+                <button type="button" class="dd-opt active" data-value="get_video_details" role="option" onclick="_ddPick(this);diagSourceChanged()">get_video_details</button>
+                <button type="button" class="dd-opt" data-value="ytdlp" role="option" onclick="_ddPick(this);diagSourceChanged()">yt-dlp</button>
+                <button type="button" class="dd-opt" data-value="tiktokapi" role="option" onclick="_ddPick(this);diagSourceChanged()">TikTokApi</button>
+              </div>
+            </div>
+            <div class="dd" id="diagAction" data-value="" style="flex:1;min-width:160px">
+              <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">(paste a URL below)</span><span class="dd-caret">▾</span></button>
+              <div class="dd-menu" role="listbox"></div>
+            </div>
           </div>
 
           <div style="display:flex;gap:10px;margin-bottom:12px">
@@ -793,10 +798,13 @@
             Run raw instaloader API calls and inspect the response. Requires a public account.
           </div>
           <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-            <select id="igDiagAction" style="flex:1;min-width:160px">
-              <option value="profile">Profile info</option>
-              <option value="posts">First 5 posts</option>
-            </select>
+            <div class="dd" id="igDiagAction" data-value="profile" style="flex:1;min-width:160px">
+              <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">Profile info</span><span class="dd-caret">▾</span></button>
+              <div class="dd-menu" role="listbox">
+                <button type="button" class="dd-opt active" data-value="profile" role="option" onclick="_ddPick(this)">Profile info</button>
+                <button type="button" class="dd-opt" data-value="posts" role="option" onclick="_ddPick(this)">First 5 posts</button>
+              </div>
+            </div>
           </div>
           <div style="display:flex;gap:10px;margin-bottom:12px">
             <input id="igDiagInput" class="text-input" type="text"
@@ -816,10 +824,13 @@
             Run raw gallery-dl API calls and inspect the response. Requires uploaded Twitter cookies.
           </div>
           <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-            <select id="twDiagAction" style="flex:1;min-width:160px">
-              <option value="profile">Profile info</option>
-              <option value="posts">First 5 posts</option>
-            </select>
+            <div class="dd" id="twDiagAction" data-value="profile" style="flex:1;min-width:160px">
+              <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">Profile info</span><span class="dd-caret">▾</span></button>
+              <div class="dd-menu" role="listbox">
+                <button type="button" class="dd-opt active" data-value="profile" role="option" onclick="_ddPick(this)">Profile info</button>
+                <button type="button" class="dd-opt" data-value="posts" role="option" onclick="_ddPick(this)">First 5 posts</button>
+              </div>
+            </div>
           </div>
           <div style="display:flex;gap:10px;margin-bottom:12px">
             <input id="twDiagInput" class="text-input" type="text"
@@ -871,9 +882,10 @@
           Saved settings differ from the running configuration. Restart the container to apply.
         </div>
 
-        <label style="display:flex;align-items:center;gap:10px;margin-bottom:20px;cursor:pointer">
-          <input type="checkbox" id="authEnabled" style="accent-color:var(--accent);width:16px;height:16px">
-          <span style="font-size:13px">Enable OAuth login</span>
+        <label class="tracking-toggle lg" style="margin-bottom:20px">
+          <input type="checkbox" id="authEnabled">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          <span class="toggle-label" style="font-size:13px;color:var(--text)">Enable OAuth login</span>
         </label>
 
         <div style="display:flex;flex-direction:column;gap:14px;max-width:500px;margin-bottom:20px">
@@ -940,6 +952,19 @@
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
       <button class="btn-sm" id="errorModalCopy" onclick="copyErrorModal()">Copy</button>
       <button class="btn-sm" onclick="closeErrorModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm / prompt dialog: themed replacement for browser confirm()/prompt() -->
+<div id="confirmModal" class="media-modal" style="display:none;z-index:10001" onclick="if(event.target===this)_confirmDismiss()">
+  <div class="media-modal-inner confirm-card">
+    <div class="confirm-title" id="confirmTitle"></div>
+    <div class="confirm-message" id="confirmMessage"></div>
+    <input class="confirm-input" id="confirmInput" style="display:none" onkeydown="if(event.key==='Enter')_confirmAccept()">
+    <div class="confirm-actions">
+      <button class="btn-sm" onclick="_confirmDismiss()">Cancel</button>
+      <button class="btn-sm confirm-ok" id="confirmOk" onclick="_confirmAccept()">Confirm</button>
     </div>
   </div>
 </div>

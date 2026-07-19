@@ -121,7 +121,7 @@ async function _cookiesUpload(platform, idPrefix, input) {
 }
 
 async function _cookiesDelete(platform, idPrefix) {
-  if (!confirm('Remove the stored cookies file?')) return;
+  if (!await openConfirm({ title: 'Remove cookies?', message: 'Remove the stored cookies file?', confirmLabel: 'Remove' })) return;
   const { ok } = await apiJSON(`/api/${platform}/cookies`, { method: 'DELETE' });
   if (ok) _cookiesLoad(platform, idPrefix);
 }
@@ -202,7 +202,7 @@ function _makeTriggerToast(noun) {
 
 function _platformDiagRun(platform, idPrefix) {
   const handle = (document.getElementById(idPrefix + 'Input').value || '').trim();
-  const action = document.getElementById(idPrefix + 'Action').value;
+  const action = _ddValue(idPrefix + 'Action');
   const btn    = document.getElementById(idPrefix + 'RunBtn');
   const out    = document.getElementById(idPrefix + 'Output');
   if (!handle) { out.textContent = 'Enter a handle first.'; return; }
@@ -364,6 +364,126 @@ async function copyErrorModal() {
   }
   btn.textContent = 'Copied';
   setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+}
+
+// ── Confirm / prompt dialog ─────────────────────────────────────────────────────
+// Themed replacement for the browser's blocking confirm()/prompt(). Both return
+// a promise: openConfirm resolves true/false, openPrompt resolves the string or
+// null on cancel. One shared #confirmModal element, driven by _confirmState.
+
+let _confirmState = null;
+
+function _openDialog(o) {
+  return new Promise(resolve => {
+    _confirmState = { resolve, isPrompt: !!o.isPrompt };
+    document.getElementById('confirmTitle').textContent = o.title || '';
+    const msgEl = document.getElementById('confirmMessage');
+    msgEl.textContent   = o.message || '';
+    msgEl.style.display = o.message ? '' : 'none';
+    const inp = document.getElementById('confirmInput');
+    if (o.isPrompt) {
+      inp.style.display = '';
+      inp.value       = o.value || '';
+      inp.placeholder = o.placeholder || '';
+    } else {
+      inp.style.display = 'none';
+    }
+    const ok = document.getElementById('confirmOk');
+    ok.textContent = o.confirmLabel || 'Confirm';
+    ok.classList.toggle('danger', !!o.danger);
+    document.getElementById('confirmModal').style.display = 'flex';
+    _lockScroll();
+    (o.isPrompt ? inp : ok).focus();
+  });
+}
+
+function openConfirm({ title = 'Are you sure?', message = '', confirmLabel = 'Confirm', danger = true } = {}) {
+  return _openDialog({ title, message, confirmLabel, danger, isPrompt: false });
+}
+
+function openPrompt({ title = '', message = '', value = '', placeholder = '', confirmLabel = 'Save' } = {}) {
+  return _openDialog({ title, message, value, placeholder, confirmLabel, danger: false, isPrompt: true });
+}
+
+function _confirmAccept() {
+  const s = _confirmState;
+  if (!s) return;
+  const result = s.isPrompt ? document.getElementById('confirmInput').value : true;
+  _confirmClose();
+  s.resolve(result);
+}
+
+function _confirmDismiss() {
+  const s = _confirmState;
+  if (!s) return;
+  _confirmClose();
+  s.resolve(s.isPrompt ? null : false);
+}
+
+function _confirmClose() {
+  document.getElementById('confirmModal').style.display = 'none';
+  _unlockScroll();
+  _confirmState = null;
+}
+
+// ── Custom dropdown ─────────────────────────────────────────────────────────────
+// Themed replacement for a native <select> whose option list the OS draws. The
+// selected value lives in the .dd element's data-value; read it with _ddValue,
+// set it programmatically with _ddSetValue, rebuild the options with _ddSetOptions.
+// Each option's own onclick calls _ddPick(this) then any handler, so no eval.
+
+function _ddOptsHtml(opts, onchange) {
+  return opts.map(o =>
+    `<button type="button" class="dd-opt" data-value="${esc(o.value)}" role="option"` +
+    ` onclick="_ddPick(this)${onchange ? ';' + onchange : ''}">${esc(o.label)}</button>`
+  ).join('');
+}
+
+// Build a complete dropdown. value defaults to the first option.
+function _ddHtml(id, opts, { value, onchange, className = '' } = {}) {
+  const cur = opts.find(o => o.value === value) || opts[0] || { value: '', label: '' };
+  return `<div class="dd${className ? ' ' + className : ''}" id="${id}" data-value="${esc(cur.value)}">` +
+    `<button type="button" class="dd-btn" onclick="_ddToggle(this)">` +
+    `<span class="dd-label">${esc(cur.label)}</span><span class="dd-caret">▾</span></button>` +
+    `<div class="dd-menu" role="listbox">${_ddOptsHtml(opts, onchange)}</div></div>`;
+}
+
+function _ddToggle(btn) {
+  const dd = btn.parentNode, open = dd.classList.contains('open');
+  document.querySelectorAll('.dd.open').forEach(d => d.classList.remove('open'));
+  if (!open) dd.classList.add('open');
+}
+
+function _ddPick(opt) {
+  const dd = opt.closest('.dd');
+  if (!dd) return;
+  dd.dataset.value = opt.dataset.value;
+  dd.querySelector('.dd-label').textContent = opt.textContent;
+  dd.querySelectorAll('.dd-opt').forEach(o => o.classList.toggle('active', o === opt));
+  dd.classList.remove('open');
+}
+
+function _ddValue(id) {
+  return document.getElementById(id)?.dataset.value ?? '';
+}
+
+// Set the selection without firing any onchange (mirrors `select.value = x`).
+function _ddSetValue(id, value) {
+  const dd = document.getElementById(id);
+  if (!dd) return;
+  const opt = dd.querySelector(`.dd-opt[data-value="${CSS.escape(String(value))}"]`);
+  if (!opt) return;
+  dd.dataset.value = value;
+  dd.querySelector('.dd-label').textContent = opt.textContent;
+  dd.querySelectorAll('.dd-opt').forEach(o => o.classList.toggle('active', o === opt));
+}
+
+// Rebuild the option list (for a dependent dropdown), then select `value`.
+function _ddSetOptions(id, opts, { value, onchange } = {}) {
+  const dd = document.getElementById(id);
+  if (!dd) return;
+  dd.querySelector('.dd-menu').innerHTML = _ddOptsHtml(opts, onchange);
+  _ddSetValue(id, value ?? (opts[0] && opts[0].value));
 }
 
 // ── Add-lookup toasts ─────────────────────────────────────────────────────────
@@ -1182,6 +1302,11 @@ function closeCarousel() {
 
 document.addEventListener('keydown', e => {
   const _open = id => { const el = document.getElementById(id); return el && el.style.display !== 'none'; };
+  // The confirm/prompt dialog blocks a decision, so it outranks everything
+  if (_open('confirmModal')) {
+    if (e.key === 'Escape') _confirmDismiss();
+    return;
+  }
   // The error dialog can open over anything (its toast floats above all
   // overlays), so it outranks even the carousel
   if (_open('errorModal')) {
@@ -1322,6 +1447,7 @@ function _mDdToggle(btn) {
 }
 document.addEventListener('click', e => {
   if (!e.target.closest('.m-dd')) document.querySelectorAll('.m-dd.open').forEach(d => d.classList.remove('open'));
+  if (!e.target.closest('.dd'))   document.querySelectorAll('.dd.open').forEach(d => d.classList.remove('open'));
 });
 function _mMobSort(cfg, field)  { cfg.st.sort = _doSort(cfg.st.sort, field); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
 function _mMobStatus(cfg, key)  { cfg.st.filter     = key ? new Set([key]) : new Set(); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
@@ -1627,7 +1753,7 @@ async function _creatorRunProfile(apiPath, id, getQueue, setQueue, render) {
 }
 
 async function _creatorRemove(apiPath, id, label, load) {
-  if (!confirm(`Stop tracking ${label}?\n(Downloaded files will not be deleted.)`)) return;
+  if (!await openConfirm({ title: `Stop tracking ${label}?`, message: 'Downloaded files will not be deleted.', confirmLabel: 'Stop tracking' })) return;
   await apiJSON(`${apiPath}/${id}`, { method: 'DELETE' });
   load();
 }

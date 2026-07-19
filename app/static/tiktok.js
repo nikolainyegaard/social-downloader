@@ -12,7 +12,7 @@ async function loadCookies()        { return _cookiesLoad('tiktok', 'cookie'); }
 // the next QR sign-in starts as a brand-new device. Also the recovery move
 // when the identity is deeply flagged.
 async function ttResetSession() {
-  if (!confirm('Reset the TikTok session? This signs out, deletes the browser identity, and requires a new QR sign-in.')) return;
+  if (!await openConfirm({ title: 'Reset the TikTok session?', message: 'This signs out, deletes the browser identity, and requires a new QR sign-in.', confirmLabel: 'Reset session' })) return;
   const { ok, data } = await apiJSON('/api/tiktok/login/session', { method: 'DELETE' });
   showToast((data && (data.message || data.error)) || (ok ? 'Session reset' : 'Reset failed'),
             { type: ok ? 'info' : 'error' });
@@ -314,7 +314,7 @@ async function ttWgSave() {
 }
 
 async function ttWgDelete() {
-  if (!confirm('Remove the saved WireGuard config? Gluetun keeps using it until that container restarts.')) return;
+  if (!await openConfirm({ title: 'Remove WireGuard config?', message: 'Gluetun keeps using it until that container restarts.', confirmLabel: 'Remove' })) return;
   const { ok } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'DELETE' });
   if (!ok) { showToast('Could not remove the config', { type: 'error' }); return; }
   _ttWgSavedToast('WireGuard config removed.');
@@ -404,11 +404,11 @@ const _TT_SOUND_CONTROLS_HTML = `
   <div class="filter-row">
     <span class="filter-row-label">Sort</span>
     <div class="sort-controls">
-      <select class="sort-select" id="soundSortField" onchange="setSoundSortField(this.value)">
-        <option value="label">Label</option>
-        <option value="video_count">Saved videos</option>
-        <option value="added_at">Date added</option>
-      </select>
+      ${_ddHtml('soundSortField', [
+        { value: 'label',       label: 'Label' },
+        { value: 'video_count', label: 'Saved videos' },
+        { value: 'added_at',    label: 'Date added' },
+      ], { value: 'label', onchange: "setSoundSortField(_ddValue('soundSortField'))" })}
       <button class="sort-dir-btn" id="soundSortDirBtn" onclick="toggleSoundSortDir()">A → Z</button>
       <button class="sort-dir-btn" onclick="resetSoundFilters()" title="Reset all filters and sort to default">Reset</button>
     </div>
@@ -748,8 +748,7 @@ function resetSoundFilters() {
   _soundSearch = '';
   const searchEl = tt.el('Search');
   if (searchEl) searchEl.value = '';
-  const sel = document.getElementById('soundSortField');
-  if (sel) sel.value = 'label';
+  _ddSetValue('soundSortField', 'label');
   _updateSoundSortBtn();
   Object.entries(SOUND_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', soundFilter.stat.has(v)));
   Object.entries(SOUND_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', soundFilter.star.has(v)));
@@ -844,7 +843,7 @@ async function loadSounds() {
 }
 
 async function removeSound(soundId, label) {
-  if (!confirm(`Remove sound "${label}" (${soundId})?\n\nVideos already downloaded will not be deleted.`)) return;
+  if (!await openConfirm({ title: `Remove sound "${label}"?`, message: `${soundId}\n\nVideos already downloaded will not be deleted.`, confirmLabel: 'Remove' })) return;
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
   if (!ok) { showToast(data.error || 'Failed to remove sound.', { type: 'error' }); return; }
   if (_soundModalId === soundId) closeSoundModal();
@@ -892,7 +891,7 @@ async function saveSoundComment(id, value) {
 
 async function editSoundLabel(soundId) {
   const s = sounds.find(s => s.sound_id === soundId);
-  const newLabel = prompt('Edit label for this sound:', s?.label || '');
+  const newLabel = await openPrompt({ title: 'Edit sound label', value: s?.label || '', placeholder: 'Label for this sound', confirmLabel: 'Save' });
   if (newLabel === null) return;
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, {
     method: 'PATCH',
@@ -1314,7 +1313,7 @@ async function runMigration() {
     statusEl.textContent = 'Both path prefixes are required.';
     return;
   }
-  if (!confirm(`Rewrite all DB paths?\n\n${oldPrefix}  →  ${newPrefix}\n\nA backup is made automatically before changes.`)) return;
+  if (!await openConfirm({ title: 'Rewrite all DB paths?', message: `${oldPrefix}  →  ${newPrefix}\n\nA backup is made automatically before changes.`, confirmLabel: 'Rewrite' })) return;
   runBtn.disabled = true;
   statusEl.textContent = 'Running migration…';
   try {
@@ -1532,7 +1531,7 @@ async function triggerFileScan() {
 }
 
 async function triggerFilePurge() {
-  if (!confirm('Remove all DB records for files that are missing on disk?\nThis cannot be undone.')) return;
+  if (!await openConfirm({ title: 'Remove missing-file records?', message: 'Remove all DB records for files that are missing on disk?\nThis cannot be undone.', confirmLabel: 'Remove records' })) return;
   _setFilecheckBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/purge', { method: 'POST' });
   if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setFilecheckBtns(false); return; }
@@ -1662,16 +1661,14 @@ const _DIAG_ACTIONS = {
 };
 
 function diagSourceChanged() {
-  const source   = document.getElementById('diagSource').value;
-  const actionEl = document.getElementById('diagAction');
-  actionEl.innerHTML = (_DIAG_ACTIONS[source] || [])
-    .map(a => `<option value="${a.value}">${a.label}</option>`).join('');
+  const source = _ddValue('diagSource');
+  _ddSetOptions('diagAction', _DIAG_ACTIONS[source] || [], { onchange: 'diagActionChanged()' });
   diagActionChanged();
 }
 
 function diagActionChanged() {
-  const source = document.getElementById('diagSource').value;
-  const action = document.getElementById('diagAction').value;
+  const source = _ddValue('diagSource');
+  const action = _ddValue('diagAction');
   const placeholders = {
     'get_video_details:':          'https://www.tiktok.com/@user/video/123…',
     'ytdlp:user_videos':           'channel_id (numeric)',
@@ -1690,8 +1687,8 @@ function diagActionChanged() {
 }
 
 async function diagRun() {
-  const source  = document.getElementById('diagSource').value;
-  const action  = document.getElementById('diagAction').value;
+  const source  = _ddValue('diagSource');
+  const action  = _ddValue('diagAction');
   const inp     = document.getElementById('diagInput').value.trim();
   const outEl   = document.getElementById('diagOutput');
   const btn     = document.getElementById('diagRunBtn');
@@ -1730,9 +1727,9 @@ async function diagRun() {
 }
 
 function diagSendToProfileById(tiktokId, secUid) {
-  document.getElementById('diagSource').value = 'tiktokapi';
+  _ddSetValue('diagSource', 'tiktokapi');
   diagSourceChanged();
-  document.getElementById('diagAction').value = 'user_info_by_id';
+  _ddSetValue('diagAction', 'user_info_by_id');
   diagActionChanged();
   document.getElementById('diagInput').value = `${tiktokId}:${secUid}`;
   diagRun();

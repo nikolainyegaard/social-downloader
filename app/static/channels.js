@@ -190,17 +190,17 @@ function initChannelApp(cfg) {
         <div class="filter-row">
           <span class="filter-row-label">Sort</span>
           <div class="sort-controls">
-            <select class="sort-select" id="${P}SortField" onchange="${P}SetSortField(this.value)">
-              <option value="handle">Handle</option>
-              <option value="display_name">Display name</option>
-              <option value="subscriber_count">${cfg.subLabelSort}</option>
-              <option value="video_total">Saved ${ITEMS}</option>
-              <option value="video_deleted">Deleted ${ITEMS}</option>
-              ${cfg.hasStories ? '<option value="story_count">Stories</option>' : ''}
-              <option value="added_at">Date added</option>
-              <option value="last_checked">Last checked</option>
-              <option value="last_saved">Last saved</option>
-            </select>
+            ${_ddHtml(`${P}SortField`, [
+              { value: 'handle',           label: 'Handle' },
+              { value: 'display_name',     label: 'Display name' },
+              { value: 'subscriber_count', label: cfg.subLabelSort },
+              { value: 'video_total',      label: `Saved ${ITEMS}` },
+              { value: 'video_deleted',    label: `Deleted ${ITEMS}` },
+              ...(cfg.hasStories ? [{ value: 'story_count', label: 'Stories' }] : []),
+              { value: 'added_at',         label: 'Date added' },
+              { value: 'last_checked',     label: 'Last checked' },
+              { value: 'last_saved',       label: 'Last saved' },
+            ], { value: 'handle', onchange: `${P}SetSortField(_ddValue('${P}SortField'))` })}
             <button class="sort-dir-btn" id="${P}SortDirBtn" onclick="${P}ToggleSortDir()">A → Z</button>
             <button class="sort-dir-btn" onclick="${P}ResetFilters()" title="Reset filters and sort">Reset</button>
           </div>
@@ -216,9 +216,10 @@ function initChannelApp(cfg) {
       <div class="log-panel">
         <div class="log-header">
           <div style="display:flex;align-items:center;gap:12px;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
-              <input type="checkbox" id="${P}AutoScroll" checked style="accent-color:var(--accent)">
-              Auto-scroll
+            <label class="tracking-toggle">
+              <input type="checkbox" id="${P}AutoScroll" checked>
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-label">Auto-scroll</span>
             </label>
             <button class="btn-ghost" onclick="${P}ClearLog()" style="font-size:11px;padding:3px 8px;">Clear</button>
           </div>
@@ -1071,8 +1072,7 @@ function initChannelApp(cfg) {
     search = '';
     const searchEl = _el('Search');
     if (searchEl) searchEl.value = '';
-    const sel = _el('SortField');
-    if (sel) sel.value = 'handle';
+    _ddSetValue(`${P}SortField`, 'handle');
     _updateSortBtn();
     _syncFilterPills();
     renderCreators();
