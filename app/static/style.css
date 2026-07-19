@@ -2045,10 +2045,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
      is no shift and no blank gap. It pins just below the tab bar (top = tab
      height), and quick-return hides it upward behind the tabs (higher z-index).
      JS only adds filters-hidden once the tab bar is actually pinned. */
-  .m-filters { display: flex; align-items: center; gap: 7px; height: 42px; padding: 0 12px; background: var(--bg); position: sticky; top: 38px; z-index: 6; border-bottom: 1px solid var(--border); transition: transform .22s ease, opacity .18s ease; }
+  .m-filters { display: flex; align-items: center; gap: 7px; padding: 9px 12px; background: var(--bg); position: sticky; top: 38px; z-index: 6; border-bottom: 1px solid var(--border); transition: transform .22s ease, opacity .18s ease; }
   .m-filters.filters-hidden { transform: translateY(-100%); opacity: 0; pointer-events: none; }
   .m-dd { position: relative; }
-  .m-dd-btn { display: inline-flex; align-items: center; gap: 4px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: var(--radius-pill); white-space: nowrap; cursor: pointer; }
+  .m-dd-btn { display: inline-flex; align-items: center; gap: 4px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-size: 11.5px; font-weight: 600; padding: 6px 12px; border-radius: var(--radius-pill); white-space: nowrap; cursor: pointer; }
   .m-dd-btn:hover { background: var(--border); }
   .m-dd-caret { color: var(--muted); font-size: 9px; }
   .m-dd-menu { display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 170px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-2); padding: 5px; }
