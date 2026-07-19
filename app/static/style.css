@@ -1298,6 +1298,26 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* ── Story mode: progress bars, tap zones, chrome hidden ─────────────────── */
 
+/* Darken the top of the story so the white progress bars keep contrast over
+   bright media. Absolute so it stays out of the inner's flex flow; sits above
+   the media (z 0) but below the bars (z 4), tap zones (z 3), and close (z 5).
+   Eased (quadratic ease-out) stops: the slope reaches zero smoothly, so no
+   Mach band forms at the boundary the way a plain two-stop gradient does. */
+.story-mode .carousel-inner::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 72px;
+  background: linear-gradient(to bottom,
+    rgba(0,0,0,.55) 0%,   rgba(0,0,0,.40) 15%,
+    rgba(0,0,0,.27) 30%,  rgba(0,0,0,.168) 45%,
+    rgba(0,0,0,.088) 60%, rgba(0,0,0,.034) 75%,
+    rgba(0,0,0,.012) 86%, transparent 100%);
+  border-radius: var(--radius) var(--radius) 0 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
 .story-progress {
   position: absolute;
   top: 8px; left: 46px; right: 46px;
