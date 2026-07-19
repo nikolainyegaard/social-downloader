@@ -2032,6 +2032,11 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .creator-modal .modal-video-list,
   .creator-modal .phist-panel,
   .creator-modal .stories-panel { flex: none; overflow: visible; }
+  /* Reserve a constant top gap for the floating filter row (matches .m-filters
+     height + its border) so it never covers the first item at rest; the gap is
+     fixed, so hiding the row still causes no shift. Stories has no filter row. */
+  .creator-modal .modal-video-list,
+  .creator-modal .phist-panel { padding-top: 43px; }
   .creator-modal .modal-toolbar { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 0; gap: 0; overflow: visible; }
   .modal-top { z-index: 260; }  /* modal back-to-top sits above the modal (z 200) */
 
