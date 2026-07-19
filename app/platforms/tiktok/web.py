@@ -629,6 +629,23 @@ def register_tiktok_routes(bp, engine) -> None:
 
     # ── Channel extras ────────────────────────────────────────────────────────
 
+    @bp.route("/channels/<channel_id>/storage", methods=["GET"])
+    def channel_storage(channel_id: str):
+        """Total on-disk size of this user's media folder, computed on demand
+        (only when the modal Info panel opens, so no cost on the channel list)."""
+        row = db.get_channel(channel_id)
+        if not row:
+            return jsonify({"error": "User not found"}), 404
+        folder = os.path.join(MEDIA_DIR, "tiktok", f"@{row['handle']}")
+        total  = 0
+        for dirpath, _dirs, files in os.walk(folder):
+            for name in files:
+                try:
+                    total += os.path.getsize(os.path.join(dirpath, name))
+                except OSError:
+                    pass
+        return jsonify({"bytes": total})
+
     @bp.route("/channels/<channel_id>/track", methods=["POST"])
     def track_discovered_channel(channel_id: str):
         """Promote a sound-discovered (enabled=0) stub to fully tracked.

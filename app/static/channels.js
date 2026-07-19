@@ -1464,6 +1464,20 @@ function initChannelApp(cfg) {
   }
 
   // About modal (mobile): full bio, link, and all stats + activity dates.
+  // Per-creator media folder size, fetched lazily when the Info panel or header
+  // renders (a folder walk is too costly to run on the channel list). Cached per
+  // channel so header re-renders on status polls do not refetch.
+  const _storageCache = {};
+  const _storageTileVal = chId =>
+    _storageCache[chId] != null ? _fmtBytes(_storageCache[chId]) : '<span class="storage-val">…</span>';
+  async function _fillStorage(chId) {
+    if (_storageCache[chId] != null) return;
+    const { ok, data } = await apiJSON(`${API}/channels/${chId}/storage`);
+    if (!ok || !data || modalCreatorId !== chId) return;
+    _storageCache[chId] = data.bytes || 0;
+    document.querySelectorAll('.storage-val').forEach(el => { el.textContent = _fmtBytes(_storageCache[chId]); });
+  }
+
   X('OpenAbout', () => {
     const ch = modalCreator; if (!ch) return;
     const platformLabel = (PLATFORMS.find(p => p.id === cfg.id) || {}).label || cfg.id;
@@ -1485,6 +1499,7 @@ function initChannelApp(cfg) {
     if ((ch.video_deleted || 0) > 0) statTiles.push({ v: ch.video_deleted,   l: 'Deleted',  cls: 'tred' });
     if (ch.video_undeleted)          statTiles.push({ v: ch.video_undeleted, l: 'Restored', cls: 'tyellow' });
     if (cfg.hasStories && ch.story_count) statTiles.push({ v: _fmtLarge(ch.story_count), l: 'Stories' });
+    statTiles.push({ v: _storageTileVal(ch.channel_id), l: 'Storage' });
     if (ch.profile_history_count)    statTiles.push({ v: ch.profile_history_count, l: 'Updates', click: `${P}CloseAbout();${P}SetModalView('history')` });
     const tile = t => `<div class="tile${t.cls ? ' ' + t.cls : ''}${t.click ? ' tlink' : ''}"${t.click ? ` onclick="${t.click}"` : ''}><span class="tv">${t.v}</span><span class="tl">${t.l}</span></div>`;
     _el('AboutBody').innerHTML = `
@@ -1495,6 +1510,7 @@ function initChannelApp(cfg) {
       <div class="about-sub">Activity</div>
       <div class="about-grid about-dates">${dateTiles.map(tile).join('')}</div>`;
     _el('AboutModal').style.display = 'flex';
+    _fillStorage(ch.channel_id);
   });
   X('CloseAbout', () => { const a = _el('AboutModal'); if (a) a.style.display = 'none'; });
 
@@ -1579,6 +1595,7 @@ function initChannelApp(cfg) {
     if ((ch.video_deleted || 0) > 0) statTiles.push({ v: ch.video_deleted,   l: 'Deleted',  cls: 'tred' });
     if (ch.video_undeleted)          statTiles.push({ v: ch.video_undeleted, l: 'Restored', cls: 'tyellow' });
     if (cfg.hasStories && ch.story_count) statTiles.push({ v: _fmtLarge(ch.story_count), l: 'Stories' });
+    statTiles.push({ v: _storageTileVal(ch.channel_id), l: 'Storage' });
     if (ch.profile_history_count)    statTiles.push({ v: ch.profile_history_count, l: 'Updates', click: `${P}SetModalView('history')` });
 
     const _tile = t => `<div class="tile${t.cls ? ' ' + t.cls : ''}${t.click ? ' tlink' : ''}"${t.click ? ` onclick="${t.click}" title="Open profile change history"` : ''}><span class="tv">${t.v}</span><span class="tl">${t.l}</span></div>`;
@@ -1633,6 +1650,7 @@ function initChannelApp(cfg) {
       <div class="modal-header-stats">${statPairs}</div>
     `;
 
+    _fillStorage(ch.channel_id);
     _renderModalBanner(ch);
   }
 

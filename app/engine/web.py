@@ -331,6 +331,23 @@ def create_channel_blueprint(engine) -> Blueprint:
         db.remove_channel(channel_id)
         return jsonify({"ok": True})
 
+    @bp.route("/channels/<channel_id>/storage", methods=["GET"])
+    def channel_storage(channel_id: str):
+        """Total on-disk size of this creator's media folder, computed on demand
+        (only when the modal Info panel opens, so no cost on the channel list)."""
+        ch = db.get_channel(channel_id)
+        if not ch:
+            return jsonify({"error": "Not found"}), 404
+        folder = os.path.join(MEDIA_DIR, platform, f"@{ch['handle']}")
+        total  = 0
+        for dirpath, _dirs, files in os.walk(folder):
+            for name in files:
+                try:
+                    total += os.path.getsize(os.path.join(dirpath, name))
+                except OSError:
+                    pass
+        return jsonify({"bytes": total})
+
     @bp.route("/channels/<channel_id>/videos", methods=["GET"])
     def channel_videos(channel_id: str):
         videos = db.get_videos_for_channel(channel_id)
