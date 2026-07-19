@@ -1164,8 +1164,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-bottom: 1px solid var(--border);
 }
 .view-tabs { display: flex; gap: 2px; }
-.view-tab {
-  padding: 7px 14px;
+/* Shared underline-tab style, used by both the top platform nav and the
+   in-section view toggle. Only padding differs (set per class below). */
+.view-tab, .platform-tab {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-dim);
@@ -1177,12 +1178,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
-.view-tab:hover { color: var(--text); }
-.view-tab.active {
+.view-tab:hover, .platform-tab:hover { color: var(--text); }
+.view-tab.active, .platform-tab.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
   text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent);
 }
+.view-tab { padding: 7px 14px; }
 .view-tabs-row .tracking-search { margin-left: auto; margin-bottom: 5px; }
 
 /* ── User sort control ──────────────────────────────────────────────────── */
@@ -2018,14 +2020,32 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   /* Loop trigger buttons: allow Stop to wrap to its own row on narrow screens */
   .loop-actions { flex-wrap: wrap; }
 
-  /* Collapsible modal toolbar on mobile */
   .modal-toolbar { flex-direction: column; align-items: stretch; padding: 8px 12px; gap: 6px; }
   .toolbar-main-row { flex: none; gap: 8px; }
   .toolbar-filter-wrap { flex-wrap: wrap; gap: 6px; }
-  .toolbar-filter-wrap.collapsed { display: none; }
-  .toolbar-toggle { display: inline-flex; }
   .modal-video-search { display: none; }
-  .toolbar-phist-btn { margin-left: auto; }
+
+  /* Creator modal: scroll the whole modal as one page so the header scrolls
+     away and only the toolbar sticks (like YouTube). Scoped to .creator-modal
+     so the sound modal is untouched. */
+  .creator-modal { overflow-y: auto; overflow-x: hidden; }
+  .creator-modal .modal-video-list,
+  .creator-modal .phist-panel,
+  .creator-modal .stories-panel { flex: none; overflow: visible; }
+  .creator-modal .modal-toolbar { position: sticky; top: 0; z-index: 6; background: var(--bg); }
+  .modal-top { z-index: 260; }  /* modal back-to-top sits above the modal (z 200) */
+
+  /* YouTube-style mobile video rows (creator modal list view) */
+  .yt-row { display: flex; gap: 12px; align-items: flex-start; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .yt-row:active { background: var(--surface2); }
+  .yt-thumb { position: relative; flex: 0 0 42%; max-width: 190px; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: var(--surface2); }
+  .yt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .yt-thumb.deleted { outline: 2px solid var(--red); outline-offset: -2px; }
+  .yt-thumb.undeleted { outline: 2px solid var(--yellow); outline-offset: -2px; }
+  .yt-thumb-badge { position: absolute; bottom: 4px; right: 4px; display: inline-flex; filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); }
+  .yt-body { flex: 1; min-width: 0; padding-top: 1px; }
+  .yt-title { font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .yt-meta { font-size: 12.5px; color: var(--text-dim); margin-top: 5px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 }
 
 /* ── Platform tabs ────────────────────────────────────────────────────────── */
@@ -2044,26 +2064,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   -webkit-backdrop-filter: blur(14px);
 }
 
-.platform-tab {
-  padding: 9px 18px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  margin-bottom: -1px;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.platform-tab:hover { color: var(--text); }
-.platform-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-  text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent);
-}
+/* Button styling shared with .view-tab (see the grouped rule above); only the
+   padding is platform-nav-specific. */
+.platform-tab { padding: 9px 18px; }
 
 /* ── Platform sections ────────────────────────────────────────────────────── */
 

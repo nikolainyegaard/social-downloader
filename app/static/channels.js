@@ -233,7 +233,7 @@ function initChannelApp(cfg) {
   function _modalHtml() {
     return `
 <div id="${P}ModalBackdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)${P}CloseModal()">
-  <div class="modal modal-base">
+  <div class="modal modal-base creator-modal" id="${P}ModalBase">
     <button class="modal-close" onclick="${P}CloseModal()"></button>
     ${cfg.hasBanner ? `<div class="yt-modal-banner" id="${P}ModalBanner" style="display:none"></div>` : ''}
     <div class="modal-header"     id="${P}ModalHeader"></div>
@@ -241,6 +241,7 @@ function initChannelApp(cfg) {
     <div class="phist-panel"      id="${P}PhistPanel" style="display:none"></div>
     <div class="stories-panel"    id="${P}StoriesPanel" style="display:none"></div>
     <div class="modal-video-list" id="${P}ModalVideoList"></div>
+    <button class="back-to-top modal-top" id="${P}ModalTop" style="display:none" onclick="${P}ScrollModalTop()" title="Back to top">↑</button>
   </div>
 </div>`;
   }
@@ -424,6 +425,7 @@ function initChannelApp(cfg) {
     authorCol:    null,
     hasSearch:    true,
     hasViewToggle: true,
+    mobileRows:   true,   // render the list as YouTube-style card rows on mobile
     viewFn:       `${P}SetModalView`,
     viewKeys:     _modalViewKeys,
     // History view swaps the post filters for its profile-change field pills,
@@ -1379,6 +1381,7 @@ function initChannelApp(cfg) {
     _el('ModalVideoList').style.display = '';
 
     _el('ModalBackdrop').style.display = 'flex';
+    { const mb = _el('ModalBase'), top = _el('ModalTop'); if (mb) mb.scrollTop = 0; if (top) top.style.display = 'none'; }
     _lockScroll();
 
     _el('ModalHeader').className = 'modal-header';  // reset custom header classes
@@ -1401,6 +1404,16 @@ function initChannelApp(cfg) {
     if (field) phistField = new Set([field]);
     window[`${P}SetModalView`]('history');
   });
+
+  // Modal back-to-top: only the modal element itself scrolls on mobile (single
+  // scroll container); on desktop the inner list scrolls, so this stays hidden.
+  X('ScrollModalTop', () => { const m = _el('ModalBase'); if (m) m.scrollTo({ top: 0, behavior: 'smooth' }); });
+  {
+    const mb = _el('ModalBase'), top = _el('ModalTop');
+    if (mb && top) mb.addEventListener('scroll', () => {
+      top.style.display = mb.scrollTop > 200 ? 'flex' : 'none';
+    }, { passive: true });
+  }
 
   X('CloseModal', () => {
     _el('ModalBackdrop').style.display = 'none';

@@ -1363,7 +1363,10 @@ function _mSetSort(cfg, field) {
   list.scrollLeft = sx;
 }
 
+function _mIsMobile() { return window.matchMedia('(max-width: 640px)').matches; }
+
 function _mRenderColHdrs(cfg) {
+  if (cfg.mobileRows && _mIsMobile()) return;  // mobile uses card rows, no column header
   if (cfg.hasViewToggle && cfg.st.view !== 'list') return;
   const list = document.getElementById(cfg.listElId);
   const existing = list.querySelector('.video-list-hdr');
@@ -1397,6 +1400,7 @@ function _mRenderList(cfg) {
 }
 
 function _mAppendVideos(cfg, vids) {
+  if (cfg.mobileRows && _mIsMobile()) { _mAppendVideosMobile(cfg, vids); return; }
   const list     = document.getElementById(cfg.listElId);
   const batch    = vids.slice(cfg.st.loaded, cfg.st.loaded + cfg.pageSize);
   cfg.st.loaded += batch.length;
@@ -1434,6 +1438,37 @@ function _mAppendVideos(cfg, vids) {
       cfg.st.obs = null;
       _mAppendVideos(cfg, vids);
     });
+  }
+}
+
+// YouTube-style mobile list rows: big thumbnail, 2-line title, one metadata line.
+// Trimmed vs the desktop table; status shows only when not Active. Reuses the
+// grid's cfg hooks (gridThumbSrc / typeIconFn / gridCellOnclick) so it stays
+// platform-driven.
+function _mAppendVideosMobile(cfg, vids) {
+  const list  = document.getElementById(cfg.listElId);
+  const batch = vids.slice(cfg.st.loaded, cfg.st.loaded + cfg.pageSize);
+  cfg.st.loaded += batch.length;
+  const fmtUpload = cfg.uploadDateFmt || fmtDateShort;
+  batch.forEach(v => {
+    const { cls, label } = _videoStatus(v);
+    const row = document.createElement('div');
+    row.className = 'yt-row';
+    row.dataset.videoId = v.video_id;
+    const badge  = cfg.typeIconFn ? cfg.typeIconFn(v) : '';
+    const thumb  = cfg.gridThumbSrc ? cfg.gridThumbSrc(v) : '';
+    const status = cls !== 'up' ? `<span class="vstatus ${cls}">${label}</span>` : '';
+    row.innerHTML = `
+      <div class="yt-thumb${cls !== 'up' ? ' ' + cls : ''}"><img src="${thumb}" alt="" onerror="this.style.opacity='.15'"><span class="yt-thumb-badge">${badge}</span></div>
+      <div class="yt-body">
+        <div class="yt-title">${v.description ? esc(v.description) : '(no description)'}</div>
+        <div class="yt-meta">${status}<span>${fmtCount(v.view_count)} views · ${fmtUpload(v.upload_date)}</span></div>
+      </div>`;
+    if (cfg.gridCellOnclick) row.onclick = () => cfg.gridCellOnclick(v);
+    list.appendChild(row);
+  });
+  if (cfg.st.loaded < vids.length) {
+    cfg.st.obs = _attachSentinel(list, () => { cfg.st.obs = null; _mAppendVideosMobile(cfg, vids); });
   }
 }
 
