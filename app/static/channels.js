@@ -395,15 +395,15 @@ function initChannelApp(cfg) {
   const _historyIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3.5 2"/></svg>`;
   const _storiesTabIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke-dasharray="3.2 2.6"/><polygon points="10,8.5 16.5,12 10,15.5" fill="currentColor" stroke="none"/></svg>`;
   const _baseViewKeys = cfg.viewKeys || [
-    { key: 'list',   icon: _listViewIcon, title: 'List view' },
-    { key: 'videos', icon: _gridViewIcon, title: 'Grid view' },
+    { key: 'list',   icon: _listViewIcon, title: 'List view', label: 'Videos' },
+    { key: 'videos', icon: _gridViewIcon, title: 'Grid view', label: 'Grid' },
   ];
   // Built per open: History is always offered; Stories only when the creator
-  // has saved stories on a stories-capable platform.
+  // has saved stories on a stories-capable platform. label is the mobile tab text.
   const _modalViewKeys = () => {
-    const keys = [..._baseViewKeys, { key: 'history', icon: _historyIcon, title: 'Profile history' }];
+    const keys = [..._baseViewKeys, { key: 'history', icon: _historyIcon, title: 'Profile history', label: 'History' }];
     if (cfg.hasStories && modalCreator && modalCreator.story_count)
-      keys.push({ key: 'stories', icon: _storiesTabIcon, title: 'Stories' });
+      keys.push({ key: 'stories', icon: _storiesTabIcon, title: 'Stories', label: 'Stories' });
     return keys;
   };
 
@@ -426,11 +426,17 @@ function initChannelApp(cfg) {
     hasSearch:    true,
     hasViewToggle: true,
     mobileRows:   true,   // render the list as YouTube-style card rows on mobile
+    mobileToolbar: true,  // text tabs + filter/sort dropdowns on mobile
+    mSortFn:      `${P}MSort`,
+    mStatusFn:    `${P}MStatus`,
+    mTypeFn:      `${P}MType`,
     viewFn:       `${P}SetModalView`,
     viewKeys:     _modalViewKeys,
     // History view swaps the post filters for its profile-change field pills,
-    // rendered into the toolbar's context-filter area.
+    // rendered into the toolbar's context-filter area (desktop). On mobile it
+    // becomes a Fields dropdown via mobileFilters.
     contextFilters: v => v === 'history' ? _phistFieldPillsHtml() : '',
+    mobileFilters:  v => v === 'history' ? _mobileFieldsDd() : '',
     viewVideoFilter: cfg.viewVideoFilter || ((view, vids) => vids),
     gridClassFn:     cfg.gridClassFn || (() => ''),
     typeIconFn:      cfg.typeIconFn || (v => _isMulti(v) ? _vgridPhotoIcon : (v.type === 'photo' || _isImage(v)) ? _vgridImageIcon : _vgridPlayIcon),
@@ -1409,10 +1415,36 @@ function initChannelApp(cfg) {
   // scroll container); on desktop the inner list scrolls, so this stays hidden.
   X('ScrollModalTop', () => { const m = _el('ModalBase'); if (m) m.scrollTo({ top: 0, behavior: 'smooth' }); });
   {
-    const mb = _el('ModalBase'), top = _el('ModalTop');
-    if (mb && top) mb.addEventListener('scroll', () => {
-      top.style.display = mb.scrollTop > 200 ? 'flex' : 'none';
+    const mb = _el('ModalBase'), top = _el('ModalTop'), tb = _el('ModalToolbar');
+    let lastY = 0;
+    if (mb) mb.addEventListener('scroll', () => {
+      const y = mb.scrollTop;
+      if (top) top.style.display = y > 200 ? 'flex' : 'none';
+      if (tb && _mIsMobile()) {  // hide the filter row scrolling down, show it scrolling up
+        if (y <= 64) tb.classList.remove('filters-hidden');
+        else if (y > lastY + 8) tb.classList.add('filters-hidden');
+        else if (y < lastY - 8) tb.classList.remove('filters-hidden');
+      }
+      lastY = y;
     }, { passive: true });
+  }
+
+  // Mobile toolbar dropdown handlers + the History Fields dropdown.
+  X('MSort',   f => _mMobSort(MODAL_CFG, f));
+  X('MStatus', k => _mMobStatus(MODAL_CFG, k));
+  X('MType',   k => _mMobType(MODAL_CFG, k));
+  X('MToggleField', (field, btn) => {
+    phistField.has(field) ? phistField.delete(field) : phistField.add(field);
+    const on = phistField.has(field);
+    btn.classList.toggle('active', on);
+    const s = btn.querySelector('span'); if (s) s.textContent = on ? '✓' : '';
+    _renderPhistPanel();
+  });
+  function _mobileFieldsDd() {
+    const fields = [...new Set(phistData.map(e => e.field))];
+    const menu = fields.map(f =>
+      `<button class="m-dd-opt${phistField.has(f) ? ' active' : ''}" onclick="${P}MToggleField('${esc(f)}',this)">${FIELD_LABELS[f] || f}<span>${phistField.has(f) ? '✓' : ''}</span></button>`).join('');
+    return _mDd('Fields', menu);
   }
 
   X('CloseModal', () => {

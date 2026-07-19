@@ -2032,8 +2032,26 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .creator-modal .modal-video-list,
   .creator-modal .phist-panel,
   .creator-modal .stories-panel { flex: none; overflow: visible; }
-  .creator-modal .modal-toolbar { position: sticky; top: 0; z-index: 6; background: var(--bg); }
+  .creator-modal .modal-toolbar { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 0; gap: 0; overflow: visible; }
   .modal-top { z-index: 260; }  /* modal back-to-top sits above the modal (z 200) */
+
+  /* Mobile toolbar: text tabs over an auto-hiding filter/sort dropdown row */
+  .m-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .m-tab { flex: 1; background: none; border: none; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--text-dim); font-size: 13px; font-weight: 600; padding: 10px 4px; cursor: pointer; transition: color .15s, border-color .15s; }
+  .m-tab:hover { color: var(--text); }
+  .m-tab.active { color: var(--accent); border-bottom-color: var(--accent); text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent); }
+  .m-filters { display: flex; align-items: center; gap: 7px; height: 42px; padding: 0 12px; background: var(--bg); overflow: visible; transition: height .22s ease, opacity .16s ease; }
+  .creator-modal .modal-toolbar.filters-hidden .m-filters { height: 0; opacity: 0; overflow: hidden; pointer-events: none; }
+  .m-dd { position: relative; }
+  .m-dd-btn { display: inline-flex; align-items: center; gap: 4px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: var(--radius-pill); white-space: nowrap; cursor: pointer; }
+  .m-dd-btn:hover { background: var(--border); }
+  .m-dd-caret { color: var(--muted); font-size: 9px; }
+  .m-dd-menu { display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 170px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-2); padding: 5px; }
+  .m-dd.open .m-dd-menu { display: block; }
+  .m-dd-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; background: none; border: none; color: var(--text-dim); font-size: 13px; padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer; }
+  .m-dd-opt:hover { background: var(--border); color: var(--text); }
+  .m-dd-opt.active { color: var(--accent); }
+  .m-dd-opt span { color: var(--accent); font-size: 12px; }
 
   /* YouTube-style mobile video rows (creator modal list view) */
   .yt-row { display: flex; gap: 12px; align-items: flex-start; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }

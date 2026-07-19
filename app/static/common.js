@@ -1235,6 +1235,7 @@ function _mFiltered(cfg, skipSearch = false) {
 }
 
 function _mRenderToolbar(cfg, vids) {
+  if (cfg.mobileToolbar && _mIsMobile()) { _mRenderToolbarMobile(cfg, vids); return; }
   const counts     = { all: 0, active: 0, deleted: 0, restored: 0 };
   const typeCounts = { video: 0, photo: 0 };
   vids.forEach(v => {
@@ -1304,6 +1305,68 @@ function _mRenderToolbar(cfg, vids) {
     if (el) { el.focus(); el.setSelectionRange(searchSelEnd, searchSelEnd); }
   }
   _mEnsureToolbarFade(toolbar);
+}
+
+// ── Mobile creator-modal toolbar: text tabs + filter/sort dropdowns ──
+// Single-select Status/Type/Sort dropdowns drive the same st.filter/typeFilter/
+// sort the desktop toolbar uses; History delegates to cfg.mobileFilters.
+function _mDd(label, menu) {
+  return `<div class="m-dd"><button class="m-dd-btn" onclick="_mDdToggle(this)">${label} <span class="m-dd-caret">▾</span></button><div class="m-dd-menu">${menu}</div></div>`;
+}
+function _mDdToggle(btn) {
+  const dd = btn.parentNode, open = dd.classList.contains('open');
+  document.querySelectorAll('.m-dd.open').forEach(d => d.classList.remove('open'));
+  if (!open) dd.classList.add('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.m-dd')) document.querySelectorAll('.m-dd.open').forEach(d => d.classList.remove('open'));
+});
+function _mMobSort(cfg, field)  { cfg.st.sort = _doSort(cfg.st.sort, field); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
+function _mMobStatus(cfg, key)  { cfg.st.filter     = key ? new Set([key]) : new Set(); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
+function _mMobType(cfg, key)    { cfg.st.typeFilter = key ? new Set([key]) : new Set(); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
+
+function _mRenderToolbarMobile(cfg, vids) {
+  const counts = { active: 0, deleted: 0, restored: 0 };
+  const typeCounts = { video: 0, photo: 0 };
+  vids.forEach(v => {
+    if      (v.status === 'up')        counts.active++;
+    else if (v.status === 'deleted')   counts.deleted++;
+    else if (v.status === 'undeleted') counts.restored++;
+    if      (v.type === 'video') typeCounts.video++;
+    else if (v.type === 'photo') typeCounts.photo++;
+  });
+  const toolbar = document.getElementById(cfg.toolbarElId);
+  toolbar.classList.remove('filters-hidden');  // always reveal on a fresh render
+  const viewKeys = (typeof cfg.viewKeys === 'function' ? cfg.viewKeys() : cfg.viewKeys) || [];
+  const tabs = viewKeys.map(vk =>
+    `<button class="m-tab${cfg.st.view === vk.key ? ' active' : ''}" onclick="${cfg.viewFn}('${vk.key}')">${vk.label || (vk.title || '').replace(/ view$/, '') || vk.key}</button>`).join('');
+  const isMedia = cfg.st.view !== 'history' && cfg.st.view !== 'stories';
+  let filters = '';
+  if (isMedia) {
+    const sortCols = (cfg.cols || []).filter(c => c.field && c.field !== 'status');
+    const sf = sortCols.find(c => c.field === cfg.st.sort.field);
+    const arrow = cfg.st.sort.dir === 'asc' ? '↑' : '↓';
+    const sortMenu = sortCols.map(c =>
+      `<button class="m-dd-opt${c.field === cfg.st.sort.field ? ' active' : ''}" onclick="${cfg.mSortFn}('${c.field}')">${c.label}<span>${c.field === cfg.st.sort.field ? arrow : ''}</span></button>`).join('');
+    filters += _mDd(sf ? `${sf.label} ${arrow}` : 'Sort', sortMenu);
+    const statusOpts = [{ k: '', l: 'All' }, { k: 'active', l: 'Active' }];
+    if (counts.deleted)  statusOpts.push({ k: 'deleted',  l: 'Deleted' });
+    if (counts.restored) statusOpts.push({ k: 'restored', l: 'Restored' });
+    const curS = statusOpts.find(o => o.k && cfg.st.filter.has(o.k)) || statusOpts[0];
+    const statusMenu = statusOpts.map(o =>
+      `<button class="m-dd-opt${o === curS ? ' active' : ''}" onclick="${cfg.mStatusFn}('${o.k}')">${o.l}<span>${o === curS ? '✓' : ''}</span></button>`).join('');
+    filters += _mDd(curS.k ? curS.l : 'Status', statusMenu);
+    if (typeCounts.video > 0 && typeCounts.photo > 0) {
+      const typeOpts = [{ k: '', l: 'All' }, { k: 'video', l: 'Videos' }, { k: 'photo', l: 'Photos' }];
+      const curT = typeOpts.find(o => o.k && cfg.st.typeFilter.has(o.k)) || typeOpts[0];
+      const typeMenu = typeOpts.map(o =>
+        `<button class="m-dd-opt${o === curT ? ' active' : ''}" onclick="${cfg.mTypeFn}('${o.k}')">${o.l}<span>${o === curT ? '✓' : ''}</span></button>`).join('');
+      filters += _mDd(curT.k ? curT.l : 'Type', typeMenu);
+    }
+  } else if (cfg.mobileFilters) {
+    filters = cfg.mobileFilters(cfg.st.view);
+  }
+  toolbar.innerHTML = `<div class="m-tabs">${tabs}</div>` + (filters ? `<div class="m-filters">${filters}</div>` : '');
 }
 
 function _mSetFilter(cfg, key) {
