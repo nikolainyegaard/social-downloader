@@ -45,8 +45,11 @@ def _fetch_stories(engine, channel) -> list[dict]:
 
 
 def _register_extra_routes(bp, engine) -> None:
-    import instaloader
     from flask import jsonify, request
+
+    from cookies import register_cookie_routes
+
+    register_cookie_routes(bp, "instagram", on_change=api.reload_session_from_cookies)
 
     @bp.route("/diagnostics", methods=["POST"])
     def run_diagnostics():
@@ -72,35 +75,6 @@ def _register_extra_routes(bp, engine) -> None:
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
 
-    @bp.route("/session", methods=["GET"])
-    def get_session():
-        return jsonify(api.get_session_status())
-
-    @bp.route("/session", methods=["POST"])
-    def session_login():
-        body     = request.get_json(silent=True) or {}
-        username = (body.get("username") or "").strip().lstrip("@")
-        password = body.get("password") or ""
-        cookies  = (body.get("cookies") or "").strip()
-        if not username or not (password or cookies):
-            return jsonify({"error": "username and password or cookies are required"}), 400
-        try:
-            if cookies:
-                api.login_with_cookies(username, cookies)
-            else:
-                api.login(username, password)
-            return jsonify({"ok": True, "username": username})
-        except instaloader.TwoFactorAuthRequiredException:
-            return jsonify({"ok": False, "error": "Two-factor authentication is required; disable 2FA or use an app password"}), 400
-        except instaloader.BadCredentialsException:
-            return jsonify({"ok": False, "error": "Incorrect username or password"}), 400
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)}), 400
-
-    @bp.route("/session", methods=["DELETE"])
-    def session_logout():
-        api.logout()
-        return jsonify({"ok": True})
 
 
 instagram_adapter = ChannelAdapter(

@@ -146,38 +146,42 @@
         </div>
 
         <div id="accounts-instagram" style="display:none">
-          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px">
-            <span class="cookie-pill absent" id="igSessionPill">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+            <span class="cookie-pill absent" id="igCookiePill">
               <span class="dot"></span>
-              <span id="igSessionPillText">Not logged in</span>
+              <span id="igCookiePillText">No cookies file</span>
             </span>
-            <button class="btn-danger" id="igSessionLogoutBtn" onclick="igSessionLogout()" style="display:none">Log out</button>
+            <span class="cookie-meta" id="igCookieMeta"></span>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <label class="cookie-upload-label">
+                <input type="file" id="igCookieFileInput" accept=".txt,text/plain" style="display:none" onchange="igUploadCookies(this)">
+                Upload cookies.txt
+              </label>
+              <button class="btn-danger" id="igCookieDeleteBtn" onclick="igDeleteCookies()" style="display:none">Remove</button>
+            </div>
           </div>
-          <div id="igLoginForm">
-            <div style="display:flex;flex-direction:column;gap:10px;max-width:340px">
-              <input type="text" id="igLoginUser" class="text-input" placeholder="Instagram username" autocomplete="off" spellcheck="false">
-              <input type="password" id="igLoginPass" class="text-input" placeholder="Password">
+          <div class="cookie-note">
+            Export cookies from a logged-in instagram.com session using the <strong>Get cookies.txt LOCALLY</strong> extension:
+            <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
+              <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
+                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+                <img src="/static/icons/chrome.svg" width="16" height="16" alt="">
+                Chrome
+              </a>
+              <a href="https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp"
+                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+                <img src="/static/icons/edge.svg" width="16" height="16" alt="">
+                Edge
+              </a>
+              <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/"
+                 class="browser-ext-link" target="_blank" rel="noopener noreferrer">
+                <img src="/static/icons/firefox.svg" width="16" height="16" alt="">
+                Firefox
+              </a>
             </div>
-            <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
-              <button class="btn-primary btn-sm" id="igLoginBtn" onclick="igSessionLogin()">Log in</button>
-            </div>
-            <p class="cookie-note" style="margin-top:12px">
-              Credentials are sent to the container once to create an instaloader session. The password is not stored on disk; only the session cookie is saved.
-            </p>
-            <div class="hr-divider"></div>
-            <p class="settings-label">Or use browser session cookies</p>
-            <div style="display:flex;flex-direction:column;gap:10px;max-width:340px">
-              <input type="text" id="igCookieUser" class="text-input" placeholder="Instagram username" autocomplete="off" spellcheck="false">
-              <textarea id="igCookieStr" class="text-input" rows="3" placeholder="Cookie header from your browser" spellcheck="false"></textarea>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
-              <button class="btn-primary btn-sm" id="igCookieBtn" onclick="igCookieLogin()">Use cookies</button>
-            </div>
-            <p class="cookie-note" style="margin-top:12px">
-              Use this when Instagram rate limits the session: cookies minted by a real browser carry more trust than instaloader's own login.
-              In a browser where you are logged in to Instagram, open DevTools, go to the Network tab, reload instagram.com, select the first request,
-              and copy the whole <code>Cookie</code> request header. It must include <code>sessionid</code> and <code>csrftoken</code>.
-            </p>
+            The file must be in Netscape format and include the <code>sessionid</code> and <code>csrftoken</code> cookies.
+            Instagram rate limits sessions created by password logins from tools, so cookies exported from a real
+            browser session are the reliable way in. Profile lookups, post fetching, and stories all need them.
           </div>
         </div>
 

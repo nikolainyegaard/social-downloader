@@ -11,6 +11,8 @@ from typing import Generator
 
 import instaloader
 
+from cookies import cookies_path, get_cookies_flat
+
 _L = instaloader.Instaloader(
     quiet=True,
     # The i.instagram.com iphone API 429s instantly for sessions like ours and
@@ -31,98 +33,30 @@ _L = instaloader.Instaloader(
 )
 
 
-def _session_file() -> str:
-    from config import DATA_DIR
-    return os.path.join(DATA_DIR, "instagram", "session")
+def reload_session_from_cookies() -> str | None:
+    """(Re)build the instaloader session from the uploaded cookies.txt.
+
+    Called at import and whenever the file changes (the cookies routes'
+    on_change hook). Instagram serves rate limits to sessions minted by
+    instaloader's own password login, so authentication is cookies exported
+    from a real browser, the same model as Twitter. Returns an error message
+    when a present file lacks the cookies instaloader needs, leaving the
+    session logged out."""
+    flat = get_cookies_flat("instagram")
+    missing = [c for c in ("sessionid", "csrftoken") if c not in flat]
+    if not missing:
+        # The username only feeds instaloader display and own-profile helpers
+        # the app never calls; the numeric ds_user_id stands in
+        _L.load_session(flat.get("ds_user_id") or "session", flat)
+        return None
+    _L.context._session.cookies.clear()
+    _L.context.username = None
+    if os.path.exists(cookies_path("instagram")):
+        return "cookies.txt is missing the " + " and ".join(missing) + " cookie(s)"
+    return None
 
 
-def _session_user_file() -> str:
-    from config import DATA_DIR
-    return os.path.join(DATA_DIR, "instagram", "session_user")
-
-
-def get_session_status() -> dict:
-    username = _L.context.username
-    if username:
-        return {"logged_in": True, "username": username}
-    saved_user = None
-    uf = _session_user_file()
-    if os.path.exists(uf):
-        with open(uf) as f:
-            saved_user = f.read().strip() or None
-    return {"logged_in": False, "username": None, "saved_username": saved_user}
-
-
-def login(username: str, password: str) -> None:
-    _L.login(username, password)
-    sf = _session_file()
-    os.makedirs(os.path.dirname(sf), exist_ok=True)
-    _L.save_session_to_file(sf)
-    with open(_session_user_file(), "w") as f:
-        f.write(username)
-
-
-def login_with_cookies(username: str, cookie_header: str) -> None:
-    """Create the session from cookies copied out of a logged-in browser.
-
-    Sessions minted by instaloader's own password login get served 429s on
-    the web profile endpoints (flagged from birth), while a real browser's
-    cookies carry that browser's trust. Takes the Cookie request header
-    string from the browser's devtools; must include sessionid and csrftoken
-    (instaloader's load_session requires csrftoken). Validates by fetching
-    the user's own profile through the web endpoint the app actually uses,
-    and restores the previous session state on failure."""
-    cookies = {}
-    for part in cookie_header.split(";"):
-        name, _, value = part.strip().partition("=")
-        if name and value:
-            cookies[name.strip()] = value.strip().strip('"')
-    missing = [c for c in ("sessionid", "csrftoken") if c not in cookies]
-    if missing:
-        raise ValueError(f"Cookie paste is missing: {', '.join(missing)}")
-    old_session, old_user = _L.context._session, _L.context.username
-    _L.load_session(username, cookies)
-    try:
-        body = _web_api_get(
-            "https://www.instagram.com/api/v1/users/web_profile_info/",
-            {"username": username}, f"https://www.instagram.com/{username}/")
-        if not (body.get("data") or {}).get("user"):
-            raise ValueError("Cookies were accepted but the profile check "
-                             "returned no data; they may be stale")
-    except Exception:
-        _L.context._session, _L.context.username = old_session, old_user
-        raise
-    sf = _session_file()
-    os.makedirs(os.path.dirname(sf), exist_ok=True)
-    _L.save_session_to_file(sf)
-    with open(_session_user_file(), "w") as f:
-        f.write(username)
-
-
-def logout() -> None:
-    _L.logout()
-    for path in (_session_file(), _session_user_file()):
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
-
-
-def _load_saved_session() -> None:
-    uf = _session_user_file()
-    sf = _session_file()
-    if not (os.path.exists(uf) and os.path.exists(sf)):
-        return
-    try:
-        with open(uf) as f:
-            username = f.read().strip()
-        if username:
-            _L.load_session_from_file(username, sf)
-    except Exception as e:
-        print(f"[instagram] failed to load saved session: {e!r}")
-
-
-_load_saved_session()
+reload_session_from_cookies()
 
 
 def normalize_handle(handle: str) -> str:

@@ -102,8 +102,13 @@ def get_cookies_flat(platform: str) -> dict:
     return result
 
 
-def register_cookie_routes(bp, platform: str) -> None:
-    """Register GET/POST/DELETE /cookies on a platform Blueprint."""
+def register_cookie_routes(bp, platform: str, on_change=None) -> None:
+    """Register GET/POST/DELETE /cookies on a platform Blueprint.
+
+    on_change, if given, runs after every upload or delete so the platform can
+    rebuild in-memory state from the file (e.g. Instagram's instaloader
+    session). If it returns an error string on upload, the file is rejected:
+    removed again and reported as a 400."""
     from flask import jsonify, request
 
     @bp.route("/cookies", methods=["GET"])
@@ -118,9 +123,17 @@ def register_cookie_routes(bp, platform: str) -> None:
         if not f.filename:
             return jsonify({"error": "Empty filename"}), 400
         save_cookies(platform, f)
+        if on_change:
+            err = on_change()
+            if err:
+                delete_cookies(platform)
+                on_change()
+                return jsonify({"error": err}), 400
         return jsonify({"ok": True, **cookies_info(platform)})
 
     @bp.route("/cookies", methods=["DELETE"])
     def remove_cookies():
         delete_cookies(platform)
+        if on_change:
+            on_change()
         return jsonify({"ok": True})
