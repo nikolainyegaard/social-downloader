@@ -2132,7 +2132,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .yt-thumb.undeleted { outline: 2px solid var(--yellow); outline-offset: -2px; }
   .yt-thumb-badge { position: absolute; bottom: 4px; right: 4px; display: inline-flex; filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); }
   .yt-body { flex: 1; min-width: 0; padding-top: 1px; padding-right: 34px; }
-  .yt-title { font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  /* Styling context for the shared .xtext expandable description inside a row. */
+  .yt-title { font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.3; }
+  .yt-title-empty { color: var(--muted); font-style: italic; }
   .yt-meta { font-size: 12.5px; color: var(--text-dim); margin-top: 5px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 
   /* Mobile creator-modal header: avatar+names, info block, actions bar */
