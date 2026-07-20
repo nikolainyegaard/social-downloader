@@ -205,6 +205,7 @@ header {
 }
 
 header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+header h1 .logo { width: 20px; height: 20px; vertical-align: -3px; }
 
 .status-badge {
   display: inline-flex;

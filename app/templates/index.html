@@ -7,6 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Social Downloader</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg">
   <link rel="stylesheet" href="{{ asset_url('style.css') }}">
   <link rel="stylesheet" href="{{ asset_url('vendor/cal-heatmap.css') }}">
 </head>
@@ -15,7 +16,7 @@
 
   <!-- Header -->
   <header>
-    <h1>Social Downloader <span class="version-tag">v{{ version }}</span></h1>
+    <h1><img src="/static/icons/favicon.svg" alt="" class="logo"> Social Downloader <span class="version-tag">v{{ version }}</span></h1>
     <span class="status-badge" id="statusBadge">
       <span class="dot"></span>
       <span id="statusText">Idle</span>
