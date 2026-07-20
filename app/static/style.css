@@ -941,7 +941,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 12px 8px;
-  display: flex; flex-direction: column; gap: 6px;
+  display: flex; flex-direction: column; gap: 14px;
 }
 .stories-cal { overflow-x: auto; padding: 4px 0; }
 .stories-cal .ch-domain-text { fill: var(--text-dim); font-size: 11px; }
