@@ -2003,6 +2003,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   transition: background .15s, color .15s;
 }
 .btn-gear:hover { background: var(--border); color: var(--text); }
+/* Mobile-only header user menu; the mobile media query swaps it in for the
+   name, Log out link, and gear */
+.btn-user-menu { display: none; }
 
 /* ── Log panel ───────────────────────────────────────────────────────────── */
 
@@ -2078,9 +2081,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   textarea,
   [contenteditable="true"] { font-size: 16px !important; }
 
-  /* Header: let header-meta wrap to its own row rather than overflow. */
+  /* Header: let header-meta wrap to its own row rather than overflow.
+     Name, Log out, and the gear collapse into the user menu button. */
   header { gap: 6px 12px; }
   .header-meta { margin-left: 0; width: 100%; }
+  .header-meta .hdr-user-name,
+  .header-meta .hdr-link,
+  .header-meta .btn-gear:not(.btn-user-menu) { display: none; }
+  .header-meta .btn-user-menu { display: flex; margin-left: auto; }
 
   /* View tabs + search: wrap so the search row drops to its own full-width row.
      Reset moves out of the sideways-scrolling filter bar to sit next to search. */

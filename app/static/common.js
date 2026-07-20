@@ -625,11 +625,13 @@ function _openCardMenu(triggerEl, items) {
   document.body.appendChild(menu);
   _cardMenuEl = menu;
 
-  // Position above the trigger, right-aligned to its right edge
+  // Position above the trigger, right-aligned to its right edge; flip below
+  // when there's no room above (e.g. the header user menu)
   const rect = triggerEl.getBoundingClientRect();
   const menuH = menu.offsetHeight;
   menu.style.right  = `${window.innerWidth - rect.right}px`;
-  menu.style.top    = `${rect.top - menuH - 4}px`;
+  const top = rect.top - menuH - 4;
+  menu.style.top = `${top < 4 ? rect.bottom + 4 : top}px`;
 
   setTimeout(() => document.addEventListener('click', _closeCardMenu, { once: true }), 0);
 }
