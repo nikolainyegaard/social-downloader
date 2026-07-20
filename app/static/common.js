@@ -970,6 +970,22 @@ function _cardShell(o) {
     </div>`;
 }
 
+// Shared card pieces so neither card builder hand-writes the same markup.
+function _statChip(label, value, color) {
+  return `<span class="stat-item"><span class="stat-item-label">${esc(label)}</span>` +
+    `<span class="stat-item-value"${color ? ` style="color:var(--${color})"` : ''}>${esc(String(value))}</span></span>`;
+}
+function _starBtn(starred, onclickExpr) {
+  return `<button class="btn-star${starred ? ' starred' : ''}" onclick="event.stopPropagation();${onclickExpr}" ` +
+    `title="${starred ? 'Unstar' : 'Star'}">${starred ? '★' : '☆'}</button>`;
+}
+// Meta footer row from [{label, value}] pairs (value is preformatted text).
+function _cardMeta(items) {
+  return `<div class="user-card-meta-footer">` + items.map(m =>
+    `<div class="user-card-meta-item"><span class="meta-label">${esc(m.label)}</span>` +
+    `<span class="meta-value">${esc(m.value)}</span></div>`).join('') + `</div>`;
+}
+
 // Expandable text: one clamped line with an ellipsis that pops the full text over
 // itself in a hovering box on click. Extracted from the modal bio so any card or
 // panel can reuse it. Stops propagation so it works inside a clickable card.

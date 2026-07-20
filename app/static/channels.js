@@ -1173,26 +1173,26 @@ function initChannelApp(cfg) {
       + `<span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>`
       + `${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" alt="" onerror="this.style.display='none'" ${ch.live_stories ? '' : `onclick="event.stopPropagation();openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}</div>`;
 
-    const stats = `${ch.subscriber_count != null ? `<span class="stat-item"><span class="stat-item-label">${cfg.subLabelCard}</span><span class="stat-item-value">${(ch.subscriber_count || 0).toLocaleString()}</span></span>` : ''}`
-      + `<span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${ch.video_total || 0}</span></span>`
-      + `${(ch.video_deleted || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${ch.video_deleted}</span></span>` : ''}`
-      + `${ch.video_missing ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:var(--orange)">${ch.video_missing}</span></span>` : ''}`
-      + `${cfg.hasStories && ch.story_count ? `<span class="stat-item"><span class="stat-item-label">stories</span><span class="stat-item-value" style="color:var(--purple)">${ch.story_count}</span></span>` : ''}`;
+    const stats = (ch.subscriber_count != null ? _statChip(cfg.subLabelCard, (ch.subscriber_count || 0).toLocaleString()) : '')
+      + _statChip('saved', ch.video_total || 0)
+      + ((ch.video_deleted || 0) > 0 ? _statChip('deleted', ch.video_deleted, 'red') : '')
+      + (ch.video_missing ? _statChip('missing', ch.video_missing, 'orange') : '')
+      + (cfg.hasStories && ch.story_count ? _statChip('stories', ch.story_count, 'purple') : '');
 
     const footer = `<div style="display:flex;gap:6px;">`
-      + `<button class="btn-star${ch.starred ? ' starred' : ''}" onclick="event.stopPropagation();${P}ToggleStar('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>`
-      + `${_bookmarkBtn(ch, true)}`
+      + _starBtn(ch.starred, `${P}ToggleStar('${esc(ch.channel_id)}')`)
+      + _bookmarkBtn(ch, true)
       + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>`
       + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>`
       + `<button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">&#x2022;&#x2022;&#x2022;</button>`
       + `</div>`;
 
-    const meta = `<div class="user-card-meta-footer">`
-      + `<div class="user-card-meta-item"><span class="meta-label">Added</span><span class="meta-value">${fmtDateOnly(ch.added_at)}</span></div>`
-      + `<div class="user-card-meta-item"><span class="meta-label">Last checked</span><span class="meta-value">${ch.last_checked ? fmt.rel(new Date(ch.last_checked * 1000).toISOString()) : 'never'}</span></div>`
-      + `<div class="user-card-meta-item"><span class="meta-label">Last saved</span><span class="meta-value">${ch.last_saved ? fmt.rel(new Date(ch.last_saved * 1000).toISOString()) : 'never'}</span></div>`
-      + `<div class="user-card-meta-item"><span class="meta-label">Storage</span><span class="meta-value">${_fmtBytes(ch.media_size_bytes || 0)}</span></div>`
-      + `</div>`;
+    const meta = _cardMeta([
+      { label: 'Added',        value: fmtDateOnly(ch.added_at) },
+      { label: 'Last checked', value: ch.last_checked ? fmt.rel(new Date(ch.last_checked * 1000).toISOString()) : 'never' },
+      { label: 'Last saved',   value: ch.last_saved   ? fmt.rel(new Date(ch.last_saved   * 1000).toISOString()) : 'never' },
+      { label: 'Storage',      value: _fmtBytes(ch.media_size_bytes || 0) },
+    ]);
 
     return _cardShell({
       classes,
