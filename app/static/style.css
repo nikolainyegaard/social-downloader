@@ -1207,9 +1207,11 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .dd-btn:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .dd.open .dd-btn { border-color: var(--accent); }
 .dd-caret { color: var(--muted); font-size: 9px; }
+/* Fixed, not absolute: anchored to the button in JS so the menu escapes any
+   overflow-clipping ancestor (e.g. the .edge-fade filter bar) that would hide it. */
 .dd-menu {
-  display: none; position: absolute; top: calc(100% + 5px); left: 0; z-index: 40;
-  min-width: 100%; width: max-content; max-width: 320px; max-height: 320px; overflow-y: auto;
+  display: none; position: fixed; z-index: 500;
+  width: max-content; max-width: 320px; max-height: 320px; overflow-y: auto;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: var(--radius);

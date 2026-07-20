@@ -476,9 +476,20 @@ function _ddHtml(id, opts, { value, onchange, className = '' } = {}) {
 }
 
 function _ddToggle(btn) {
-  const dd = btn.parentNode, open = dd.classList.contains('open');
+  const dd = btn.parentNode, willOpen = !dd.classList.contains('open');
   document.querySelectorAll('.dd.open').forEach(d => d.classList.remove('open'));
-  if (!open) dd.classList.add('open');
+  if (!willOpen) return;
+  dd.classList.add('open');
+  // The menu is position:fixed, so anchor it to the button here. Flip above if
+  // it would spill past the viewport bottom.
+  const menu = dd.querySelector('.dd-menu');
+  const r = btn.getBoundingClientRect();
+  menu.style.minWidth = r.width + 'px';
+  menu.style.left     = r.left + 'px';
+  menu.style.top      = (r.bottom + 5) + 'px';
+  const h = menu.offsetHeight;
+  if (r.bottom + 5 + h > window.innerHeight && r.top - 5 - h > 0)
+    menu.style.top = (r.top - 5 - h) + 'px';
 }
 
 function _ddPick(opt) {
@@ -1476,6 +1487,11 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.m-dd')) document.querySelectorAll('.m-dd.open').forEach(d => d.classList.remove('open'));
   if (!e.target.closest('.dd'))   document.querySelectorAll('.dd.open').forEach(d => d.classList.remove('open'));
 });
+// A fixed menu does not track its button, so close on any scroll (capture, to
+// catch nested scroll containers like the settings modal body).
+window.addEventListener('scroll', () => {
+  document.querySelectorAll('.dd.open').forEach(d => d.classList.remove('open'));
+}, true);
 function _mMobSort(cfg, field)  { cfg.st.sort = _doSort(cfg.st.sort, field); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
 function _mMobStatus(cfg, key)  { cfg.st.filter     = key ? new Set([key]) : new Set(); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
 function _mMobType(cfg, key)    { cfg.st.typeFilter = key ? new Set([key]) : new Set(); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
