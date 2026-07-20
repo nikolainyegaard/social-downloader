@@ -1004,6 +1004,20 @@ function _xtextClose(btn) { btn.closest('.xtext')?.classList.remove('open'); }
 document.addEventListener('click', e => {
   document.querySelectorAll('.xtext.open').forEach(x => { if (!x.contains(e.target)) x.classList.remove('open'); });
 });
+// The box is always clickable; the overflow icon only shows when the single line
+// is actually truncated. Measure the text (scrollWidth > clientWidth) and toggle
+// .is-clipped. Call after any render that emits _expandableText; also runs on resize.
+function _markXtextClipped(root) {
+  (root || document).querySelectorAll('.xtext').forEach(x => {
+    const t = x.querySelector('.xtext-text');
+    if (t) x.classList.toggle('is-clipped', t.scrollWidth - t.clientWidth > 1);
+  });
+}
+let _xtextResizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_xtextResizeTimer);
+  _xtextResizeTimer = setTimeout(() => _markXtextClipped(document), 150);
+});
 
 function _trackingBadge(tracking_enabled) {
   return tracking_enabled === 0
@@ -1758,6 +1772,7 @@ function _mAppendVideos(cfg, vids) {
     </div>`;
   }).join('');
   list.insertAdjacentHTML('beforeend', html);
+  _markXtextClipped(list);
   if (cfg.st.loaded < vids.length) {
     cfg.st.obs = _attachSentinel(list, () => {
       cfg.st.obs = null;

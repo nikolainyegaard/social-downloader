@@ -1247,6 +1247,7 @@ function initChannelApp(cfg) {
     if (!next.length) return;
     grid.insertAdjacentHTML('beforeend', next.map(_renderCreatorCard).join(''));
     renderedCount += next.length;
+    _markXtextClipped(grid);
     if (sortedCache.length > renderedCount) {
       gridObs = _attachGridSentinel(grid, _appendCreatorCards);
     }
@@ -1279,6 +1280,7 @@ function initChannelApp(cfg) {
     grid.innerHTML = slice.map(_renderCreatorCard).join('')
       + (toShow < CARD_BATCH ? _ghostCards(CARD_BATCH - toShow) : '');
     renderedCount = slice.length;
+    _markXtextClipped(grid);
     if (!gridAnimated) {
       gridAnimated = true;
       grid.classList.add('grid-anim');
@@ -1674,6 +1676,7 @@ function initChannelApp(cfg) {
 
     _fillStorage(ch.channel_id);
     _renderModalBanner(ch);
+    _markXtextClipped(_el('ModalHeader'));
   }
 
   function _renderModalBanner(ch) {

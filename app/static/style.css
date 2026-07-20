@@ -874,8 +874,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    Reused by the modal bio and the catalog card bios. The pop offsets cancel its
    own border+padding so the text lands exactly over the original line. */
 .xtext            { position: relative; max-width: 100%; }
-/* Clickable field: filled + outlined so it reads as tappable; expand icon on the
-   right; hover lifts the border/fill to the accent. Pop overlays the padded box. */
+/* Clickable field: filled + outlined so it always reads as tappable; hover lifts
+   the border/fill to the accent. The expand icon appears only when the line is
+   actually truncated (.is-clipped, set by _markXtextClipped). Pop overlays the box. */
 .xtext-line       { display: flex; align-items: center; gap: 6px; min-width: 0; cursor: pointer;
                     padding: 5px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
                     background: color-mix(in srgb, var(--surface2) 65%, transparent);
@@ -883,7 +884,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .xtext-line:hover { background: var(--surface2); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
 .xtext-line:hover .xtext-exp { color: var(--accent); }
 .xtext-text       { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.xtext-exp        { flex-shrink: 0; color: var(--muted); display: inline-flex; }
+.xtext-exp        { flex-shrink: 0; color: var(--muted); display: none; }
+.xtext.is-clipped .xtext-exp { display: inline-flex; }
 .xtext-pop        { display: none; position: absolute; top: -1px; left: -1px; z-index: 30;
                     min-width: calc(100% + 2px); max-width: min(460px, 58vw);
                     background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
