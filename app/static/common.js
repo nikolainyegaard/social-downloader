@@ -34,7 +34,7 @@ function switchPlatform(name) {
   _activePlatform = name;
   _updateHdrAuthPill();
   history.replaceState(null, '', '#' + name);
-  document.querySelectorAll('.platform-tab').forEach(btn => {
+  document.querySelectorAll('.platform-tabs .tab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.platform === name);
   });
   PLATFORMS.forEach(p => {
@@ -60,7 +60,7 @@ function initSettingsPlatformTabs() {
   const container = document.getElementById('settingsPlatformTabs');
   if (!container) return;
   container.innerHTML = PLATFORMS.map(p =>
-    `<button class="settings-sub-tab" id="stab-${p.id}" onclick="switchSettingsPlatform('${p.id}')">${p.label}</button>`
+    `<button class="tab" id="stab-${p.id}" onclick="switchSettingsPlatform('${p.id}')">${p.label}</button>`
   ).join('');
   switchSettingsPlatform(_settingsPlatform);
 }
@@ -1526,15 +1526,15 @@ function _mRenderToolbar(cfg, vids) {
     { key: 'grid', icon: _gridViewIcon, title: 'Grid view' },
   ];
   // Left-aligned underline tab header (opt-in via cfg.desktopTabs), mirroring the
-  // mobile .m-tabs bar but not stretched full-width. Reuses the .view-tab style.
+  // mobile .m-tabs bar but not stretched full-width. Reuses the shared .tab style.
   // Modals without the flag (sound modal) keep the inline icon-pill view toggle.
   const useTabs = !!(cfg.desktopTabs && cfg.hasViewToggle);
   toolbar.classList.toggle('has-tab-bar', useTabs);
   let html = '';
   if (useTabs) {
-    html += `<div class="modal-tab-bar view-tabs">`
+    html += `<div class="modal-tab-bar">`
       + viewKeys.map(vk =>
-          `<button class="view-tab${cfg.st.view === vk.key ? ' active' : ''}" onclick="${cfg.viewFn}('${vk.key}')" title="${vk.title}">${vk.label || (vk.title || '').replace(/ view$/, '') || vk.key}</button>`
+          `<button class="tab${cfg.st.view === vk.key ? ' active' : ''}" onclick="${cfg.viewFn}('${vk.key}')" title="${vk.title}">${vk.label || (vk.title || '').replace(/ view$/, '') || vk.key}</button>`
         ).join('')
       + `</div><div class="modal-toolbar-controls">`;
   }
@@ -1621,7 +1621,7 @@ function _mRenderToolbarMobile(cfg, vids) {
   toolbar.classList.remove('has-tab-bar');      // desktop-only layout class
   const viewKeys = (typeof cfg.viewKeys === 'function' ? cfg.viewKeys() : cfg.viewKeys) || [];
   const tabs = viewKeys.map(vk =>
-    `<button class="m-tab${cfg.st.view === vk.key ? ' active' : ''}" onclick="${cfg.viewFn}('${vk.key}')">${vk.label || (vk.title || '').replace(/ view$/, '') || vk.key}</button>`).join('');
+    `<button class="tab${cfg.st.view === vk.key ? ' active' : ''}" onclick="${cfg.viewFn}('${vk.key}')">${vk.label || (vk.title || '').replace(/ view$/, '') || vk.key}</button>`).join('');
   const isMedia = cfg.st.view !== 'history' && cfg.st.view !== 'stories';
   let filters = '';
   if (isMedia) {

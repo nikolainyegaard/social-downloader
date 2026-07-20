@@ -1034,11 +1034,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .toolbar-main-row .modal-vid-count { margin-left: 0; }
 .toolbar-filter-wrap { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 /* Left-aligned underline tab header (cfg.desktopTabs): tabs on their own row over
-   a controls row, mirroring the mobile .m-tabs layout. .view-tabs supplies the
-   flex row + .view-tab underline style; this only stacks the toolbar and adds the
-   baseline the active tab's accent underline sits on. */
+   a controls row, mirroring the mobile .m-tabs layout. .modal-tab-bar lays out the
+   shared .tab buttons and provides the baseline the active accent underline sits on. */
 .modal-toolbar.has-tab-bar { flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: visible; }
-.modal-tab-bar { padding: 0 8px; border-bottom: 1px solid var(--border); }
+.modal-tab-bar { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--border); }
 .modal-toolbar-controls { display: flex; align-items: center; gap: 10px; padding: 8px 16px; }
 .toolbar-toggle { display: none; }
 .modal-video-search {
@@ -1174,9 +1173,12 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-bottom: 1px solid var(--border);
 }
 .view-tabs { display: flex; gap: 2px; }
-/* Shared underline-tab style, used by both the top platform nav and the
-   in-section view toggle. Only padding differs (set per class below). */
-.view-tab, .platform-tab {
+/* Unified underline tab. Used by the top platform nav (.platform-tabs), the
+   in-section view toggle (.view-tabs), the desktop/mobile modal tab bars
+   (.modal-tab-bar / .m-tabs), and the settings platform selector
+   (.settings-sub-tabs). Each container sets its own layout and padding overrides
+   below; this is the single source for the button look. */
+.tab {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-dim);
@@ -1185,16 +1187,16 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-bottom: 2px solid transparent;
   border-radius: 0;
   margin-bottom: -1px;
+  padding: 7px 14px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
-.view-tab:hover, .platform-tab:hover { color: var(--text); }
-.view-tab.active, .platform-tab.active {
+.tab:hover { color: var(--text); }
+.tab.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
   text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent);
 }
-.view-tab { padding: 7px 14px; }
 .view-tabs-row .tracking-search { margin-left: auto; margin-bottom: 5px; }
 
 /* ── Custom dropdown (themed <select> replacement) ──────────────────────── */
@@ -1898,28 +1900,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .loop-interval-field span { color: var(--muted); font-size: 13px; }
 /* ── Settings sub-tabs ─────────────────────────────────────────────────────── */
 
+/* Settings platform selector: shared .tab buttons on the standard underline row. */
 .settings-sub-tabs {
   display: flex;
-  gap: 0;
+  gap: 2px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
 }
-
-.settings-sub-tab {
-  padding: 6px 16px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-dim);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.settings-sub-tab:hover { color: var(--text); }
-.settings-sub-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* ── Diag output pre ────────────────────────────────────────────────────────── */
 
@@ -2108,9 +2095,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
   /* Mobile toolbar: text tabs over an auto-hiding filter/sort dropdown row */
   .m-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--bg); position: relative; z-index: 2; }
-  .m-tab { flex: 1; background: none; border: none; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--text-dim); font-size: 13px; font-weight: 600; padding: 10px 4px; cursor: pointer; transition: color .15s, border-color .15s; }
-  .m-tab:hover { color: var(--text); }
-  .m-tab.active { color: var(--accent); border-bottom-color: var(--accent); text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent); }
+  /* Mobile modal tabs use the shared .tab look, stretched full-width. */
+  .m-tabs .tab { flex: 1; padding: 10px 4px; }
   /* Filter row is a sticky element in the scroll flow (a sibling after the tab
      bar): its own slot provides the space and scrolls away naturally, so there
      is no shift and no blank gap. It pins just below the tab bar (top = tab
@@ -2197,9 +2183,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   -webkit-backdrop-filter: blur(14px);
 }
 
-/* Button styling shared with .view-tab (see the grouped rule above); only the
-   padding is platform-nav-specific. */
-.platform-tab { padding: 9px 18px; }
+/* Button styling from the shared .tab rule above; the top nav just wants a
+   larger hit area. */
+.platform-tabs .tab { padding: 9px 18px; }
 
 /* ── Platform sections ────────────────────────────────────────────────────── */
 

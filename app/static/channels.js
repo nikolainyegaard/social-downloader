@@ -159,9 +159,9 @@ function initChannelApp(cfg) {
     <div style="margin-bottom:12px;">
       <div class="view-tabs-row">
         <div class="view-tabs">
-          <button class="view-tab active" id="${P}TvCreators" onclick="${P}SetTrackingView('creators')">${CreatorsCap}</button>
-          ${EXTRA_VIEWS.map(v => `<button class="view-tab" id="${P}Tv_${v.key}" onclick="${P}SetTrackingView('${v.key}')">${v.label}</button>`).join('')}
-          <button class="view-tab"        id="${P}TvLog"      onclick="${P}SetTrackingView('log')">Log</button>
+          <button class="tab active" id="${P}TvCreators" onclick="${P}SetTrackingView('creators')">${CreatorsCap}</button>
+          ${EXTRA_VIEWS.map(v => `<button class="tab" id="${P}Tv_${v.key}" onclick="${P}SetTrackingView('${v.key}')">${v.label}</button>`).join('')}
+          <button class="tab"        id="${P}TvLog"      onclick="${P}SetTrackingView('log')">Log</button>
         </div>
         <span id="${P}Count" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
         <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)">
