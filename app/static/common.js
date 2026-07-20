@@ -1521,12 +1521,25 @@ function _mRenderToolbar(cfg, vids) {
   const searchWasFocused = cfg.hasSearch && isMedia &&
     document.activeElement === toolbar.querySelector('#modalVideoSearch');
   const searchSelEnd = searchWasFocused ? document.activeElement.selectionEnd : 0;
-  let html = `<div class="toolbar-main-row">`;
-  if (cfg.hasViewToggle) {
-    const viewKeys = (typeof cfg.viewKeys === 'function' ? cfg.viewKeys() : cfg.viewKeys) || [
-      { key: 'list', icon: _listViewIcon, title: 'List view' },
-      { key: 'grid', icon: _gridViewIcon, title: 'Grid view' },
-    ];
+  const viewKeys = (typeof cfg.viewKeys === 'function' ? cfg.viewKeys() : cfg.viewKeys) || [
+    { key: 'list', icon: _listViewIcon, title: 'List view' },
+    { key: 'grid', icon: _gridViewIcon, title: 'Grid view' },
+  ];
+  // Left-aligned underline tab header (opt-in via cfg.desktopTabs), mirroring the
+  // mobile .m-tabs bar but not stretched full-width. Reuses the .view-tab style.
+  // Modals without the flag (sound modal) keep the inline icon-pill view toggle.
+  const useTabs = !!(cfg.desktopTabs && cfg.hasViewToggle);
+  toolbar.classList.toggle('has-tab-bar', useTabs);
+  let html = '';
+  if (useTabs) {
+    html += `<div class="modal-tab-bar view-tabs">`
+      + viewKeys.map(vk =>
+          `<button class="view-tab${cfg.st.view === vk.key ? ' active' : ''}" onclick="${cfg.viewFn}('${vk.key}')" title="${vk.title}">${vk.label || (vk.title || '').replace(/ view$/, '') || vk.key}</button>`
+        ).join('')
+      + `</div><div class="modal-toolbar-controls">`;
+  }
+  html += `<div class="toolbar-main-row">`;
+  if (cfg.hasViewToggle && !useTabs) {
     html += `<div class="filter-pills">`
       + viewKeys.map(vk =>
           `<button class="filter-pill${cfg.st.view === vk.key ? ' active' : ''}" data-view-key="${vk.key}" onclick="${cfg.viewFn}('${vk.key}')" title="${vk.title}">${vk.icon}</button>`
@@ -1557,6 +1570,7 @@ function _mRenderToolbar(cfg, vids) {
     html += cfg.contextFilters(cfg.st.view);
   }
   html += `</div>`;
+  if (useTabs) html += `</div>`;  // close .modal-toolbar-controls
   toolbar.innerHTML = html;
   toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
   if (searchWasFocused) {
@@ -1604,6 +1618,7 @@ function _mRenderToolbarMobile(cfg, vids) {
   });
   const toolbar = document.getElementById(cfg.toolbarElId);
   toolbar.classList.remove('filters-hidden');  // always reveal on a fresh render
+  toolbar.classList.remove('has-tab-bar');      // desktop-only layout class
   const viewKeys = (typeof cfg.viewKeys === 'function' ? cfg.viewKeys() : cfg.viewKeys) || [];
   const tabs = viewKeys.map(vk =>
     `<button class="m-tab${cfg.st.view === vk.key ? ' active' : ''}" onclick="${cfg.viewFn}('${vk.key}')">${vk.label || (vk.title || '').replace(/ view$/, '') || vk.key}</button>`).join('');

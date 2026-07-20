@@ -465,6 +465,7 @@ function initChannelApp(cfg) {
     authorCol:    null,
     hasSearch:    true,
     hasViewToggle: true,
+    desktopTabs:  true,   // left-aligned underline tab header on desktop (like mobile, not full-width)
     mobileRows:   true,   // render the list as YouTube-style card rows on mobile
     mobileToolbar: true,  // text tabs + filter/sort dropdowns on mobile
     filtersHostId: `${P}ModalFilters`,  // mobile filter row lives in its own scroll-flow element

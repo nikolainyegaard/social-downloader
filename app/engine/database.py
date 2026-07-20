@@ -536,7 +536,7 @@ class ChannelDB:
                 SET status             = 'up',
                     deleted_reason     = NULL,
                     deleted_at         = NULL,
-                    deletion_confirmed = NULL,
+                    deletion_confirmed = 0,
                     undeleted_at       = NULL
                 WHERE channel_id = ? AND deleted_reason = 'user_banned'
             """, (channel_id,))
