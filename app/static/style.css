@@ -954,7 +954,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   font-size: 11px; color: var(--muted);
 }
 .stories-cal-legend span { margin: 0 4px; }
-.stories-cal-legend i { width: 13px; height: 13px; border-radius: 2px; border: 1px solid var(--border); }
+.stories-cal-legend i { width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--border); }
 /* GitHub-style hover detail bubble for the calendar cells */
 .cal-tip {
   position: fixed;

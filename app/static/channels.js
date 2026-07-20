@@ -1963,7 +1963,7 @@ function initChannelApp(cfg) {
       itemSelector: `#${P}StoriesCal`,
       theme:     'dark',
       domain:    { type: 'month', gutter: 14, label: { text: 'MMM YYYY', textAlign: 'start', position: 'top' } },
-      subDomain: { type: 'day', radius: 2, width: 13, height: 13, gutter: 3 },
+      subDomain: { type: 'day', radius: 2, width: 10, height: 10, gutter: 3 }, // GitHub: 10px cells, 2px radius, 3px border-spacing
       date:      { start, highlight: [new Date()] },
       range:     4,
       data:      { source, x: 'date', y: 'value' },
