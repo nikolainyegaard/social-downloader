@@ -990,11 +990,12 @@ function _cardMeta(items) {
 // itself in a hovering box on click. Extracted from the modal bio so any card or
 // panel can reuse it. Stops propagation so it works inside a clickable card.
 const _xCloseIcon = `<svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 1L9 9M9 1L1 9"/></svg>`;
+const _xExpandIcon = `<svg class="xtext-exp" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
 function _expandableText(text) {
   if (!text) return '';
   const t = esc(text);
   return `<div class="xtext" onclick="event.stopPropagation();_xtextToggle(this)">` +
-    `<span class="xtext-line">${t}</span>` +
+    `<div class="xtext-line"><span class="xtext-text">${t}</span>${_xExpandIcon}</div>` +
     `<div class="xtext-pop" onclick="event.stopPropagation()">` +
     `<button class="xtext-close" onclick="_xtextClose(this)" aria-label="Close">${_xCloseIcon}</button>${t}</div></div>`;
 }
