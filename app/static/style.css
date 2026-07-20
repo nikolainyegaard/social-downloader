@@ -934,6 +934,12 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .stories-cal .ch-domain-text { fill: var(--text-dim); font-size: 11px; }
 .stories-cal .ch-subdomain-bg { fill: var(--surface2); }
 .stories-cal rect { cursor: pointer; }
+.stories-cal-legend {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 11px; color: var(--muted);
+}
+.scl-item { display: inline-flex; align-items: center; gap: 5px; color: var(--text-dim); }
+.scl-item i { width: 13px; height: 13px; border-radius: 2px; }
 .phist-empty { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
 .phist-entry {
   padding: 10px 12px;
