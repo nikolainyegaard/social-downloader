@@ -491,6 +491,18 @@ def create_channel_blueprint(engine) -> Blueprint:
             return send_file(jpg, mimetype="image/jpeg", max_age=300)
         return ("", 404)
 
+    @bp.route("/channels/<channel_id>/avatar-history/<filename>", methods=["GET"])
+    def channel_avatar_history(channel_id: str, filename: str):
+        # Archived avatars: {channel_id}_{ts}.avif written by cache_avatar. The
+        # strict pattern keeps the path inside the avatars dir.
+        if not _re.fullmatch(r"[A-Za-z0-9_-]+_[0-9]+\.(jpg|avif)", filename):
+            return ("", 400)
+        path = os.path.join(DATA_DIR, platform, "avatars", filename)
+        if not os.path.exists(path):
+            return ("", 404)
+        mime = "image/avif" if filename.endswith(".avif") else "image/jpeg"
+        return send_file(path, mimetype=mime)
+
     @bp.route("/channels/<channel_id>/banner", methods=["GET"])
     def channel_banner(channel_id: str):
         path = os.path.join(DATA_DIR, platform, "banners", f"{channel_id}.avif")

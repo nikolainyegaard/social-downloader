@@ -151,15 +151,38 @@ def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok",
     except OSError:
         _try_remove(jpg_tmp)
         return False
-    old_md5 = None
+    # Sidecar line 1 is the current source hash; an optional line 2 is a
+    # pending hash awaiting confirmation (see the two-strike block below).
+    old_md5     = None
+    pending_md5 = None
     try:
         with open(src_sig, encoding="ascii") as f:
-            old_md5 = f.read().strip()
+            _lines = f.read().split()
+            old_md5     = _lines[0] if _lines else None
+            pending_md5 = _lines[1] if len(_lines) > 1 else None
     except OSError:
         pass
 
     if old_md5 == new_md5 and os.path.exists(path):
         _try_remove(jpg_tmp)
+        if pending_md5:
+            # A stale pending hash was a one-off variant, not a change taking
+            # hold; clear it so it can never confirm later.
+            with open(src_sig, "w", encoding="ascii") as f:
+                f.write(new_md5)
+        _db.set_avatar_cached(creator_id, True)
+        return "unchanged"
+
+    # Two-strike confirm for changes: Google's avatar CDN keeps byte-different
+    # encodes of the same picture on different edge caches, so checks can
+    # alternate between two hashes for one unchanged avatar (seen on YouTube:
+    # a false "changed" every session). A differing download is stashed as
+    # pending and only counts as a change when the NEXT check downloads the
+    # same new hash again; the A/B flip-flop never repeats twice in a row.
+    if old_md5 and os.path.exists(path) and new_md5 != old_md5 and new_md5 != pending_md5:
+        _try_remove(jpg_tmp)
+        with open(src_sig, "w", encoding="ascii") as f:
+            f.write(old_md5 + "\n" + new_md5)
         _db.set_avatar_cached(creator_id, True)
         return "unchanged"
 
