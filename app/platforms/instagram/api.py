@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import time
 from datetime import timezone
 from typing import Generator
 
@@ -21,6 +22,9 @@ _L = instaloader.Instaloader(
     download_geotags=False,
     download_comments=False,
     save_metadata=False,
+    # Default is "{caption}", which writes a stray {shortcode}.txt next to
+    # every downloaded post; titles live in the DB
+    post_metadata_txt_pattern="",
     compress_json=False,
     filename_pattern="{shortcode}",
     request_timeout=30,
@@ -95,6 +99,28 @@ def normalize_handle(handle: str) -> str:
 _WEB_APP_ID = "936619743392459"  # X-IG-App-ID the instagram.com web frontend sends
 
 
+def _web_api_get(url: str, params: dict, referer: str) -> dict:
+    """GET a www.instagram.com/api/v1 endpoint on the instaloader session with
+    the headers the web frontend sends. Raises on a non-200 response.
+
+    instaloader's own wrappers cannot make these requests: get_json sends only
+    the session's default headers (no web app id, so Instagram answers 401)
+    and get_iphone_json hits i.instagram.com, which rate limits sessions like
+    ours on the first request and retries with 30 minute sleeps."""
+    session = _L.context._session
+    headers = {
+        "X-IG-App-ID":      _WEB_APP_ID,
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer":          referer,
+    }
+    csrf = session.cookies.get("csrftoken")
+    if csrf:
+        headers["X-CSRFToken"] = csrf
+    resp = session.get(url, params=params, headers=headers, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
 def _profile_from_username(handle: str) -> instaloader.Profile:
     """Resolve a username to a Profile.
 
@@ -102,35 +128,21 @@ def _profile_from_username(handle: str) -> instaloader.Profile:
     endpoint, which omits many smaller accounts entirely and misreports them
     as nonexistent (instaloader PR #2715). Instead, when logged in, make the
     same web_profile_info request the instagram.com frontend makes when a
-    profile page opens: the www variant with the web app id header and the
-    session's own cookies (gallery-dl resolves usernames the same way).
-    instaloader only wraps the i.instagram.com variant of this endpoint,
-    which rate limits sessions like ours on the first request. Any error
-    falls back to the library's own lookup."""
+    profile page opens (gallery-dl resolves usernames the same way). Any
+    error falls back to the library's own lookup."""
     if _L.context.is_logged_in:
         try:
-            session = _L.context._session
-            headers = {
-                "X-IG-App-ID":      _WEB_APP_ID,
-                "X-Requested-With": "XMLHttpRequest",
-                "Referer":          f"https://www.instagram.com/{handle}/",
-            }
-            csrf = session.cookies.get("csrftoken")
-            if csrf:
-                headers["X-CSRFToken"] = csrf
-            resp = session.get(
+            body = _web_api_get(
                 "https://www.instagram.com/api/v1/users/web_profile_info/",
-                params={"username": handle}, headers=headers, timeout=30)
-            if resp.status_code == 200:
-                body = resp.json()
-                user = (body.get("data") or {}).get("user")
-                if user is not None:
-                    return instaloader.Profile(_L.context, user)
-                if body.get("status") == "ok":
-                    # Healthy answer with no user is authoritative nonexistence.
-                    # Keep the library's message so the gone markers match
-                    raise instaloader.ProfileNotExistsException(
-                        f"Profile {handle} does not exist.")
+                {"username": handle}, f"https://www.instagram.com/{handle}/")
+            user = (body.get("data") or {}).get("user")
+            if user is not None:
+                return instaloader.Profile(_L.context, user)
+            if body.get("status") == "ok":
+                # Healthy answer with no user is authoritative nonexistence.
+                # Keep the library's message so the gone markers match
+                raise instaloader.ProfileNotExistsException(
+                    f"Profile {handle} does not exist.")
         except instaloader.ProfileNotExistsException:
             raise
         except Exception:
@@ -160,17 +172,42 @@ def fetch_profile_info(handle: str) -> dict:
 
 
 def iter_profile_posts(user_id: str) -> Generator[tuple[dict, object], None, None]:
-    """Yield (post_dict, raw_post) pairs for all posts of a profile."""
-    profile = instaloader.Profile.from_id(_L.context, int(user_id))
-    for post in profile.get_posts():
-        yield {
-            "video_id":     post.shortcode,
-            "title":        (post.caption or "")[:500],
-            "upload_date":  int(post.date_utc.timestamp()),
-            "duration":     None,
-            "view_count":   post.video_view_count if post.is_video else None,
-            "content_type": "video" if post.is_video else "image",
-        }, post
+    """Yield (post_dict, raw_post) pairs for all posts of a profile, newest first.
+
+    Paginates the web frontend's /api/v1/feed/user/ endpoint directly:
+    instaloader's Profile.get_posts uses a GraphQL doc_id Instagram retired,
+    a persistent 401 dressed up as a rate limit message (instaloader issue
+    #2689, unfixed in 4.15.2). Feed items come in the shape
+    Post.from_iphone_struct wraps, so downloads work unchanged."""
+    url    = f"https://www.instagram.com/api/v1/feed/user/{user_id}/"
+    max_id = None
+    while True:
+        params = {"count": 12}
+        if max_id:
+            params["max_id"] = max_id
+        data = _web_api_get(url, params, "https://www.instagram.com/")
+        for item in data.get("items") or []:
+            post = instaloader.Post.from_iphone_struct(_L.context, item)
+            try:
+                view_count = post.video_view_count if post.is_video else None
+            except Exception:
+                # Missing from the feed item; fetching full post metadata
+                # uses another retired doc_id, so never fall through to it
+                view_count = None
+            yield {
+                "video_id":     post.shortcode,
+                "title":        (post.caption or "")[:500],
+                "upload_date":  int(post.date_utc.timestamp()),
+                "duration":     None,
+                "view_count":   view_count,
+                "content_type": "video" if post.is_video else "image",
+            }, post
+        if not data.get("more_available"):
+            break
+        max_id = data.get("next_max_id")
+        if not max_id:
+            break
+        time.sleep(2)
 
 
 def _story_item_to_dict(item) -> dict | None:
