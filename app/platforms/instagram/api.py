@@ -10,6 +10,7 @@ from datetime import timezone
 from typing import Generator
 
 import instaloader
+import requests
 
 from cookies import cookies_path, get_cookies_flat
 
@@ -48,6 +49,14 @@ def reload_session_from_cookies() -> str | None:
         # The username only feeds instaloader display and own-profile helpers
         # the app never calls; the numeric ds_user_id stands in
         _L.load_session(flat.get("ds_user_id") or "session", flat)
+        # load_session builds the jar with empty cookie domains, so Instagram's
+        # Set-Cookie responses add .instagram.com duplicates instead of
+        # overwriting, and a later cookies.get() raises CookieConflictError.
+        # Rebuild the jar with the real domain so responses overwrite in place
+        jar = requests.cookies.RequestsCookieJar()
+        for name, value in flat.items():
+            jar.set(name, value, domain=".instagram.com", path="/")
+        _L.context._session.cookies = jar
         return None
     _L.context._session.cookies.clear()
     _L.context.username = None
@@ -85,7 +94,8 @@ def _web_api_get(url: str, params: dict, referer: str) -> dict:
         "X-Requested-With": "XMLHttpRequest",
         "Referer":          referer,
     }
-    csrf = session.cookies.get("csrftoken")
+    # dict_from_cookiejar tolerates duplicate cookie names, unlike .get()
+    csrf = requests.utils.dict_from_cookiejar(session.cookies).get("csrftoken")
     if csrf:
         headers["X-CSRFToken"] = csrf
     resp = session.get(url, params=params, headers=headers, timeout=30)
