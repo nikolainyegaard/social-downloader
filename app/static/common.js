@@ -1799,6 +1799,7 @@ function _mSetSort(cfg, field) {
   cfg.st.sort = _doSort(cfg.st.sort, field);
   const list = document.getElementById(cfg.listElId);
   const sx = list.scrollLeft;
+  _mRenderToolbar(cfg, cfg.st.videos);  // keep the Sort dropdown label in sync
   _mRenderList(cfg);
   list.scrollLeft = sx;
 }
