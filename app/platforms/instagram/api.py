@@ -92,21 +92,48 @@ def normalize_handle(handle: str) -> str:
     return handle
 
 
+_WEB_APP_ID = "936619743392459"  # X-IG-App-ID the instagram.com web frontend sends
+
+
 def _profile_from_username(handle: str) -> instaloader.Profile:
     """Resolve a username to a Profile.
 
     instaloader 4.15 resolves usernames through Instagram's logged-out search
     endpoint, which omits many smaller accounts entirely and misreports them
-    as nonexistent (instaloader PR #2715). The logged-in top search (the app's
-    search bar) sees every account the session user can see, so try it first;
-    fall back to the library's own lookup, whose ProfileNotExistsException
-    also covers genuinely missing handles."""
+    as nonexistent (instaloader PR #2715). Instead, when logged in, make the
+    same web_profile_info request the instagram.com frontend makes when a
+    profile page opens: the www variant with the web app id header and the
+    session's own cookies (gallery-dl resolves usernames the same way).
+    instaloader only wraps the i.instagram.com variant of this endpoint,
+    which rate limits sessions like ours on the first request. Any error
+    falls back to the library's own lookup."""
     if _L.context.is_logged_in:
         try:
-            for profile in instaloader.TopSearchResults(_L.context, handle).get_profiles():
-                if profile.username.lower() == handle.lower():
-                    return profile
-        except instaloader.InstaloaderException:
+            session = _L.context._session
+            headers = {
+                "X-IG-App-ID":      _WEB_APP_ID,
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer":          f"https://www.instagram.com/{handle}/",
+            }
+            csrf = session.cookies.get("csrftoken")
+            if csrf:
+                headers["X-CSRFToken"] = csrf
+            resp = session.get(
+                "https://www.instagram.com/api/v1/users/web_profile_info/",
+                params={"username": handle}, headers=headers, timeout=30)
+            if resp.status_code == 200:
+                body = resp.json()
+                user = (body.get("data") or {}).get("user")
+                if user is not None:
+                    return instaloader.Profile(_L.context, user)
+                if body.get("status") == "ok":
+                    # Healthy answer with no user is authoritative nonexistence.
+                    # Keep the library's message so the gone markers match
+                    raise instaloader.ProfileNotExistsException(
+                        f"Profile {handle} does not exist.")
+        except instaloader.ProfileNotExistsException:
+            raise
+        except Exception:
             pass
     return instaloader.Profile.from_username(_L.context, handle)
 
