@@ -1787,7 +1787,8 @@ function _mAppendVideosMobile(cfg, vids) {
       <div class="yt-body">
         <div class="yt-title">${v.description ? esc(v.description) : '(no description)'}</div>
         <div class="yt-meta">${status}<span>${fmtCount(v.view_count)} views · ${fmtUpload(v.upload_date)}</span></div>
-      </div>`;
+      </div>
+      ${cfg.videoMenuFn ? `<button class="btn-menu yt-row-menu" title="More" onclick="event.stopPropagation();${cfg.videoMenuFn}(this,'${esc(v.video_id)}')">&#x2022;&#x2022;&#x2022;</button>` : ''}`;
     if (cfg.gridCellOnclick) row.onclick = () => cfg.gridCellOnclick(v);
     list.appendChild(row);
   });

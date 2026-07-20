@@ -347,6 +347,33 @@ function initChannelApp(cfg) {
 
   const _videoActionBtns = cfg.videoActionBtnsFn || _defaultVideoActionBtns;
 
+  // Overflow (•••) menu for a post row, mirroring the channel-card menu. Currently
+  // just Download; the list is here so future per-post actions slot straight in.
+  function _downloadVideo(id, name) {
+    const a = document.createElement('a');
+    a.href = `${API}/videos/${encodeURIComponent(id)}/file`;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  function _videoMenuItems(v) {
+    const items = [];
+    if (v.file_path) {
+      const id   = esc(v.video_id);
+      const ext  = _mediaExt(v) || 'mp4';
+      const name = _isMulti(v) ? (v.file_path.split('/').pop()) : `${id}.${ext}`;
+      items.push({ label: 'Download', onclick: () => _downloadVideo(v.video_id, name) });
+    }
+    return items;
+  }
+  X('VideoMenu', (btn, vid) => {
+    const v = _creatorState.videos.find(x => x.video_id === vid);
+    if (!v) return;
+    const items = (cfg.videoMenuItemsFn || _videoMenuItems)(v);
+    if (items.length) _openCardMenu(btn, items);
+  });
+
   X('OpenImgModal', videoId => {
     openImgModalUrl(`${API}/videos/${encodeURIComponent(videoId)}/thumbnail`);
   });
@@ -456,6 +483,7 @@ function initChannelApp(cfg) {
     gridId:       `${P}VideoGrid`,
     thumbCellFn:  _thumbCell,
     actionBtnsFn: _videoActionBtns,
+    videoMenuFn:  `${P}VideoMenu`,   // mobile list rows: ••• overflow menu (Download, ...)
     previewFn:    `${P}OpenImgModal`,
     gridThumbSrc: v => `${API}/videos/${esc(v.video_id)}/thumbnail`,
     gridCellOnclick: v => _isMulti(v)

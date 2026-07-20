@@ -2111,14 +2111,16 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .m-dd-opt span { color: var(--accent); font-size: 12px; }
 
   /* YouTube-style mobile video rows (creator modal list view) */
-  .yt-row { display: flex; gap: 12px; align-items: flex-start; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .yt-row { position: relative; display: flex; gap: 12px; align-items: flex-start; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
   .yt-row:active { background: var(--surface2); }
+  /* ••• overflow menu button in the row's lower-right corner */
+  .yt-row-menu { position: absolute; right: 10px; bottom: 8px; }
   .yt-thumb { position: relative; flex: 0 0 42%; max-width: 190px; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: var(--surface2); }
   .yt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .yt-thumb.deleted { outline: 2px solid var(--red); outline-offset: -2px; }
   .yt-thumb.undeleted { outline: 2px solid var(--yellow); outline-offset: -2px; }
   .yt-thumb-badge { position: absolute; bottom: 4px; right: 4px; display: inline-flex; filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); }
-  .yt-body { flex: 1; min-width: 0; padding-top: 1px; }
+  .yt-body { flex: 1; min-width: 0; padding-top: 1px; padding-right: 34px; }
   .yt-title { font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .yt-meta { font-size: 12.5px; color: var(--text-dim); margin-top: 5px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 
