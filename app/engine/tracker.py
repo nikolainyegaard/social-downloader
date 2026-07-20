@@ -75,7 +75,8 @@ def save_new_stories(db, platform: str, channel_id: str, handle: str,
     known = db.get_known_story_ids(channel_id)
     fresh = [s for s in stories if s["story_id"] not in known]
     saved = 0
-    for s in fresh:
+    for _n, s in enumerate(fresh, 1):
+        log(f"  [{_n}/{len(fresh)}] Downloading story {s['story_id']}...")
         try:
             path = download_story(
                 story_id=s["story_id"], username=handle, platform=platform,
@@ -286,8 +287,9 @@ def process_single_channel(
         if not (new_ids or deleted_ids or undeleted_ids or recovered):
             log("  No changes.")
 
-        for vid_id in sorted(new_ids):
-            log(f"  Downloading {vid_id}...")
+        _new_sorted = sorted(new_ids)
+        for _n, vid_id in enumerate(_new_sorted, 1):
+            log(f"  [{_n}/{len(_new_sorted)}] Downloading {vid_id}...")
             adapter.download_item(
                 engine, channel_id, handle, display_name,
                 vid_id, remote_posts[vid_id], raw_posts[vid_id], log,

@@ -622,7 +622,9 @@ async def process_single_user(
         if not (new_ids or deleted_ids or confirm_ids or undeleted_ids):
             log("  No changes.")
 
-        for vid_id in new_ids:
+        _new_sorted = sorted(new_ids)
+        for _n, vid_id in enumerate(_new_sorted, 1):
+            _dlp = f"[{_n}/{len(_new_sorted)}] "
             if stop_event and stop_event.is_set():
                 log("  Loop stop requested: skipping remaining downloads")
                 break
@@ -644,7 +646,7 @@ async def process_single_user(
                         "image_urls":  [],
                     }
             if details["type"] == "photo" and details.get("image_urls"):
-                log(f"  Downloading photo post {vid_id} ({len(details['image_urls'])} images)...")
+                log(f"  {_dlp}Downloading photo post {vid_id} ({len(details['image_urls'])} images)...")
                 path = download_photos(
                     video_id=vid_id,
                     username=username,
@@ -660,7 +662,7 @@ async def process_single_user(
                         log(f"  Thumbnail FAILED for {vid_id} -- see [thumb] lines above")
                 dl_result = {"file_path": path, "ytdlp_data": None} if path else None
             else:
-                log(f"  Downloading video {vid_id}...")
+                log(f"  {_dlp}Downloading video {vid_id}...")
                 dl_result = download_video(
                     video_id=vid_id,
                     username=username,
@@ -1089,15 +1091,16 @@ async def process_single_sound(engine, sound: dict, log: Callable[[str], None]) 
     cookies   = get_cookies_flat()
     new_count = 0
 
-    for vid_id in new_ids:
+    for _n, vid_id in enumerate(new_ids, 1):
+        _dlp = f"[{_n}/{len(new_ids)}] "
         # Already in DB (downloaded via user tracking) -- just add the junction row
         if db.get_video(vid_id):
             store.add_sound_video(sound_id, vid_id)
-            log(f"Linked existing video {vid_id} to sound '{label}'")
+            log(f"{_dlp}Linked existing video {vid_id} to sound '{label}'")
             new_count += 1
             continue
 
-        result = save_video_by_id(vid_id, cookies, log)
+        result = save_video_by_id(vid_id, cookies, log, prefix=_dlp)
         if result:
             store.add_sound_video(sound_id, vid_id)
         if result == "saved":
@@ -1107,12 +1110,14 @@ async def process_single_sound(engine, sound: dict, log: Callable[[str], None]) 
     return new_count
 
 
-def save_video_by_id(vid_id: str, cookies, log: Callable[[str], None]) -> str | None:
+def save_video_by_id(vid_id: str, cookies, log: Callable[[str], None],
+                     prefix: str = "") -> str | None:
     """Fetch, download, and record a single post by video ID.
 
     Ensures the author's channel row exists (enabled=0 when new). Shared by the
     sound loop and the direct-URL add flow. Returns 'saved' on a full download,
     'audio' for an audio-only post (recorded without a file), None on failure.
+    prefix is prepended to the download log lines (e.g. an "[n/total]" counter).
     """
     # Fetch full video details (placeholder username; TikTok redirects by video ID)
     try:
@@ -1136,7 +1141,7 @@ def save_video_by_id(vid_id: str, cookies, log: Callable[[str], None]) -> str | 
 
     # Download
     if details["type"] == "photo" and details.get("image_urls"):
-        log(f"Downloading photo post {vid_id} from @{author_username} "
+        log(f"{prefix}Downloading photo post {vid_id} from @{author_username} "
             f"({len(details['image_urls'])} images)...")
         path = download_photos(
             video_id=vid_id,
@@ -1153,7 +1158,7 @@ def save_video_by_id(vid_id: str, cookies, log: Callable[[str], None]) -> str | 
                 log(f"Thumbnail FAILED for {vid_id} -- see [thumb] lines above")
         dl_result = {"file_path": path, "ytdlp_data": None} if path else None
     else:
-        log(f"Downloading video {vid_id} from @{author_username}...")
+        log(f"{prefix}Downloading video {vid_id} from @{author_username}...")
         dl_result = download_video(
             video_id=vid_id,
             username=author_username,

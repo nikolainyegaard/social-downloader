@@ -81,8 +81,8 @@ def _load_saved_session() -> None:
             username = f.read().strip()
         if username:
             _L.load_session_from_file(username, sf)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[instagram] failed to load saved session: {e!r}")
 
 
 _load_saved_session()
@@ -117,7 +117,8 @@ def _web_api_get(url: str, params: dict, referer: str) -> dict:
     if csrf:
         headers["X-CSRFToken"] = csrf
     resp = session.get(url, params=params, headers=headers, timeout=30)
-    resp.raise_for_status()
+    if resp.status_code != 200:
+        raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
     return resp.json()
 
 
@@ -130,6 +131,7 @@ def _profile_from_username(handle: str) -> instaloader.Profile:
     same web_profile_info request the instagram.com frontend makes when a
     profile page opens (gallery-dl resolves usernames the same way). Any
     error falls back to the library's own lookup."""
+    web_err = None
     if _L.context.is_logged_in:
         try:
             body = _web_api_get(
@@ -140,14 +142,25 @@ def _profile_from_username(handle: str) -> instaloader.Profile:
                 return instaloader.Profile(_L.context, user)
             if body.get("status") == "ok":
                 # Healthy answer with no user is authoritative nonexistence.
-                # Keep the library's message so the gone markers match
+                # Must contain "does not exist" so the gone markers match
                 raise instaloader.ProfileNotExistsException(
-                    f"Profile {handle} does not exist.")
+                    f"Profile {handle} does not exist (web profile endpoint).")
+            web_err = f"unexpected response: {str(body)[:300]}"
         except instaloader.ProfileNotExistsException:
             raise
-        except Exception:
-            pass
-    return instaloader.Profile.from_username(_L.context, handle)
+        except Exception as e:
+            web_err = repr(e)
+    else:
+        web_err = "no session login"
+    try:
+        return instaloader.Profile.from_username(_L.context, handle)
+    except instaloader.ProfileNotExistsException as e:
+        # The search lookup omits small accounts, so absence here proves
+        # nothing when the direct lookup gave no healthy answer. Phrase
+        # without "does not exist" so the loop never reads this as banned
+        raise instaloader.ConnectionException(
+            f"Profile lookup for {handle} failed; web profile endpoint: "
+            f"{web_err}; search fallback found no match") from e
 
 
 def fetch_profile_info(handle: str) -> dict:
