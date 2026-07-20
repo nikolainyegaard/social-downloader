@@ -2087,9 +2087,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   [contenteditable="true"] { font-size: 16px !important; }
 
   /* Header: let header-meta wrap to its own row rather than overflow.
-     Name, Log out, and the gear collapse into the user menu button. */
+     Name, Log out, and the gear collapse into the user menu button.
+     No version tag; the status badge condenses to its dot. */
   header { gap: 6px 12px; }
   .header-meta { margin-left: 0; width: 100%; }
+  h1 .version-tag { display: none; }
+  .status-badge { gap: 0; padding: 4px 6px; }
+  .status-badge #statusText { display: none; }
   .header-meta .hdr-user-name,
   .header-meta .hdr-link,
   .header-meta .btn-gear:not(.btn-user-menu) { display: none; }
