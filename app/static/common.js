@@ -1554,7 +1554,11 @@ function _mRenderToolbar(cfg, vids) {
   }
   html += `</div>`
     + `<div class="toolbar-filter-wrap">`;
-  if (isMedia) {
+  if (isMedia && cfg.mSortFn) {
+    // Modals that wired up the mobile filter functions (creator modal) use the
+    // same Sort/Status/Type dropdowns on desktop; others (sound modal) keep pills.
+    html += _mFilterDds(cfg, counts, typeCounts);
+  } else if (isMedia) {
     html += `<div class="filter-pills multi">`
       + pill('active', 'Active')
       + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
@@ -1606,6 +1610,32 @@ function _mMobSort(cfg, field)  { cfg.st.sort = _doSort(cfg.st.sort, field); _mR
 function _mMobStatus(cfg, key)  { cfg.st.filter     = key ? new Set([key]) : new Set(); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
 function _mMobType(cfg, key)    { cfg.st.typeFilter = key ? new Set([key]) : new Set(); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
 
+// Sort / Status / Type single-select dropdowns, shared by the mobile toolbar and
+// the desktop modal toolbar. Driven by cfg.mSortFn / mStatusFn / mTypeFn.
+function _mFilterDds(cfg, counts, typeCounts) {
+  const sortCols = (cfg.cols || []).filter(c => c.field && c.field !== 'status');
+  const sf = sortCols.find(c => c.field === cfg.st.sort.field);
+  const arrow = cfg.st.sort.dir === 'asc' ? '↑' : '↓';
+  const sortMenu = sortCols.map(c =>
+    `<button class="m-dd-opt${c.field === cfg.st.sort.field ? ' active' : ''}" onclick="${cfg.mSortFn}('${c.field}')">${c.label}<span>${c.field === cfg.st.sort.field ? arrow : ''}</span></button>`).join('');
+  let out = _mDd(sf ? `${sf.label} ${arrow}` : 'Sort', sortMenu);
+  const statusOpts = [{ k: '', l: 'All' }, { k: 'active', l: 'Active' }];
+  if (counts.deleted)  statusOpts.push({ k: 'deleted',  l: 'Deleted' });
+  if (counts.restored) statusOpts.push({ k: 'restored', l: 'Restored' });
+  const curS = statusOpts.find(o => o.k && cfg.st.filter.has(o.k)) || statusOpts[0];
+  const statusMenu = statusOpts.map(o =>
+    `<button class="m-dd-opt${o === curS ? ' active' : ''}" onclick="${cfg.mStatusFn}('${o.k}')">${o.l}<span>${o === curS ? '✓' : ''}</span></button>`).join('');
+  out += _mDd(curS.k ? curS.l : 'Status', statusMenu);
+  if (typeCounts.video > 0 && typeCounts.photo > 0) {
+    const typeOpts = [{ k: '', l: 'All' }, { k: 'video', l: 'Videos' }, { k: 'photo', l: 'Photos' }];
+    const curT = typeOpts.find(o => o.k && cfg.st.typeFilter.has(o.k)) || typeOpts[0];
+    const typeMenu = typeOpts.map(o =>
+      `<button class="m-dd-opt${o === curT ? ' active' : ''}" onclick="${cfg.mTypeFn}('${o.k}')">${o.l}<span>${o === curT ? '✓' : ''}</span></button>`).join('');
+    out += _mDd(curT.k ? curT.l : 'Type', typeMenu);
+  }
+  return out;
+}
+
 function _mRenderToolbarMobile(cfg, vids) {
   const counts = { active: 0, deleted: 0, restored: 0 };
   const typeCounts = { video: 0, photo: 0 };
@@ -1624,30 +1654,8 @@ function _mRenderToolbarMobile(cfg, vids) {
     `<button class="tab${cfg.st.view === vk.key ? ' active' : ''}" onclick="${cfg.viewFn}('${vk.key}')">${vk.label || (vk.title || '').replace(/ view$/, '') || vk.key}</button>`).join('');
   const isMedia = cfg.st.view !== 'history' && cfg.st.view !== 'stories';
   let filters = '';
-  if (isMedia) {
-    const sortCols = (cfg.cols || []).filter(c => c.field && c.field !== 'status');
-    const sf = sortCols.find(c => c.field === cfg.st.sort.field);
-    const arrow = cfg.st.sort.dir === 'asc' ? '↑' : '↓';
-    const sortMenu = sortCols.map(c =>
-      `<button class="m-dd-opt${c.field === cfg.st.sort.field ? ' active' : ''}" onclick="${cfg.mSortFn}('${c.field}')">${c.label}<span>${c.field === cfg.st.sort.field ? arrow : ''}</span></button>`).join('');
-    filters += _mDd(sf ? `${sf.label} ${arrow}` : 'Sort', sortMenu);
-    const statusOpts = [{ k: '', l: 'All' }, { k: 'active', l: 'Active' }];
-    if (counts.deleted)  statusOpts.push({ k: 'deleted',  l: 'Deleted' });
-    if (counts.restored) statusOpts.push({ k: 'restored', l: 'Restored' });
-    const curS = statusOpts.find(o => o.k && cfg.st.filter.has(o.k)) || statusOpts[0];
-    const statusMenu = statusOpts.map(o =>
-      `<button class="m-dd-opt${o === curS ? ' active' : ''}" onclick="${cfg.mStatusFn}('${o.k}')">${o.l}<span>${o === curS ? '✓' : ''}</span></button>`).join('');
-    filters += _mDd(curS.k ? curS.l : 'Status', statusMenu);
-    if (typeCounts.video > 0 && typeCounts.photo > 0) {
-      const typeOpts = [{ k: '', l: 'All' }, { k: 'video', l: 'Videos' }, { k: 'photo', l: 'Photos' }];
-      const curT = typeOpts.find(o => o.k && cfg.st.typeFilter.has(o.k)) || typeOpts[0];
-      const typeMenu = typeOpts.map(o =>
-        `<button class="m-dd-opt${o === curT ? ' active' : ''}" onclick="${cfg.mTypeFn}('${o.k}')">${o.l}<span>${o === curT ? '✓' : ''}</span></button>`).join('');
-      filters += _mDd(curT.k ? curT.l : 'Type', typeMenu);
-    }
-  } else if (cfg.mobileFilters) {
-    filters = cfg.mobileFilters(cfg.st.view);
-  }
+  if (isMedia) filters = _mFilterDds(cfg, counts, typeCounts);
+  else if (cfg.mobileFilters) filters = cfg.mobileFilters(cfg.st.view);
   toolbar.innerHTML = `<div class="m-tabs">${tabs}</div>`;
   // Filter row lives in its own element in the scroll flow (a sibling after the
   // toolbar), so its slot scrolls away naturally and hiding it never shifts the
