@@ -485,8 +485,12 @@ function _ddToggle(btn) {
   const menu = dd.querySelector('.dd-menu');
   const r = btn.getBoundingClientRect();
   menu.style.minWidth = r.width + 'px';
-  menu.style.left     = r.left + 'px';
   menu.style.top      = (r.bottom + 5) + 'px';
+  // Clamp within the viewport horizontally: the button can be scrolled to the
+  // far edge of a horizontal filter bar, which would push a left-aligned menu
+  // off-screen (invisible on mobile).
+  const w = menu.offsetWidth;
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 8 - w)) + 'px';
   const h = menu.offsetHeight;
   if (r.bottom + 5 + h > window.innerHeight && r.top - 5 - h > 0)
     menu.style.top = (r.top - 5 - h) + 'px';
