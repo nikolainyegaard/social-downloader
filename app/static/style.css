@@ -292,6 +292,10 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
 .btn-bookmark svg { width: 13px; height: 14px; display: block; }
 .btn-bookmark:hover { color: var(--accent); border-color: var(--accent); }
 .btn-bookmark.bookmarked { color: var(--accent); border-color: var(--accent); }
+/* X-in-circle reset button (panel-header filter rows) */
+.btn-reset-filter { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 7px; line-height: 1; display: inline-flex; align-items: center; }
+.btn-reset-filter svg { display: block; }
+.btn-reset-filter:hover { color: var(--text); border-color: var(--text-dim); }
 
 .btn-ghost { background: var(--surface2); color: var(--text); }
 .btn-ghost:hover:not(:disabled) { background: var(--border); }
@@ -662,6 +666,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   color: var(--text-dim);
   line-height: 1.45;
 }
+/* Placeholder when a channel has no bio (cards + modals) */
+.no-bio { color: var(--muted); font-style: italic; }
 
 .user-rescan-notice {
   font-size: 11px;
@@ -1212,7 +1218,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-bottom-color: var(--accent);
   text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent);
 }
-.view-tabs-row .tracking-search { margin-left: auto; margin-bottom: 5px; }
+.view-tabs-row .search-row { display: flex; align-items: center; gap: 6px; margin-left: auto; margin-bottom: 5px; }
+/* The Reset next to the search box exists for mobile; desktop keeps the one in
+   the filter bar (hidden there under 640px, swapped for this one) */
+.search-reset { display: none; }
 
 /* ── Custom dropdown (themed <select> replacement) ──────────────────────── */
 
@@ -2048,9 +2057,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   header { gap: 6px 12px; }
   .header-meta { margin-left: 0; width: 100%; }
 
-  /* View tabs + search: wrap so search drops to its own full-width row. */
+  /* View tabs + search: wrap so the search row drops to its own full-width row.
+     Reset moves out of the sideways-scrolling filter bar to sit next to search. */
   .view-tabs-row { flex-wrap: wrap; }
-  .tracking-search { width: 100% !important; box-sizing: border-box; }
+  .search-row { width: 100%; }
+  .tracking-search { flex: 1; min-width: 0; box-sizing: border-box; }
+  .search-reset { display: inline-flex; flex-shrink: 0; }
+  .filter-control-group .controls-reset { display: none; }
 
   /* Full-screen modals: no space to waste on a blurred backdrop */
   .modal-backdrop {

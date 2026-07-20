@@ -110,6 +110,7 @@ function initChannelApp(cfg) {
         <span style="display:flex;gap:4px;flex-shrink:0">
           <button class="btn-star" id="${P}RfStar" onclick="${P}ToggleRfStar()" title="Only starred ${CREATORS}">☆</button>
           <button class="btn-bookmark" id="${P}RfBook" onclick="${P}ToggleRfBook()" title="Only bookmarked ${CREATORS}">${_bmOutline}</button>
+          <button class="btn-reset-filter" onclick="${P}ResetRecentFilters()" title="Reset filters">${_xCircleIcon}</button>
         </span>
       </div>
     </div>
@@ -164,7 +165,10 @@ function initChannelApp(cfg) {
           <button class="tab"        id="${P}TvLog"      onclick="${P}SetTrackingView('log')">Log</button>
         </div>
         <span id="${P}Count" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
-        <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)">
+        <span class="search-row">
+          <input id="${P}Search" class="tracking-search" type="search" placeholder="Search…" oninput="${P}OnSearch(this.value)">
+          <button class="sort-dir-btn search-reset" id="${P}SearchReset" onclick="${P}ResetFilters()" title="Reset filters and sort">Reset</button>
+        </span>
       </div>
       <div id="${P}Controls" class="filter-control-group edge-fade" style="margin-top:10px">
         ${EXTRA_FILTER_GROUPS.map(g => `
@@ -204,7 +208,7 @@ function initChannelApp(cfg) {
               { value: 'last_saved',       label: 'Last saved' },
             ], { value: 'handle', onchange: `${P}SetSortField(_ddValue('${P}SortField'))` })}
             <button class="sort-dir-btn" id="${P}SortDirBtn" onclick="${P}ToggleSortDir()">A → Z</button>
-            <button class="sort-dir-btn" onclick="${P}ResetFilters()" title="Reset filters and sort">Reset</button>
+            <button class="sort-dir-btn controls-reset" onclick="${P}ResetFilters()" title="Reset filters and sort">Reset</button>
           </div>
         </div>
       </div>
@@ -642,6 +646,17 @@ function initChannelApp(cfg) {
     const b = document.getElementById(`${P}RfBook`);
     if (b) { b.classList.toggle('bookmarked', _rfBook); b.innerHTML = _rfBook ? _bmFilled : _bmOutline; }
     _applyFeedFilter();
+  });
+
+  // Reset kind + flag filters in one go; SetRecentFilter re-applies the feed
+  X('ResetRecentFilters', () => {
+    _rfStar = false;
+    _rfBook = false;
+    const s = document.getElementById(`${P}RfStar`);
+    if (s) { s.classList.remove('starred'); s.textContent = '☆'; }
+    const b = document.getElementById(`${P}RfBook`);
+    if (b) { b.classList.remove('bookmarked'); b.innerHTML = _bmOutline; }
+    window[`${P}SetRecentFilter`]('all');
   });
 
   // Warm the per-kind caches the first time the pointer reaches the filter
@@ -1236,7 +1251,7 @@ function initChannelApp(cfg) {
       sub:        `@${esc(ch.handle)}${_oldNamesTag(ch)}`,
       idLine:     ch.channel_id,
       badges:     `<span class="account-status ${trackingCls}">${trackingLabel}</span>${_relationPill(ch)}`,
-      bio:        _expandableText(ch.description),
+      bio:        ch.description ? _expandableText(ch.description) : '<span class="no-bio">No bio</span>',
       stats,
       extra:      rescanBadge,
       footer,
@@ -1655,7 +1670,7 @@ function initChannelApp(cfg) {
             <span style="color:var(--muted);font-size:12px;margin-left:6px">${esc(ch.channel_id)}${joinStr}</span>
           </div>
           ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
-          ${ch.description ? `<div class="modal-bio">${_expandableText(ch.description)}</div>` : ''}
+          <div class="modal-bio">${ch.description ? _expandableText(ch.description) : '<span class="no-bio">No bio</span>'}</div>
           ${ch.bio_link ? `<div class="modal-bio-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
           <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
             <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
@@ -1713,7 +1728,7 @@ function initChannelApp(cfg) {
       return daysLeft > 0 ? `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} until inactive` : '';
     })();
     const N = 90, desc = ch.description || '', long = desc.length > N;
-    const bioText = desc ? (long ? esc(desc.slice(0, N).trim()) + '… ' : esc(desc) + ' ') : '';
+    const bioText = desc ? (long ? esc(desc.slice(0, N).trim()) + '… ' : esc(desc) + ' ') : '<span class="no-bio">No bio</span> ';
     const moreLbl = long ? '…more' : 'Details';
     _el('ModalHeader').innerHTML = `
       <div class="mh">
@@ -2026,6 +2041,8 @@ function initChannelApp(cfg) {
       searchEl.style.visibility = view === 'log' ? 'hidden' : '';
       if (view !== 'log') searchEl.value = '';
     }
+    const searchRst = _el('SearchReset');
+    if (searchRst) searchRst.style.visibility = view === 'log' ? 'hidden' : '';
     const countEl = _el('Count');
     if (countEl) countEl.style.visibility = view === 'log' ? 'hidden' : '';
     search = '';
