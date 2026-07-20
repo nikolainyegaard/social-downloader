@@ -963,7 +963,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   padding: 5px 8px; min-height: 30px;
 }
 .phist-value.empty { color: var(--muted); font-style: italic; }
-/* Word-level bio diff highlights (see _wordDiff) */
+/* Word-level bio diff highlights (see _wordDiff); the diffed boxes render as
+   monospace code blocks, diffchecker-style */
+.phist-value.diff-mono { font-family: var(--mono); font-size: 12px; line-height: 1.6; }
 .diff-del { background: var(--red-bg); color: var(--red); text-decoration: line-through; border-radius: 3px; padding: 0 1px; }
 .diff-ins { background: var(--green-bg); color: var(--green); border-radius: 3px; padding: 0 1px; }
 .phist-avatar-diff {

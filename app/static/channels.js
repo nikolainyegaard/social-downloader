@@ -2015,7 +2015,7 @@ function initChannelApp(cfg) {
 
     const isStatusField = e.field === 'account_status' || e.field === 'privacy_status';
     const valHtml = (v, dh) => v
-      ? `<div class="phist-value">${dh || esc(isStatusField ? (_PHIST_STATUS_LABELS[v] || v) : v)}</div>`
+      ? `<div class="phist-value${dh ? ' diff-mono' : ''}">${dh || esc(isStatusField ? (_PHIST_STATUS_LABELS[v] || v) : v)}</div>`
       : `<div class="phist-value empty">(empty)</div>`;
     return `<div class="phist-entry">
       <div class="phist-entry-hdr"><strong>${esc(fieldLabel)}</strong> <span class="phist-date">· Changed ${dateStr}</span></div>
