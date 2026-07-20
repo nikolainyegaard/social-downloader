@@ -1222,6 +1222,10 @@ function initChannelApp(cfg) {
             <span class="meta-label">Last saved</span>
             <span class="meta-value">${ch.last_saved ? fmt.rel(new Date(ch.last_saved * 1000).toISOString()) : 'never'}</span>
           </div>
+          <div class="user-card-meta-item">
+            <span class="meta-label">Storage</span>
+            <span class="meta-value">${_fmtBytes(ch.media_size_bytes || 0)}</span>
+          </div>
         </div>
       </div>
     `;

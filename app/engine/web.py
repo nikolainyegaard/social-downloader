@@ -256,8 +256,10 @@ def create_channel_blueprint(engine) -> Blueprint:
         all_ph        = db.get_all_profile_history_for_search()
         live_stories  = db.get_live_story_counts() if adapter.has_stories else {}
         story_counts  = db.get_all_story_counts()  if adapter.has_stories else {}
+        media_sizes   = _media_sizes_by_handle()
         for ch in channels:
             cid   = ch["channel_id"]
+            ch["media_size_bytes"]      = media_sizes.get(ch["handle"], 0)
             stats = all_stats.get(cid, {})
             ch["live_stories"]          = live_stories.get(cid, 0)
             ch["story_count"]           = story_counts.get(cid, 0)
@@ -609,22 +611,33 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     # ── Stats and recent activity ─────────────────────────────────────────────
 
-    # Walking a large media library takes a moment, so the size is cached and
-    # refreshed at most every 15 minutes even though stats poll every 60 s
-    _media_size_cache = {"ts": 0.0, "size": 0}
+    # Walking a large media library takes a moment, so one walk buckets every
+    # file under its @handle folder and the result is cached for 15 minutes
+    # (stats poll every 60 s, the channel list every 15 s). Both the aggregate
+    # size and the per-creator card sizes are served from this one map.
+    _media_size_cache = {"ts": 0.0, "by_handle": {}, "total": 0}
 
-    def _media_size_bytes() -> int:
+    def _media_sizes_by_handle() -> dict:
         now = time.time()
         if now - _media_size_cache["ts"] > 900:
-            total = 0
-            for dirpath, _dirs, files in os.walk(os.path.join(MEDIA_DIR, platform)):
+            by_handle: dict = {}
+            root = os.path.join(MEDIA_DIR, platform)
+            for dirpath, _dirs, files in os.walk(root):
+                top = os.path.relpath(dirpath, root).split(os.sep)[0]
+                if not top.startswith("@"):
+                    continue
+                handle = top[1:]
                 for name in files:
                     try:
-                        total += os.path.getsize(os.path.join(dirpath, name))
+                        by_handle[handle] = by_handle.get(handle, 0) + os.path.getsize(os.path.join(dirpath, name))
                     except OSError:
                         pass
-            _media_size_cache.update(ts=now, size=total)
-        return _media_size_cache["size"]
+            _media_size_cache.update(ts=now, by_handle=by_handle, total=sum(by_handle.values()))
+        return _media_size_cache["by_handle"]
+
+    def _media_size_bytes() -> int:
+        _media_sizes_by_handle()  # refresh the cache if stale
+        return _media_size_cache["total"]
 
     @bp.route("/stats", methods=["GET"])
     def get_aggregate_stats():
