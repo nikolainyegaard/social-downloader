@@ -1021,6 +1021,35 @@ window.addEventListener('resize', () => {
   _xtextResizeTimer = setTimeout(() => _markXtextClipped(document), 150);
 });
 
+// Word-level diff for profile history bio entries: LCS over word+whitespace
+// tokens, rendered as per-side highlights (deletions marked on Old, insertions
+// on New). Returns {oldHtml, newHtml}, both fully escaped.
+function _wordDiff(oldStr, newStr) {
+  const a = String(oldStr).split(/(\s+)/).filter(t => t !== '');
+  const b = String(newStr).split(/(\s+)/).filter(t => t !== '');
+  const n = a.length, m = b.length;
+  // ponytail: O(n*m) LCS; bios are tiny. Plain text past ~400 tokens per side.
+  if (n * m > 160000) return { oldHtml: esc(oldStr), newHtml: esc(newStr) };
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  let i = 0, j = 0, oldHtml = '', newHtml = '', delBuf = [], insBuf = [];
+  const flush = () => {
+    if (delBuf.length) { oldHtml += `<span class="diff-del">${esc(delBuf.join(''))}</span>`; delBuf = []; }
+    if (insBuf.length) { newHtml += `<span class="diff-ins">${esc(insBuf.join(''))}</span>`; insBuf = []; }
+  };
+  while (i < n && j < m) {
+    if (a[i] === b[j])                 { flush(); const t = esc(a[i]); oldHtml += t; newHtml += t; i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) delBuf.push(a[i++]);
+    else                                   insBuf.push(b[j++]);
+  }
+  while (i < n) delBuf.push(a[i++]);
+  while (j < m) insBuf.push(b[j++]);
+  flush();
+  return { oldHtml, newHtml };
+}
+
 function _trackingBadge(tracking_enabled) {
   return tracking_enabled === 0
     ? { cls: 'inactive', label: 'Untracked' }

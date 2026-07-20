@@ -2007,16 +2007,22 @@ function initChannelApp(cfg) {
       </div>`;
     }
 
+    // Bio edits are usually small adjustments, so highlight the actual words
+    // that changed (deletions on Old, insertions on New). Other text fields
+    // (display name, handle) change wholesale and keep the plain view.
+    const isBio = e.field === 'description' || e.field === 'bio';
+    const diff  = isBio && e.old_value && newVal ? _wordDiff(e.old_value, newVal) : null;
+
     const isStatusField = e.field === 'account_status' || e.field === 'privacy_status';
-    const valHtml = v => v
-      ? `<div class="phist-value">${esc(isStatusField ? (_PHIST_STATUS_LABELS[v] || v) : v)}</div>`
+    const valHtml = (v, dh) => v
+      ? `<div class="phist-value">${dh || esc(isStatusField ? (_PHIST_STATUS_LABELS[v] || v) : v)}</div>`
       : `<div class="phist-value empty">(empty)</div>`;
     return `<div class="phist-entry">
       <div class="phist-entry-hdr"><strong>${esc(fieldLabel)}</strong> <span class="phist-date">· Changed ${dateStr}</span></div>
       <div class="phist-diff">
-        <div class="phist-side"><div class="phist-side-hdr"><span class="phist-side-label">Old</span></div>${valHtml(e.old_value)}</div>
+        <div class="phist-side"><div class="phist-side-hdr"><span class="phist-side-label">Old</span></div>${valHtml(e.old_value, diff && diff.oldHtml)}</div>
         <div class="phist-arrow">→</div>
-        <div class="phist-side"><div class="phist-side-hdr"><span class="phist-side-label">New</span></div>${valHtml(newVal)}</div>
+        <div class="phist-side"><div class="phist-side-hdr"><span class="phist-side-label">New</span></div>${valHtml(newVal, diff && diff.newHtml)}</div>
       </div>
     </div>`;
   }
