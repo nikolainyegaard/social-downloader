@@ -7,6 +7,7 @@ import os
 from config import MEDIA_DIR
 from engine import ChannelAdapter, ChannelGoneError
 from platforms.instagram import api
+from thumbnailer import generate_thumbnail
 
 # instaloader raises ProfileNotExistsException ("Profile X does not exist")
 # for banned, deleted, and renamed accounts alike.
@@ -35,6 +36,7 @@ def _download_item(engine, channel_id, handle, display_name, vid_id, post, raw_p
     file_path = api.download_post_media(raw_post, dest_dir)
     if file_path:
         engine.db.update_video_downloaded(vid_id, file_path)
+        generate_thumbnail(vid_id, file_path)
         log(f"  Saved {vid_id} -> {file_path}")
     else:
         log(f"  Failed to download {vid_id} (recorded in DB)")
