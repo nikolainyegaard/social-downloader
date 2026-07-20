@@ -968,6 +968,19 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .phist-value.diff-mono { font-family: var(--mono); font-size: 12px; line-height: 1.6; }
 .diff-del { background: var(--red-bg); color: var(--red); text-decoration: line-through; border-radius: 3px; padding: 0 1px; }
 .diff-ins { background: var(--green-bg); color: var(--green); border-radius: 3px; padding: 0 1px; }
+/* Line-aligned diff grid (see _lineDiffHtml): two synced columns; edited rows
+   get a light full-row tint, whole added/removed lines the strong tint, and
+   unpaired rows a hatched gap cell on the other side */
+.ld-wrap { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface2); }
+.ld-hdr { display: grid; grid-template-columns: 1fr 1fr; padding: 4px 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.ld-grid { display: grid; grid-template-columns: 1fr 1fr; font-family: var(--mono); font-size: 12px; line-height: 1.6; padding: 4px 0; }
+.ld-cell { padding: 0 8px; min-height: 19px; white-space: pre-wrap; word-break: break-word; min-width: 0; }
+.ld-cell:nth-child(odd) { border-right: 1px solid var(--border); }
+.ld-del { background: color-mix(in srgb, var(--red) 7%, transparent); }
+.ld-ins { background: color-mix(in srgb, var(--green) 8%, transparent); }
+.ld-del.ld-full { background: var(--red-bg); color: var(--red); }
+.ld-ins.ld-full { background: var(--green-bg); color: var(--green); }
+.ld-gap { background: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, var(--border) 55%, transparent) 5px 6px); }
 .phist-avatar-diff {
   display: flex;
   align-items: center;

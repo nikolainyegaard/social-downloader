@@ -2007,11 +2007,22 @@ function initChannelApp(cfg) {
       </div>`;
     }
 
-    // Bio edits are usually small adjustments, so highlight the actual words
-    // that changed (deletions on Old, insertions on New). Other text fields
+    // Bio edits are usually small adjustments, so render a line-aligned diff
+    // grid highlighting the words that changed (deletions on Old, insertions
+    // on New, gap rows keeping the columns aligned). Other text fields
     // (display name, handle) change wholesale and keep the plain view.
     const isBio = e.field === 'description' || e.field === 'bio';
-    const diff  = isBio && e.old_value && newVal ? _wordDiff(e.old_value, newVal) : null;
+    if (isBio && e.old_value && newVal) {
+      const grid = _lineDiffHtml(e.old_value, newVal);
+      if (grid) return `<div class="phist-entry">
+        <div class="phist-entry-hdr"><strong>${esc(fieldLabel)}</strong> <span class="phist-date">· Changed ${dateStr}</span></div>
+        <div class="ld-wrap">
+          <div class="ld-hdr"><span class="phist-side-label">Old</span><span class="phist-side-label">New</span></div>
+          ${grid}
+        </div>
+      </div>`;
+    }
+    const diff = isBio && e.old_value && newVal ? _wordDiff(e.old_value, newVal) : null;
 
     const isStatusField = e.field === 'account_status' || e.field === 'privacy_status';
     const valHtml = (v, dh) => v

@@ -1050,6 +1050,49 @@ function _wordDiff(oldStr, newStr) {
   return { oldHtml, newHtml };
 }
 
+// Line-aligned diff view (diffchecker-style) built on _wordDiff. Lines are
+// LCS-matched; a changed block pairs old/new lines index-wise and word-diffs
+// within each pair; an unpaired line gets a hatched gap cell on the other side
+// so the two columns stay row-aligned. Edited rows carry a light full-row tint
+// with the stronger word tint inside; whole added/removed lines get the strong
+// tint across the row. Returns the grid HTML, or null when the text is too
+// large (caller falls back to the flat word diff).
+function _lineDiffHtml(oldStr, newStr) {
+  const a = String(oldStr).split('\n'), b = String(newStr).split('\n');
+  const n = a.length, m = b.length;
+  if (n * m > 250000) return null;
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const cells = [];
+  const cell = (cls, html) => `<div class="ld-cell${cls ? ' ' + cls : ''}">${html}</div>`;
+  let i = 0, j = 0, dels = [], inss = [];
+  const flush = () => {
+    for (let x = 0; x < Math.max(dels.length, inss.length); x++) {
+      const o = dels[x], nl = inss[x];
+      if (o !== undefined && nl !== undefined) {
+        const d = _wordDiff(o, nl);
+        cells.push(cell('ld-del', d.oldHtml), cell('ld-ins', d.newHtml));
+      } else if (o !== undefined) {
+        cells.push(cell('ld-del ld-full', esc(o)), cell('ld-gap', ''));
+      } else {
+        cells.push(cell('ld-gap', ''), cell('ld-ins ld-full', esc(nl)));
+      }
+    }
+    dels = []; inss = [];
+  };
+  while (i < n && j < m) {
+    if (a[i] === b[j])                     { flush(); const t = esc(a[i]); cells.push(cell('', t), cell('', t)); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) dels.push(a[i++]);
+    else                                   inss.push(b[j++]);
+  }
+  while (i < n) dels.push(a[i++]);
+  while (j < m) inss.push(b[j++]);
+  flush();
+  return `<div class="ld-grid">${cells.join('')}</div>`;
+}
+
 function _trackingBadge(tracking_enabled) {
   return tracking_enabled === 0
     ? { cls: 'inactive', label: 'Untracked' }
