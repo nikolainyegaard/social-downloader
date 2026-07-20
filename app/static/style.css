@@ -2086,11 +2086,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   textarea,
   [contenteditable="true"] { font-size: 16px !important; }
 
-  /* Header: let header-meta wrap to its own row rather than overflow.
-     Name, Log out, and the gear collapse into the user menu button.
+  /* Header: name, Log out, and the gear collapse into the user menu button,
+     so header-meta fits on the title row (margin-left:auto from the base rule).
      No version tag; the status badge condenses to its dot. */
   header { gap: 6px 12px; }
-  .header-meta { margin-left: 0; width: 100%; }
   h1 .version-tag { display: none; }
   .status-badge { gap: 0; padding: 4px 6px; }
   .status-badge #statusText { display: none; }
