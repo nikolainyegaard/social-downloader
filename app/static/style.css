@@ -931,9 +931,18 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-bottom: 1px solid var(--border);
 }
 .stories-cal-title { font-size: 12px; color: var(--text-dim); }
+/* GitHub-style calendar box: cells sit on the nav-dark box background
+   (our closest token to GitHub's #0d1117), empty days one notch above it */
+.stories-cal-box {
+  background: var(--nav);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
 .stories-cal { overflow-x: auto; padding: 4px 0; }
 .stories-cal .ch-domain-text { fill: var(--text-dim); font-size: 11px; }
-.stories-cal .ch-subdomain-bg { fill: var(--bg); } /* empty cells darker than the panel, GitHub-style */
+.stories-cal .ch-subdomain-bg { fill: var(--hdr); } /* empty day, GitHub's #151b23 equivalent */
 .stories-cal rect { cursor: pointer; }
 .stories-cal-legend {
   display: flex; align-items: center; justify-content: flex-end; gap: 4px;

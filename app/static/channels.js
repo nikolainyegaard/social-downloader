@@ -1910,15 +1910,16 @@ function initChannelApp(cfg) {
     }
     let accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
     if (!/^#[0-9a-fA-F]{6}$/.test(accent)) accent = '#4f8ef7';
-    // Sequential ramp: GitHub's dark-mode contribution scale (its per-step
-    // saturation/lightness profile, slightly widened at the low end so the two
-    // dark steps stay apart on blue hues) re-hued to the platform accent. The
-    // darkest step is deliberately subtle against the surface, GitHub-style;
-    // the empty cells drop below the surface (var(--bg)) to carry the contrast.
+    // Sequential ramp: GitHub's dark-mode contribution scale (the per-step
+    // saturation/lightness profile of its four green levels) re-hued to the
+    // platform accent. The darkest step is deliberately subtle against the
+    // box background, GitHub-style; the empty cells sit a notch above it
+    // (var(--hdr) on a var(--nav) box, GitHub's #151b23 on #0d1117) so filled
+    // days read against their empty neighbours.
     const [r, g, b] = [1, 3, 5].map(i => parseInt(accent.slice(i, i + 2), 16) / 255);
     const mx = Math.max(r, g, b), mn = Math.min(r, g, b), cd = mx - mn;
     const hue = !cd ? 0 : Math.round(60 * ((mx === r ? ((g - b) / cd) % 6 : mx === g ? (b - r) / cd + 2 : (r - g) / cd + 4) + 6)) % 360;
-    const ramp = [[66, 15], [100, 24], [63, 40], [64, 53]].map(([s, l]) => `hsl(${hue} ${s}% ${l}%)`);
+    const ramp = [[90, 12], [62, 26], [55, 40], [59, 58]].map(([s, l]) => `hsl(${hue} ${s}% ${l}%)`);
     const BUCKETS = ['1', '2', '3-4', '5+'];
 
     const total = Object.values(dayCounts).reduce((a, b) => a + b, 0);
@@ -1930,12 +1931,14 @@ function initChannelApp(cfg) {
           <button class="filter-pill" onclick="${P}StoriesCalStep(1)" title="Later months">→</button>
         </div>
       </div>
-      <div class="stories-cal" id="${P}StoriesCal"></div>
-      <div class="stories-cal-legend">
-        <span>Less</span>
-        <i style="background:var(--bg)" title="No stories"></i>
-        ${BUCKETS.map((label, i) => `<i style="background:${ramp[i]}" title="${label} ${label === '1' ? 'story' : 'stories'}"></i>`).join('')}
-        <span>More</span>
+      <div class="stories-cal-box">
+        <div class="stories-cal" id="${P}StoriesCal"></div>
+        <div class="stories-cal-legend">
+          <span>Less</span>
+          <i style="background:var(--hdr)" title="No stories"></i>
+          ${BUCKETS.map((label, i) => `<i style="background:${ramp[i]}" title="${label} ${label === '1' ? 'story' : 'stories'}"></i>`).join('')}
+          <span>More</span>
+        </div>
       </div>`;
 
     const source = Object.entries(dayCounts).map(([date, value]) => ({ date, value }));
