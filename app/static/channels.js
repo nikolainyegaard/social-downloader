@@ -1165,72 +1165,51 @@ function initChannelApp(cfg) {
       ? `<div class="user-rescan-notice" title="Isolated full re-scan scheduled to verify deletion candidates">Re-scan ${fmt.rel(new Date(rescanAt * 1000).toISOString())}</div>`
       : '';
 
-    return `
-      <div class="user-card ${P}-creator-card${isCurrent ? ' user-card-current' : ''}${isInactive || isBanned || isBlocked || isPrivBlk ? ' user-card-inactive' : ''}${isBanned || isBlocked ? ' user-card-banned' : ''}${isPrivBlk ? ' user-card-private' : ''}"
-           data-channelid="${esc(ch.channel_id)}"
-           onclick="if(!event.target.closest('button'))${P}OpenModal('${esc(ch.channel_id)}')"
-           role="button" tabindex="0">
-        <div class="user-card-top">
-          <div class="avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="event.stopPropagation();${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
-            <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
-            ${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" alt=""
-                 onerror="this.style.display='none'"
-                 ${ch.live_stories ? '' : `onclick="event.stopPropagation();openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}
-          </div>
-          <div class="user-identity">
-            <div class="user-display-name">${_isPrivateAccount(ch) ? LOCK_SVG : ''}${esc(ch.display_name || ch.handle)}</div>
-            <div class="user-handle">@${esc(ch.handle)}${_oldNamesTag(ch)}</div>
-            <div class="user-id-line">${esc(ch.channel_id)}</div>
-          </div>
-          <div class="user-badges">
-            <span class="account-status ${trackingCls}">${trackingLabel}</span>
-            ${_relationPill(ch)}
-          </div>
-        </div>
+    const classes = `${P}-creator-card${isCurrent ? ' user-card-current' : ''}`
+      + `${isInactive || isBanned || isBlocked || isPrivBlk ? ' user-card-inactive' : ''}`
+      + `${isBanned || isBlocked ? ' user-card-banned' : ''}${isPrivBlk ? ' user-card-private' : ''}`;
 
-        <div class="user-bio-area">
-          ${ch.description ? `<div class="user-bio">${esc(ch.description)}</div>` : ''}
-        </div>
+    const icon = `<div class="avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="event.stopPropagation();${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>`
+      + `<span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>`
+      + `${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" alt="" onerror="this.style.display='none'" ${ch.live_stories ? '' : `onclick="event.stopPropagation();openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}</div>`;
 
-        <div class="user-stats">
-          ${ch.subscriber_count != null ? `<span class="stat-item"><span class="stat-item-label">${cfg.subLabelCard}</span><span class="stat-item-value">${(ch.subscriber_count || 0).toLocaleString()}</span></span>` : ''}
-          <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${ch.video_total || 0}</span></span>
-          ${(ch.video_deleted || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${ch.video_deleted}</span></span>` : ''}
-          ${ch.video_missing   ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:var(--orange)">${ch.video_missing}</span></span>` : ''}
-          ${cfg.hasStories && ch.story_count ? `<span class="stat-item"><span class="stat-item-label">stories</span><span class="stat-item-value" style="color:var(--purple)">${ch.story_count}</span></span>` : ''}
-        </div>
+    const stats = `${ch.subscriber_count != null ? `<span class="stat-item"><span class="stat-item-label">${cfg.subLabelCard}</span><span class="stat-item-value">${(ch.subscriber_count || 0).toLocaleString()}</span></span>` : ''}`
+      + `<span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${ch.video_total || 0}</span></span>`
+      + `${(ch.video_deleted || 0) > 0 ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${ch.video_deleted}</span></span>` : ''}`
+      + `${ch.video_missing ? `<span class="stat-item"><span class="stat-item-label">missing</span><span class="stat-item-value" style="color:var(--orange)">${ch.video_missing}</span></span>` : ''}`
+      + `${cfg.hasStories && ch.story_count ? `<span class="stat-item"><span class="stat-item-label">stories</span><span class="stat-item-value" style="color:var(--purple)">${ch.story_count}</span></span>` : ''}`;
 
-        ${rescanBadge}
+    const footer = `<div style="display:flex;gap:6px;">`
+      + `<button class="btn-star${ch.starred ? ' starred' : ''}" onclick="event.stopPropagation();${P}ToggleStar('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>`
+      + `${_bookmarkBtn(ch, true)}`
+      + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>`
+      + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>`
+      + `<button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">&#x2022;&#x2022;&#x2022;</button>`
+      + `</div>`;
 
-        <div class="user-card-footer">
-          <div style="display:flex;gap:6px;">
-            <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="event.stopPropagation();${P}ToggleStar('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
-            ${_bookmarkBtn(ch, true)}
-            <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
-            <button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">&#x2022;&#x2022;&#x2022;</button>
-          </div>
-        </div>
-        <div class="user-card-meta-footer">
-          <div class="user-card-meta-item">
-            <span class="meta-label">Added</span>
-            <span class="meta-value">${fmtDateOnly(ch.added_at)}</span>
-          </div>
-          <div class="user-card-meta-item">
-            <span class="meta-label">Last checked</span>
-            <span class="meta-value">${ch.last_checked ? fmt.rel(new Date(ch.last_checked * 1000).toISOString()) : 'never'}</span>
-          </div>
-          <div class="user-card-meta-item">
-            <span class="meta-label">Last saved</span>
-            <span class="meta-value">${ch.last_saved ? fmt.rel(new Date(ch.last_saved * 1000).toISOString()) : 'never'}</span>
-          </div>
-          <div class="user-card-meta-item">
-            <span class="meta-label">Storage</span>
-            <span class="meta-value">${_fmtBytes(ch.media_size_bytes || 0)}</span>
-          </div>
-        </div>
-      </div>
-    `;
+    const meta = `<div class="user-card-meta-footer">`
+      + `<div class="user-card-meta-item"><span class="meta-label">Added</span><span class="meta-value">${fmtDateOnly(ch.added_at)}</span></div>`
+      + `<div class="user-card-meta-item"><span class="meta-label">Last checked</span><span class="meta-value">${ch.last_checked ? fmt.rel(new Date(ch.last_checked * 1000).toISOString()) : 'never'}</span></div>`
+      + `<div class="user-card-meta-item"><span class="meta-label">Last saved</span><span class="meta-value">${ch.last_saved ? fmt.rel(new Date(ch.last_saved * 1000).toISOString()) : 'never'}</span></div>`
+      + `<div class="user-card-meta-item"><span class="meta-label">Storage</span><span class="meta-value">${_fmtBytes(ch.media_size_bytes || 0)}</span></div>`
+      + `</div>`;
+
+    return _cardShell({
+      classes,
+      dataAttr:   `data-channelid="${esc(ch.channel_id)}"`,
+      onclick:    `if(!event.target.closest('button'))${P}OpenModal('${esc(ch.channel_id)}')`,
+      icon,
+      namePrefix: _isPrivateAccount(ch) ? LOCK_SVG : '',
+      name:       ch.display_name || ch.handle,
+      sub:        `@${esc(ch.handle)}${_oldNamesTag(ch)}`,
+      idLine:     ch.channel_id,
+      badges:     `<span class="account-status ${trackingCls}">${trackingLabel}</span>${_relationPill(ch)}`,
+      bio:        _expandableText(ch.description),
+      stats,
+      extra:      rescanBadge,
+      footer,
+      meta,
+    });
   }
 
   function _appendCreatorCards() {
@@ -1642,7 +1621,7 @@ function initChannelApp(cfg) {
             <span style="color:var(--muted);font-size:12px;margin-left:6px">${esc(ch.channel_id)}${joinStr}</span>
           </div>
           ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
-          ${ch.description ? `<div class="modal-bio"><span class="modal-bio-line" onclick="${P}OpenBio(this.parentNode)">${esc(ch.description)}</span><div class="modal-bio-pop" onclick="event.stopPropagation()"><button class="modal-bio-close" onclick="${P}CloseBio(this)" aria-label="Close"><svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 1L9 9M9 1L1 9"/></svg></button>${esc(ch.description)}</div></div>` : ''}
+          ${ch.description ? `<div class="modal-bio">${_expandableText(ch.description)}</div>` : ''}
           ${ch.bio_link ? `<div class="modal-bio-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
           <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
             <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${ch.starred ? '★' : '☆'}</button>
@@ -1762,18 +1741,6 @@ function initChannelApp(cfg) {
   // Bio popover: the full description opens over the content instead of expanding
   // inline. Clicks inside the popover don't close it (so the text stays selectable);
   // the X button or an outside click dismisses it.
-  X('OpenBio',  el  => el.classList.add('open'));
-  X('CloseBio', btn => btn.closest('.modal-bio')?.classList.remove('open'));
-  const _w = /** @type {any} */ (window);
-  if (!_w._bioOutsideClose) {
-    _w._bioOutsideClose = true;
-    document.addEventListener('click', e => {
-      document.querySelectorAll('.modal-bio.open').forEach(b => {
-        if (!b.contains(/** @type {Node} */ (e.target))) b.classList.remove('open');
-      });
-    });
-  }
-
   // Modal engine delegates
 
   X('SetModalFilter',     f => _mSetFilter(MODAL_CFG, f));

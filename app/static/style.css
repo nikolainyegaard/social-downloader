@@ -657,16 +657,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Bio area always reserves 3-line height so stats/footer sit at a consistent position */
 .user-bio-area {
   flex: 1;
-  min-height: 52px; /* 12px font × 1.45 line-height × 3 lines */
-}
-.user-bio {
+  min-height: 18px; /* one line at 12px x 1.45 */
   font-size: 12px;
   color: var(--text-dim);
   line-height: 1.45;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .user-rescan-notice {
@@ -874,21 +868,24 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .modal-handle     { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
 .modal-id-line        { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
 .modal-ban-countdown  { font-size: 11px; color: var(--muted); margin-top: 4px; }
-.modal-bio        { position: relative; font-size: 13px; color: var(--text-dim); margin-top: 8px; line-height: 1.5; max-width: 100%; }
-.modal-bio-line   { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-/* Full bio pops over the content instead of expanding inline; the offsets cancel the
-   popover's border+padding so the text lands exactly over the original line. */
-.modal-bio-pop    { display: none; position: absolute; top: -9px; left: -12px; z-index: 30;
+.modal-bio        { font-size: 13px; color: var(--text-dim); margin-top: 8px; line-height: 1.5; max-width: 100%; }
+
+/* Expandable text: one clamped line that pops the full text over itself on click.
+   Reused by the modal bio and the catalog card bios. The pop offsets cancel its
+   own border+padding so the text lands exactly over the original line. */
+.xtext            { position: relative; max-width: 100%; }
+.xtext-line       { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.xtext-pop        { display: none; position: absolute; top: -9px; left: -12px; z-index: 30;
                     min-width: calc(100% + 24px); max-width: min(460px, 58vw);
                     background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
                     box-shadow: var(--shadow-2); padding: 8px 26px 8px 11px; white-space: normal; line-height: 1.5;
-                    color: var(--text); user-select: text; }
-.modal-bio.open .modal-bio-pop { display: block; animation: bio-fade .1s ease; }
+                    color: var(--text); user-select: text; cursor: default; }
+.xtext.open .xtext-pop { display: block; animation: bio-fade .1s ease; }
 @keyframes bio-fade { from { opacity: 0; } }
-.modal-bio-close  { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; padding: 0; border: 0;
+.xtext-close      { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; padding: 0; border: 0;
                     background: transparent; color: var(--muted); cursor: pointer; display: flex;
                     align-items: center; justify-content: center; border-radius: 4px; }
-.modal-bio-close:hover { background: var(--border); color: var(--text); }
+.xtext-close:hover { background: var(--border); color: var(--text); }
 .modal-bio-link   { font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal-bio-link a { color: var(--accent); text-decoration: none; }
 .modal-bio-link a:hover { text-decoration: underline; }

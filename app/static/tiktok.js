@@ -793,41 +793,32 @@ function renderSounds() {
     const runDis     = (inQueue || isCurrent) ? 'disabled' : '';
     const { cls: sTrackingCls, label: sTrackingLabel } = _trackingBadge(s.tracking_enabled);
     const isInactive = s.tracking_enabled === 0;
-    return `
-      <div class="user-card${isInactive ? ' user-card-inactive' : ''}" data-soundid="${esc(s.sound_id)}" onclick="if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')" role="button" tabindex="0">
-        <div class="user-card-top">
-          <div class="sound-icon-wrap"><span class="sound-icon-letter">♫</span></div>
-          <div class="user-identity">
-            <div class="user-display-name">${esc(label)}</div>
-            <div class="user-handle">
-              <a href="${esc(ttUrl)}" target="_blank" rel="noopener"
-                 onclick="event.stopPropagation()" class="tt-link"
-              >${esc(s.sound_id)}</a>
-            </div>
-          </div>
-          <div class="user-badges">
-            <span class="account-status ${sTrackingCls}">${sTrackingLabel}</span>
-          </div>
-        </div>
-        <div class="user-bio-area"></div>
-        <div class="user-stats">
-          <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${s.video_count || 0}</span></span>
-          ${s.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${s.video_deleted}</span></span>` : ''}
-          ${s.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${s.video_undeleted}</span></span>` : ''}
-        </div>
-        <div class="user-card-footer">
-          <span class="user-checked">${checked}${saved}</span>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <label class="tracking-toggle" title="${isInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}" onclick="event.stopPropagation()">
-              <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            </label>
-            <button class="btn-star${s.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleSoundStar('${esc(s.sound_id)}')" title="${s.starred ? 'Unstar' : 'Star'}">${s.starred ? '★' : '☆'}</button>
-            <button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${runLabel}</button>
-            <button class="btn-danger" onclick="event.stopPropagation();removeSound('${esc(s.sound_id)}','${esc(label)}')">Remove</button>
-          </div>
-        </div>
-      </div>`;
+
+    const stats = `<span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${s.video_count || 0}</span></span>`
+      + `${s.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${s.video_deleted}</span></span>` : ''}`
+      + `${s.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${s.video_undeleted}</span></span>` : ''}`;
+
+    const footer = `<span class="user-checked">${checked}${saved}</span>`
+      + `<div style="display:flex;gap:6px;align-items:center;">`
+      + `<label class="tracking-toggle" title="${isInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}" onclick="event.stopPropagation()">`
+      + `<input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">`
+      + `<span class="toggle-track"><span class="toggle-thumb"></span></span></label>`
+      + `<button class="btn-star${s.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleSoundStar('${esc(s.sound_id)}')" title="${s.starred ? 'Unstar' : 'Star'}">${s.starred ? '★' : '☆'}</button>`
+      + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${runLabel}</button>`
+      + `<button class="btn-danger" onclick="event.stopPropagation();removeSound('${esc(s.sound_id)}','${esc(label)}')">Remove</button>`
+      + `</div>`;
+
+    return _cardShell({
+      classes:  isInactive ? 'user-card-inactive' : '',
+      dataAttr: `data-soundid="${esc(s.sound_id)}"`,
+      onclick:  `if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')`,
+      icon:     `<div class="sound-icon-wrap"><span class="sound-icon-letter">♫</span></div>`,
+      name:     label,
+      sub:      `<a href="${esc(ttUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="tt-link">${esc(s.sound_id)}</a>`,
+      badges:   `<span class="account-status ${sTrackingCls}">${sTrackingLabel}</span>`,
+      stats,
+      footer,
+    });
   }).join('') + _ghostCards(Math.max(0, 9 - filtered.length));
 }
 

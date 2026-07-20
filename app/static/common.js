@@ -947,6 +947,47 @@ function _videoStatus(v) {
 const _GHOST_CARD = '<div class="user-card" aria-hidden="true" style="visibility:hidden;pointer-events:none;min-height:220px"></div>';
 function _ghostCards(n) { return n > 0 ? Array(n).fill(_GHOST_CARD).join('') : ''; }
 
+// Shared catalog card skeleton. Both the channel card (channels.js) and the
+// TikTok sound card (tiktok.js) fill these slots so the card structure lives in
+// one place. All slot values are raw HTML except `name`, which is escaped here.
+function _cardShell(o) {
+  return `
+    <div class="user-card${o.classes ? ' ' + o.classes : ''}" ${o.dataAttr || ''} onclick="${o.onclick}" role="button" tabindex="0">
+      <div class="user-card-top">
+        ${o.icon || ''}
+        <div class="user-identity">
+          <div class="user-display-name">${o.namePrefix || ''}${esc(o.name || '')}</div>
+          <div class="user-handle">${o.sub || ''}</div>
+          ${o.idLine ? `<div class="user-id-line">${esc(o.idLine)}</div>` : ''}
+        </div>
+        <div class="user-badges">${o.badges || ''}</div>
+      </div>
+      <div class="user-bio-area">${o.bio || ''}</div>
+      <div class="user-stats">${o.stats || ''}</div>
+      ${o.extra || ''}
+      <div class="user-card-footer">${o.footer || ''}</div>
+      ${o.meta || ''}
+    </div>`;
+}
+
+// Expandable text: one clamped line with an ellipsis that pops the full text over
+// itself in a hovering box on click. Extracted from the modal bio so any card or
+// panel can reuse it. Stops propagation so it works inside a clickable card.
+const _xCloseIcon = `<svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 1L9 9M9 1L1 9"/></svg>`;
+function _expandableText(text) {
+  if (!text) return '';
+  const t = esc(text);
+  return `<div class="xtext" onclick="event.stopPropagation();_xtextToggle(this)">` +
+    `<span class="xtext-line">${t}</span>` +
+    `<div class="xtext-pop" onclick="event.stopPropagation()">` +
+    `<button class="xtext-close" onclick="_xtextClose(this)" aria-label="Close">${_xCloseIcon}</button>${t}</div></div>`;
+}
+function _xtextToggle(el) { el.classList.toggle('open'); }
+function _xtextClose(btn) { btn.closest('.xtext')?.classList.remove('open'); }
+document.addEventListener('click', e => {
+  document.querySelectorAll('.xtext.open').forEach(x => { if (!x.contains(e.target)) x.classList.remove('open'); });
+});
+
 function _trackingBadge(tracking_enabled) {
   return tracking_enabled === 0
     ? { cls: 'inactive', label: 'Untracked' }
