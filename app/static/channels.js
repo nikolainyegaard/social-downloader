@@ -1476,10 +1476,19 @@ function initChannelApp(cfg) {
     _storageCache[chId] != null ? _fmtBytes(_storageCache[chId]) : '<span class="storage-val">…</span>';
   async function _fillStorage(chId) {
     if (_storageCache[chId] != null) return;
-    const { ok, data } = await apiJSON(`${API}/channels/${chId}/storage`);
-    if (!ok || !data || modalCreatorId !== chId) return;
-    _storageCache[chId] = data.bytes || 0;
-    document.querySelectorAll('.storage-val').forEach(el => { el.textContent = _fmtBytes(_storageCache[chId]); });
+    // Tracked creators already carry the size from the channel list's cached
+    // walk, so reuse it; only untracked ones (not in the list) hit the live route.
+    const listed = creators.find(c => c.channel_id === chId);
+    let bytes;
+    if (listed && listed.media_size_bytes != null) {
+      bytes = listed.media_size_bytes;
+    } else {
+      const { ok, data } = await apiJSON(`${API}/channels/${chId}/storage`);
+      if (!ok || !data || modalCreatorId !== chId) return;
+      bytes = data.bytes || 0;
+    }
+    _storageCache[chId] = bytes;
+    document.querySelectorAll('.storage-val').forEach(el => { el.textContent = _fmtBytes(bytes); });
   }
 
   X('OpenAbout', () => {
