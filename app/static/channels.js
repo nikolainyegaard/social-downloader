@@ -1908,18 +1908,12 @@ function initChannelApp(cfg) {
       panel.innerHTML = '<div class="vlist-loading">Calendar library failed to load.</div>';
       return;
     }
-    let accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
-    if (!/^#[0-9a-fA-F]{6}$/.test(accent)) accent = '#4f8ef7';
-    // Sequential ramp: GitHub's dark-mode contribution scale (the per-step
-    // saturation/lightness profile of its four green levels) re-hued to the
-    // platform accent. The darkest step is deliberately subtle against the
-    // box background, GitHub-style; the empty cells sit a notch above it
-    // (var(--hdr) on a var(--nav) box, GitHub's #151b23 on #0d1117) so filled
-    // days read against their empty neighbours.
-    const [r, g, b] = [1, 3, 5].map(i => parseInt(accent.slice(i, i + 2), 16) / 255);
-    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), cd = mx - mn;
-    const hue = !cd ? 0 : Math.round(60 * ((mx === r ? ((g - b) / cd) % 6 : mx === g ? (b - r) / cd + 2 : (r - g) / cd + 4) + 6)) % 360;
-    const ramp = [[90, 12], [62, 26], [55, 40], [59, 58]].map(([s, l]) => `hsl(${hue} ${s}% ${l}%)`);
+    // GitHub's dark-mode contribution greens, verbatim, on every platform.
+    // The darkest step is deliberately subtle against the box background,
+    // GitHub-style; the empty cells sit a notch above it (var(--hdr) on a
+    // var(--nav) box, GitHub's #151b23 on #0d1117) so filled days read
+    // against their empty neighbours.
+    const ramp = ['#033a16', '#196c2e', '#2ea043', '#56d364'];
     const BUCKETS = ['1', '2', '3-4', '5+'];
 
     const total = Object.values(dayCounts).reduce((a, b) => a + b, 0);
