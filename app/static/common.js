@@ -475,34 +475,52 @@ function _ddHtml(id, opts, { value, onchange, className = '' } = {}) {
     `<div class="dd-menu" role="listbox">${_ddOptsHtml(opts, onchange)}</div></div>`;
 }
 
+function _ddCloseAll() {
+  document.querySelectorAll('.dd.open').forEach(dd => {
+    dd.classList.remove('open');
+    const menu = dd._menu;
+    if (menu) {
+      menu.classList.remove('show');
+      if (menu.parentNode === document.body) dd.appendChild(menu);  // return the portaled menu
+    }
+  });
+}
+
 function _ddToggle(btn) {
   const dd = btn.parentNode, willOpen = !dd.classList.contains('open');
-  document.querySelectorAll('.dd.open').forEach(d => d.classList.remove('open'));
+  _ddCloseAll();
   if (!willOpen) return;
   dd.classList.add('open');
-  // The menu is position:fixed, so anchor it to the button here. Flip above if
-  // it would spill past the viewport bottom.
+  // Portal the menu to <body> so it escapes any masked/transformed ancestor: the
+  // edge-fade filter bar's mask (and a modal's open-transform) makes that element
+  // the containing block for position:fixed, which clipped the menu off-screen on
+  // mobile. Visibility then lives on the menu's own .show class, not .dd.open.
   const menu = dd.querySelector('.dd-menu');
+  dd._menu = menu;
+  document.body.appendChild(menu);
+  menu.classList.add('show');
+  const M = 8;  // min gap from any window edge
   const r = btn.getBoundingClientRect();
+  // Cap width to the window so the menu can never exceed both edges, then clamp
+  // its left so it stays fully on-screen wherever the button sits.
+  menu.style.maxWidth = `min(320px, ${window.innerWidth - M * 2}px)`;
   menu.style.minWidth = r.width + 'px';
   menu.style.top      = (r.bottom + 5) + 'px';
-  // Clamp within the viewport horizontally: the button can be scrolled to the
-  // far edge of a horizontal filter bar, which would push a left-aligned menu
-  // off-screen (invisible on mobile).
   const w = menu.offsetWidth;
-  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 8 - w)) + 'px';
+  menu.style.left = Math.max(M, Math.min(r.left, window.innerWidth - M - w)) + 'px';
   const h = menu.offsetHeight;
   if (r.bottom + 5 + h > window.innerHeight && r.top - 5 - h > 0)
     menu.style.top = (r.top - 5 - h) + 'px';
 }
 
 function _ddPick(opt) {
-  const dd = opt.closest('.dd');
+  const menu = opt.closest('.dd-menu');
+  const dd = [...document.querySelectorAll('.dd')].find(d => d._menu === menu) || opt.closest('.dd');
   if (!dd) return;
   dd.dataset.value = opt.dataset.value;
   dd.querySelector('.dd-label').textContent = opt.textContent;
-  dd.querySelectorAll('.dd-opt').forEach(o => o.classList.toggle('active', o === opt));
-  dd.classList.remove('open');
+  menu.querySelectorAll('.dd-opt').forEach(o => o.classList.toggle('active', o === opt));
+  _ddCloseAll();
 }
 
 function _ddValue(id) {
@@ -1489,12 +1507,14 @@ function _mDdToggle(btn) {
 }
 document.addEventListener('click', e => {
   if (!e.target.closest('.m-dd')) document.querySelectorAll('.m-dd.open').forEach(d => d.classList.remove('open'));
-  if (!e.target.closest('.dd'))   document.querySelectorAll('.dd.open').forEach(d => d.classList.remove('open'));
+  if (!e.target.closest('.dd') && !e.target.closest('.dd-menu')) _ddCloseAll();
 });
 // A fixed menu does not track its button, so close on any scroll (capture, to
-// catch nested scroll containers like the settings modal body).
-window.addEventListener('scroll', () => {
-  document.querySelectorAll('.dd.open').forEach(d => d.classList.remove('open'));
+// catch nested scroll containers like the settings modal body). Ignore scrolls
+// originating inside the menu itself so a long menu stays scrollable.
+window.addEventListener('scroll', e => {
+  if (e.target && e.target.closest && e.target.closest('.dd-menu')) return;
+  _ddCloseAll();
 }, true);
 function _mMobSort(cfg, field)  { cfg.st.sort = _doSort(cfg.st.sort, field); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }
 function _mMobStatus(cfg, key)  { cfg.st.filter     = key ? new Set([key]) : new Set(); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }

@@ -1219,6 +1219,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   padding: 5px;
 }
 .dd.open .dd-menu { display: block; }
+/* Portaled to <body> on open (escapes masked/transformed ancestors); visibility
+   then rides on the menu's own class since it is no longer inside .dd.open. */
+.dd-menu.show { display: block; }
 .dd-opt {
   display: block; width: 100%; text-align: left;
   background: none; border: none;
