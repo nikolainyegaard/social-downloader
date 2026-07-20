@@ -79,12 +79,16 @@ def _register_extra_routes(bp, engine) -> None:
     @bp.route("/session", methods=["POST"])
     def session_login():
         body     = request.get_json(silent=True) or {}
-        username = (body.get("username") or "").strip()
+        username = (body.get("username") or "").strip().lstrip("@")
         password = body.get("password") or ""
-        if not username or not password:
-            return jsonify({"error": "username and password are required"}), 400
+        cookies  = (body.get("cookies") or "").strip()
+        if not username or not (password or cookies):
+            return jsonify({"error": "username and password or cookies are required"}), 400
         try:
-            api.login(username, password)
+            if cookies:
+                api.login_with_cookies(username, cookies)
+            else:
+                api.login(username, password)
             return jsonify({"ok": True, "username": username})
         except instaloader.TwoFactorAuthRequiredException:
             return jsonify({"ok": False, "error": "Two-factor authentication is required; disable 2FA or use an app password"}), 400

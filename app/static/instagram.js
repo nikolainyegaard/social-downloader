@@ -68,6 +68,28 @@ async function igSessionLogin() {
   }
 }
 
+async function igCookieLogin() {
+  const user    = (document.getElementById('igCookieUser')?.value || '').trim().replace(/^@/, '');
+  const cookies = (document.getElementById('igCookieStr')?.value || '').trim();
+  const btn     = document.getElementById('igCookieBtn');
+  if (!user || !cookies) { showToast('Enter username and the cookie header.', { type: 'warning' }); return; }
+  btn.disabled = true;
+  const t = showToast('Checking session…', { spinner: true, duration: 0 });
+  const { ok, data } = await apiJSON('/api/instagram/session', {
+    method: 'POST',
+    body: JSON.stringify({ username: user, cookies }),
+  });
+  btn.disabled = false;
+  if (ok) {
+    const cookieEl = document.getElementById('igCookieStr');
+    if (cookieEl) cookieEl.value = '';
+    loadIgSessionStatus();
+    t.update(`Logged in as @${data.username}`, { type: 'success' });
+  } else {
+    t.update(data.error || 'Session import failed.', { type: 'error' });
+  }
+}
+
 async function igSessionLogout() {
   const { ok } = await apiJSON('/api/instagram/session', { method: 'DELETE' });
   if (ok) {

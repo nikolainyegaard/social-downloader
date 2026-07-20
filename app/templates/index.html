@@ -164,6 +164,20 @@
             <p class="cookie-note" style="margin-top:12px">
               Credentials are sent to the container once to create an instaloader session. The password is not stored on disk; only the session cookie is saved.
             </p>
+            <div class="hr-divider"></div>
+            <p class="settings-label">Or use browser session cookies</p>
+            <div style="display:flex;flex-direction:column;gap:10px;max-width:340px">
+              <input type="text" id="igCookieUser" class="text-input" placeholder="Instagram username" autocomplete="off" spellcheck="false">
+              <textarea id="igCookieStr" class="text-input" rows="3" placeholder="Cookie header from your browser" spellcheck="false"></textarea>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+              <button class="btn-primary btn-sm" id="igCookieBtn" onclick="igCookieLogin()">Use cookies</button>
+            </div>
+            <p class="cookie-note" style="margin-top:12px">
+              Use this when Instagram rate limits the session: cookies minted by a real browser carry more trust than instaloader's own login.
+              In a browser where you are logged in to Instagram, open DevTools, go to the Network tab, reload instagram.com, select the first request,
+              and copy the whole <code>Cookie</code> request header. It must include <code>sessionid</code> and <code>csrftoken</code>.
+            </p>
           </div>
         </div>
 

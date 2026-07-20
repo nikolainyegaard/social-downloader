@@ -62,6 +62,43 @@ def login(username: str, password: str) -> None:
         f.write(username)
 
 
+def login_with_cookies(username: str, cookie_header: str) -> None:
+    """Create the session from cookies copied out of a logged-in browser.
+
+    Sessions minted by instaloader's own password login get served 429s on
+    the web profile endpoints (flagged from birth), while a real browser's
+    cookies carry that browser's trust. Takes the Cookie request header
+    string from the browser's devtools; must include sessionid and csrftoken
+    (instaloader's load_session requires csrftoken). Validates by fetching
+    the user's own profile through the web endpoint the app actually uses,
+    and restores the previous session state on failure."""
+    cookies = {}
+    for part in cookie_header.split(";"):
+        name, _, value = part.strip().partition("=")
+        if name and value:
+            cookies[name.strip()] = value.strip().strip('"')
+    missing = [c for c in ("sessionid", "csrftoken") if c not in cookies]
+    if missing:
+        raise ValueError(f"Cookie paste is missing: {', '.join(missing)}")
+    old_session, old_user = _L.context._session, _L.context.username
+    _L.load_session(username, cookies)
+    try:
+        body = _web_api_get(
+            "https://www.instagram.com/api/v1/users/web_profile_info/",
+            {"username": username}, f"https://www.instagram.com/{username}/")
+        if not (body.get("data") or {}).get("user"):
+            raise ValueError("Cookies were accepted but the profile check "
+                             "returned no data; they may be stale")
+    except Exception:
+        _L.context._session, _L.context.username = old_session, old_user
+        raise
+    sf = _session_file()
+    os.makedirs(os.path.dirname(sf), exist_ok=True)
+    _L.save_session_to_file(sf)
+    with open(_session_user_file(), "w") as f:
+        f.write(username)
+
+
 def logout() -> None:
     _L.logout()
     for path in (_session_file(), _session_user_file()):
@@ -110,6 +147,7 @@ def _web_api_get(url: str, params: dict, referer: str) -> dict:
     session = _L.context._session
     headers = {
         "X-IG-App-ID":      _WEB_APP_ID,
+        "X-ASBD-ID":        "129477",
         "X-Requested-With": "XMLHttpRequest",
         "Referer":          referer,
     }
