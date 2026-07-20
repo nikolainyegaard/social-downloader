@@ -1523,6 +1523,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .rf-icon, .ah-icon { display: inline-flex; align-items: center; justify-content: center; }
 .rf-icon svg, .ah-icon svg { width: 13px; height: 13px; }
 .rf-saved   { color: var(--green); }
+.rf-story   { color: var(--purple); }
 .rf-deleted { color: var(--red); }
 .rf-changed { color: var(--accent); }
 .rf-banned  { color: var(--orange); }

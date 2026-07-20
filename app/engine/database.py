@@ -525,16 +525,21 @@ class ChannelDB:
 
 
     def restore_banned_videos(self, channel_id: str) -> int:
-        """Re-activate all videos deleted by a ban. Videos deleted before the ban
-        (deleted_reason='video_deleted') are left untouched. Returns the count."""
+        """Re-activate all videos hidden by a ban, back to plain active status.
+        A ban never actually deleted them, so they are not marked 'Restored'
+        (undeleted); the deletion metadata the ban stamped is simply cleared.
+        Videos deleted before the ban (deleted_reason='video_deleted') are left
+        untouched. Returns the count."""
         with self.get_db() as conn:
             conn.execute("""
                 UPDATE videos
-                SET status         = 'undeleted',
-                    deleted_reason = NULL,
-                    undeleted_at   = ?
+                SET status             = 'up',
+                    deleted_reason     = NULL,
+                    deleted_at         = NULL,
+                    deletion_confirmed = NULL,
+                    undeleted_at       = NULL
                 WHERE channel_id = ? AND deleted_reason = 'user_banned'
-            """, (int(time.time()), channel_id))
+            """, (channel_id,))
             row = conn.execute("SELECT changes() AS n").fetchone()
         return row["n"] if row else 0
 
@@ -1130,7 +1135,7 @@ class ChannelDB:
         """Unified chronological activity feed for the dashboard panel: saved
         and deletion groups, profile changes, and bans merged newest first.
         Keyset pagination via `before` (event unix ts). `kind` restricts to one
-        event type (saved, deleted, changed, banned). Each source fetches
+        event type (saved, story, deleted, changed, banned). Each source fetches
         limit+1 events so has_more stays correct when one source dominates.
         ponytail: a strict before cursor can drop one of two adjacent events
         sharing an identical timestamp across a page boundary."""
@@ -1153,6 +1158,17 @@ class ChannelDB:
                     ORDER BY v.download_date DESC LIMIT ?""", args).fetchall()]
                 for g in self._group_consecutive_by_channel(rows, "download_date")[:cap]:
                     events.append({"ts": g["download_date"], "kind": "saved", "item": g})
+            if kind in (None, "story"):
+                w    = f"{flags}" + ("AND s.saved_at < ?" if before else "")
+                args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)
+                rows = [dict(r) for r in conn.execute(f"""
+                    SELECT s.saved_at, c.handle, c.channel_id, c.enabled,
+                           c.starred, c.account_status
+                    FROM stories s JOIN channels c ON c.channel_id = s.channel_id
+                    WHERE s.saved_at IS NOT NULL {w}
+                    ORDER BY s.saved_at DESC LIMIT ?""", args).fetchall()]
+                for g in self._group_consecutive_by_channel(rows, "saved_at")[:cap]:
+                    events.append({"ts": g["saved_at"], "kind": "story", "item": g})
             if kind in (None, "deleted"):
                 w    = f"{flags}" + ("AND v.deleted_at < ?" if before else "")
                 args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)

@@ -518,18 +518,22 @@ class TikTokStore:
         return row["n"] if row else 0
 
     def restore_banned_videos(self, channel_id: str) -> int:
-        """Re-activate all videos deleted by a ban (deleted_reason='user_banned').
+        """Re-activate all videos hidden by a ban back to plain active status.
+        A ban never actually deleted them, so they are not marked 'Restored'
+        (undeleted); the deletion metadata the ban stamped is simply cleared.
         Videos individually deleted before the ban (deleted_reason='video_deleted')
         are left untouched. Returns the number of videos restored.
         """
         with self.db.get_db() as conn:
             conn.execute("""
                 UPDATE videos
-                SET status         = 'undeleted',
-                    deleted_reason = NULL,
-                    undeleted_at   = ?
+                SET status             = 'up',
+                    deleted_reason     = NULL,
+                    deleted_at         = NULL,
+                    deletion_confirmed = NULL,
+                    undeleted_at       = NULL
                 WHERE channel_id = ? AND deleted_reason = 'user_banned'
-            """, (int(time.time()), channel_id))
+            """, (channel_id,))
             row = conn.execute(
                 "SELECT changes() AS n"
             ).fetchone()

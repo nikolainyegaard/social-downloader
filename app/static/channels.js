@@ -102,6 +102,7 @@ function initChannelApp(cfg) {
         <div class="filter-pills multi hdr-pills" onpointerenter="${P}PrefetchFeedKinds()">
           <button class="filter-pill active" id="${P}Rf_all"     onclick="${P}SetRecentFilter('all')">All</button>
           <button class="filter-pill"        id="${P}Rf_saved"   onclick="${P}SetRecentFilter('saved')">Saved</button>
+          ${cfg.hasStories ? `<button class="filter-pill" id="${P}Rf_story" onclick="${P}SetRecentFilter('story')">Stories</button>` : ''}
           <button class="filter-pill"        id="${P}Rf_deleted" onclick="${P}SetRecentFilter('deleted')">Deleted</button>
           <button class="filter-pill"        id="${P}Rf_changed" onclick="${P}SetRecentFilter('changed')">Changes</button>
           <button class="filter-pill" id="${P}Rf_banned" onclick="${P}SetRecentFilter('banned')">Bans</button>
@@ -544,6 +545,7 @@ function initChannelApp(cfg) {
 
   const _RF_ICONS = {
     saved:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16"/></svg>',
+    story:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke-dasharray="3.4 2.8"/><polygon points="10,8.5 16.5,12 10,15.5" fill="currentColor" stroke="none"/></svg>',
     deleted: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
     changed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L7 21H3v-4L17 3z"/></svg>',
     banned:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.7 5.7l12.6 12.6"/></svg>',
@@ -566,6 +568,7 @@ function initChannelApp(cfg) {
   function _rfRow(ev, now) {
     const it = ev.item;
     const detail = ev.kind === 'saved'   ? `${it.count} saved`
+                 : ev.kind === 'story'   ? `${it.count} ${it.count === 1 ? 'story' : 'stories'}`
                  : ev.kind === 'deleted' ? `${it.count} deleted`
                  : ev.kind === 'changed' ? esc(FIELD_LABELS[it.field] || it.field)
                  : 'Banned';
@@ -618,7 +621,7 @@ function initChannelApp(cfg) {
 
   X('SetRecentFilter', f => {
     _recentFilter = f;
-    ['all', 'saved', 'deleted', 'changed', 'banned'].forEach(k => {
+    ['all', 'saved', 'story', 'deleted', 'changed', 'banned'].forEach(k => {
       document.getElementById(`${P}Rf_${k}`)?.classList.toggle('active', k === f);
     });
     _applyFeedFilter();
@@ -643,7 +646,7 @@ function initChannelApp(cfg) {
   // Warm the per-kind caches the first time the pointer reaches the filter
   // pills, so the first filter click is instant too
   X('PrefetchFeedKinds', async () => {
-    for (const kind of ['saved', 'deleted', 'changed', 'banned']) {
+    for (const kind of ['saved', 'story', 'deleted', 'changed', 'banned']) {
       const key = `${kind}|0|0`;
       if (_rf.cache[key]) continue;
       const { ok, data } = await apiJSON(`${API}/recent/feed?limit=40&kind=${kind}`);

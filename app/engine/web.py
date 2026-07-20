@@ -113,6 +113,7 @@ def create_channel_blueprint(engine) -> Blueprint:
                     raw_channel_data=info.get("raw_channel_data"),
                 )
                 db.add_queue_resolve(handle, "ok")
+                loop.enqueue_channel_run(channel_id, mode="quick")
                 return
             # Already tracked. If the lookup resolved to a different current handle
             # than we have stored, the account was renamed on the platform: the id
@@ -128,6 +129,7 @@ def create_channel_blueprint(engine) -> Blueprint:
                 _update_profile(engine, existing, info, loop._log)
                 loop._log(f"Add: @{_old} was renamed to @{_new}; updated the tracked handle")
                 db.add_queue_resolve(handle, "ok")
+                loop.enqueue_channel_run(channel_id, mode="quick")
                 return
             db.add_queue_resolve(handle, "error", "duplicate", f"{noun} is already being tracked")
             return
@@ -149,6 +151,10 @@ def create_channel_blueprint(engine) -> Blueprint:
             bio_link=info.get("bio_link"),
         )
         db.add_queue_resolve(handle, "ok")
+        # Kick off a Quick fetch right away so a freshly added creator gets its
+        # posts (and, for a re-added unbanned account, its ban lifecycle cleared)
+        # without waiting for the next scheduled session.
+        loop.enqueue_channel_run(channel_id, mode="quick")
 
     def _add_worker() -> None:
         while True:
