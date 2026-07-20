@@ -1029,7 +1029,7 @@ function _renderSoundModalHeader(s) {
         <textarea placeholder="Add a note about this sound…"
           onblur="saveSoundComment('${esc(s.sound_id)}', this.value)"
           style="flex:1;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
-                 background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
+                 background:var(--raised);border:1px solid var(--border);border-radius:6px;
                  color:var(--text);font-family:inherit;line-height:1.5"
         >${esc(s.comment || '')}</textarea>
       </div>

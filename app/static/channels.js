@@ -1696,7 +1696,7 @@ function initChannelApp(cfg) {
             <textarea placeholder="Add a note about this ${CREATOR}…"
               onblur="${P}SaveComment('${esc(ch.channel_id)}', this.value)"
               style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
-                     background:var(--bg-card);border:1px solid var(--border);border-radius:6px;
+                     background:var(--raised);border:1px solid var(--border);border-radius:6px;
                      color:var(--text);font-family:inherit;line-height:1.5"
             >${esc(ch.comment || '')}</textarea>
           </div>
@@ -1776,7 +1776,7 @@ function initChannelApp(cfg) {
         <div id="${P}ModalNoteArea" style="display:${ch.comment ? '' : 'none'};margin-top:4px">
           <textarea placeholder="Add a note about this ${CREATOR}…"
             onblur="${P}SaveComment('${esc(ch.channel_id)}', this.value)"
-            style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;line-height:1.5"
+            style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;background:var(--raised);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;line-height:1.5"
           >${esc(ch.comment || '')}</textarea>
         </div>
       </div>`;

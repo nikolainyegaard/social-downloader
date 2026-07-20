@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0d1015" />
+  <meta name="theme-color" content="#07090d" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Social Downloader</title>
@@ -504,7 +504,7 @@
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;min-height:16px">
               <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
               <span id="statsFailedCount"  style="font-size:12px;color:var(--red);display:none;cursor:pointer;text-decoration:underline dotted" onclick="toggleFailedList()" title="Click to see which videos"></span>
-              <button id="retryFailedBtn" onclick="retryFailed()" style="display:none;font-size:12px;padding:3px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-dim);cursor:pointer" title="Clear error counts so these videos are retried on the next backfill run">Retry failed</button>
+              <button id="retryFailedBtn" onclick="retryFailed()" style="display:none;font-size:12px;padding:3px 10px;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-dim);cursor:pointer" title="Clear error counts so these videos are retried on the next backfill run">Retry failed</button>
               <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
             </div>
             <div id="failedList" style="display:none;font-size:11px;color:var(--muted);line-height:1.7"></div>
@@ -895,11 +895,11 @@
           The secret key and session files are managed automatically.
         </p>
 
-        <div id="authForceDisabledBanner" style="display:none;background:var(--surface2);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--red)">
+        <div id="authForceDisabledBanner" style="display:none;background:var(--raised);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--red)">
           <strong>OAUTH_FORCE_DISABLE=true</strong> is set in your environment. Auth enforcement is bypassed regardless of the toggle below. Remove it to re-enable enforcement after fixing your configuration.
         </div>
 
-        <div id="authRestartBanner" style="display:none;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--accent)">
+        <div id="authRestartBanner" style="display:none;background:var(--raised);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--accent)">
           Saved settings differ from the running configuration. Restart the container to apply.
         </div>
 
@@ -923,7 +923,7 @@
             <span>Client secret <span style="color:var(--red)">*</span></span>
             <div style="display:flex;gap:8px;align-items:center">
               <input type="password" id="authClientSecret" class="text-input" style="flex:1" placeholder="leave blank to keep existing" autocomplete="new-password" spellcheck="false">
-              <button id="authSecretToggle" onclick="toggleAuthSecretVisibility()" style="flex-shrink:0;font-size:12px;padding:5px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text-dim);cursor:pointer">Show</button>
+              <button id="authSecretToggle" onclick="toggleAuthSecretVisibility()" style="flex-shrink:0;font-size:12px;padding:5px 10px;background:var(--raised);border:1px solid var(--border);border-radius:6px;color:var(--text-dim);cursor:pointer">Show</button>
             </div>
             <span id="authSecretStatus" style="font-size:11px;color:var(--muted)"></span>
           </label>
