@@ -12,6 +12,9 @@ import instaloader
 
 _L = instaloader.Instaloader(
     quiet=True,
+    # The i.instagram.com iphone API 429s instantly for sessions like ours and
+    # instaloader retries it with 30 minute sleeps; web endpoints cover everything
+    iphone_support=False,
     download_pictures=True,
     download_videos=True,
     download_video_thumbnails=False,
@@ -92,25 +95,18 @@ def normalize_handle(handle: str) -> str:
 def _profile_from_username(handle: str) -> instaloader.Profile:
     """Resolve a username to a Profile.
 
-    instaloader 4.15 resolves usernames through Instagram's search endpoint,
-    which omits many smaller accounts entirely and misreports them as
-    nonexistent (instaloader PR #2715). When logged in, look the username up
-    directly via web_profile_info first; fall back to the library's own
-    search-based lookup."""
+    instaloader 4.15 resolves usernames through Instagram's logged-out search
+    endpoint, which omits many smaller accounts entirely and misreports them
+    as nonexistent (instaloader PR #2715). The logged-in top search (the app's
+    search bar) sees every account the session user can see, so try it first;
+    fall back to the library's own lookup, whose ProfileNotExistsException
+    also covers genuinely missing handles."""
     if _L.context.is_logged_in:
         try:
-            data = _L.context.get_iphone_json(
-                f"api/v1/users/web_profile_info/?username={handle}", params={})
-            user = (data.get("data") or {}).get("user")
-            if user is not None:
-                return instaloader.Profile(_L.context, user)
-            if data.get("status") == "ok":
-                # Healthy answer with no user is authoritative nonexistence.
-                # Keep the library's message so the adapter's gone markers match
-                raise instaloader.ProfileNotExistsException(
-                    f"Profile {handle} does not exist.")
-        except (instaloader.QueryReturnedBadRequestException,
-                instaloader.QueryReturnedNotFoundException, KeyError):
+            for profile in instaloader.TopSearchResults(_L.context, handle).get_profiles():
+                if profile.username.lower() == handle.lower():
+                    return profile
+        except instaloader.InstaloaderException:
             pass
     return instaloader.Profile.from_username(_L.context, handle)
 
