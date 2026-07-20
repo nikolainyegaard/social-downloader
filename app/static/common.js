@@ -1740,7 +1740,7 @@ function _mAppendVideos(cfg, vids) {
       <div style="display:flex;align-items:center;gap:4px;min-width:0">
         ${previewFn ? `<button class="play-btn" onclick="event.stopPropagation();${previewFn}('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>` : ''}
         <div style="flex:1;min-width:0">${v.description
-          ? `<div class="video-desc" onclick="event.stopPropagation();this.classList.toggle('expanded')" title="Click to expand">${esc(v.description)}</div>`
+          ? `<div class="video-desc">${_expandableText(v.description)}</div>`
           : `<div class="video-desc-empty">(no description)</div>`}</div>
       </div>
       ${authorCell}
