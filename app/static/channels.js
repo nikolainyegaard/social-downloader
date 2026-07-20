@@ -1962,8 +1962,8 @@ function initChannelApp(cfg) {
     _storyCal.paint({
       itemSelector: `#${P}StoriesCal`,
       theme:     'dark',
-      domain:    { type: 'month', gutter: 14, label: { text: 'MMM YYYY', textAlign: 'start', position: 'top' } },
-      subDomain: { type: 'day', radius: 2, width: 10, height: 10, gutter: 3 }, // GitHub: 10px cells, 2px radius, 3px border-spacing
+      domain:    { type: 'month', gutter: 21, label: { text: 'MMM YYYY', textAlign: 'start', position: 'top' } },
+      subDomain: { type: 'day', radius: 3, width: 15, height: 15, gutter: 4.5 }, // GitHub's 10px/2px/3px geometry scaled 1.5x
       date:      { start, highlight: [new Date()] },
       range:     4,
       data:      { source, x: 'date', y: 'value' },
