@@ -784,9 +784,6 @@ function renderSounds() {
   }
   grid.innerHTML = filtered.map(s => {
     const label      = s.label || s.sound_id;
-    const ttUrl      = `https://www.tiktok.com/music/-${s.sound_id}`;
-    const checked    = _fmtLastChecked(s.last_checked);
-    const saved      = s.last_saved ? ` · Last saved ${fmt.rel(new Date(s.last_saved * 1000).toISOString())}` : '';
     const inQueue    = soundRunQueue.includes(s.sound_id);
     const isCurrent  = soundRunCurrent === s.sound_id;
     const runLabel   = isCurrent ? 'Running…' : inQueue ? 'Queued' : 'Run';
@@ -798,26 +795,31 @@ function renderSounds() {
       + (s.video_deleted   ? _statChip('deleted', s.video_deleted, 'red') : '')
       + (s.video_undeleted ? _statChip('restored', s.video_undeleted, 'yellow') : '');
 
-    const footer = `<span class="user-checked">${checked}${saved}</span>`
-      + `<div style="display:flex;gap:6px;align-items:center;">`
-      + `<label class="tracking-toggle" title="${isInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}" onclick="event.stopPropagation()">`
-      + `<input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">`
-      + `<span class="toggle-track"><span class="toggle-thumb"></span></span></label>`
+    // Same footer shape as the channel card: star + run button(s) + overflow menu.
+    // Tracking (a sound-only control) lives in the menu instead of an inline toggle.
+    const footer = `<div style="display:flex;gap:6px;">`
       + _starBtn(s.starred, `toggleSoundStar('${esc(s.sound_id)}')`)
-      + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${runLabel}</button>`
-      + `<button class="btn-danger" onclick="event.stopPropagation();removeSound('${esc(s.sound_id)}','${esc(label)}')">Remove</button>`
+      + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${_refreshIcon} ${runLabel}</button>`
+      + `<button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'${isInactive ? 'Enable tracking' : 'Disable tracking'}',onclick:()=>setSoundTracking('${esc(s.sound_id)}',${isInactive})},{label:'Remove',danger:true,onclick:()=>removeSound('${esc(s.sound_id)}')}])">&#x2022;&#x2022;&#x2022;</button>`
       + `</div>`;
+
+    const meta = _cardMeta([
+      { label: 'Added',        value: fmtDateOnly(s.added_at) },
+      { label: 'Last checked', value: s.last_checked ? fmt.rel(new Date(s.last_checked * 1000).toISOString()) : 'never' },
+      { label: 'Last saved',   value: s.last_saved   ? fmt.rel(new Date(s.last_saved   * 1000).toISOString()) : 'never' },
+    ]);
 
     return _cardShell({
       classes:  isInactive ? 'user-card-inactive' : '',
       dataAttr: `data-soundid="${esc(s.sound_id)}"`,
-      onclick:  `if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')`,
+      onclick:  `if(!event.target.closest('button'))openSoundModal('${esc(s.sound_id)}')`,
       icon:     `<div class="sound-icon-wrap"><span class="sound-icon-letter">♫</span></div>`,
       name:     label,
-      sub:      `<a href="${esc(ttUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="tt-link">${esc(s.sound_id)}</a>`,
+      sub:      esc(s.sound_id),
       badges:   `<span class="account-status ${sTrackingCls}">${sTrackingLabel}</span>`,
       stats,
       footer,
+      meta,
     });
   }).join('') + _ghostCards(Math.max(0, 9 - filtered.length));
 }
@@ -833,7 +835,9 @@ async function loadSounds() {
   renderSounds();
 }
 
-async function removeSound(soundId, label) {
+async function removeSound(soundId) {
+  const s = sounds.find(x => x.sound_id === soundId);
+  const label = s ? (s.label || s.sound_id) : soundId;
   if (!await openConfirm({ title: `Remove sound "${label}"?`, message: `${soundId}\n\nVideos already downloaded will not be deleted.`, confirmLabel: 'Remove' })) return;
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
   if (!ok) { showToast(data.error || 'Failed to remove sound.', { type: 'error' }); return; }
