@@ -3,10 +3,10 @@
 Self-hosted social media archiver. Monitors creators across multiple platforms, detects new, deleted, and restored content each loop cycle, and downloads it with embedded metadata. Managed from a browser-based UI.
 
 **Platform support:**
-- TikTok: users and sounds
+- TikTok: users, sounds, and stories
 - YouTube: channels
 - X/Twitter: accounts (requires an uploaded cookies.txt from a logged-in account)
-- Instagram: profiles (built, currently untested)
+- Instagram: profiles and stories (requires an uploaded cookies.txt from a logged-in browser session)
 
 ---
 
@@ -49,7 +49,7 @@ Optional. Disabled by default; existing deployments need no changes.
 To enable OAuth2/OIDC (tested with Authentik, works with any standard OIDC provider):
 
 1. Create an OAuth2 provider in your OIDC provider with redirect URI `https://your-domain/auth/callback`
-2. Open **Settings > Authentication** in the UI
+2. Open **Settings > Access** in the UI
 3. Paste the Discovery URL from your provider (e.g. `https://authentik.example.com/application/o/app-name/.well-known/openid-configuration`)
 4. Enter your Client ID and Client Secret
 5. Enable authentication and save; the app must restart for the change to take effect
@@ -62,7 +62,7 @@ If you are locked out because the OIDC provider is unreachable, set `OAUTH_FORCE
 
 | Path | Purpose |
 |------|---------|
-| `./data` | Databases, cookies, avatars, logs -- back this up |
+| `./data` | Databases, cookies, avatars, logs; back this up |
 | `./media` | Downloaded videos and photos |
 
 ---
@@ -86,10 +86,10 @@ On first startup, the app automatically moves files from the old layout into the
 
 **Fix database paths:**
 
-6. Open the web UI, go to **Settings** (gear icon) > **Migration**
-7. Click **Scan database** -- it detects the old `/app/videos` prefix automatically
+6. Open the web UI, go to **Settings** (gear icon) > **Jobs** > TikTok and find the **Path migration** job card
+7. Click **Scan database**; it detects the old `/app/videos` prefix automatically
 8. The new prefix auto-fills as `/app/media/tiktok`; click **Rewrite paths**
-9. Done -- existing videos play immediately without re-downloading
+9. Done: existing videos play immediately without re-downloading
 
 If the old docker-compose used `LOOP_INTERVAL_MINUTES`, the app still accepts it but logs a deprecation warning. Replace it with `TIKTOK_USER_LOOP_INTERVAL_MINUTES` and `TIKTOK_SOUND_LOOP_INTERVAL_MINUTES`.
 
@@ -138,6 +138,6 @@ Generate a dedicated config for this container rather than reusing one from anot
 
 Two caveats. VPN exit IPs are datacenter IPs, which TikTok tends to score worse than residential ones, so treat this as an escape hatch for a flagged home IP rather than a default. And the proxy changes what IP TikTok sees for an existing session, so expect extra scrutiny right after toggling; pairing a proxy change with **Reset session** and a fresh QR sign-in gives the new IP a clean identity.
 
-X/Twitter requires a `cookies.txt` from a logged-in x.com session (must include `auth_token` and `ct0`), uploaded from the **Settings > Twitter** cookies panel. Profile lookups work without it, but timelines and downloads do not.
+X/Twitter requires a `cookies.txt` from a logged-in x.com session (must include `auth_token` and `ct0`), uploaded from the **Settings > Accounts > Twitter** cookies panel. Profile lookups work without it, but timelines and downloads do not.
 
-Instagram uses a username/password login from the **Settings > Instagram** panel instead of a cookies file; only the resulting session cookie is stored, never the password.
+Instagram requires a `cookies.txt` exported from a logged-in instagram.com browser session (must include `sessionid` and `csrftoken`), uploaded from the **Settings > Accounts > Instagram** panel. Instagram rate limits sessions created by tool logins from the first request, so there is no password login; cookies minted by a real browser carry that browser's trust. Profile lookups, post fetching, and stories all need them.
