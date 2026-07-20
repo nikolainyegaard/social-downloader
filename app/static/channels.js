@@ -1866,9 +1866,27 @@ function initChannelApp(cfg) {
   // ── Stories history calendar (Cal-Heatmap month intensity view) ───────────
 
   let _storyCal = null;
+  let _calTip = null;
+
+  function _calTipShow(target, text) {
+    if (!_calTip) {
+      _calTip = document.createElement('div');
+      _calTip.className = 'cal-tip';
+      document.body.appendChild(_calTip);
+    }
+    _calTip.textContent = text;
+    _calTip.style.display = 'block';
+    const r = target.getBoundingClientRect();
+    const tr = _calTip.getBoundingClientRect();
+    _calTip.style.left = `${Math.max(6, Math.min(r.left + r.width / 2 - tr.width / 2, innerWidth - tr.width - 6))}px`;
+    _calTip.style.top = `${r.top - tr.height - 8}px`;
+  }
+
+  function _calTipHide() { if (_calTip) _calTip.style.display = 'none'; }
 
   function _destroyStoriesPanel() {
     if (_storyCal) { try { _storyCal.destroy(); } catch { /* already gone */ } _storyCal = null; }
+    _calTipHide();
     const panel = _el('StoriesPanel');
     if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
   }
@@ -1955,6 +1973,17 @@ function initChannelApp(cfg) {
       const day = new Date(timestamp).toLocaleDateString('sv');
       if (dayCounts[day]) window[`${P}PlayStoriesOfDay`](day);
     });
+    // GitHub-style hover detail: "3 stories on April 16th."
+    _storyCal.on('mouseover', (event, timestamp, value) => {
+      const d = new Date(timestamp);
+      const n = value || 0;
+      const day = d.getDate();
+      const ord = day + (day > 3 && day < 21 ? 'th' : ['th', 'st', 'nd', 'rd'][day % 10] || 'th');
+      const year = d.getFullYear() === new Date().getFullYear() ? '' : `, ${d.getFullYear()}`;
+      const month = d.toLocaleDateString('en-US', { month: 'long' });
+      _calTipShow(event.target, `${n || 'No'} ${n === 1 ? 'story' : 'stories'} on ${month} ${ord}${year}.`);
+    });
+    _storyCal.on('mouseout', _calTipHide);
   }
 
   const _PHIST_STATUS_LABELS = {

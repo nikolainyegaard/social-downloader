@@ -955,6 +955,21 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .stories-cal-legend span { margin: 0 4px; }
 .stories-cal-legend i { width: 13px; height: 13px; border-radius: 2px; border: 1px solid var(--border); }
+/* GitHub-style hover detail bubble for the calendar cells */
+.cal-tip {
+  position: fixed;
+  z-index: 500;
+  display: none;
+  pointer-events: none;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
 .phist-empty { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
 .phist-entry {
   padding: 10px 12px;
