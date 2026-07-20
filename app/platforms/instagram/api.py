@@ -89,9 +89,35 @@ def normalize_handle(handle: str) -> str:
     return handle
 
 
+def _profile_from_username(handle: str) -> instaloader.Profile:
+    """Resolve a username to a Profile.
+
+    instaloader 4.15 resolves usernames through Instagram's search endpoint,
+    which omits many smaller accounts entirely and misreports them as
+    nonexistent (instaloader PR #2715). When logged in, look the username up
+    directly via web_profile_info first; fall back to the library's own
+    search-based lookup."""
+    if _L.context.is_logged_in:
+        try:
+            data = _L.context.get_iphone_json(
+                f"api/v1/users/web_profile_info/?username={handle}", params={})
+            user = (data.get("data") or {}).get("user")
+            if user is not None:
+                return instaloader.Profile(_L.context, user)
+            if data.get("status") == "ok":
+                # Healthy answer with no user is authoritative nonexistence.
+                # Keep the library's message so the adapter's gone markers match
+                raise instaloader.ProfileNotExistsException(
+                    f"Profile {handle} does not exist.")
+        except (instaloader.QueryReturnedBadRequestException,
+                instaloader.QueryReturnedNotFoundException, KeyError):
+            pass
+    return instaloader.Profile.from_username(_L.context, handle)
+
+
 def fetch_profile_info(handle: str) -> dict:
     """Fetch profile metadata. Returns dict matching the channels DB schema."""
-    profile = instaloader.Profile.from_username(_L.context, handle)
+    profile = _profile_from_username(handle)
     return {
         "channel_id":       str(profile.userid),
         "handle":           profile.username,
