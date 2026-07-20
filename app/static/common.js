@@ -23,9 +23,11 @@ function _updateHdrAuthPill() {
   const txt  = document.getElementById('hdrCookiePillText');
   if (!pill) return;
   const state = _hdrAuth[_activePlatform];
-  if (!state) { pill.style.display = 'none'; return; }
+  // Only warn: cookies present is the normal state and needs no header pill
+  // (the status pill in Settings still shows it).
+  if (!state || state.present) { pill.style.display = 'none'; return; }
   pill.style.display = '';
-  pill.className     = `cookie-pill ${state.present ? 'present' : 'absent'}`;
+  pill.className     = 'cookie-pill absent';
   if (txt) txt.textContent = state.label;
 }
 
