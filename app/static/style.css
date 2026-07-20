@@ -966,7 +966,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Word-level bio diff highlights (see _wordDiff); the diffed boxes render as
    monospace code blocks, diffchecker-style */
 .phist-value.diff-mono { font-family: var(--mono); font-size: 12px; line-height: 1.6; }
-.diff-del { background: var(--red-bg); color: var(--red); text-decoration: line-through; border-radius: 3px; padding: 0 1px; }
+.diff-del { background: var(--red-bg); color: var(--red); border-radius: 3px; padding: 0 1px; }
 .diff-ins { background: var(--green-bg); color: var(--green); border-radius: 3px; padding: 0 1px; }
 /* Line-aligned diff grid (see _lineDiffHtml): two synced columns; edited rows
    get a light full-row tint, whole added/removed lines the strong tint, and
