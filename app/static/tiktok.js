@@ -1225,7 +1225,7 @@ function switchSettingsSection(name) {
   // The global platform selector applies to every section except Access
   const ptabs = document.getElementById('settingsPlatformTabs');
   if (ptabs) ptabs.style.display = name === 'access' ? 'none' : '';
-  if (name === 'accounts')  { loadCookies(); twLoadCookies(); loadIgSessionStatus(); }
+  if (name === 'accounts')  { loadCookies(); twLoadCookies(); igLoadCookies(); }
   if (name === 'network')   { ttProxyLoad(); }  // also refreshes the WireGuard meta
   if (name === 'schedules') { loadSettings(); loadYtSettings(); _scheduleSettingsLoad('twitter', 'twSettings'); _scheduleSettingsLoad('instagram', 'igSettings'); }
   if (name === 'access')    { loadAuthSettings(); }
