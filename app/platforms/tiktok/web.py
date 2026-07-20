@@ -696,15 +696,8 @@ def register_tiktok_routes(bp, engine) -> None:
         from platforms.tiktok.api import resolve_share_url
         return jsonify({"ok": True, "url": resolve_share_url(url)})
 
-    @bp.route("/channels/<channel_id>/avatar-history/<filename>", methods=["GET"])
-    def channel_avatar_history(channel_id: str, filename: str):
-        if not re.fullmatch(r"[0-9]+_[0-9]+\.(jpg|avif)", filename):
-            return ("", 400)
-        path = os.path.join(AVATARS_DIR, filename)
-        if not os.path.exists(path):
-            return ("", 404)
-        mime = "image/avif" if filename.endswith(".avif") else "image/jpeg"
-        return send_file(path, mimetype=mime)
+    # avatar-history is served by the engine blueprint (engine/web.py) for all
+    # platforms, TikTok included; the TikTok copy was removed when that landed.
 
     # ── Photo post API ────────────────────────────────────────────────────────
 
