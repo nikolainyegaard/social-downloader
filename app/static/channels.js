@@ -230,7 +230,7 @@ function initChannelApp(cfg) {
             <button class="btn-ghost" onclick="${P}ClearLog()" style="font-size:11px;padding:3px 8px;">Clear</button>
           </div>
         </div>
-        <div id="${P}LogActivityBar" class="log-activity-bar"></div>
+        <div id="${P}LogActivityBar" class="log-activity-bar">&nbsp;</div>
         <div class="log-body" id="${P}LogBody"></div>
       </div>
     </div>
@@ -2081,6 +2081,7 @@ function initChannelApp(cfg) {
     if (view === 'log') {
       const body = _el('LogBody');
       if (body) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+      _tickActivityBar(); // fill the bar now; the 1 s interval skips it while hidden
     }
     if (view === 'creators') renderCreators();
     const extra = EXTRA_VIEWS.find(v => v.key === view);
