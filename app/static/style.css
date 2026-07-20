@@ -2019,17 +2019,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   body { width: 100vw; }
   .app { padding: 16px 16px 40px; gap: 16px; margin: 0; max-width: 100%; overflow: hidden; }
 
-  /* Catalog filter bar wraps instead of scrolling sideways, so the sort control
-     is reachable without scrolling to the far right. Neutralise the edge-fade
-     scroll/mask (scoped to this bar; the modal toolbar keeps its sideways scroll). */
-  .filter-control-group {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    overflow: visible;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-
   /* iOS focus-zoom prevention: Safari zooms when a focused element has font-size < 16px. */
   input[type="text"],
   input[type="search"],
