@@ -15,6 +15,7 @@ import re as _re
 import shutil
 import threading
 import time
+import traceback
 from flask import Blueprint, Response, jsonify, request, send_file
 
 from config import DATA_DIR, MEDIA_DIR
@@ -86,6 +87,9 @@ def create_channel_blueprint(engine) -> Blueprint:
         try:
             info = adapter.lookup_profile(handle)
         except Exception as e:
+            # The exception chain carries the real cause (e.g. instaloader masks
+            # a 403 on graphql/query as "Profile does not exist")
+            loop._log(f"Add lookup failed for {handle}: {e}\n{traceback.format_exc().rstrip()}")
             db.add_queue_resolve(handle, "error", _classify_error(str(e)), f"Lookup error: {e}")
             return
 

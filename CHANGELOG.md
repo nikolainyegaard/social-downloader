@@ -116,6 +116,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel takes the full row; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
+- A failed creator add now logs the full error traceback to the platform's log console, so the underlying cause (e.g. an HTTP error the library reported as a missing profile) is visible instead of only the summary line in Add history
 - Adding an Instagram profile no longer fails with "Profile does not exist" for profiles that exist: instaloader 4.15.1 sent malformed profile queries that Instagram rejected, and the library reported the rejection as a missing profile. The requirement is now instaloader 4.15.2 or newer, which fixes the query
 - Tracking a sound-discovered user from its popup no longer leaves the modal stuck on a spinner. It now fills in the moment tracking resolves, driven by the live update stream instead of a poll that waited for a condition that never happened, so you no longer have to close and reopen the modal to see the user
 - Adding a Twitter or Instagram creator by a shared profile link (e.g. https://x.com/@user?s=11 from the app's share sheet) no longer fails: the query string and fragment are now stripped when the handle is extracted from the URL
