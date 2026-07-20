@@ -114,6 +114,21 @@ def create_channel_blueprint(engine) -> Blueprint:
                 )
                 db.add_queue_resolve(handle, "ok")
                 return
+            # Already tracked. If the lookup resolved to a different current handle
+            # than we have stored, the account was renamed on the platform: the id
+            # is unchanged but the old handle no longer resolves, so searching for
+            # the new one comes up empty. A username only resolves to an id when it
+            # is the account's current handle, so this new handle is authoritative.
+            # Apply the same rename path the loop uses when it finds a new handle
+            # organically, then treat the add as done instead of a duplicate error.
+            _new = (info.get("handle") or "").lstrip("@")
+            _old = (existing.get("handle") or "").lstrip("@")
+            if _new and _new.lower() != _old.lower():
+                from engine.tracker import _update_profile
+                _update_profile(engine, existing, info, loop._log)
+                loop._log(f"Add: @{_old} was renamed to @{_new}; updated the tracked handle")
+                db.add_queue_resolve(handle, "ok")
+                return
             db.add_queue_resolve(handle, "error", "duplicate", f"{noun} is already being tracked")
             return
 
