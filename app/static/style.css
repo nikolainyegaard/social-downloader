@@ -1517,6 +1517,11 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* ── Dashboard: stat strip, then recent feed beside loop + add history ───── */
 
+/* Desktop: the wrapper dissolves (display:contents) so the strip sits in the
+   section grid exactly as before; the toggle only exists on mobile, where the
+   panel collapses via the grid-rows transition on .stat-strip-wrap. */
+.stats-panel { display: contents; }
+.stats-toggle { display: none; }
 .stat-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
@@ -2089,6 +2094,26 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .header-meta .hdr-link,
   .header-meta .btn-gear:not(.btn-user-menu) { display: none; }
   .header-meta .btn-user-menu { display: flex; margin-left: auto; }
+
+  /* Statistics: collapsible panel, closed by default. The wrap slides via a
+     0fr -> 1fr grid-rows transition; the caret rotates on open. */
+  .stats-panel { display: block; }
+  .stats-toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 10px 14px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    color: var(--text); font-size: 13px; font-weight: 600;
+    cursor: pointer;
+  }
+  .stats-caret { color: var(--muted); font-size: 11px; transition: transform .25s ease; }
+  .stats-toggle.open .stats-caret { transform: rotate(180deg); }
+  .stat-strip-wrap {
+    display: grid; grid-template-rows: 0fr;
+    transition: grid-template-rows .28s ease;
+  }
+  .stat-strip-wrap.open { grid-template-rows: 1fr; }
+  .stat-strip-wrap > .stat-strip { min-height: 0; overflow: hidden; padding-top: 10px; }
 
   /* View tabs + search: wrap so the search row drops to its own full-width row.
      Reset moves out of the sideways-scrolling filter bar to sit next to search. */

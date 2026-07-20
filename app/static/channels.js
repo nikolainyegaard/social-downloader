@@ -92,7 +92,14 @@ function initChannelApp(cfg) {
     <button class="btn-primary" onclick="${P}AddCreator()">Add</button>
   </div>
 
-  <div class="stat-strip" id="${P}StatsGrid"></div>
+  <!-- Desktop renders the strip directly (display:contents); on mobile the
+       panel becomes a collapsible with the Statistics toggle, closed by default -->
+  <div class="stats-panel">
+    <button class="stats-toggle" onclick="${P}ToggleStats(this)">Statistics <span class="stats-caret">▾</span></button>
+    <div class="stat-strip-wrap" id="${P}StatsWrap">
+      <div class="stat-strip" id="${P}StatsGrid"></div>
+    </div>
+  </div>
 
   <div class="dash-row">
   <div class="panel-card recent-card">
@@ -646,6 +653,12 @@ function initChannelApp(cfg) {
     const b = document.getElementById(`${P}RfBook`);
     if (b) { b.classList.toggle('bookmarked', _rfBook); b.innerHTML = _rfBook ? _bmFilled : _bmOutline; }
     _applyFeedFilter();
+  });
+
+  // Mobile stats panel: slide the stat strip open/closed (CSS grid-rows transition)
+  X('ToggleStats', btn => {
+    btn.classList.toggle('open');
+    document.getElementById(`${P}StatsWrap`)?.classList.toggle('open');
   });
 
   // Reset kind + flag filters in one go; SetRecentFilter re-applies the feed
