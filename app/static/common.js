@@ -1478,6 +1478,11 @@ function _showCarouselSlide(idx) {
   const isVid = typeof slide !== 'string' && slide.type === 'video';
   const img   = document.getElementById('carouselImg');
   const vid   = document.getElementById('carouselVid');
+  // Detach the previous slide's handlers BEFORE touching src: unloading via
+  // src = '' (and replacing a loading src) fires error/abort events, which
+  // used to hit the old slide's onerror and phantom-skip photo slides with a
+  // spurious "failed to play" warning. closeCarousel does the same dance.
+  vid.onended = vid.onerror = vid.onloadedmetadata = null;
   vid.pause();
   vid.controls = !_storyMode;
   if (isVid) {
