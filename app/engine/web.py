@@ -318,7 +318,7 @@ def create_channel_blueprint(engine) -> Blueprint:
 
         existing = db.get_all_channels()
         if any(c["handle"].lower() == handle.lower() for c in existing):
-            return jsonify({"error": f"{noun} is already being tracked"}), 409
+            return jsonify({"error": f"{noun} is already being tracked", "kind": "duplicate"}), 409
 
         if not _enqueue_add(handle):
             return jsonify({"error": "Already queued"}), 409

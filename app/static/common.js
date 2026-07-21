@@ -574,7 +574,10 @@ function _makeAddToasts(onAdded) {
       const info = queue[handle];
       if (!info || info.status === 'pending') continue;
       active.delete(handle);
-      if (info.status === 'error') {
+      if (info.status === 'error' && info.kind === 'duplicate') {
+        // Already tracked is not a failure; show it as a friendly green toast
+        t.update(`@${handle} is already tracked.`, { type: 'success' });
+      } else if (info.status === 'error') {
         t.update(`Failed to add @${handle}: ${info.message || info.kind || 'lookup failed'}`,
                  { type: 'error' });
       } else {

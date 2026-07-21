@@ -834,7 +834,7 @@ def register_tiktok_routes(bp, engine) -> None:
 
         added = store.add_sound(sound_id, label)
         if not added:
-            return jsonify({"error": "Sound is already being tracked"}), 409
+            return jsonify({"error": "Sound is already being tracked", "kind": "duplicate"}), 409
         return jsonify({"ok": True, "sound_id": sound_id}), 201
 
     @bp.route("/sounds/<sound_id>", methods=["PATCH"])

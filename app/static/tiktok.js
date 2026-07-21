@@ -462,6 +462,8 @@ async function _ttAddHandler(val, addToasts) {
     if (ok) {
       t.update(`Sound ${data.sound_id} added.`, { type: 'success' });
       loadSounds();
+    } else if (data.kind === 'duplicate') {
+      t.update('This sound is already tracked.', { type: 'success' });
     } else {
       t.update(data.error || 'Could not add sound.', { type: 'error' });
     }

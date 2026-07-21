@@ -976,6 +976,7 @@ function initChannelApp(cfg) {
       body: JSON.stringify({ handle: raw }),
     });
     if (ok) addToasts.start(data.handle || raw.replace(/^@/, ''));
+    else if (data.kind === 'duplicate') showToast(`This ${CREATOR} is already tracked.`, { type: 'success' });
     else showToast(data.error || `Could not add ${CREATOR}.`, { type: 'error' });
   });
 
