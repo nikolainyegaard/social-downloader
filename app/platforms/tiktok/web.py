@@ -590,13 +590,13 @@ def register_tiktok_routes(bp, engine) -> None:
                 _story_repair_state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
     def _story_repair_redownload() -> None:
-        from engine.tracker import scan_afflicted_stories
+        from engine.tracker import scan_afflicted_stories, purge_afflicted_stories
         from platforms.tiktok.tracker import redownload_story_row
         with _story_repair_lock:
             if _story_repair_state["running"]:
                 return
             _story_repair_state.update({"running": True, "mode": "redownload",
-                                        "recovered": 0, "still_failing": 0})
+                                        "recovered": 0, "still_failing": 0, "purged": 0})
         print("[story-recovery] Re-downloading afflicted live video stories...")
         try:
             afflicted  = scan_afflicted_stories(db)
@@ -618,8 +618,13 @@ def register_tiktok_routes(bp, engine) -> None:
                 with _story_repair_lock:
                     _story_repair_state.update({"recovered": recovered, "still_failing": failing})
                 time.sleep(2)
+            # Expired afflicted stories are unrecoverable (TikTok has dropped
+            # them); purge row + file so the story viewer stops warning on them
+            purged = purge_afflicted_stories(db, [r for r in afflicted if not r["live"]])
+            with _story_repair_lock:
+                _story_repair_state["purged"] = purged
             print(f"[story-recovery] Re-download done: {recovered} recovered, {failing} failed, "
-                  f"{expired} expired.")
+                  f"{purged} expired purged.")
         except Exception as e:
             print(f"[story-recovery] Re-download error: {e}")
         finally:

@@ -595,8 +595,10 @@
                   Scans saved stories for missing or unplayable files. Re-download
                   fetches fresh copies of the afflicted ones, but only while a story
                   is still live: TikTok drops stories 24 hours after posting, and
-                  expired ones cannot be recovered. Video stories only; photo stories
-                  are re-fetched by the next loop check of their user.
+                  expired ones cannot be recovered, so Re-download removes them from
+                  the library instead (they would otherwise warn in the story viewer
+                  forever). Video stories only; photo stories are re-fetched by the
+                  next loop check of their user.
                 </div>
               </div>
               <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">

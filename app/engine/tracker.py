@@ -57,6 +57,27 @@ def scan_afflicted_stories(db) -> list[dict]:
     return out
 
 
+def purge_afflicted_stories(db, rows: list[dict]) -> int:
+    """Delete afflicted story rows and their files. For expired afflicted
+    stories this is the only resolution: TikTok has dropped them, the saved
+    bytes are missing or unplayable, and leaving the row makes the story
+    viewer warn on every playback. Returns the number of rows removed."""
+    import os
+
+    purged = 0
+    for r in rows:
+        path = os.path.abspath(r["file_path"]) if r.get("file_path") else None
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        with db.get_db() as conn:
+            conn.execute("DELETE FROM stories WHERE story_id = ?", (r["story_id"],))
+        purged += 1
+    return purged
+
+
 def save_new_stories(db, platform: str, channel_id: str, handle: str,
                      stories: list[dict], log: Callable[[str], None],
                      cookies: dict | None = None,

@@ -1581,11 +1581,9 @@ function _storyfixPollUntilDone(mode, toast) {
     } else {
       toast.dismiss();
     }
-    const bad = [];
-    if (data.still_failing) bad.push(`${_nStory(data.still_failing)} failed to re-download`);
-    if (data.expired)       bad.push(`${data.expired} expired and unrecoverable`);
-    if (bad.length) showToast(`${bad.join('; ')}.`, { type: 'error', duration: 0 });
-    else if (!data.recovered) {
+    if (data.purged) showToast(`${_nStory(data.purged)} expired and unrecoverable, removed from the library.`, { type: 'info' });
+    if (data.still_failing) showToast(`${_nStory(data.still_failing)} failed to re-download.`, { type: 'error', duration: 0 });
+    else if (!data.recovered && !data.purged) {
       const note = data.live_photo
         ? `No video stories to re-download; ${data.live_photo} live photo left for the next check.`
         : 'No corrupted stories to re-download.';

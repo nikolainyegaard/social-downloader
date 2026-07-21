@@ -37,7 +37,7 @@ APP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 sys.path.insert(0, APP)
 
 from engine.database import ChannelDB                      # noqa: E402
-from engine.tracker import scan_afflicted_stories          # noqa: E402
+from engine.tracker import scan_afflicted_stories, purge_afflicted_stories  # noqa: E402
 from platforms.tiktok.tracker import redownload_story_row  # noqa: E402
 
 
@@ -79,17 +79,7 @@ def main() -> int:
         time.sleep(args.gap)
 
     if args.purge_expired and expired:
-        purged = 0
-        for r in expired:
-            p = os.path.abspath(r["file_path"]) if r["file_path"] else None
-            if p and os.path.exists(p):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
-            with db.get_db() as conn:
-                conn.execute("DELETE FROM stories WHERE story_id = ?", (r["story_id"],))
-            purged += 1
+        purged = purge_afflicted_stories(db, expired)
         print(f"Purged {purged} expired afflicted story rows.")
 
     print(f"\nDone: {ok} recovered, {fail} still failing, "
