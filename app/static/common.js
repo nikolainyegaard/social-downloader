@@ -1007,9 +1007,12 @@ function _expandableText(text) {
 }
 function _xtextToggle(el) { el.classList.toggle('open'); }
 function _xtextClose(btn) { btn.closest('.xtext')?.classList.remove('open'); }
+// Capture phase: the xtext toggles and many card controls stopPropagation, so a
+// bubble listener never saw those clicks and an open box stayed open when
+// another one was clicked. Capture runs before any of that.
 document.addEventListener('click', e => {
-  document.querySelectorAll('.xtext.open').forEach(x => { if (!x.contains(e.target)) x.classList.remove('open'); });
-});
+  document.querySelectorAll('.xtext.open').forEach(x => { if (e.target instanceof Node && !x.contains(e.target)) x.classList.remove('open'); });
+}, true);
 // The box is always clickable; the overflow icon only shows when the single line
 // is actually truncated. Measure the text (scrollWidth > clientWidth) and toggle
 // .is-clipped. Call after any render that emits _expandableText; also runs on resize.
