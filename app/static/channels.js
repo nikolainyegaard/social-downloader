@@ -1160,18 +1160,19 @@ function initChannelApp(cfg) {
   function _filteredCreators() {
     const q = search.toLowerCase();
     return creators.filter(ch => {
+      // A search always looks across all creators, ignoring the filter pills
+      if (q) {
+        const hay = [ch.handle, ch.display_name, ch.channel_id, ch.description,
+                     ...(ch.old_handles || []), ...(ch.old_display_names || []), ...(ch.old_descriptions || [])]
+                    .filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(q);
+      }
       for (const g of EXTRA_FILTER_GROUPS) {
         if (filter[g.key].size && !g.test(ch, filter[g.key])) return false;
       }
       if (filter.stat.size && !filter.stat.has(ch.tracking_enabled === 0 ? 'inactive' : 'active')) return false;
       if (filter.star.has('starred') && !ch.starred) return false;
       if (filter.book.has('bookmarked') && !ch.bookmarked) return false;
-      if (q) {
-        const hay = [ch.handle, ch.display_name, ch.channel_id, ch.description,
-                     ...(ch.old_handles || []), ...(ch.old_display_names || []), ...(ch.old_descriptions || [])]
-                    .filter(Boolean).join(' ').toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
       return true;
     });
   }

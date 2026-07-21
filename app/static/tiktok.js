@@ -760,9 +760,13 @@ function renderSounds() {
   if (!grid) return;
   const q = _soundSearch.toLowerCase();
   let filtered = sounds;
-  if (soundFilter.stat.size)           filtered = filtered.filter(s => soundFilter.stat.has(s.tracking_enabled === 0 ? 'inactive' : 'active'));
-  if (soundFilter.star.has('starred')) filtered = filtered.filter(s => s.starred);
-  if (q) filtered = filtered.filter(s => `${s.label || ''} ${s.sound_id}`.toLowerCase().includes(q));
+  // A search always looks across all sounds, ignoring the filter pills
+  if (q) {
+    filtered = filtered.filter(s => `${s.label || ''} ${s.sound_id}`.toLowerCase().includes(q));
+  } else {
+    if (soundFilter.stat.size)           filtered = filtered.filter(s => soundFilter.stat.has(s.tracking_enabled === 0 ? 'inactive' : 'active'));
+    if (soundFilter.star.has('starred')) filtered = filtered.filter(s => s.starred);
+  }
   const isFiltered = soundFilter.stat.size > 0 || soundFilter.star.size > 0 || !!_soundSearch;
   if (tt.getTrackingView() === 'sounds') {
     const countEl = tt.el('Count');

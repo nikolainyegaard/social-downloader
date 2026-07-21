@@ -47,6 +47,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The TikTok Loops panel now toggles between the User and Sound loops with pills in the panel header, so the panel is the same height as on the other apps instead of stacking both loops
 
 ### Changed
+- Searching the creator grid (and the TikTok sounds catalog) now always searches all entries, ignoring the active filter pills; clearing the search restores the filtered view
 - The creator modal header is redesigned: the identity block sits beside a dates box (added, last checked, last saved, next check) and a stats box that groups the counts into paired chips (followers/following, on-platform/saved, deleted/restored, stories, storage, updates), each value stacked over a small label, so the header reads at a glance instead of as one long stat line
 - The creator bio now opens in a popover over the modal content instead of expanding the header in place: it stays put when opened, has a close button, and does not dismiss when you click inside it so the text stays selectable
 - Profile history and Stories are now views in the creator modal's List/Grid toggle rather than separate toolbar buttons, each with its own icon; on the History view the profile-change field filters move onto the toolbar next to the other filters, the Back to posts buttons are gone, and the modal toolbar scrolls sideways with a fade at the clipped edge when it is too narrow to fit everything
