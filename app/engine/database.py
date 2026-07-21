@@ -1056,17 +1056,21 @@ class ChannelDB:
 
 
     def _group_consecutive_by_channel(self, rows: list[dict], date_key: str) -> list[dict]:
-        """Collapse a newest-first row list into groups of consecutive same-channel
-        entries. Groups break when the gap between adjacent rows exceeds 5 minutes."""
+        """Collapse a newest-first row list into per-channel groups. A row joins
+        its channel's most recent group when the gap to that group's previous
+        row is 5 minutes or less; rows from OTHER channels in between do not
+        break the group. Grouping used to require strict adjacency, so two
+        creators downloading in parallel shredded each other's runs into
+        hundreds of 1-item lines. Groups are ordered by their newest row."""
         groups: list[dict] = []
+        open_by_channel: dict = {}
         for row in rows:
-            if (groups
-                    and groups[-1]["channel_id"] == row["channel_id"]
-                    and groups[-1]["_last_ts"] - row[date_key] <= 300):
-                groups[-1]["count"] += 1
-                groups[-1]["_last_ts"] = row[date_key]
+            g = open_by_channel.get(row["channel_id"])
+            if g is not None and g["_last_ts"] - row[date_key] <= 300:
+                g["count"] += 1
+                g["_last_ts"] = row[date_key]
             else:
-                groups.append({
+                g = {
                     "channel_id":     row["channel_id"],
                     "handle":         row["handle"],
                     "enabled":        row.get("enabled", 1),
@@ -1077,7 +1081,9 @@ class ChannelDB:
                     date_key:         row[date_key],
                     "_last_ts":       row[date_key],
                     "count":          1,
-                })
+                }
+                groups.append(g)
+                open_by_channel[row["channel_id"]] = g
         for g in groups:
             del g["_last_ts"]
         return groups
