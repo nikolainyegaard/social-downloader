@@ -255,8 +255,8 @@ async function ttProxyTest() {
 const _WG_FIELD_IDS = { private_key: 'ttWgPrivateKey', address: 'ttWgAddress',
                         public_key: 'ttWgPublicKey', endpoint: 'ttWgEndpoint' };
 let _ttWgCanRestart = false;   // Docker socket mounted, so the app can restart gluetun itself
-const _eyeIcon    = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-const _eyeOffIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+const _eyeIcon    = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const _eyeOffIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 
 // Feedback toast for a saved or removed WireGuard config: gluetun only reads
 // its config at startup, so the toast carries the restart action when the
@@ -800,7 +800,7 @@ function renderSounds() {
     const footer = `<div style="display:flex;gap:6px;">`
       + _starBtn(s.starred, `toggleSoundStar('${esc(s.sound_id)}')`)
       + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${_refreshIcon} ${runLabel}</button>`
-      + `<button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'${isInactive ? 'Enable tracking' : 'Disable tracking'}',onclick:()=>setSoundTracking('${esc(s.sound_id)}',${isInactive})},{label:'Remove',danger:true,onclick:()=>removeSound('${esc(s.sound_id)}')}])">&#x2022;&#x2022;&#x2022;</button>`
+      + `<button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'${isInactive ? 'Enable tracking' : 'Disable tracking'}',onclick:()=>setSoundTracking('${esc(s.sound_id)}',${isInactive})},{label:'Remove',danger:true,onclick:()=>removeSound('${esc(s.sound_id)}')}])">${_dotsIcon}</button>`
       + `</div>`;
 
     const meta = _cardMeta([

@@ -3,7 +3,7 @@
 // YouTube adds shorts-aware grid views, the channel banner, and its own
 // diagnostics wiring.
 
-const _wideGridIcon   = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5"><rect x=".75" y="2" width="5.25" height="3" rx=".5"/><rect x="7" y="2" width="5.25" height="3" rx=".5"/><rect x=".75" y="8" width="5.25" height="3" rx=".5"/><rect x="7" y="8" width="5.25" height="3" rx=".5"/></svg>`;
+const _wideGridIcon   = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x=".75" y="2" width="5.25" height="3" rx=".5"/><rect x="7" y="2" width="5.25" height="3" rx=".5"/><rect x=".75" y="8" width="5.25" height="3" rx=".5"/><rect x="7" y="8" width="5.25" height="3" rx=".5"/></svg>`;
 const _vgridShortIcon = `<svg width="12" height="12" viewBox="0 0 9 9" fill="none" stroke="rgba(255,255,255,.9)" stroke-width="1.2"><rect x="1.5" y=".5" width="6" height="8" rx=".75"/><polygon fill="rgba(255,255,255,.9)" stroke="none" points="3,2.5 7,4.5 3,6.5"/></svg>`;
 const _ytShortsBadge  = `<span style="position:absolute;bottom:4px;right:4px;color:#fff;pointer-events:none;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))"><svg width="18" height="18" viewBox="0 0 9 9" fill="none" stroke="rgba(255,255,255,.9)" stroke-width="1.2"><rect x="1.5" y=".5" width="6" height="8" rx=".75"/><polygon fill="rgba(255,255,255,.9)" stroke="none" points="3,2.5 7,4.5 3,6.5"/></svg></span>`;
 

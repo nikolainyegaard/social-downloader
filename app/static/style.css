@@ -285,7 +285,12 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
 .btn-run:hover:not(:disabled) { background: var(--accent-bg); }
 .btn-trigger { padding: 4px 8px; font-size: 11px; white-space: nowrap; }
 
-.btn-star { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; font-size: 14px; line-height: 1; }
+/* Shared chrome icon sizing: every svg.ic renders 13px with a ~1.3px stroke.
+   display:block kills the baseline gap that mis-centered inline svgs. */
+svg.ic { width: 13px; height: 13px; display: block; flex-shrink: 0; }
+.ah-btn svg.ic { width: 11px; height: 11px; }
+
+.btn-star { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; line-height: 1; display: inline-flex; align-items: center; }
 .btn-star:hover { color: var(--gold); border-color: var(--gold); }
 .btn-star.starred { color: var(--gold); border-color: var(--gold); }
 
@@ -302,7 +307,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
 .btn-ghost { background: var(--raised); color: var(--text); }
 .btn-ghost:hover:not(:disabled) { background: var(--border); }
 
-.btn-menu { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; font-size: 13px; line-height: 1; letter-spacing: 1px; border-radius: var(--radius); cursor: pointer; }
+.btn-menu { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; line-height: 1; border-radius: var(--radius); cursor: pointer; display: inline-flex; align-items: center; }
 .btn-menu:hover { color: var(--text); border-color: var(--muted); }
 
 .card-menu {
