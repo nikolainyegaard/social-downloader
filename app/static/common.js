@@ -1393,7 +1393,27 @@ function openStorySlides(slides) {
   bar.innerHTML = slides.map(() =>
     '<span class="story-progress-seg"><span class="story-progress-fill"></span></span>').join('');
   bar.style.display = '';
+  // Action rail beside the story: Download works, the other two are reserved
+  // slots for future actions. Shown/hidden by the story-mode class alone.
+  document.getElementById('storyActions').innerHTML = `
+    <button class="story-action-btn" title="Download" onclick="storyDownloadCurrent()">${_dlIcon}</button>
+    <button class="story-action-btn" title="Coming soon" disabled>${_storyDotsIcon}</button>
+    <button class="story-action-btn" title="Coming soon" disabled>${_storyDotsIcon}</button>`;
   openCarouselSlides(slides);
+}
+
+const _storyDotsIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
+
+// Same anchor-click download as the Videos list-view Download button.
+function storyDownloadCurrent() {
+  const slide = _carouselUrls[_carouselIdx];
+  if (!slide || typeof slide === 'string') return;
+  const a = document.createElement('a');
+  a.href = slide.url;
+  a.download = slide.name || 'story';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 function _storyClearTimer() {

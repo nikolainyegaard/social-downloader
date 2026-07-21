@@ -1535,6 +1535,28 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .story-mode .carousel-nav { display: none; }
 .story-mode .media-modal-close { z-index: 5; }
 
+/* Action rail beside the story media (Download plus reserved slots) */
+.story-actions { display: none; }
+.story-mode .story-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+  z-index: 4;
+}
+.story-action-btn {
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,.08);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.story-action-btn svg { width: 16px; height: 16px; }
+.story-action-btn:hover:not(:disabled) { background: rgba(255,255,255,.2); }
+.story-action-btn:disabled { opacity: .35; cursor: default; }
+
 /* ── Live story ring around avatars ──────────────────────────────────────── */
 
 .story-ring { cursor: pointer; }

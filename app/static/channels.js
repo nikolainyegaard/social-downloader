@@ -404,6 +404,14 @@ function initChannelApp(cfg) {
     openCarouselSlides(data.files);
   });
 
+  // Story row to viewer slide; name feeds the viewer's Download action (the
+  // stories file route serves .mp4 for videos and .avif for photos).
+  const _storySlide = s => ({
+    url:  s.url,
+    type: s.content_type === 'photo' ? 'image' : 'video',
+    name: `${s.story_id}.${s.content_type === 'photo' ? 'avif' : 'mp4'}`,
+  });
+
   // Open a creator's live stories in the story viewer, oldest first. Reached
   // from the ringed avatars; the ring only renders when live_stories > 0, but
   // a story can expire between the poll and the click, hence the fallback.
@@ -415,10 +423,7 @@ function initChannelApp(cfg) {
       showToast('No live stories right now.');
       return;
     }
-    openStorySlides(live.map(s => ({
-      url:  s.url,
-      type: s.content_type === 'photo' ? 'image' : 'video',
-    })));
+    openStorySlides(live.map(_storySlide));
   });
 
   // ── Detail modal config ───────────────────────────────────────────────────
@@ -1915,7 +1920,7 @@ function initChannelApp(cfg) {
     const slides = (data || [])
       .filter(s => s.posted_at && new Date(s.posted_at * 1000).toLocaleDateString('sv') === day)
       .sort((a, b) => a.posted_at - b.posted_at)
-      .map(s => ({ url: s.url, type: s.content_type === 'photo' ? 'image' : 'video' }));
+      .map(_storySlide);
     if (slides.length) openStorySlides(slides);
   });
 
