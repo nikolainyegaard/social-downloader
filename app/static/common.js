@@ -1428,7 +1428,32 @@ function _storyBeginSlide(idx, isVid, vid) {
   vid.onended = () => { if (_storyMode) _storyAdvance(); };
   vid.onerror = () => {
     if (!_storyMode) return;
-    showToast('A story video failed to play; skipping it.', { type: 'warning' });
+    // Verbose diagnostics: the MediaError says how playback failed, the HEAD
+    // probe says what the server actually returned (404 = row without file,
+    // 200 video/* = file exists but does not decode, other content-type =
+    // wrong bytes served). Full detail in the console and behind Details.
+    const slide = _carouselUrls[_carouselIdx];
+    const url   = vid.currentSrc || (typeof slide === 'string' ? slide : slide?.url) || '';
+    const me    = vid.error;
+    const CODES = { 1: 'ABORTED', 2: 'NETWORK', 3: 'DECODE', 4: 'SRC_NOT_SUPPORTED' };
+    const base  = [
+      `Story video failed to play (slide ${_carouselIdx + 1}/${_carouselUrls.length}).`,
+      `URL: ${url}`,
+      `MediaError: ${me ? `code ${me.code} ${CODES[me.code] || '?'}${me.message ? ` (${me.message})` : ''}` : 'none reported'}`,
+      `networkState=${vid.networkState} readyState=${vid.readyState}`,
+    ];
+    fetch(url, { method: 'HEAD' }).then(
+      r => base.push(`HTTP HEAD: ${r.status}, content-type ${r.headers.get('content-type') || '?'}, ${r.headers.get('content-length') || '?'} bytes`),
+      e => base.push(`HTTP HEAD failed: ${e}`),
+    ).finally(() => {
+      const detail = base.join('\n');
+      console.error('[story]', detail);
+      showToast('A story video failed to play; skipping it.', {
+        type: 'warning',
+        duration: 8000,
+        action: { label: 'Details', onclick: () => openErrorModal(detail) },
+      });
+    });
     _storyAdvance();
   };
   vid.onloadedmetadata = () => {
