@@ -1876,10 +1876,20 @@ function initChannelApp(cfg) {
     if (ok && modalCreator && modalCreator.channel_id === id) modalCreator.comment = value.trim() || null;
   });
 
-  X('ToggleStarModal', async id => {
-    await _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators);
+  X('ToggleStarModal', id => {
+    // _creatorToggleStar flips the array item and re-renders the cards before
+    // its PATCH resolves; mirror the new state onto modalCreator (which can be
+    // a different object after a list refetch) and repaint the header right
+    // away instead of after the network round-trip (ToggleBookmark pattern).
+    const done = _creatorToggleStar(`${API}/channels`, id, creators, 'channel_id', renderCreators);
     _syncStarBookmark(id);
-    if (modalCreator && modalCreator.channel_id === id) _renderModalHeader(modalCreator);
+    const ch = creators.find(c => c.channel_id === id);
+    if (ch && modalCreator && modalCreator.channel_id === id) {
+      modalCreator.starred    = ch.starred;
+      modalCreator.bookmarked = ch.bookmarked;
+      _renderModalHeader(modalCreator);
+    }
+    return done;
   });
 
   X('ToggleModalNote', () => {

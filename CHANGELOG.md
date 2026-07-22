@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Fixed
+- The creator modal's star button reacts instantly: it waited for the server round-trip (and sometimes the next live-refresh event) before repainting, which read as a delay of up to a second
 - Inserted manual run log lines ("=== Manual quick run (inserted): ... ===") get the same session-separator styling as their completion lines instead of rendering as plain grey text
 - The TikTok sound modal now uses the exact same shell as the creator modals instead of its own copy that had drifted: it gets the creator modal's layout classes, the mobile toolbar with sort/status/type dropdowns, the card-style mobile post rows with a per-row Download menu, and the back-to-top button; its markup now comes from the same shared template so the two cannot drift apart again
 - The sound modal's header and tabs match the creator modal too: the same header layout with Added/Last checked tiles and Saved/Deleted/Restored stats on the right, a Run button and an overflow menu (Edit label, Add note) in place of the always-visible controls, the compact card header on mobile, and the same Videos/Grid underline tabs above the toolbar
