@@ -235,8 +235,10 @@ class ChannelLoop:
         return state
 
     def request_stop(self) -> None:
-        """Signal the loop to stop after the current channel finishes."""
+        """Signal the loop to stop as soon as possible: a sleeping loop wakes
+        immediately, a bulk download stops after the in-flight item."""
         self._stop_event.set()
+        self._log("Stop requested: finishing the current item, then stopping...")
 
     def reschedule_loop(self) -> None:
         """Wake the scheduler to re-read its interval from DB without running the loop."""

@@ -185,7 +185,12 @@ def process_all_channels(
         if i > 0:
             gap = channel_gap_secs(platform)
             if stop_event:
+                # wait() wakes early on a stop request; without the re-check
+                # the current channel would still get a full run afterwards
                 stop_event.wait(gap)
+                if stop_event.is_set():
+                    log(f"=== {engine.label} loop stopped by request ===")
+                    break
             else:
                 time.sleep(gap)
         drained |= drain_manual_runs(engine, log, set_current)
@@ -197,7 +202,8 @@ def process_all_channels(
         last_full = channel.get("last_full_refresh_at")
         mode      = "quick" if (last_full and now - last_full < full_secs) else "full"
         try:
-            result = process_single_channel(engine, channel, log, set_current, mode=mode)
+            result = process_single_channel(engine, channel, log, set_current, mode=mode,
+                                            stop_event=stop_event)
         except Exception as e:
             log(f"Unhandled error for @{channel.get('handle', '?')}: {e}")
             result = "failed"
@@ -231,12 +237,16 @@ def process_single_channel(
     set_current: Callable[[str | None], None] | None = None,
     profile_only: bool = False,
     mode: str = "full",
+    stop_event: threading.Event | None = None,
 ) -> str:
     """Update profile, fetch the post list, download new posts, track deletions.
 
     mode="quick" fetches only the newest posts (adapter.quick_limit) and skips
     deletion detection (absence from a partial listing proves nothing);
     mode="full" fetches the whole list and runs the full diff.
+
+    A stop request lands between individual downloads: the in-flight download
+    finishes, the remaining new posts are left for the next check.
 
     Returns "ok", "deletions" (unconfirmed deletion candidates found; caller
     schedules an ASAP re-check), or "failed" (post fetch failed; caller leaves
@@ -308,6 +318,11 @@ def process_single_channel(
             remote_posts: dict[str, dict]   = {}
             raw_posts:    dict[str, object] = {}
             for post_dict, raw_post in adapter.iter_posts(channel_id):
+                if stop_event and stop_event.is_set():
+                    # A truncated listing must not feed the deletion diff; the
+                    # channel stays due and is fetched fresh next session
+                    log("  Loop stop requested: abandoning the post fetch")
+                    return "failed"
                 vid_id               = post_dict["video_id"]
                 remote_posts[vid_id] = post_dict
                 raw_posts[vid_id]    = raw_post
@@ -348,6 +363,9 @@ def process_single_channel(
 
         _new_sorted = sorted(new_ids)
         for _n, vid_id in enumerate(_new_sorted, 1):
+            if stop_event and stop_event.is_set():
+                log("  Loop stop requested: skipping remaining downloads")
+                break
             log(f"  [{_n}/{len(_new_sorted)}] Downloading {vid_id}...")
             adapter.download_item(
                 engine, channel_id, handle, display_name,

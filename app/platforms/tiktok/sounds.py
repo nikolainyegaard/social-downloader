@@ -138,8 +138,10 @@ class SoundLoop:
             self.state["next_run"] = iso
 
     def request_stop(self) -> None:
-        """Signal the sound loop to stop after the current sound finishes."""
+        """Signal the sound loop to stop as soon as possible: between sounds,
+        or after the in-flight download within a sound."""
         self._stop_event.set()
+        self._log("Sound loop stop requested: finishing the current item, then stopping...")
 
     def reschedule(self) -> None:
         """Wake the scheduler to re-read its interval from DB without running the loop."""

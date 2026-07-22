@@ -51,6 +51,18 @@ _SESSION_GAP_MIN_SECS         = 15   # minimum inter-user gap within a session (
 _LARGE_DELETION_THRESHOLD     = 10   # first-pass missing count that triggers an isolated full re-scan
 
 
+async def _stoppable_sleep(secs: float, stop_event: threading.Event | None) -> bool:
+    """Sleep up to secs, waking immediately when a loop stop is requested.
+    Returns True when stop was requested."""
+    if stop_event is None:
+        await asyncio.sleep(secs)
+        return False
+    if stop_event.is_set():
+        return True
+    await asyncio.to_thread(stop_event.wait, secs)
+    return stop_event.is_set()
+
+
 def _start_bot_cooldown() -> int:
     """Stamp bot_cooldown_until so the scheduler skips upcoming sessions.
 
@@ -376,7 +388,7 @@ async def process_single_user(
                     raise _restart_error(e) from e
                 if _attempt == 0:
                     log(f"  Profile fetch failed, retrying in {_PROFILE_FAIL_SLEEP}s")
-                    await asyncio.sleep(_PROFILE_FAIL_SLEEP)
+                    await _stoppable_sleep(_PROFILE_FAIL_SLEEP, stop_event)
                 else:
                     _fail_count = store.increment_profile_fail_count(channel_id)
                     if _fail_count < _PROFILE_FAIL_QUIET_THRESHOLD:
@@ -868,11 +880,14 @@ async def process_user_session(
             if set_sleep:
                 _resume = f"resuming @{users[start_idx]['handle']}" if start_idx < total else "restarting session"
                 set_sleep(time.time() + cooldown_sleep, _resume)
-            await asyncio.sleep(cooldown_sleep)
+            _stopped = await _stoppable_sleep(cooldown_sleep, stop_event)
             cooldown_pending = False
             cooldown_sleep   = 0
             if set_sleep:
                 set_sleep(None, None)
+            if _stopped:
+                log("=== User loop stopped by request ===")
+                return total_completed
 
         async with TikTokApi() as api:
             if not await _make_session(api):
@@ -912,9 +927,13 @@ async def process_user_session(
                     _next_mode = "full refresh" if user.get("full_refresh_pending") else "quick check"
                     if set_sleep:
                         set_sleep(time.time() + _gap, f"{_next_mode} for @{user['handle']}")
-                    await asyncio.sleep(_gap)
+                    _stopped = await _stoppable_sleep(_gap, stop_event)
                     if set_sleep:
                         set_sleep(None, None)
+                    if _stopped:
+                        log("=== User loop stopped by request ===")
+                        browser_gate.close_jobs()
+                        return total_completed
                 await browser_gate.drain_jobs(api)
                 drained |= await _drain_manual_runs_inline(engine, api, cookies, log, logd, set_current_user)
                 if user["channel_id"] in drained:
@@ -1076,14 +1095,16 @@ async def process_all_sounds(
         if not sound.get("tracking_enabled", 1):
             log(f"Skipping '{sound.get('label') or sound['sound_id']}' (tracking disabled)")
             continue
-        total_new += await process_single_sound(engine, sound, log)
+        total_new += await process_single_sound(engine, sound, log, stop_event=stop_event)
         sounds_checked += 1
 
     return {"sounds_checked": sounds_checked, "new_videos": total_new}
 
 
-async def process_single_sound(engine, sound: dict, log: Callable[[str], None]) -> int:
-    """Process one sound. Returns the count of new video associations added."""
+async def process_single_sound(engine, sound: dict, log: Callable[[str], None],
+                               stop_event: threading.Event | None = None) -> int:
+    """Process one sound. Returns the count of new video associations added.
+    A stop request lands between individual downloads."""
     _bind(engine)
     sound_id = sound["sound_id"]
     label    = sound.get("label") or sound_id
@@ -1098,7 +1119,9 @@ async def process_single_sound(engine, sound: dict, log: Callable[[str], None]) 
         except Exception as e:
             if _attempt == 0:
                 log(f"Sound '{label}' fetch failed, retrying in 15s: {e}")
-                await asyncio.sleep(15)
+                if await _stoppable_sleep(15, stop_event):
+                    log("Loop stop requested: skipping the retry")
+                    return 0
             else:
                 log(f"Failed to fetch posts for sound {sound_id}: {e}")
                 store.update_sound_last_checked(sound_id)
@@ -1141,6 +1164,9 @@ async def process_single_sound(engine, sound: dict, log: Callable[[str], None]) 
 
     for _n, vid_id in enumerate(new_ids, 1):
         _dlp = f"[{_n}/{len(new_ids)}] "
+        if stop_event and stop_event.is_set():
+            log("Loop stop requested: skipping remaining downloads")
+            break
         # Already in DB (downloaded via user tracking) -- just add the junction row
         if db.get_video(vid_id):
             store.add_sound_video(sound_id, vid_id)
