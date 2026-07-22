@@ -40,6 +40,7 @@
  * @property {(raw: string, addToasts: Object) => (boolean|Promise<boolean>)} [addHandler]  Return true when fully handled
  * @property {(state: Object) => void} [onStatus]       Called after every status render
  * @property {Object<string, () => void>} [extraDomainLoaders]  Platform panels refetched on SSE 'changed' domains (TikTok: sounds)
+ * @property {() => void} [onCreatorsRefetched]  Called after the SSE creators domain refetches (TikTok: refresh the open sound modal)
  * @property {(state: Object) => boolean} [statusActive]  Extra 'running' signal for the header badge
  * @property {(state: Object) => {iso: string, label: string}[]} [nextRunCandidates]
  * @property {boolean} [hasStories]     Platform saves stories: adds the Stories card stat and sort option
@@ -1616,11 +1617,63 @@ function initChannelApp(cfg) {
     _creatorState.videos = [];
   });
 
+  let _modalVidsSig = null;
+
+  function _setModalVideos(data) {
+    _modalVidsSig = JSON.stringify(data);
+    _creatorState.videos = data.map(v => ({ ...v, description: v.title || v.description,
+      type: (v.content_type === 'image' || _isImage(v)) ? 'photo' : 'video' }));
+  }
+
+  // Live refresh of the open modal, hooked to the SSE creators domain (its
+  // tables cover everything the modal shows). Each section is gated on a JSON
+  // signature so an unchanged payload never touches the DOM; a real change
+  // re-renders (which resets list paging, hence the gates matter).
+  async function _refreshOpenModal() {
+    if (!modalCreatorId) return;
+    const id = modalCreatorId;
+    // Header + storage chip from the already-fresh creators array. Untracked
+    // creators (custom headers) are not in the list and are left alone.
+    const ch = creators.find(c => c.channel_id === id);
+    if (ch && JSON.stringify(ch) !== JSON.stringify(modalCreator)) {
+      modalCreator = ch;
+      if (ch.media_size_bytes != null) _storageCache[id] = ch.media_size_bytes;
+      const hdr = _el('ModalHeader');
+      if (!hdr || !hdr.contains(document.activeElement)) _renderModalHeader(ch);
+    }
+    const { ok, data } = await apiJSON(`${API}/channels/${id}/videos`);
+    if (ok && modalCreatorId === id && JSON.stringify(data) !== _modalVidsSig) {
+      _setModalVideos(data);
+      _mRenderToolbar(MODAL_CFG, _creatorState.videos);
+      if (_creatorState.view !== 'history' && _creatorState.view !== 'stories')
+        _mRenderList(MODAL_CFG);
+    }
+    if (modalCreatorId !== id) return;
+    if (_creatorState.view === 'history')      await _refreshPhist(id);
+    else if (_creatorState.view === 'stories') await _refreshStoriesCal(id);
+  }
+
+  async function _refreshPhist(id) {
+    const { ok, data } = await apiJSON(`${API}/channels/${id}/profile-history`);
+    if (!ok || modalCreatorId !== id || _creatorState.view !== 'history') return;
+    if (JSON.stringify(data) === JSON.stringify(phistData)) return;
+    phistData = data;
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);
+    _renderPhistPanel();
+  }
+
+  async function _refreshStoriesCal(id) {
+    const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(id)}/stories/calendar`);
+    if (!ok || modalCreatorId !== id || _creatorState.view !== 'stories') return;
+    if (JSON.stringify(data || {}) === _storyCalSig) return;
+    if (_storyCal) { try { _storyCal.destroy(); } catch { /* already gone */ } _storyCal = null; }
+    _renderStoriesPanel(data || {});
+  }
+
   async function _loadModalVideos(channelId) {
     const { ok, data } = await apiJSON(`${API}/channels/${channelId}/videos`);
     if (!ok || modalCreatorId !== channelId) return;
-    _creatorState.videos = data.map(v => ({ ...v, description: v.title || v.description,
-      type: (v.content_type === 'image' || _isImage(v)) ? 'photo' : 'video' }));
+    _setModalVideos(data);
 
     if (modalPendingHighlight) {
       const { videoId, filter: mFilter, sortField, sortDir } = modalPendingHighlight;
@@ -1893,7 +1946,8 @@ function initChannelApp(cfg) {
 
   let _storyCal = null;
   let _calTip = null;
-  let _storyTotal = null;  // saved-story count for the toolbar line; null until loaded
+  let _storyTotal = null;   // saved-story count for the toolbar line; null until loaded
+  let _storyCalSig = null;  // rendered day-counts signature; gates live repaints
 
   function _calTipShow(target, text) {
     if (!_calTip) {
@@ -1914,7 +1968,8 @@ function initChannelApp(cfg) {
   function _destroyStoriesPanel() {
     if (_storyCal) { try { _storyCal.destroy(); } catch { /* already gone */ } _storyCal = null; }
     _calTipHide();
-    _storyTotal = null;
+    _storyTotal  = null;
+    _storyCalSig = null;
     const panel = _el('StoriesPanel');
     if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
   }
@@ -1962,7 +2017,8 @@ function initChannelApp(cfg) {
     const ramp = ['#033a16', '#196c2e', '#2ea043', '#56d364'];
     const BUCKETS = ['1', '2', '3-4', '5+'];
 
-    _storyTotal = Object.values(dayCounts).reduce((a, b) => a + b, 0);
+    _storyCalSig = JSON.stringify(dayCounts);
+    _storyTotal  = Object.values(dayCounts).reduce((a, b) => a + b, 0);
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // story count now known
     panel.innerHTML = `
       <div class="stories-cal-box">
@@ -2234,7 +2290,14 @@ function initChannelApp(cfg) {
   // the DOM. A change drops the recent feed's per-filter page-one caches
   // too, since those went stale with the data.
   const _domainLoaders = Object.assign({
-    creators: loadCreators,
+    // The creators domain's tables also back the open detail modal (channel
+    // row, videos, profile history, stories), so its refetch pulls the modal
+    // along; platforms hook their own modals via onCreatorsRefetched.
+    creators: async () => {
+      await loadCreators();
+      _refreshOpenModal();
+      if (cfg.onCreatorsRefetched) cfg.onCreatorsRefetched();
+    },
     stats:    loadStats,
     recent:   () => { _rf.cache = {}; return loadRecent(); },
   }, cfg.extraDomainLoaders || {});

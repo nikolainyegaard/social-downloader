@@ -1505,7 +1505,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   z-index: 6;
 }
 /* Bare white glyph buttons on the video's lower edge (play/pause lower left,
-   mute lower right): no solid shape, a drop shadow keeps them readable */
+   mute lower right): no solid shape */
 .mv-glyph {
   position: absolute;
   bottom: 6px;
@@ -1517,7 +1517,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   z-index: 5;
-  filter: drop-shadow(0 1px 3px rgba(0,0,0,.75));
 }
 .mv-glyph svg { width: 20px; height: 20px; display: block; }
 #mvPlayBtn { left: 6px; }

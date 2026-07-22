@@ -673,7 +673,10 @@ const tt = initChannelApp({
   extraLoopLabel:    'Sounds',
   addHandler:        _ttAddHandler,
   videoActionBtnsFn: _ttVideoActionBtns,
-  extraDomainLoaders: { sounds: () => loadSounds() },
+  // Sound modal data spans both domains: sound_videos discoveries bump
+  // 'sounds', video status changes bump 'creators'.
+  extraDomainLoaders: { sounds: () => loadSounds().then(_refreshOpenSoundModal) },
+  onCreatorsRefetched: () => _refreshOpenSoundModal(),
   recentFallback:    item => item.sound_id
     ? `openSoundModalAndHighlight('${esc(item.sound_id)}','${esc(item.video_id)}')`
     : '',
@@ -1064,9 +1067,36 @@ function onSoundModalSearch(val) {
   _mRenderList(_SOUND_MODAL_CFG);
 }
 
+let _soundVidsSig = null;
+
+// Live refresh of the open sound modal, driven by the SSE 'sounds' and
+// 'creators' domains. Signature-gated like the engine's modal refresh.
+async function _refreshOpenSoundModal() {
+  if (!_soundModalId) return;
+  const id = _soundModalId;
+  // Header from the already-fresh sounds catalog; skipped while the note
+  // textarea (or anything else in the header) holds focus
+  const s   = sounds.find(x => x.sound_id === id);
+  const hdr = document.getElementById('soundModalHeader');
+  if (s && JSON.stringify(s) !== JSON.stringify(_soundModal)) {
+    _soundModal = s;
+    if (!hdr || !hdr.contains(document.activeElement)) _renderSoundModalHeader(s);
+  }
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(id)}/videos`);
+  if (!ok || _soundModalId !== id) return;
+  const sig = JSON.stringify(data);
+  if (sig === _soundVidsSig) return;
+  _soundVidsSig = sig;
+  data.forEach(v => { v.type = v.content_type; v.description = v.title; });
+  _soundState.videos = data;
+  _mRenderToolbar(_SOUND_MODAL_CFG, data);
+  _mRenderList(_SOUND_MODAL_CFG);
+}
+
 async function _loadSoundModalVideos(soundId) {
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/videos`);
   if (!ok || _soundModalId !== soundId) return;
+  _soundVidsSig = JSON.stringify(data);
   // Engine vocabulary: expose content_type/title under the names the renderers use
   data.forEach(v => { v.type = v.content_type; v.description = v.title; });
   _soundState.videos = data;

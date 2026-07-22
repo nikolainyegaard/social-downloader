@@ -47,6 +47,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The TikTok Loops panel now toggles between the User and Sound loops with pills in the panel header, so the panel is the same height as on the other apps instead of stacking both loops
 
 ### Changed
+- Open detail modals now update live like the rest of the page: a creator modal's video list, header stats, History view, and Stories calendar (and the TikTok sound modal's header and video list) follow loop activity through the event stream, so new saves and changes appear without closing and reopening the modal; refreshes only re-render when the data actually changed
 - Videos now play in the same viewer as stories instead of a separate bare player: bare white play/pause and mute glyphs sit on the video's lower corners with a seek bar between them, replacing the browser's native controls; the glyphs show the action a press triggers (pause while playing, mute while sound is on), clicking the video toggles playback, and manual toggles flash a brief state icon over the media (autoplay on open never does)
 - A Download button now sits on the viewer's top bar for every kind of media (videos, photos, multi-media posts, stories); it was previously story-only
 - Tapping back on the first story slide restarts that story from the beginning instead of doing nothing
