@@ -1072,14 +1072,8 @@
 </div>
 
 <!-- Sound detail modal -->
-<div id="soundModalBackdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeSoundModal()">
-  <div class="modal modal-base">
-    <button class="modal-close" onclick="closeSoundModal()"></button>
-    <div class="modal-header"   id="soundModalHeader"></div>
-    <div class="modal-toolbar"  id="soundModalToolbar"></div>
-    <div class="modal-video-list" id="soundModalVideoList"></div>
-  </div>
-</div>
+<!-- The sound detail modal is injected by tiktok.js from the shared
+     _modalShellHtml builder, the same shell the creator modals use. -->
 
 <button id="backToTopBtn" class="back-to-top"
         onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top">↑</button>

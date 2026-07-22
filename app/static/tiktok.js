@@ -944,11 +944,46 @@ function _soundThumbCell(v) {
          ${action}>${badge}</div>`;
 }
 
+// The sound modal uses the same shell markup and mobile treatment as the
+// creator modals (shared _modalShellHtml + the engine's mobile toolbar/rows),
+// so the two can never drift apart again.
+document.body.insertAdjacentHTML('beforeend',
+  _modalShellHtml('soundModal', 'closeSoundModal', { scrollTopFn: 'soundModalScrollTop' }));
+_modalShellScrollWiring('soundModal');
+
+function soundModalScrollTop() {
+  const m = document.getElementById('soundModalBase');
+  if (m) m.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function soundMSort(f)   { _mMobSort(_SOUND_MODAL_CFG, f); }
+function soundMStatus(k) { _mMobStatus(_SOUND_MODAL_CFG, k); }
+function soundMType(k)   { _mMobType(_SOUND_MODAL_CFG, k); }
+function _soundDownload(url, name) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+function soundVideoMenu(btn, vid) {
+  const v = _soundState.videos.find(x => x.video_id === vid);
+  if (!v || !v.file_path) return;
+  const id = esc(v.video_id);
+  _openCardMenu(btn, [{ label: 'Download', onclick: () => v.type === 'photo'
+    ? _soundDownload(`/api/tiktok/videos/${id}/photos/zip`, `${id}_photos.zip`)
+    : _soundDownload(`/api/tiktok/videos/${id}/file`, `${id}.mp4`) }]);
+}
+
 const _SOUND_MODAL_CFG = {
   st: _soundState, listElId: 'soundModalVideoList', toolbarElId: 'soundModalToolbar',
   cols: SOUND_VCOLS, colsCls: 'sound-vcols', pageSize: 50,
   filterFn: 'setSoundModalFilter', typeFilterFn: 'setSoundModalTypeFilter',
   sortFn: 'setSoundModalSort', toggleFn: 'toggleSoundModalToolbar', searchFn: 'onSoundModalSearch',
+  mobileToolbar: true, mobileRows: true,
+  filtersHostId: 'soundModalFilters',
+  mSortFn: 'soundMSort', mStatusFn: 'soundMStatus', mTypeFn: 'soundMType',
+  videoMenuFn: 'soundVideoMenu',
   authorCol: v => {
     const name = v.author_handle || v.channel_id || '?';
     return v.author_enabled === 1

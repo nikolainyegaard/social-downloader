@@ -247,27 +247,21 @@ function initChannelApp(cfg) {
   }
 
   function _modalHtml() {
-    return `
-<div id="${P}ModalBackdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)${P}CloseModal()">
-  <div class="modal modal-base creator-modal" id="${P}ModalBase">
-    <button class="modal-close" onclick="${P}CloseModal()"></button>
-    ${cfg.hasBanner ? `<div class="yt-modal-banner" id="${P}ModalBanner" style="display:none"></div>` : ''}
-    <div class="modal-header"     id="${P}ModalHeader"></div>
-    <div class="modal-toolbar"    id="${P}ModalToolbar"></div>
-    <div class="m-filters"        id="${P}ModalFilters" style="display:none"></div>
+    return _modalShellHtml(`${P}Modal`, `${P}CloseModal`, {
+      bannerHtml: cfg.hasBanner ? `<div class="yt-modal-banner" id="${P}ModalBanner" style="display:none"></div>` : '',
+      panelsHtml: `
     <div class="phist-panel"      id="${P}PhistPanel" style="display:none"></div>
-    <div class="stories-panel"    id="${P}StoriesPanel" style="display:none"></div>
-    <div class="modal-video-list" id="${P}ModalVideoList"></div>
-    <button class="back-to-top modal-top" id="${P}ModalTop" style="display:none" onclick="${P}ScrollModalTop()" title="Back to top">↑</button>
-  </div>
+    <div class="stories-panel"    id="${P}StoriesPanel" style="display:none"></div>`,
+      scrollTopFn: `${P}ScrollModalTop`,
+      afterHtml: `
   <div class="about-modal" id="${P}AboutModal" style="display:none" onclick="if(event.target===this)${P}CloseAbout()">
     <div class="about-card">
       <button class="about-close" onclick="${P}CloseAbout()" aria-label="Close">${_xIcon}</button>
       <h3 class="about-title">About</h3>
       <div id="${P}AboutBody"></div>
     </div>
-  </div>
-</div>`;
+  </div>`,
+    });
   }
 
   document.getElementById(`platform-${cfg.id}`).innerHTML = _sectionHtml();
@@ -1509,24 +1503,7 @@ function initChannelApp(cfg) {
   // Modal back-to-top: only the modal element itself scrolls on mobile (single
   // scroll container); on desktop the inner list scrolls, so this stays hidden.
   X('ScrollModalTop', () => { const m = _el('ModalBase'); if (m) m.scrollTo({ top: 0, behavior: 'smooth' }); });
-  {
-    const mb = _el('ModalBase'), top = _el('ModalTop'), tabsHost = _el('ModalToolbar'), filt = _el('ModalFilters');
-    let lastY = 0;
-    if (mb) mb.addEventListener('scroll', () => {
-      const y = mb.scrollTop;
-      if (top) top.style.display = y > 200 ? 'flex' : 'none';
-      if (filt && _mIsMobile()) {
-        const tabs = tabsHost && tabsHost.querySelector('.m-tabs');
-        // Quick-return: only hide once the toolbar is pinned at the top (the
-        // header has scrolled away). Until then the filter row scrolls off with
-        // the page on its own, so there is no shift and no blank gap.
-        const pinned = tabs && tabs.getBoundingClientRect().top <= mb.getBoundingClientRect().top + 1;
-        if (!pinned || y < lastY - 6) filt.classList.remove('filters-hidden');
-        else if (y > lastY + 6) filt.classList.add('filters-hidden');
-      }
-      lastY = y;
-    }, { passive: true });
-  }
+  _modalShellScrollWiring(`${P}Modal`);
 
   // Mobile toolbar dropdown handlers + the History Fields dropdown.
   X('MSort',   f => _mMobSort(MODAL_CFG, f));

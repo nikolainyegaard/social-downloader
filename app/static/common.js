@@ -1796,6 +1796,51 @@ function _mFiltered(cfg, skipSearch = false) {
   return _sortByField(vids, field, dir);
 }
 
+// Shared detail-modal shell: one markup source for the engine's creator modal
+// and the TikTok sound modal, so structure and classes (creator-modal styling,
+// the mobile filter host, the back-to-top button) can never drift apart.
+// `base` prefixes every element id (base 'ttModal' gives ttModalBackdrop,
+// ttModalHeader, ...); opts slot in the platform extras.
+function _modalShellHtml(base, closeFn, { bannerHtml = '', panelsHtml = '', afterHtml = '', scrollTopFn = null } = {}) {
+  return `
+<div id="${base}Backdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)${closeFn}()">
+  <div class="modal modal-base creator-modal" id="${base}Base">
+    <button class="modal-close" onclick="${closeFn}()"></button>
+    ${bannerHtml}
+    <div class="modal-header"     id="${base}Header"></div>
+    <div class="modal-toolbar"    id="${base}Toolbar"></div>
+    <div class="m-filters"        id="${base}Filters" style="display:none"></div>
+    ${panelsHtml}
+    <div class="modal-video-list" id="${base}VideoList"></div>
+    ${scrollTopFn ? `<button class="back-to-top modal-top" id="${base}Top" style="display:none" onclick="${scrollTopFn}()" title="Back to top">↑</button>` : ''}
+  </div>
+  ${afterHtml}
+</div>`;
+}
+
+// Back-to-top visibility plus the mobile filter row's quick-return behavior
+// (hide on scroll down once the toolbar is pinned, reveal on scroll up),
+// shared by every modal built on _modalShellHtml.
+function _modalShellScrollWiring(base) {
+  const mb = document.getElementById(`${base}Base`);
+  if (!mb) return;
+  const top = document.getElementById(`${base}Top`);
+  const tabsHost = document.getElementById(`${base}Toolbar`);
+  const filt = document.getElementById(`${base}Filters`);
+  let lastY = 0;
+  mb.addEventListener('scroll', () => {
+    const y = mb.scrollTop;
+    if (top) top.style.display = y > 200 ? 'flex' : 'none';
+    if (filt && _mIsMobile()) {
+      const tabs = tabsHost && tabsHost.querySelector('.m-tabs');
+      const pinned = tabs && tabs.getBoundingClientRect().top <= mb.getBoundingClientRect().top + 1;
+      if (!pinned || y < lastY - 6) filt.classList.remove('filters-hidden');
+      else if (y > lastY + 6) filt.classList.add('filters-hidden');
+    }
+    lastY = y;
+  }, { passive: true });
+}
+
 function _mRenderToolbar(cfg, vids) {
   if (cfg.mobileToolbar && _mIsMobile()) { _mRenderToolbarMobile(cfg, vids); return; }
   const _fh = cfg.filtersHostId && document.getElementById(cfg.filtersHostId);
