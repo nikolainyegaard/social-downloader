@@ -2065,7 +2065,12 @@ function initChannelApp(cfg) {
     // rightmost slot is always the present.
     const RANGE  = 6;
     const start  = new Date();
-    start.setDate(1);
+    // Anchor mid-month: the 1st at local midnight is the previous month in
+    // UTC, and Cal-Heatmap resolves the instant in UTC, which shifted the
+    // whole window one month back (June ended up rightmost instead of July).
+    // The 15th resolves to the same month in every timezone, and also can't
+    // overflow when stepping back from a 31st.
+    start.setDate(15);
     start.setMonth(start.getMonth() - (RANGE - 1));
     _storyCalOffset = 0;
 
