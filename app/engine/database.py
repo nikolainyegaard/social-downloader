@@ -182,6 +182,24 @@ class ChannelDB:
             # Invariant: starred channels are always bookmarked. Cheap and
             # idempotent, so it also repairs pre-bookmark databases on launch.
             conn.execute("UPDATE channels SET bookmarked = 1 WHERE starred = 1 AND bookmarked = 0")
+            # Backfill bans recorded before transitions to banned were written
+            # to profile_history (July 2026 fix): any channel with a banned_at
+            # stamp but no recorded to-banned transition gets a synthetic
+            # account_status row at banned_at, so the modal's Profile History
+            # shows the ban. Idempotent: the inserted row satisfies the NOT
+            # EXISTS on the next launch.
+            conn.execute("""
+                INSERT INTO profile_history (channel_id, field, old_value, changed_at)
+                SELECT c.channel_id, 'account_status', 'active', c.banned_at
+                FROM channels c
+                WHERE c.banned_at IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM profile_history ph
+                      WHERE ph.channel_id = c.channel_id
+                        AND ph.field = 'account_status'
+                        AND ph.old_value != 'banned'
+                  )
+            """)
         if needs_vacuum:
             self.vacuum()
 
@@ -1028,7 +1046,10 @@ class ChannelDB:
 
     def get_aggregate_stats(self) -> dict:
         with self.get_db() as conn:
-            crow = conn.execute("SELECT COUNT(*) FROM channels WHERE enabled = 1").fetchone()
+            # channel_count is actively tracked creators only: soft-disabled
+            # stubs and tracking-disabled creators stay out of the stat tile
+            crow = conn.execute(
+                "SELECT COUNT(*) FROM channels WHERE enabled = 1 AND tracking_enabled = 1").fetchone()
             vrow = conn.execute("""
                 SELECT
                     SUM(CASE WHEN status != 'deleted' THEN 1 ELSE 0 END) AS saved_count,
