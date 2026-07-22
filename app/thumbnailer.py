@@ -21,6 +21,7 @@ import concurrent.futures
 import glob as _glob
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -110,6 +111,37 @@ def avatar_thumb(platform: str, creator_id: str) -> str | None:
 
 # ── Avatar caching ────────────────────────────────────────────────────────────
 
+# 64x64 grayscale SSIM at or above this means "same picture, different encode".
+# Re-encodes of one picture score ~0.99 after the downscale; a real avatar
+# change lands far below.
+_SSIM_SAME_THRESHOLD = 0.95
+
+
+def _ssim_same_picture(img_a: str, img_b: str) -> bool | None:
+    """
+    Decode two images and compare them structurally: both scaled to 64x64
+    grayscale, then SSIM. Returns True when they are the same picture within
+    re-encode noise, False when they visually differ, None when the
+    comparison itself failed (undecodable file, ffmpeg error).
+    """
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-i", img_a, "-i", img_b,
+             "-filter_complex",
+             "[0:v]scale=64:64,format=gray[a];[1:v]scale=64:64,format=gray[b];[a][b]ssim",
+             "-f", "null", "-"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            return None
+        m = re.search(r"All:([0-9.]+)", result.stderr)
+        if not m:
+            return None
+        return float(m.group(1)) >= _SSIM_SAME_THRESHOLD
+    except Exception:
+        return None
+
+
 def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok",
                  db_obj=None) -> str | bool:
     """
@@ -151,40 +183,38 @@ def cache_avatar(creator_id: str, avatar_url: str, platform: str = "tiktok",
     except OSError:
         _try_remove(jpg_tmp)
         return False
-    # Sidecar line 1 is the current source hash; an optional line 2 is a
-    # pending hash awaiting confirmation (see the two-strike block below).
-    old_md5     = None
-    pending_md5 = None
+    # The sidecar holds the source hash of the cached avatar. Files written
+    # by the retired two-strike scheme carried a pending hash on line 2;
+    # only the first token is read, the rest is ignored.
+    old_md5 = None
     try:
         with open(src_sig, encoding="ascii") as f:
             _lines = f.read().split()
-            old_md5     = _lines[0] if _lines else None
-            pending_md5 = _lines[1] if len(_lines) > 1 else None
+            old_md5 = _lines[0] if _lines else None
     except OSError:
         pass
 
     if old_md5 == new_md5 and os.path.exists(path):
         _try_remove(jpg_tmp)
-        if pending_md5:
-            # A stale pending hash was a one-off variant, not a change taking
-            # hold; clear it so it can never confirm later.
-            with open(src_sig, "w", encoding="ascii") as f:
-                f.write(new_md5)
         _db.set_avatar_cached(creator_id, True)
         return "unchanged"
 
-    # Two-strike confirm for changes: Google's avatar CDN keeps byte-different
-    # encodes of the same picture on different edge caches, so checks can
-    # alternate between two hashes for one unchanged avatar (seen on YouTube:
-    # a false "changed" every session). A differing download is stashed as
-    # pending and only counts as a change when the NEXT check downloads the
-    # same new hash again; the A/B flip-flop never repeats twice in a row.
-    if old_md5 and os.path.exists(path) and new_md5 != old_md5 and new_md5 != pending_md5:
-        _try_remove(jpg_tmp)
-        with open(src_sig, "w", encoding="ascii") as f:
-            f.write(old_md5 + "\n" + new_md5)
-        _db.set_avatar_cached(creator_id, True)
-        return "unchanged"
+    # A byte hash alone cannot decide a change: Google's avatar CDN keeps
+    # byte-different encodes of the same picture on different edge caches, so
+    # an unchanged avatar yields several source hashes over time (seen on
+    # YouTube as false "changed" entries, surviving even a two-strike confirm
+    # when one edge answered twice in a row). A differing download is instead
+    # compared structurally against the cached file; the same picture in a new
+    # encode just becomes the current hash so repeats fast-path, and only a
+    # real visual difference falls through to be recorded. A failed comparison
+    # also falls through, treating the download as a change.
+    if old_md5 and os.path.exists(path) and new_md5 != old_md5:
+        if _ssim_same_picture(jpg_tmp, path):
+            _try_remove(jpg_tmp)
+            with open(src_sig, "w", encoding="ascii") as f:
+                f.write(new_md5)
+            _db.set_avatar_cached(creator_id, True)
+            return "unchanged"
 
     if not encode_avif(jpg_tmp, avif_tmp, CRF_AVATAR):
         _try_remove(jpg_tmp)
