@@ -1361,18 +1361,21 @@ function closeImgModal() {
   _unlockScroll();
 }
 
-// ── Media carousel modal ──────────────────────────────────────────────────────
+// ── Media viewer modal ────────────────────────────────────────────────────────
 // The one media viewer: photo posts, multi-media posts, normal video playback,
 // and stories. Slides are plain image URL strings (TikTok photo posts) or
 // {url, type: 'image'|'video'} objects.
+//
+// Two entry points parameterize the behavior: openMediaViewer is the plain
+// viewer (nav arrows on multi-slide sets, play/pause + mute + seek chrome on
+// videos), openStoryViewer is story mode (progress bars, auto-advance,
+// 20/60/20 tap zones, no button chrome; a center tap toggles pause and
+// flashes the state icon over the media).
 
-let _carouselUrls  = [];
-let _carouselIdx   = 0;
-let _carouselMuted = false;  // sticky across slides within one open, reset on close
+let _mvSlides = [];
+let _mvIdx    = 0;
+let _mvMuted  = false;  // sticky across slides within one open, reset on close
 
-// Story mode: same modal plus per-slide progress bars, auto-advance, and tap
-// zones, with the nav arrows hidden. openStorySlides turns it on; closeCarousel
-// tears it down so normal carousels are unaffected.
 const _STORY_IMAGE_SECS = 5;
 let _storyMode     = false;
 let _storyTimer    = null;
@@ -1381,21 +1384,21 @@ let _storyEndsAt   = 0;     // when the armed advance timer fires (ms epoch)
 let _storyRemainMs = 0;     // captured at pause, drives the resume timer
 let _storySlideCtx = null;  // {isVid, vid, fill} of the running slide
 
-function openCarouselSlides(slides) {
+function openMediaViewer(slides) {
   if (!slides || !slides.length) return;
-  _carouselUrls = slides;
-  // Single-slide carousels (normal video playback, lone photos) drop the nav
-  // arrows and let the media use the released width, like the old video modal
-  document.getElementById('carouselModal').classList.toggle('single-slide', slides.length === 1);
-  _showCarouselSlide(0);
-  document.getElementById('carouselModal').style.display = 'flex';
+  _mvSlides = slides;
+  // Single-slide sets (normal video playback, lone photos) drop the nav
+  // arrows and let the media use the released width
+  document.getElementById('mvModal').classList.toggle('mv-single', slides.length === 1);
+  _mvShowSlide(0);
+  document.getElementById('mvModal').style.display = 'flex';
   _lockScroll();
 }
 
-function openStorySlides(slides) {
+function openStoryViewer(slides) {
   if (!slides || !slides.length) return;
   _storyMode = true;
-  document.getElementById('carouselModal').classList.add('story-mode');
+  document.getElementById('mvModal').classList.add('story-mode');
   const bar = document.getElementById('storyProgress');
   bar.innerHTML = slides.map(() =>
     '<span class="story-progress-seg"><span class="story-progress-fill"></span></span>').join('');
@@ -1403,44 +1406,52 @@ function openStorySlides(slides) {
   // Story actions on the topbar row: Download works, the other two are reserved
   // slots for future actions. Shown/hidden by the story-mode class alone.
   document.getElementById('storyActions').innerHTML = `
-    <button class="story-action-btn" title="Download" onclick="storyDownloadCurrent()">${_dlIcon}</button>
-    <button class="story-action-btn" title="Coming soon" disabled>${_storyDotsIcon}</button>
-    <button class="story-action-btn" title="Coming soon" disabled>${_storyDotsIcon}</button>`;
-  openCarouselSlides(slides);
+    <button class="mv-btn" title="Download" onclick="storyDownloadCurrent()">${_dlIcon}</button>
+    <button class="mv-btn" title="Coming soon" disabled>${_storyDotsIcon}</button>
+    <button class="mv-btn" title="Coming soon" disabled>${_storyDotsIcon}</button>`;
+  openMediaViewer(slides);
 }
 
-const _storyDotsIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
-const _cPlayIcon  = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.5 5.2v13.6c0 .8.9 1.3 1.6.9l10.4-6.8c.6-.4.6-1.4 0-1.8L10.1 4.3c-.7-.4-1.6.1-1.6.9z"/></svg>`;
-const _cPauseIcon = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="6.4" y="5" width="3.8" height="14" rx="1.2"/><rect x="13.8" y="5" width="3.8" height="14" rx="1.2"/></svg>`;
+const _storyDotsIcon = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
+const _mvPlayIcon  = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.5 5.2v13.6c0 .8.9 1.3 1.6.9l10.4-6.8c.6-.4.6-1.4 0-1.8L10.1 4.3c-.7-.4-1.6.1-1.6.9z"/></svg>`;
+const _mvPauseIcon = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="6.4" y="5" width="3.8" height="14" rx="1.2"/><rect x="13.8" y="5" width="3.8" height="14" rx="1.2"/></svg>`;
 const _soundIcon = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M4 9.5v5a1 1 0 0 0 1 1h2.8l4.6 3.7c.65.52 1.6.06 1.6-.78V5.58c0-.84-.95-1.3-1.6-.78L7.8 8.5H5a1 1 0 0 0-1 1z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M16.5 9a4.4 4.4 0 0 1 0 6M18.8 6.8a7.6 7.6 0 0 1 0 10.4"/></svg>`;
 const _mutedIcon = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M4 9.5v5a1 1 0 0 0 1 1h2.8l4.6 3.7c.65.52 1.6.06 1.6-.78V5.58c0-.84-.95-1.3-1.6-.78L7.8 8.5H5a1 1 0 0 0-1 1z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M16.3 9.7l5 5M21.3 9.7l-5 5"/></svg>`;
 
-// Play/pause and mute chrome on the topbar; shown for video slides (and any
-// story slide, where pausing also freezes the image timer and progress bar).
-function _carouselMediaSync() {
-  const ctrls = document.getElementById('carouselControls');
-  const vid   = document.getElementById('carouselVid');
-  const isVid = vid.style.display !== 'none';
-  const show  = isVid || _storyMode;
-  ctrls.style.display = show ? '' : 'none';
+// Play/pause + mute buttons and the seek bar: plain-video slides only. Story
+// mode has no button chrome; its feedback is the flash overlay.
+function _mvSync() {
+  const vid   = document.getElementById('mvVid');
+  const show  = vid.style.display !== 'none' && !_storyMode;
+  document.getElementById('mvControls').style.display = show ? '' : 'none';
+  document.getElementById('mvSeek').style.display     = show ? '' : 'none';
   if (!show) return;
-  const playing = _storyMode ? !_storyPaused : !(vid.paused || vid.ended);
-  const playBtn = document.getElementById('carouselPlayBtn');
-  playBtn.innerHTML = playing ? _cPauseIcon : _cPlayIcon;
+  const playing = !(vid.paused || vid.ended);
+  const playBtn = document.getElementById('mvPlayBtn');
+  playBtn.innerHTML = playing ? _mvPauseIcon : _mvPlayIcon;
   playBtn.title     = playing ? 'Pause' : 'Play';
-  const muteBtn = document.getElementById('carouselMuteBtn');
-  muteBtn.style.display = isVid ? '' : 'none';
+  const muteBtn = document.getElementById('mvMuteBtn');
   muteBtn.innerHTML = vid.muted ? _mutedIcon : _soundIcon;
   muteBtn.title     = vid.muted ? 'Unmute' : 'Mute';
 }
 
-function carouselTogglePlay() {
+// Momentary center overlay flashing the new state when a story is tapped.
+function _mvFlash(icon) {
+  const el = document.getElementById('mvFlash');
+  el.innerHTML = icon;
+  el.classList.remove('on');
+  void el.offsetWidth;  // restart the animation
+  el.classList.add('on');
+}
+
+function mvTogglePlay() {
   if (_storyMode) {
-    _storyPaused ? _storyResume() : _storyPause();
-    _carouselMediaSync();
+    const pausing = !_storyPaused;
+    pausing ? _storyPause() : _storyResume();
+    _mvFlash(pausing ? _mvPauseIcon : _mvPlayIcon);
     return;
   }
-  const vid = document.getElementById('carouselVid');
+  const vid = document.getElementById('mvVid');
   if (vid.style.display === 'none') return;
   if (vid.paused) {
     if (vid.ended) vid.currentTime = 0;
@@ -1448,14 +1459,30 @@ function carouselTogglePlay() {
   } else vid.pause();
 }
 
-function carouselToggleMute() {
-  const vid = document.getElementById('carouselVid');
-  _carouselMuted = vid.muted = !vid.muted;
+function mvToggleMute() {
+  const vid = document.getElementById('mvVid');
+  _mvMuted = vid.muted = !vid.muted;
+}
+
+// Seek bar (plain video only): input drags set the position, timeupdate
+// events keep the bar tracking playback.
+function mvSeek(val) {
+  const vid = document.getElementById('mvVid');
+  if (isFinite(vid.duration) && vid.duration > 0)
+    vid.currentTime = (Number(val) / 1000) * vid.duration;
+}
+
+function _mvSeekSync() {
+  if (_storyMode) return;
+  const vid = document.getElementById('mvVid');
+  if (isFinite(vid.duration) && vid.duration > 0)
+    document.getElementById('mvSeek').value =
+      String(Math.round(vid.currentTime / vid.duration * 1000));
 }
 
 // Same anchor-click download as the Videos list-view Download button.
 function storyDownloadCurrent() {
-  const slide = _carouselUrls[_carouselIdx];
+  const slide = _mvSlides[_mvIdx];
   if (!slide || typeof slide === 'string') return;
   const a = document.createElement('a');
   a.href = slide.url;
@@ -1519,8 +1546,8 @@ function _storyResume() {
 
 function _storyAdvance() {
   _storyClearTimer();
-  if (_carouselIdx >= _carouselUrls.length - 1) closeCarousel();
-  else _showCarouselSlide(_carouselIdx + 1);
+  if (_mvIdx >= _mvSlides.length - 1) closeMediaViewer();
+  else _mvShowSlide(_mvIdx + 1);
 }
 
 function _storyBeginSlide(idx, isVid, vid) {
@@ -1551,12 +1578,12 @@ function _storyBeginSlide(idx, isVid, vid) {
     // probe says what the server actually returned (404 = row without file,
     // 200 video/* = file exists but does not decode, other content-type =
     // wrong bytes served). Full detail in the console and behind Details.
-    const slide = _carouselUrls[_carouselIdx];
+    const slide = _mvSlides[_mvIdx];
     const url   = vid.currentSrc || (typeof slide === 'string' ? slide : slide?.url) || '';
     const me    = vid.error;
     const CODES = { 1: 'ABORTED', 2: 'NETWORK', 3: 'DECODE', 4: 'SRC_NOT_SUPPORTED' };
     const base  = [
-      `Story video failed to play (slide ${_carouselIdx + 1}/${_carouselUrls.length}).`,
+      `Story video failed to play (slide ${_mvIdx + 1}/${_mvSlides.length}).`,
       `URL: ${url}`,
       `MediaError: ${me ? `code ${me.code} ${CODES[me.code] || '?'}${me.message ? ` (${me.message})` : ''}` : 'none reported'}`,
       `networkState=${vid.networkState} readyState=${vid.readyState}`,
@@ -1589,24 +1616,24 @@ function _storyBeginSlide(idx, isVid, vid) {
   _storyArm(15 * 1000);
 }
 
-function _showCarouselSlide(idx) {
-  _carouselIdx = idx;
-  const slide = _carouselUrls[idx];
+function _mvShowSlide(idx) {
+  _mvIdx = idx;
+  const slide = _mvSlides[idx];
   const url   = typeof slide === 'string' ? slide : slide.url;
   const isVid = typeof slide !== 'string' && slide.type === 'video';
-  const img   = document.getElementById('carouselImg');
-  const vid   = document.getElementById('carouselVid');
+  const img   = document.getElementById('mvImg');
+  const vid   = document.getElementById('mvVid');
   // Detach the previous slide's handlers BEFORE touching src: unloading via
   // src = '' (and replacing a loading src) fires error/abort events, which
   // used to hit the old slide's onerror and phantom-skip photo slides with a
-  // spurious "failed to play" warning. closeCarousel does the same dance.
+  // spurious "failed to play" warning. closeMediaViewer does the same dance.
   vid.onended = vid.onerror = vid.onloadedmetadata = null;
   vid.pause();
   if (isVid) {
     img.style.display = 'none';
     img.src = '';
     vid.style.display = '';
-    vid.muted = _carouselMuted;
+    vid.muted = _mvMuted;
     vid.src = url;
     vid.play().catch(() => {});
   } else {
@@ -1615,52 +1642,54 @@ function _showCarouselSlide(idx) {
     img.style.display = '';
     img.src = url;
   }
-  document.getElementById('carouselCounter').textContent =
-    (!_storyMode && _carouselUrls.length > 1) ? `${idx + 1} / ${_carouselUrls.length}` : '';
-  document.getElementById('carouselPrev').disabled = idx === 0;
-  document.getElementById('carouselNext').disabled = idx === _carouselUrls.length - 1;
+  document.getElementById('mvSeek').value = '0';
+  document.getElementById('mvCounter').textContent =
+    (!_storyMode && _mvSlides.length > 1) ? `${idx + 1} / ${_mvSlides.length}` : '';
+  document.getElementById('mvPrev').disabled = idx === 0;
+  document.getElementById('mvNext').disabled = idx === _mvSlides.length - 1;
   if (_storyMode) _storyBeginSlide(idx, isVid, vid);
-  _carouselMediaSync();
+  _mvSync();
 }
 
-function carouselStep(dir) {
-  const next = _carouselIdx + dir;
+function mvStep(dir) {
+  const next = _mvIdx + dir;
   if (next < 0) return;
-  if (next >= _carouselUrls.length) {
+  if (next >= _mvSlides.length) {
     // Tapping forward on the last story slide closes, like the platforms do
-    if (_storyMode) closeCarousel();
+    if (_storyMode) closeMediaViewer();
     return;
   }
-  _showCarouselSlide(next);
+  _mvShowSlide(next);
 }
 
-function closeCarousel() {
+function closeMediaViewer() {
   _storyClearTimer();
-  const vid = document.getElementById('carouselVid');
+  const vid = document.getElementById('mvVid');
   vid.onended = vid.onerror = vid.onloadedmetadata = null;
   vid.pause();
   vid.src = '';
-  vid.muted = _carouselMuted = false;
+  vid.muted = _mvMuted = false;
   _storyPaused   = false;
   _storySlideCtx = null;
   if (_storyMode) {
     _storyMode = false;
-    document.getElementById('carouselModal').classList.remove('story-mode');
+    document.getElementById('mvModal').classList.remove('story-mode');
     const bar = document.getElementById('storyProgress');
     bar.innerHTML = '';
     bar.style.display = 'none';
   }
-  document.getElementById('carouselControls').style.display = 'none';
-  document.getElementById('carouselModal').classList.remove('single-slide');
-  document.getElementById('carouselModal').style.display = 'none';
-  document.getElementById('carouselImg').src = '';
-  _carouselUrls = [];
-  _carouselIdx  = 0;
+  document.getElementById('mvControls').style.display = 'none';
+  document.getElementById('mvSeek').style.display = 'none';
+  document.getElementById('mvModal').classList.remove('mv-single');
+  document.getElementById('mvModal').style.display = 'none';
+  document.getElementById('mvImg').src = '';
+  _mvSlides = [];
+  _mvIdx    = 0;
   _unlockScroll();
 }
 
 // ── Global overlay keyboard handling ──────────────────────────────────────────
-// Carousel arrow keys plus Escape for the shared overlay modals. Platform
+// Media viewer arrow keys plus Escape for the shared overlay modals. Platform
 // detail modals handle their own Escape in channels.js.
 
 document.addEventListener('keydown', e => {
@@ -1671,15 +1700,15 @@ document.addEventListener('keydown', e => {
     return;
   }
   // The error dialog can open over anything (its toast floats above all
-  // overlays), so it outranks even the carousel
+  // overlays), so it outranks even the media viewer
   if (_open('errorModal')) {
     if (e.key === 'Escape') closeErrorModal();
     return;
   }
-  if (_open('carouselModal')) {
-    if (e.key === 'ArrowLeft')  { carouselStep(-1); return; }
-    if (e.key === 'ArrowRight') { carouselStep(1);  return; }
-    if (e.key === 'Escape')     { closeCarousel();  return; }
+  if (_open('mvModal')) {
+    if (e.key === 'ArrowLeft')  { mvStep(-1); return; }
+    if (e.key === 'ArrowRight') { mvStep(1);  return; }
+    if (e.key === 'Escape')     { closeMediaViewer(); return; }
     return;
   }
   if (e.key !== 'Escape') return;

@@ -390,12 +390,12 @@ function initChannelApp(cfg) {
     openImgModalUrl(`${API}/videos/${encodeURIComponent(videoId)}/thumbnail`);
   });
 
-  // Normal video playback goes through the shared carousel viewer as a
-  // single video slide (play/pause and mute chrome, no nav arrows).
+  // Normal video playback goes through the shared media viewer as a single
+  // video slide (play/pause, mute, and seek chrome; no nav arrows).
   X('OpenVidModal', videoId => {
     const v   = _creatorState.videos.find(x => x.video_id === videoId);
     const ext = (v && _mediaExt(v)) || 'mp4';
-    openCarouselSlides([{
+    openMediaViewer([{
       url:  `${API}/videos/${encodeURIComponent(videoId)}/file`,
       type: 'video',
       name: `${videoId}.${ext}`,
@@ -405,7 +405,7 @@ function initChannelApp(cfg) {
   X('OpenCarousel', async videoId => {
     const { ok, data } = await apiJSON(`${API}/videos/${encodeURIComponent(videoId)}/files`);
     if (!ok || !data.files || !data.files.length) return;
-    openCarouselSlides(data.files);
+    openMediaViewer(data.files);
   });
 
   // Story row to viewer slide; name feeds the viewer's Download action (the
@@ -427,7 +427,7 @@ function initChannelApp(cfg) {
       showToast('No live stories right now.');
       return;
     }
-    openStorySlides(live.map(_storySlide));
+    openStoryViewer(live.map(_storySlide));
   });
 
   // ── Detail modal config ───────────────────────────────────────────────────
@@ -1944,7 +1944,7 @@ function initChannelApp(cfg) {
       .filter(s => s.posted_at && new Date(s.posted_at * 1000).toLocaleDateString('sv') === day)
       .sort((a, b) => a.posted_at - b.posted_at)
       .map(_storySlide);
-    if (slides.length) openStorySlides(slides);
+    if (slides.length) openStoryViewer(slides);
   });
 
   function _renderStoriesPanel(dayCounts) {
@@ -2207,10 +2207,10 @@ function initChannelApp(cfg) {
 
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    // Overlay modals (carousel, image, video, sound, recent log, settings) sit
+    // Overlay modals (media viewer, image, sound, recent log, settings) sit
     // on top of the creator modal and close themselves via their own handler;
     // don't close both at once.
-    for (const id of ['carouselModal', 'imgModal', 'soundModalBackdrop', 'settingsBackdrop']) {
+    for (const id of ['mvModal', 'imgModal', 'soundModalBackdrop', 'settingsBackdrop']) {
       if (document.getElementById(id) && document.getElementById(id).style.display !== 'none') return;
     }
     if (_el('ModalBackdrop')?.style.display !== 'none') {

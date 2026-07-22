@@ -1032,27 +1032,30 @@
   </div>
 </div>
 
-<!-- Media carousel modal: photos, videos, multi-media posts, and stories -->
-<div id="carouselModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeCarousel()">
-  <div class="carousel-topbar">
-    <div class="carousel-controls" id="carouselControls" style="display:none">
-      <button class="story-action-btn" id="carouselPlayBtn" title="Pause" onclick="carouselTogglePlay()"></button>
-      <button class="story-action-btn" id="carouselMuteBtn" title="Mute" onclick="carouselToggleMute()"></button>
+<!-- Media viewer modal: photos, videos, multi-media posts, and stories -->
+<div id="mvModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeMediaViewer()">
+  <div class="mv-topbar">
+    <div class="mv-controls" id="mvControls" style="display:none">
+      <button class="mv-btn" id="mvPlayBtn" title="Pause" onclick="mvTogglePlay()"></button>
+      <button class="mv-btn" id="mvMuteBtn" title="Mute" onclick="mvToggleMute()"></button>
     </div>
     <div class="story-actions" id="storyActions"></div>
-    <button class="media-modal-close" onclick="closeCarousel()"></button>
+    <button class="mv-btn" title="Close" onclick="closeMediaViewer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
-  <div class="carousel-inner">
-    <button class="carousel-nav" id="carouselPrev" onclick="carouselStep(-1)"><svg width="20" height="20" viewBox="-4.5 0 20 20" fill="currentColor" fill-rule="evenodd" xmlns="http://www.w3.org/2000/svg"><g transform="translate(-289,-6519)"><path d="M299.633777,6519.29231 C299.228878,6518.90256 298.573377,6518.90256 298.169513,6519.29231 L289.606572,6527.55587 C288.797809,6528.33636 288.797809,6529.60253 289.606572,6530.38301 L298.231646,6538.70754 C298.632403,6539.09329 299.27962,6539.09828 299.685554,6538.71753 C300.100809,6538.32879 300.104951,6537.68821 299.696945,6537.29347 L291.802968,6529.67648 C291.398069,6529.28574 291.398069,6528.65315 291.802968,6528.26241 L299.633777,6520.70538 C300.038676,6520.31563 300.038676,6519.68305 299.633777,6519.29231"/></g></svg></button>
-    <div class="carousel-stage">
+  <div class="mv-inner">
+    <button class="mv-nav" id="mvPrev" onclick="mvStep(-1)"><svg width="20" height="20" viewBox="-4.5 0 20 20" fill="currentColor" fill-rule="evenodd" xmlns="http://www.w3.org/2000/svg"><g transform="translate(-289,-6519)"><path d="M299.633777,6519.29231 C299.228878,6518.90256 298.573377,6518.90256 298.169513,6519.29231 L289.606572,6527.55587 C288.797809,6528.33636 288.797809,6529.60253 289.606572,6530.38301 L298.231646,6538.70754 C298.632403,6539.09329 299.27962,6539.09828 299.685554,6538.71753 C300.100809,6538.32879 300.104951,6537.68821 299.696945,6537.29347 L291.802968,6529.67648 C291.398069,6529.28574 291.398069,6528.65315 291.802968,6528.26241 L299.633777,6520.70538 C300.038676,6520.31563 300.038676,6519.68305 299.633777,6519.29231"/></g></svg></button>
+    <div class="mv-stage">
       <div class="story-progress" id="storyProgress" style="display:none"></div>
-      <div class="story-tap-zone story-tap-prev" onclick="carouselStep(-1)"></div>
-      <div class="story-tap-zone story-tap-next" onclick="carouselStep(1)"></div>
-      <img id="carouselImg" src="" alt="">
-      <video id="carouselVid" playsinline style="display:none" onclick="carouselTogglePlay()" onplay="_carouselMediaSync()" onpause="_carouselMediaSync()" onvolumechange="_carouselMediaSync()"></video>
+      <div class="story-tap-zone story-tap-prev" onclick="mvStep(-1)"></div>
+      <div class="story-tap-zone story-tap-pause" onclick="mvTogglePlay()"></div>
+      <div class="story-tap-zone story-tap-next" onclick="mvStep(1)"></div>
+      <div class="mv-flash" id="mvFlash"></div>
+      <img id="mvImg" src="" alt="">
+      <video id="mvVid" playsinline style="display:none" onclick="mvTogglePlay()" onplay="_mvSync()" onpause="_mvSync()" onvolumechange="_mvSync()" ontimeupdate="_mvSeekSync()"></video>
+      <input type="range" class="mv-seek" id="mvSeek" min="0" max="1000" value="0" style="display:none" oninput="mvSeek(this.value)">
     </div>
-    <button class="carousel-nav" id="carouselNext" onclick="carouselStep(1)"><svg width="20" height="20" viewBox="-4.5 0 20 20" fill="currentColor" fill-rule="evenodd" xmlns="http://www.w3.org/2000/svg"><g transform="translate(-249,-6519)"><path d="M249.365851,6538.70769 C249.770764,6539.09744 250.426289,6539.09744 250.830166,6538.70769 L259.393407,6530.44413 C260.202198,6529.66364 260.202198,6528.39747 259.393407,6527.61699 L250.768031,6519.29246 C250.367261,6518.90671 249.720021,6518.90172 249.314072,6519.28247 C248.899839,6519.67121 248.894661,6520.31179 249.302681,6520.70653 L257.196934,6528.32352 C257.601847,6528.71426 257.601847,6529.34685 257.196934,6529.73759 L249.365851,6537.29462 C248.960938,6537.68437 248.960938,6538.31795 249.365851,6538.70769"/></g></svg></button>
-    <div class="carousel-counter" id="carouselCounter"></div>
+    <button class="mv-nav" id="mvNext" onclick="mvStep(1)"><svg width="20" height="20" viewBox="-4.5 0 20 20" fill="currentColor" fill-rule="evenodd" xmlns="http://www.w3.org/2000/svg"><g transform="translate(-249,-6519)"><path d="M249.365851,6538.70769 C249.770764,6539.09744 250.426289,6539.09744 250.830166,6538.70769 L259.393407,6530.44413 C260.202198,6529.66364 260.202198,6528.39747 259.393407,6527.61699 L250.768031,6519.29246 C250.367261,6518.90671 249.720021,6518.90172 249.314072,6519.28247 C248.899839,6519.67121 248.894661,6520.31179 249.302681,6520.70653 L257.196934,6528.32352 C257.601847,6528.71426 257.601847,6529.34685 257.196934,6529.73759 L249.365851,6537.29462 C248.960938,6537.68437 248.960938,6538.31795 249.365851,6538.70769"/></g></svg></button>
+    <div class="mv-counter" id="mvCounter"></div>
   </div>
 </div>
 
