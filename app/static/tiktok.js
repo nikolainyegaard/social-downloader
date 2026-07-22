@@ -522,6 +522,9 @@ function _ttVideoActionBtns(v) {
 function _ttOnStatus(state) {
   soundRunQueue   = state.sound_run_queue   || [];
   soundRunCurrent = state.sound_run_current || null;
+  _soundActivity  = (state.sound_loop_running || state.sound_run_current)
+    ? (state.sound_loop_stage || 'sound loop running')
+    : null;
 
   const el = id => document.getElementById(id);
 
@@ -681,6 +684,7 @@ const tt = initChannelApp({
     ? `openSoundModalAndHighlight('${esc(item.sound_id)}','${esc(item.video_id)}')`
     : '',
   statusActive:      state => state.sound_loop_running || !!state.sound_run_current,
+  currentActivity:   () => _soundActivity,
   nextRunCandidates: state => [
     state.loop_next       ? { iso: state.loop_next,       label: 'user loop'  } : null,
     state.sound_loop_next ? { iso: state.sound_loop_next, label: 'sound loop' } : null,
@@ -693,6 +697,7 @@ const tt = initChannelApp({
 function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/tiktok/trigger/sounds', 'Could not trigger sound loop'); }
 
 let _soundLoopPaused = false;
+let _soundActivity   = null;  // sound loop stage line for the log activity bar
 
 async function toggleSoundPause() {
   const paused = !_soundLoopPaused;

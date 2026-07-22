@@ -33,13 +33,21 @@ from thumbnailer import cache_avatar, generate_thumbnail
 # the same singletons, so concurrent loops are safe.
 db = None
 store = None
+_loop = None
 
 
 def _bind(engine) -> None:
-    global db, store
+    global db, store, _loop
     if db is None:
         db    = engine.db
         store = TikTokStore(engine.db)
+        _loop = engine.loop
+
+
+def _stage(text: str | None) -> None:
+    """Report what the current user check is doing (activity bar)."""
+    if _loop:
+        _loop._set_stage(text)
 
 _BOT_SLEEP_1                  = 300  # seconds after first bot detection (5 min)
 _BOT_SLEEP_2                  = 600  # seconds after second bot detection (10 min)
@@ -250,6 +258,7 @@ async def process_single_user(
     try:
         _mode_tag = "[Quick]" if mode == "quick" else "[Full] "
         log(f"{_mode_tag} Processing @{user['handle']} ({progress or f'ID: {channel_id}'})")
+        _stage("fetching profile")
 
         is_private: bool | None = None
 
@@ -403,7 +412,9 @@ async def process_single_user(
             return _profile_ok, _deletion_detected
 
         # ── Stories: fetch any currently live stories, save new ones ─────────
+        _stage("checking stories")
         _stories_live = await _check_user_stories(user, api, username, log, logd)
+        _stage("fetching videos")
 
         # ── Deletion source: yt-dlp lists the full current video set ─────────
         # yt-dlp is the reliable "what exists right now" source and the sole
@@ -640,6 +651,7 @@ async def process_single_user(
             if stop_event and stop_event.is_set():
                 log("  Loop stop requested: skipping remaining downloads")
                 break
+            _stage(f"downloading video {_n} of {len(_new_sorted)}")
             if vid_id in item_list_map:
                 # Already have full details from item_list -- no page scrape needed.
                 details = item_list_map[vid_id]
@@ -748,6 +760,7 @@ async def process_single_user(
         # Only on full-mode runs: item_list fetches all pages so stats are complete.
         # Quick-mode runs only fetch the first page (30 videos) and skip this step.
         if mode == "full":
+            _stage("updating stats")
             for vid_id, details in item_list_map.items():
                 if vid_id in known_ids and vid_id not in new_ids:
                     store.update_video_stats_loop(
@@ -764,6 +777,7 @@ async def process_single_user(
         return _profile_ok, _deletion_detected, _large_deletion_spike
 
     finally:
+        _stage(None)  # explicit: dedicated manual runs pass no set_current_user
         if set_current_user:
             set_current_user(None)
 
@@ -1073,6 +1087,7 @@ async def run_single_user_with_session(
     logd: Callable[[str], None],
     profile_only: bool = False,
     mode: str = "full",
+    set_current_user: Callable[[str | None], None] | None = None,
 ) -> None:
     """Create a dedicated session and process a single user. Used by the manual run worker."""
     _bind(engine)
@@ -1095,7 +1110,9 @@ async def run_single_user_with_session(
                     log(f"Processing @{user['handle']} -- session failed after retry ({e}), skipping")
                     return
         await asyncio.sleep(3)
-        await process_single_user(user, api, cookies, log=log, logd=logd, fetch_videos=not profile_only, mode=mode)
+        await process_single_user(user, api, cookies, log=log, logd=logd,
+                                  fetch_videos=not profile_only, mode=mode,
+                                  set_current_user=set_current_user)
 
 
 # ── Sound tracking ────────────────────────────────────────────────────────────
@@ -1135,10 +1152,13 @@ async def process_single_sound(engine, sound: dict, log: Callable[[str], None],
     """Process one sound. Returns the count of new video associations added.
     A stop request lands between individual downloads."""
     _bind(engine)
+    from platforms.tiktok.sounds import get_sound_loop
+    _sstage  = get_sound_loop(engine).set_stage
     sound_id = sound["sound_id"]
     label    = sound.get("label") or sound_id
 
     log(f"Processing sound '{label}' ({sound_id})")
+    _sstage(f"sound '{label}': fetching videos")
 
     remote_ids: list[str] = []
     for _attempt in range(2):
@@ -1196,6 +1216,7 @@ async def process_single_sound(engine, sound: dict, log: Callable[[str], None],
         if stop_event and stop_event.is_set():
             log("Loop stop requested: skipping remaining downloads")
             break
+        _sstage(f"sound '{label}': downloading video {_n} of {len(new_ids)}")
         # Already in DB (downloaded via user tracking) -- just add the junction row
         if db.get_video(vid_id):
             store.add_sound_video(sound_id, vid_id)
@@ -1210,6 +1231,7 @@ async def process_single_sound(engine, sound: dict, log: Callable[[str], None],
             new_count += 1
 
     store.update_sound_last_checked(sound_id)
+    _sstage(None)
     return new_count
 
 

@@ -49,6 +49,7 @@ class SoundLoop:
             "last_run_duration_secs": _dur,
             "last_new_videos":        _persisted.get("last_new_videos"),
             "next_run":               None,
+            "stage":                  None,  # what the sound check is doing right now, for the activity bar
         }
         self._lock = threading.Lock()
 
@@ -137,6 +138,12 @@ class SoundLoop:
         with self._lock:
             self.state["next_run"] = iso
 
+    def set_stage(self, text: str | None) -> None:
+        """What the current sound check is doing right now; shown in the log
+        activity bar while the sound loop runs."""
+        with self._lock:
+            self.state["stage"] = text
+
     def request_stop(self) -> None:
         """Signal the sound loop to stop as soon as possible: between sounds,
         or after the in-flight download within a sound."""
@@ -169,6 +176,7 @@ class SoundLoop:
         with self._lock:
             state = {
                 "sound_loop_running":            self.state["running"],
+                "sound_loop_stage":              self.state["stage"],
                 "sound_loop_last_start":         self.state["last_run_start"],
                 "sound_loop_last_end":           self.state["last_run_end"],
                 "sound_loop_last_duration_secs": self.state["last_run_duration_secs"],
@@ -207,6 +215,7 @@ class SoundLoop:
             finally:
                 with self._run_state_lock:
                     self._run_state["current"] = None
+                self.set_stage(None)
                 self._run_queue.task_done()
 
     def run_sound_loop(self) -> None:
@@ -243,6 +252,7 @@ class SoundLoop:
             self._log("=== Sound loop complete ===")
         with self._lock:
             self.state["running"]                = False
+            self.state["stage"]                  = None
             self.state["last_run_start"]         = self.state["current_run_start"]
             self.state["current_run_start"]      = None
             self.state["last_run_end"]           = last_run_end

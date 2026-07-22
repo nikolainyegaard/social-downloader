@@ -62,6 +62,7 @@ class ChannelLoop:
             "last_session_total":     _persisted.get("last_session_total"),
             "next_run":               None,
             "current_channel":        None,
+            "current_stage":          None,  # what the check is doing right now, for the activity bar
             "sessions_today":         [],
             "logs":                   deque(maxlen=1000),
         }
@@ -221,6 +222,7 @@ class ChannelLoop:
                 "loop_last_session_total":     self.loop_state["last_session_total"],
                 "loop_next":                   self.loop_state["next_run"],
                 "loop_current_channel":        self.loop_state["current_channel"],
+                "loop_current_stage":          self.loop_state["current_stage"],
                 "loop_sessions_today":         list(self.loop_state["sessions_today"]),
                 "logs":                        list(self.loop_state["logs"]),
                 "log_seq":                     self._log_seq,
@@ -284,6 +286,13 @@ class ChannelLoop:
     def _set_current_channel(self, handle: str | None) -> None:
         with self._state_lock:
             self.loop_state["current_channel"] = handle
+            self.loop_state["current_stage"]   = None  # stage always belongs to one creator
+
+    def _set_stage(self, text: str | None) -> None:
+        """What the current check is doing right now ("fetching videos",
+        "downloading video 2 of 5"); shown in the log activity bar."""
+        with self._state_lock:
+            self.loop_state["current_stage"] = text
 
     def _set_sleep(self, until: float | None, next_label: str | None) -> None:
         """Set or clear the active sleep indicator shown in the log console."""

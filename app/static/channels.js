@@ -42,6 +42,7 @@
  * @property {Object<string, () => void>} [extraDomainLoaders]  Platform panels refetched on SSE 'changed' domains (TikTok: sounds)
  * @property {() => void} [onCreatorsRefetched]  Called after the SSE creators domain refetches (TikTok: refresh the open sound modal)
  * @property {(state: Object) => boolean} [statusActive]  Extra 'running' signal for the header badge
+ * @property {() => (string|null)} [currentActivity]  Extra-loop activity line for the log bar (TikTok: sound loop stage)
  * @property {(state: Object) => {iso: string, label: string}[]} [nextRunCandidates]
  * @property {boolean} [hasStories]     Platform saves stories: adds the Stories card stat and sort option
  * @property {(s: Object) => Object[]} [statsRows]      Rows for the stat strip
@@ -290,6 +291,7 @@ function initChannelApp(cfg) {
   let loopRunning    = false;
   let loopPaused     = false;
   let currentCreator = null;
+  let currentStage   = null;   // what the current check is doing right now, for the activity bar
   let pendingRescans = {};     // {channel_id: fires_at_unix_secs} for large-spike midpoint re-scans
   let logSeq           = 0;    // log_seq from last server response (monotonic, resets on app restart)
   let logClearSeq      = 0;    // lines before this seq were cleared; don't re-render them
@@ -721,6 +723,7 @@ function initChannelApp(cfg) {
   function renderStatus(state) {
     loopRunning    = state.loop_running;
     currentCreator = state.loop_current_channel;
+    currentStage   = state.loop_current_stage || null;
     runQueue       = state.run_queue  || [];
     runCurrent     = state.run_current || null;
     pendingRescans = state.pending_rescans || {};
@@ -841,6 +844,22 @@ function initChannelApp(cfg) {
       const rem = Math.max(0, Math.round((sleepUntil - Date.now()) / 1000));
       bar.innerHTML = `sleeping ${dur(rem)}`
         + (sleepNext ? ` <span class="lab-next">-- up next: ${esc(sleepNext)}</span>` : '');
+      return;
+    }
+    // A check in progress (session or manual run) outranks any countdown: the
+    // bar reports what is happening right now, stage from the server.
+    if (currentCreator) {
+      bar.innerHTML = `processing @${esc(currentCreator)}`
+        + (currentStage ? ` <span class="lab-next">-- ${esc(currentStage)}</span>` : '');
+      return;
+    }
+    const extraActivity = cfg.currentActivity && cfg.currentActivity();
+    if (extraActivity) {
+      bar.innerHTML = esc(extraActivity);
+      return;
+    }
+    if (loopRunning) {
+      bar.innerHTML = 'session running';
       return;
     }
     const now = Date.now();

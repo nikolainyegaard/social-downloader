@@ -270,12 +270,16 @@ def process_single_channel(
     channel_id = channel["channel_id"]
     handle     = channel["handle"]
 
+    _loop  = getattr(engine, "loop", None)
+    _stage = _loop._set_stage if _loop else (lambda text: None)
+
     if set_current:
         set_current(handle)
 
     try:
         suffix = " (profile only)" if profile_only else (" (quick)" if mode == "quick" else "")
         log(f"Processing @{handle}{suffix}")
+        _stage("fetching profile")
 
         display_name = channel.get("display_name") or handle
         was_banned   = channel.get("account_status") == "banned"
@@ -319,6 +323,7 @@ def process_single_channel(
 
         if adapter.fetch_stories:
             try:
+                _stage("checking stories")
                 stories = adapter.fetch_stories(engine, channel)
                 if stories:
                     save_new_stories(db, engine.platform, channel_id, handle, stories, log)
@@ -326,6 +331,7 @@ def process_single_channel(
                 log(f"  Story fetch failed: {e}")
 
         try:
+            _stage(f"fetching {noun} list")
             remote_posts: dict[str, dict]   = {}
             raw_posts:    dict[str, object] = {}
             for post_dict, raw_post in adapter.iter_posts(channel_id):
@@ -377,6 +383,7 @@ def process_single_channel(
             if stop_event and stop_event.is_set():
                 log("  Loop stop requested: skipping remaining downloads")
                 break
+            _stage(f"downloading {noun} {_n} of {len(_new_sorted)}")
             log(f"  [{_n}/{len(_new_sorted)}] Downloading {vid_id}...")
             adapter.download_item(
                 engine, channel_id, handle, display_name,
@@ -400,6 +407,7 @@ def process_single_channel(
         return "deletions" if (deletion_candidates or deletion_spike) else "ok"
 
     finally:
+        _stage(None)
         if set_current:
             set_current(None)
 

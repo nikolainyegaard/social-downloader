@@ -86,7 +86,8 @@ def _process_single(engine, channel, log, set_current, profile_only=False, mode=
     browser_gate.turn.acquire()
     try:
         asyncio.run(tracker.run_single_user_with_session(
-            engine, channel, log, _logd, profile_only=profile_only, mode=mode))
+            engine, channel, log, _logd, profile_only=profile_only, mode=mode,
+            set_current_user=set_current))
     finally:
         browser_gate.turn.release()
 
