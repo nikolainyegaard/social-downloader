@@ -490,11 +490,11 @@ function initChannelApp(cfg) {
     mTypeFn:      `${P}MType`,
     viewFn:       `${P}SetModalView`,
     viewKeys:     _modalViewKeys,
-    // History view swaps the post filters for its profile-change field pills,
-    // rendered into the toolbar's context-filter area (desktop). On mobile it
-    // becomes a Fields dropdown via mobileFilters.
-    contextFilters: v => v === 'history' ? _phistFieldPillsHtml() : '',
-    mobileFilters:  v => v === 'history' ? _mobileFieldsDd() : '',
+    // History swaps the post filters for a Fields dropdown, and Stories shows
+    // the saved-story count, both rendered into the toolbar's context-filter
+    // area (desktop) or the mobile filter row.
+    contextFilters: _modalContextFilters,
+    mobileFilters:  _modalContextFilters,
     viewVideoFilter: cfg.viewVideoFilter || ((view, vids) => vids),
     gridClassFn:     cfg.gridClassFn || (() => ''),
     typeIconFn:      cfg.typeIconFn || (v => _isMulti(v) ? _vgridPhotoIcon : (v.type === 'photo' || _isImage(v)) ? _vgridImageIcon : _vgridPlayIcon),
@@ -1510,11 +1510,20 @@ function initChannelApp(cfg) {
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // rebuild the Fields dropdown
     _renderPhistPanel();
   });
-  function _mobileFieldsDd() {
+  function _fieldsDd() {
     const fields = [...new Set(phistData.map(e => e.field))];
+    if (!fields.length) return '';
     const menu = fields.map(f =>
       `<button class="m-dd-opt${phistField.has(f) ? ' active' : ''}" onclick="${P}MToggleField('${esc(f)}',this)">${FIELD_LABELS[f] || f}<span>${phistField.has(f) ? '✓' : ''}</span></button>`).join('');
     return _mDd('Fields', menu);
+  }
+
+  // Toolbar context-filter content for the non-media views, shared by the
+  // desktop toolbar (cfg.contextFilters) and the mobile filter row.
+  function _modalContextFilters(view) {
+    if (view === 'history') return _fieldsDd();
+    if (view === 'stories') return _storiesTitleHtml();
+    return '';
   }
 
   // About modal (mobile): full bio, link, and all stats + activity dates.
@@ -1840,8 +1849,8 @@ function initChannelApp(cfg) {
   });
 
   // ── Profile history view ──────────────────────────────────────────────────
-  // Fetches once per creator (cached by phistChId); the field filter pills live
-  // on the toolbar (cfg.contextFilters) so they re-render there after the load.
+  // Fetches once per creator (cached by phistChId); the Fields dropdown lives
+  // on the toolbar (cfg.contextFilters) so it re-renders there after the load.
 
   async function _loadPhist() {
     const panel = _el('PhistPanel');
@@ -1853,27 +1862,23 @@ function initChannelApp(cfg) {
       const { ok, data } = await apiJSON(`${API}/channels/${modalCreatorId}/profile-history`);
       if (!ok || phistChId !== modalCreatorId || _creatorState.view !== 'history') return;
       phistData = data;
-      _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // field pills now known
+      _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // field list now known
     }
     _renderPhistPanel();
-  }
-
-  // Field filter pills for the History view, injected into the toolbar's
-  // context-filter area by cfg.contextFilters.
-  function _phistFieldPillsHtml() {
-    const fields = [...new Set(phistData.map(e => e.field))];
-    if (!fields.length) return '';
-    const pills = fields.map(f => {
-      const active = phistField.has(f) ? ' active' : '';
-      return `<button class="filter-pill${active}" onclick="${P}PhistSetField('${esc(f)}')">${FIELD_LABELS[f] || f}</button>`;
-    }).join('');
-    return `<span class="col-hdr" style="margin-right:2px">Fields</span><div class="filter-pills multi">${pills}</div>`;
   }
 
   // ── Stories history calendar (Cal-Heatmap month intensity view) ───────────
 
   let _storyCal = null;
   let _calTip = null;
+  let _storyTotal = null;  // saved-story count for the toolbar line; null until loaded
+
+  // Saved-story count on the toolbar, injected via _modalContextFilters after
+  // the calendar data lands (same late re-render pattern as the History fields).
+  function _storiesTitleHtml() {
+    if (_storyTotal == null) return '';
+    return `<span class="stories-cal-title">${_storyTotal.toLocaleString()} ${_storyTotal === 1 ? 'story' : 'stories'} saved · click a day to play it</span>`;
+  }
 
   function _calTipShow(target, text) {
     if (!_calTip) {
@@ -1894,6 +1899,7 @@ function initChannelApp(cfg) {
   function _destroyStoriesPanel() {
     if (_storyCal) { try { _storyCal.destroy(); } catch { /* already gone */ } _storyCal = null; }
     _calTipHide();
+    _storyTotal = null;
     const panel = _el('StoriesPanel');
     if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
   }
@@ -1941,11 +1947,9 @@ function initChannelApp(cfg) {
     const ramp = ['#033a16', '#196c2e', '#2ea043', '#56d364'];
     const BUCKETS = ['1', '2', '3-4', '5+'];
 
-    const total = Object.values(dayCounts).reduce((a, b) => a + b, 0);
+    _storyTotal = Object.values(dayCounts).reduce((a, b) => a + b, 0);
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // story count now known
     panel.innerHTML = `
-      <div class="stories-cal-hdr">
-        <span class="stories-cal-title">${total.toLocaleString()} ${total === 1 ? 'story' : 'stories'} saved · click a day to play it</span>
-      </div>
       <div class="stories-cal-box">
         <div class="stories-cal" id="${P}StoriesCal"></div>
         <div class="stories-cal-foot">
@@ -2102,13 +2106,6 @@ function initChannelApp(cfg) {
       </div>
     </div>`;
   }
-
-  // Single-choice: pick one field, or click the active one again to clear.
-  X('PhistSetField', field => {
-    phistField = phistField.has(field) ? new Set() : new Set([field]);
-    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // reflect active pill on the toolbar
-    _renderPhistPanel();
-  });
 
   // ── Tracking view (creators / log) ────────────────────────────────────────
 
