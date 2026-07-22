@@ -1440,8 +1440,9 @@ const _mutedIcon = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
 
 // Play/pause and mute glyphs on the video's lower edge plus the seek bar:
 // plain-video slides only. Story mode has no chrome; its feedback is the
-// flash overlay. Glyphs show the actionable action, not the state: a pause
-// symbol while playing, a mute (crossed speaker) symbol while sound is on.
+// flash overlay. The play glyph shows the actionable action (a pause symbol
+// while playing); the mute glyph shows the current state (crossed speaker
+// while muted, sound waves while audible).
 function _mvSync() {
   const vid  = document.getElementById('mvVid');
   const show = vid.style.display !== 'none' && !_storyMode;
@@ -1453,7 +1454,7 @@ function _mvSync() {
   const playing = !(vid.paused || vid.ended);
   playBtn.innerHTML = playing ? _mvPauseIcon : _mvPlayIcon;
   playBtn.title     = playing ? 'Pause' : 'Play';
-  muteBtn.innerHTML = vid.muted ? _soundIcon : _mutedIcon;
+  muteBtn.innerHTML = vid.muted ? _mutedIcon : _soundIcon;
   muteBtn.title     = vid.muted ? 'Unmute' : 'Mute';
 }
 

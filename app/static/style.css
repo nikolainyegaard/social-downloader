@@ -1472,10 +1472,12 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .mv-inner img,
 .mv-inner video {
   max-width: min(78vw, 520px);
-  max-height: 85vh;
-  /* Mobile browser chrome inflates vh; svh keeps the centered media clear of
-     the topbar (the ~7.5svh top gap always fits the 52px of chrome) */
-  max-height: 85svh;
+  /* Fixed clearance instead of a percentage: the centered media always leaves
+     64px above and below, so the pinned topbar (14px offset + 38px buttons)
+     never sits flush against the media. svh guards against mobile browser
+     chrome inflating vh; the vh line is the fallback for old browsers. */
+  max-height: calc(100vh - 128px);
+  max-height: calc(100svh - 128px);
   display: block;
 }
 .mv-inner video { background: #000; outline: none; }
