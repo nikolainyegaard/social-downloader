@@ -960,7 +960,7 @@ async def process_user_session(
                 if stop_event and stop_event.is_set():
                     log("=== User loop stopped by request ===")
                     browser_gate.close_jobs()
-                    return total_completed
+                    return total_completed + completed
                 user = users[idx]
                 if idx > 0:
                     _gap        = max(random.expovariate(1.0 / SESSION_GAP_MEAN_SECS), _SESSION_GAP_MIN_SECS)
@@ -976,7 +976,7 @@ async def process_user_session(
                     if _stopped:
                         log("=== User loop stopped by request ===")
                         browser_gate.close_jobs()
-                        return total_completed
+                        return total_completed + completed
                 await browser_gate.drain_jobs(api)
                 drained |= await _drain_manual_runs_inline(engine, api, cookies, log, logd, set_current_user)
                 if user["channel_id"] in drained:
