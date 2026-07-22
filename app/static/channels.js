@@ -1956,8 +1956,9 @@ function initChannelApp(cfg) {
 
   let _storyCal = null;
   let _calTip = null;
-  let _storyTotal = null;   // saved-story count for the toolbar line; null until loaded
-  let _storyCalSig = null;  // rendered day-counts signature; gates live repaints
+  let _storyTotal = null;     // saved-story count for the toolbar line; null until loaded
+  let _storyCalSig = null;    // rendered day-counts signature; gates live repaints
+  let _storyCalOffset = 0;    // months paged back from the current month at the right edge
 
   function _calTipShow(target, text) {
     if (!_calTip) {
@@ -1978,8 +1979,9 @@ function initChannelApp(cfg) {
   function _destroyStoriesPanel() {
     if (_storyCal) { try { _storyCal.destroy(); } catch { /* already gone */ } _storyCal = null; }
     _calTipHide();
-    _storyTotal  = null;
-    _storyCalSig = null;
+    _storyTotal     = null;
+    _storyCalSig    = null;
+    _storyCalOffset = 0;
     const panel = _el('StoriesPanel');
     if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
   }
@@ -1997,8 +1999,13 @@ function initChannelApp(cfg) {
 
   X('StoriesCalStep', dir => {
     if (!_storyCal) return;
-    if (dir < 0) _storyCal.previous();
-    else _storyCal.next();
+    // Forward paging clamps at the present: the rightmost slot never shows a
+    // month later than the current one.
+    if (dir > 0 && _storyCalOffset <= 0) return;
+    if (dir < 0) { _storyCalOffset++; _storyCal.previous(); }
+    else         { _storyCalOffset--; _storyCal.next(); }
+    const fwd = _el('StoriesCalFwd');
+    if (fwd) fwd.disabled = _storyCalOffset <= 0;
   });
 
   X('PlayStoriesOfDay', async day => {
@@ -2039,7 +2046,7 @@ function initChannelApp(cfg) {
         <div class="stories-cal-foot">
           <div class="stories-cal-nav">
             <button class="filter-pill" onclick="${P}StoriesCalStep(-1)" title="Earlier months">←</button>
-            <button class="filter-pill" onclick="${P}StoriesCalStep(1)" title="Later months">→</button>
+            <button class="filter-pill" id="${P}StoriesCalFwd" disabled onclick="${P}StoriesCalStep(1)" title="Later months">→</button>
           </div>
           <div class="stories-cal-legend">
             <span>Less</span>
@@ -2051,9 +2058,16 @@ function initChannelApp(cfg) {
       </div>`;
 
     const source = Object.entries(dayCounts).map(([date, value]) => ({ date, value }));
+    // Paint more months than the 540px viewport can show so the content always
+    // overflows off the left edge: the fade mask then always bites into cells
+    // instead of empty background (4 months of 5-week columns total ~455px,
+    // which left a bare gap). The window ends at the current month, so the
+    // rightmost slot is always the present.
+    const RANGE  = 6;
     const start  = new Date();
     start.setDate(1);
-    start.setMonth(start.getMonth() - 3);
+    start.setMonth(start.getMonth() - (RANGE - 1));
+    _storyCalOffset = 0;
 
     _storyCal = new CalHeatmap();
     _storyCal.paint({
@@ -2062,7 +2076,7 @@ function initChannelApp(cfg) {
       domain:    { type: 'month', gutter: 21, label: { text: 'MMM YYYY', textAlign: 'start', position: 'top' } },
       subDomain: { type: 'day', radius: 3, width: 15, height: 15, gutter: 4.5 }, // GitHub's 10px/2px/3px geometry scaled 1.5x
       date:      { start, highlight: [new Date()] },
-      range:     4,
+      range:     RANGE,
       data:      { source, x: 'date', y: 'value' },
       scale:     { color: { type: 'threshold', domain: [2, 3, 5], range: ramp } },
     });

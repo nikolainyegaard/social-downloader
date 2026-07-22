@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Fixed
+- The stories calendar's left edge fade works for every month alignment: with four narrow months the painted content fit inside the fixed viewport, leaving a bare gap on the left where the fade had nothing to fade. The calendar now paints six months so content always overflows the left edge, and paging forward stops at the current month (the button disables there), so the rightmost slot always shows the present month
 - The creator modal's star button reacts instantly: it waited for the server round-trip (and sometimes the next live-refresh event) before repainting, which read as a delay of up to a second
 - Inserted manual run log lines ("=== Manual quick run (inserted): ... ===") get the same session-separator styling as their completion lines instead of rendering as plain grey text
 - The TikTok sound modal now uses the exact same shell as the creator modals instead of its own copy that had drifted: it gets the creator modal's layout classes, the mobile toolbar with sort/status/type dropdowns, the card-style mobile post rows with a per-row Download menu, and the back-to-top button; its markup now comes from the same shared template so the two cannot drift apart again

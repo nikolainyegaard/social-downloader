@@ -941,11 +941,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   padding: 10px 12px 8px;
   display: flex; flex-direction: column; gap: 14px;
 }
-/* Fixed viewport for the painted months: 540px covers 4 months at the widest
-   (6 week-columns each at the 15px/4.5px geometry plus 21px month gutters), so
-   the box never resizes as paging shifts the week alignment. The newest month
-   pins to the right edge and older months drift off the left, faded out by the
-   mask so the cut is soft regardless of where a month lands on the edge. */
+/* Fixed viewport for the painted months, so the box never resizes as paging
+   shifts the week alignment. The calendar paints 6 months (minimum ~663px at
+   the 15px/4.5px geometry plus 21px month gutters), always wider than this
+   540px viewport, so content always overflows off the left edge: the newest
+   month pins right and older months drift off the left, faded by the mask so
+   the cut is soft regardless of where a month lands on the edge. Keep the JS
+   RANGE high enough that the painted width can never drop under 540px. */
 .stories-cal {
   width: 540px; max-width: 100%;
   padding: 4px 0;
