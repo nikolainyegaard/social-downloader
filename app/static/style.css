@@ -954,8 +954,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    [data-theme=dark] .ch-subdomain-bg, which loads after this file */
 .stories-cal-box .stories-cal .ch-subdomain-bg { fill: var(--hdr); } /* empty day, GitHub's #151b23 equivalent */
 .stories-cal rect { cursor: pointer; }
+/* Footer row inside the box: month nav lower-left, legend lower-right */
+.stories-cal-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.stories-cal-nav { display: flex; align-items: center; gap: 6px; }
 .stories-cal-legend {
-  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  display: flex; align-items: center; gap: 4px;
   font-size: 11px; color: var(--muted);
 }
 .stories-cal-legend span { margin: 0 4px; }

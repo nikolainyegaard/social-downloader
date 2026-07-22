@@ -1945,18 +1945,20 @@ function initChannelApp(cfg) {
     panel.innerHTML = `
       <div class="stories-cal-hdr">
         <span class="stories-cal-title">${total.toLocaleString()} ${total === 1 ? 'story' : 'stories'} saved · click a day to play it</span>
-        <div style="display:flex;gap:6px;align-items:center">
-          <button class="filter-pill" onclick="${P}StoriesCalStep(-1)" title="Earlier months">←</button>
-          <button class="filter-pill" onclick="${P}StoriesCalStep(1)" title="Later months">→</button>
-        </div>
       </div>
       <div class="stories-cal-box">
         <div class="stories-cal" id="${P}StoriesCal"></div>
-        <div class="stories-cal-legend">
-          <span>Less</span>
-          <i style="background:var(--hdr)" title="No stories"></i>
-          ${BUCKETS.map((label, i) => `<i style="background:${ramp[i]}" title="${label} ${label === '1' ? 'story' : 'stories'}"></i>`).join('')}
-          <span>More</span>
+        <div class="stories-cal-foot">
+          <div class="stories-cal-nav">
+            <button class="filter-pill" onclick="${P}StoriesCalStep(-1)" title="Earlier months">←</button>
+            <button class="filter-pill" onclick="${P}StoriesCalStep(1)" title="Later months">→</button>
+          </div>
+          <div class="stories-cal-legend">
+            <span>Less</span>
+            <i style="background:var(--hdr)" title="No stories"></i>
+            ${BUCKETS.map((label, i) => `<i style="background:${ramp[i]}" title="${label} ${label === '1' ? 'story' : 'stories'}"></i>`).join('')}
+            <span>More</span>
+          </div>
         </div>
       </div>`;
 
