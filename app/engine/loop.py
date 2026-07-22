@@ -328,6 +328,10 @@ class ChannelLoop:
         label   = f"@{channel['handle']}" if channel else channel_id
         self._log(f"  Large deletion spike: isolated full re-scan for {label} in {mins}m")
 
+    def has_pending_manual(self) -> bool:
+        with self._run_state_lock:
+            return bool(self._run_pending)
+
     def pop_manual_run(self):
         """Claim the next queued manual run. Returns (channel, profile_only, mode)
         or None when nothing is pending. Marks the run as current; the caller

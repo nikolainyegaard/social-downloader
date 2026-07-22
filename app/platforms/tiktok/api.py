@@ -58,6 +58,10 @@ class _BrowserGate:
         for _fn, fut in pending:
             fut.set_exception(_JobOrphaned())
 
+    def has_jobs(self) -> bool:
+        with self._jobs_lock:
+            return bool(self._jobs)
+
     def try_submit(self, coro_fn):
         """Queue a job for the live shared session. Returns a Future, or None
         when no session is accepting jobs."""

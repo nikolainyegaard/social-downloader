@@ -183,16 +183,27 @@ def process_all_channels(
             log(f"=== {engine.label} loop stopped by request ===")
             break
         if i > 0:
-            gap = channel_gap_secs(platform)
-            if stop_event:
-                # wait() wakes early on a stop request; without the re-check
-                # the current channel would still get a full run afterwards
-                stop_event.wait(gap)
-                if stop_event.is_set():
-                    log(f"=== {engine.label} loop stopped by request ===")
+            # Gap sleep in 1s slices: a stop request ends the session right
+            # here (without the re-check the current channel still got a full
+            # run), and a manual run enqueued mid-sleep executes immediately,
+            # with the remaining sleep continuing afterwards.
+            ends    = time.monotonic() + channel_gap_secs(platform)
+            stopped = False
+            while True:
+                if stop_event and stop_event.is_set():
+                    stopped = True
                     break
-            else:
-                time.sleep(gap)
+                drained |= drain_manual_runs(engine, log, set_current)
+                remaining = ends - time.monotonic()
+                if remaining <= 0:
+                    break
+                if stop_event:
+                    stop_event.wait(min(remaining, 1.0))
+                else:
+                    time.sleep(min(remaining, 1.0))
+            if stopped:
+                log(f"=== {engine.label} loop stopped by request ===")
+                break
         drained |= drain_manual_runs(engine, log, set_current)
         if channel["channel_id"] in drained:
             log(f"Skipping @{channel.get('handle', '?')}: already checked by an inserted manual run")

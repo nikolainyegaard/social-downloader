@@ -799,6 +799,32 @@ async def _drain_manual_runs_inline(engine, api, cookies, log, logd, set_current
             drained.add(user["channel_id"])
 
 
+async def _service_sleep(secs, stop_event, engine, api, cookies, log, logd,
+                         set_current_user, set_sleep, sleep_label, drained) -> bool:
+    """Inter-user gap sleep that services queued work the moment it arrives:
+    an add lookup, diagnostics probe, or sound fetch (gate jobs) and manual
+    Quick/Full runs enqueued mid-sleep run immediately on the warm session,
+    then the remaining sleep continues. Checks once per second. Returns True
+    when a loop stop was requested."""
+    ends = time.monotonic() + secs
+    while True:
+        if stop_event and stop_event.is_set():
+            return True
+        if browser_gate.has_jobs() or engine.loop.has_pending_manual():
+            if set_sleep:
+                set_sleep(None, None)
+            await browser_gate.drain_jobs(api)
+            drained.update(await _drain_manual_runs_inline(
+                engine, api, cookies, log, logd, set_current_user))
+            remaining = ends - time.monotonic()
+            if set_sleep and remaining > 0:
+                set_sleep(time.time() + remaining, sleep_label)
+        remaining = ends - time.monotonic()
+        if remaining <= 0:
+            return False
+        await asyncio.sleep(min(remaining, 1.0))
+
+
 async def process_user_session(
     engine,
     users: list[dict],
@@ -923,11 +949,14 @@ async def process_user_session(
                     return total_completed
                 user = users[idx]
                 if idx > 0:
-                    _gap       = max(random.expovariate(1.0 / SESSION_GAP_MEAN_SECS), _SESSION_GAP_MIN_SECS)
-                    _next_mode = "full refresh" if user.get("full_refresh_pending") else "quick check"
+                    _gap        = max(random.expovariate(1.0 / SESSION_GAP_MEAN_SECS), _SESSION_GAP_MIN_SECS)
+                    _next_mode  = "full refresh" if user.get("full_refresh_pending") else "quick check"
+                    _next_label = f"{_next_mode} for @{user['handle']}"
                     if set_sleep:
-                        set_sleep(time.time() + _gap, f"{_next_mode} for @{user['handle']}")
-                    _stopped = await _stoppable_sleep(_gap, stop_event)
+                        set_sleep(time.time() + _gap, _next_label)
+                    _stopped = await _service_sleep(_gap, stop_event, engine, api, cookies,
+                                                    log, logd, set_current_user,
+                                                    set_sleep, _next_label, drained)
                     if set_sleep:
                         set_sleep(None, None)
                     if _stopped:
