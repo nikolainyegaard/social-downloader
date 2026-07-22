@@ -35,7 +35,7 @@
  * @property {Object<string, string>} [fieldLabels]     profile_history field -> label
  * @property {{key: string, label: string, defaults?: string[], options: {key: string, label: string}[], test: (ch: Object, active: Set<string>) => boolean}[]} [extraFilterGroups]
  * @property {{key: string, label: string, controlsHtml?: string, emptyLabel?: string, show: (search: string) => void}[]} [extraViews]
- * @property {{key: string, icon: string, title: string}[]} [viewKeys]  Video-type filter tabs in the detail modal
+ * @property {{key: string, icon: string, title: string, label?: string}[]} [viewKeys]  Video-type filter tabs in the detail modal (label is the tab text)
  * @property {(view: string, vids: Object[]) => Object[]} [viewVideoFilter]
  * @property {(raw: string, addToasts: Object) => (boolean|Promise<boolean>)} [addHandler]  Return true when fully handled
  * @property {(state: Object) => void} [onStatus]       Called after every status render
@@ -51,6 +51,7 @@
  * @property {(v: Object) => string} [typeIconFn]
  * @property {(v: Object) => string} [thumbBadge]
  * @property {Function} [videoActionBtnsFn]
+ * @property {(v: Object) => {label: string, danger?: boolean, onclick: () => void}[]} [videoMenuItemsFn]  Items for the mobile row ••• menu
  */
 
 /** @param {ChannelAppConfig} cfg */

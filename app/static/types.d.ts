@@ -34,13 +34,21 @@ interface Element {
   selectionEnd: number | null;
   focus(): void;
   setSelectionRange(start: number | null, end: number | null): void;
+  readonly offsetWidth: number;
+  // Expando: an open dropdown remembers its body-portaled menu element
+  _menu?: Element | null;
 }
 
 interface EventTarget {
   classList?: DOMTokenList;
   tagName?: string;
   click(): void;
+  closest?(selector: string): Element | null;
 }
+
+// Vendored cal-heatmap (vendor/cal-heatmap.min.js) global for the Stories
+// calendar; typed loosely since only paint/on/destroy are used.
+declare var CalHeatmap: any;
 
 interface Window {
   // Legacy clipboard fallback used in the paste handler

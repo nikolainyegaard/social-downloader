@@ -469,6 +469,11 @@ function _ddOptsHtml(opts, onchange) {
 }
 
 // Build a complete dropdown. value defaults to the first option.
+/**
+ * @param {string} id
+ * @param {{value: string, label: string}[]} opts
+ * @param {{value?: string, onchange?: string, className?: string}} [o]
+ */
 function _ddHtml(id, opts, { value, onchange, className = '' } = {}) {
   const cur = opts.find(o => o.value === value) || opts[0] || { value: '', label: '' };
   return `<div class="dd${className ? ' ' + className : ''}" id="${id}" data-value="${esc(cur.value)}">` +
@@ -541,6 +546,11 @@ function _ddSetValue(id, value) {
 }
 
 // Rebuild the option list (for a dependent dropdown), then select `value`.
+/**
+ * @param {string} id
+ * @param {{value: string, label: string}[]} opts
+ * @param {{value?: string, onchange?: string}} [o]
+ */
 function _ddSetOptions(id, opts, { value, onchange } = {}) {
   const dd = document.getElementById(id);
   if (!dd) return;
