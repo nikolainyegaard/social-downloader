@@ -929,7 +929,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   flex: 1; overflow-y: auto; padding: 16px 20px;
   display: flex; flex-direction: column; gap: 12px;
 }
-.stories-cal-title { font-size: 12px; color: var(--text-dim); }
 /* GitHub-style calendar box: hugs the calendar content instead of spanning the
    panel, cells sit on the nav-dark box background (our closest token to
    GitHub's #0d1117), empty days one notch above it, legend lower-right below */
@@ -942,7 +941,19 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   padding: 10px 12px 8px;
   display: flex; flex-direction: column; gap: 14px;
 }
-.stories-cal { overflow-x: auto; padding: 4px 0; }
+/* Fixed viewport for the painted months: 540px covers 4 months at the widest
+   (6 week-columns each at the 15px/4.5px geometry plus 21px month gutters), so
+   the box never resizes as paging shifts the week alignment. The newest month
+   pins to the right edge and older months drift off the left, faded out by the
+   mask so the cut is soft regardless of where a month lands on the edge. */
+.stories-cal {
+  width: 540px; max-width: 100%;
+  padding: 4px 0;
+  overflow: hidden;
+  display: flex; justify-content: flex-end;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 48px);
+  mask-image: linear-gradient(to right, transparent 0, #000 48px);
+}
 .stories-cal .ch-domain-text { fill: var(--text-dim); font-size: 11px; }
 /* Triple class outweighs the vendor sheet's equally-specific
    [data-theme=dark] .ch-subdomain-bg, which loads after this file */

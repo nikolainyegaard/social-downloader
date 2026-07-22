@@ -490,11 +490,12 @@ function initChannelApp(cfg) {
     mTypeFn:      `${P}MType`,
     viewFn:       `${P}SetModalView`,
     viewKeys:     _modalViewKeys,
-    // History swaps the post filters for a Fields dropdown, and Stories shows
-    // the saved-story count, both rendered into the toolbar's context-filter
-    // area (desktop) or the mobile filter row.
+    // History swaps the post filters for a Fields dropdown, rendered into the
+    // toolbar's context-filter area (desktop) or the mobile filter row; both
+    // non-media views report their count line via viewCount.
     contextFilters: _modalContextFilters,
     mobileFilters:  _modalContextFilters,
+    viewCount:      _modalViewCount,
     viewVideoFilter: cfg.viewVideoFilter || ((view, vids) => vids),
     gridClassFn:     cfg.gridClassFn || (() => ''),
     typeIconFn:      cfg.typeIconFn || (v => _isMulti(v) ? _vgridPhotoIcon : (v.type === 'photo' || _isImage(v)) ? _vgridImageIcon : _vgridPlayIcon),
@@ -1521,8 +1522,24 @@ function initChannelApp(cfg) {
   // Toolbar context-filter content for the non-media views, shared by the
   // desktop toolbar (cfg.contextFilters) and the mobile filter row.
   function _modalContextFilters(view) {
-    if (view === 'history') return _fieldsDd();
-    if (view === 'stories') return _storiesTitleHtml();
+    return view === 'history' ? _fieldsDd() : '';
+  }
+
+  // Toolbar count line for the non-media views (cfg.viewCount): filtered change
+  // count on History, saved-story total on Stories (blank until the load lands).
+  function _modalViewCount(view) {
+    if (view === 'history') {
+      const shown = _phistFiltered().length;
+      if (_creatorState.search) {
+        const total = _phistFiltered(true).length;
+        return `${shown.toLocaleString()} of ${total.toLocaleString()} changes`;
+      }
+      return shown === 1 ? '1 change' : `${shown.toLocaleString()} changes`;
+    }
+    if (view === 'stories') {
+      if (_storyTotal == null) return '';
+      return _storyTotal === 1 ? '1 story' : `${_storyTotal.toLocaleString()} stories`;
+    }
     return '';
   }
 
@@ -1845,7 +1862,8 @@ function initChannelApp(cfg) {
   X('OnModalSearch', val => {
     _creatorState.search = val.trim();
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);
-    _mRenderList(MODAL_CFG);
+    if (_creatorState.view === 'history') _renderPhistPanel();
+    else _mRenderList(MODAL_CFG);
   });
 
   // ── Profile history view ──────────────────────────────────────────────────
@@ -1872,13 +1890,6 @@ function initChannelApp(cfg) {
   let _storyCal = null;
   let _calTip = null;
   let _storyTotal = null;  // saved-story count for the toolbar line; null until loaded
-
-  // Saved-story count on the toolbar, injected via _modalContextFilters after
-  // the calendar data lands (same late re-render pattern as the History fields).
-  function _storiesTitleHtml() {
-    if (_storyTotal == null) return '';
-    return `<span class="stories-cal-title">${_storyTotal.toLocaleString()} ${_storyTotal === 1 ? 'story' : 'stories'} saved · click a day to play it</span>`;
-  }
 
   function _calTipShow(target, text) {
     if (!_calTip) {
@@ -2034,19 +2045,33 @@ function initChannelApp(cfg) {
     return map;
   }
 
+  // History entries after the Fields dropdown and the toolbar search box;
+  // skipSearch backs the "x of y changes" count the same way _mFiltered does.
+  function _phistFiltered(skipSearch = false) {
+    let entries = phistField.size
+      ? phistData.filter(e => phistField.has(e.field))
+      : phistData;
+    if (!skipSearch && _creatorState.search) {
+      const q = _creatorState.search.toLowerCase();
+      const newValMap = _phistNewValMap();
+      entries = entries.filter(e =>
+        (FIELD_LABELS[e.field] || e.field).toLowerCase().includes(q) ||
+        String(e.old_value ?? '').toLowerCase().includes(q) ||
+        String(newValMap.get(e) ?? '').toLowerCase().includes(q));
+    }
+    return entries;
+  }
+
   function _renderPhistPanel() {
     const panel = _el('PhistPanel');
     if (!panel) return;
 
-    const entries = phistField.size
-      ? phistData.filter(e => phistField.has(e.field))
-      : phistData;
-
+    const entries = _phistFiltered();
     const newValMap = _phistNewValMap();
 
     panel.innerHTML = entries.length
       ? entries.map(e => _phistEntryHtml(e, newValMap.get(e))).join('')
-      : `<div style="color:var(--muted);font-size:13px;padding:12px 0">No profile changes recorded${phistField.size ? ' for the selected fields' : ''}.</div>`;
+      : `<div style="color:var(--muted);font-size:13px;padding:12px 0">No profile changes recorded${phistField.size || _creatorState.search ? ' matching the current filters' : ''}.</div>`;
   }
 
   function _phistEntryHtml(e, newVal) {

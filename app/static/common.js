@@ -1655,13 +1655,19 @@ function _mRenderToolbar(cfg, vids) {
   // and (History) swap in their own field filters via cfg.contextFilters, which
   // sits in the same context-filter area of the nav bar as the post filters.
   const isMedia = cfg.st.view !== 'history' && cfg.st.view !== 'stories';
+  // History keeps the search box (it filters the change entries); Stories has
+  // no search. Non-media count labels ("n changes", "n stories") come from the
+  // cfg.viewCount hook since their data lives with the platform code.
+  const searchable = isMedia || cfg.st.view === 'history';
   const shown = _mFiltered(cfg).length;
   const total = _mFiltered(cfg, true).length;
-  const countLabel = cfg.st.search
-    ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
-    : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
+  const countLabel = isMedia
+    ? (cfg.st.search
+        ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
+        : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`))
+    : (cfg.viewCount ? cfg.viewCount(cfg.st.view) || '' : '');
   const toolbar = document.getElementById(cfg.toolbarElId);
-  const searchWasFocused = cfg.hasSearch && isMedia &&
+  const searchWasFocused = cfg.hasSearch && searchable &&
     document.activeElement === toolbar.querySelector('#modalVideoSearch');
   const searchSelEnd = searchWasFocused ? document.activeElement.selectionEnd : 0;
   const viewKeys = (typeof cfg.viewKeys === 'function' ? cfg.viewKeys() : cfg.viewKeys) || [
@@ -1689,11 +1695,9 @@ function _mRenderToolbar(cfg, vids) {
         ).join('')
       + `</div>`;
   }
-  if (isMedia) {
-    html += `<span class="modal-vid-count">${countLabel}</span>`;
-    if (cfg.hasSearch) {
-      html += `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${esc(cfg.st.search)}" placeholder="Search videos…" oninput="${cfg.searchFn}(this.value)">`;
-    }
+  if (countLabel) html += `<span class="modal-vid-count">${countLabel}</span>`;
+  if (cfg.hasSearch && searchable) {
+    html += `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${esc(cfg.st.search)}" placeholder="Search ${isMedia ? 'videos' : 'history'}…" oninput="${cfg.searchFn}(this.value)">`;
   }
   html += `</div>`
     + `<div class="toolbar-filter-wrap">`;

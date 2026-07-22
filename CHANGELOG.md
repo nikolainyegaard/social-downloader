@@ -47,8 +47,10 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The TikTok Loops panel now toggles between the User and Sound loops with pills in the panel header, so the panel is the same height as on the other apps instead of stacking both loops
 
 ### Changed
-- The Stories calendar's month paging buttons moved from the top right of the panel into the calendar box itself, sitting in the lower left corner opposite the legend; the saved-story count line moved up onto the modal toolbar and the panel's own header row is gone
+- The Stories calendar's month paging buttons moved from the top right of the panel into the calendar box itself, sitting in the lower left corner opposite the legend, and the panel's own header row is gone
+- The Stories calendar box no longer changes size while paging months: the newest painted month stays pinned to the right edge and older months drift off the left edge under a soft fade, instead of the box tracking how each month happens to align with the week grid
 - The History view's field filter is now a single-select Fields dropdown on the toolbar, matching the Sort/Status/Type dropdowns, instead of a row of toggle pills
+- The creator modal toolbar is unified across views: the search box now also works on the History view (filtering the change entries), and the count line appears on every view, as "n changes" on History and "n stories" on Stories
 - Adding a creator or sound that is already tracked now shows a friendly green "already tracked" notification instead of a red error toast, on the direct add and on lookups that resolve to an existing creator
 - Searching the creator grid (and the TikTok sounds catalog) now always searches all entries, ignoring the active filter pills; clearing the search restores the filtered view
 - The creator modal header is redesigned: the identity block sits beside a dates box (added, last checked, last saved, next check) and a stats box that groups the counts into paired chips (followers/following, on-platform/saved, deleted/restored, stories, storage, updates), each value stacked over a small label, so the header reads at a glance instead of as one long stat line
