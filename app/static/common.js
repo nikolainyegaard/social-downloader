@@ -1403,10 +1403,9 @@ function openStoryViewer(slides) {
   bar.innerHTML = slides.map(() =>
     '<span class="story-progress-seg"><span class="story-progress-fill"></span></span>').join('');
   bar.style.display = '';
-  // Story actions on the topbar row: Download works, the other two are reserved
-  // slots for future actions. Shown/hidden by the story-mode class alone.
+  // Story-only topbar extras: two reserved slots for future actions (Download
+  // is a permanent topbar button). Shown/hidden by the story-mode class alone.
   document.getElementById('storyActions').innerHTML = `
-    <button class="mv-btn" title="Download" onclick="storyDownloadCurrent()">${_dlIcon}</button>
     <button class="mv-btn" title="Coming soon" disabled>${_storyDotsIcon}</button>
     <button class="mv-btn" title="Coming soon" disabled>${_storyDotsIcon}</button>`;
   openMediaViewer(slides);
@@ -1418,24 +1417,27 @@ const _mvPauseIcon = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http:/
 const _soundIcon = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M4 9.5v5a1 1 0 0 0 1 1h2.8l4.6 3.7c.65.52 1.6.06 1.6-.78V5.58c0-.84-.95-1.3-1.6-.78L7.8 8.5H5a1 1 0 0 0-1 1z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M16.5 9a4.4 4.4 0 0 1 0 6M18.8 6.8a7.6 7.6 0 0 1 0 10.4"/></svg>`;
 const _mutedIcon = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M4 9.5v5a1 1 0 0 0 1 1h2.8l4.6 3.7c.65.52 1.6.06 1.6-.78V5.58c0-.84-.95-1.3-1.6-.78L7.8 8.5H5a1 1 0 0 0-1 1z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M16.3 9.7l5 5M21.3 9.7l-5 5"/></svg>`;
 
-// Play/pause + mute buttons and the seek bar: plain-video slides only. Story
-// mode has no button chrome; its feedback is the flash overlay.
+// Play/pause and mute glyphs on the video's lower edge plus the seek bar:
+// plain-video slides only. Story mode has no chrome; its feedback is the
+// flash overlay. Glyphs show the actionable action, not the state: a pause
+// symbol while playing, a mute (crossed speaker) symbol while sound is on.
 function _mvSync() {
-  const vid   = document.getElementById('mvVid');
-  const show  = vid.style.display !== 'none' && !_storyMode;
-  document.getElementById('mvControls').style.display = show ? '' : 'none';
-  document.getElementById('mvSeek').style.display     = show ? '' : 'none';
+  const vid  = document.getElementById('mvVid');
+  const show = vid.style.display !== 'none' && !_storyMode;
+  const playBtn = document.getElementById('mvPlayBtn');
+  const muteBtn = document.getElementById('mvMuteBtn');
+  playBtn.style.display = muteBtn.style.display =
+    document.getElementById('mvSeek').style.display = show ? '' : 'none';
   if (!show) return;
   const playing = !(vid.paused || vid.ended);
-  const playBtn = document.getElementById('mvPlayBtn');
   playBtn.innerHTML = playing ? _mvPauseIcon : _mvPlayIcon;
   playBtn.title     = playing ? 'Pause' : 'Play';
-  const muteBtn = document.getElementById('mvMuteBtn');
-  muteBtn.innerHTML = vid.muted ? _mutedIcon : _soundIcon;
+  muteBtn.innerHTML = vid.muted ? _soundIcon : _mutedIcon;
   muteBtn.title     = vid.muted ? 'Unmute' : 'Mute';
 }
 
-// Momentary center overlay flashing the new state when a story is tapped.
+// Momentary center overlay flashing what just happened. Only manual toggles
+// call this; playback starting on open never flashes.
 function _mvFlash(icon) {
   const el = document.getElementById('mvFlash');
   el.innerHTML = icon;
@@ -1456,7 +1458,11 @@ function mvTogglePlay() {
   if (vid.paused) {
     if (vid.ended) vid.currentTime = 0;
     vid.play().catch(() => {});
-  } else vid.pause();
+    _mvFlash(_mvPlayIcon);
+  } else {
+    vid.pause();
+    _mvFlash(_mvPauseIcon);
+  }
 }
 
 function mvToggleMute() {
@@ -1480,13 +1486,14 @@ function _mvSeekSync() {
       String(Math.round(vid.currentTime / vid.duration * 1000));
 }
 
-// Same anchor-click download as the Videos list-view Download button.
-function storyDownloadCurrent() {
+// Same anchor-click download as the Videos list-view Download button; works
+// on every slide shape (string slides let the browser derive the filename).
+function mvDownloadCurrent() {
   const slide = _mvSlides[_mvIdx];
-  if (!slide || typeof slide === 'string') return;
+  if (!slide) return;
   const a = document.createElement('a');
-  a.href = slide.url;
-  a.download = slide.name || 'story';
+  a.href = typeof slide === 'string' ? slide : slide.url;
+  a.download = (typeof slide !== 'string' && slide.name) || '';
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1653,7 +1660,11 @@ function _mvShowSlide(idx) {
 
 function mvStep(dir) {
   const next = _mvIdx + dir;
-  if (next < 0) return;
+  if (next < 0) {
+    // Tapping back on the first story slide restarts it from the beginning
+    if (_storyMode) _mvShowSlide(0);
+    return;
+  }
   if (next >= _mvSlides.length) {
     // Tapping forward on the last story slide closes, like the platforms do
     if (_storyMode) closeMediaViewer();
@@ -1678,8 +1689,8 @@ function closeMediaViewer() {
     bar.innerHTML = '';
     bar.style.display = 'none';
   }
-  document.getElementById('mvControls').style.display = 'none';
-  document.getElementById('mvSeek').style.display = 'none';
+  for (const id of ['mvPlayBtn', 'mvMuteBtn', 'mvSeek'])
+    document.getElementById(id).style.display = 'none';
   document.getElementById('mvModal').classList.remove('mv-single');
   document.getElementById('mvModal').style.display = 'none';
   document.getElementById('mvImg').src = '';

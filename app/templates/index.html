@@ -1035,10 +1035,7 @@
 <!-- Media viewer modal: photos, videos, multi-media posts, and stories -->
 <div id="mvModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeMediaViewer()">
   <div class="mv-topbar">
-    <div class="mv-controls" id="mvControls" style="display:none">
-      <button class="mv-btn" id="mvPlayBtn" title="Pause" onclick="mvTogglePlay()"></button>
-      <button class="mv-btn" id="mvMuteBtn" title="Mute" onclick="mvToggleMute()"></button>
-    </div>
+    <button class="mv-btn" title="Download" onclick="mvDownloadCurrent()"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12L12 16M12 16L16 12M12 16V4M4 20H20"/></svg></button>
     <div class="story-actions" id="storyActions"></div>
     <button class="mv-btn" title="Close" onclick="closeMediaViewer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
@@ -1053,6 +1050,8 @@
       <img id="mvImg" src="" alt="">
       <video id="mvVid" playsinline style="display:none" onclick="mvTogglePlay()" onplay="_mvSync()" onpause="_mvSync()" onvolumechange="_mvSync()" ontimeupdate="_mvSeekSync()"></video>
       <input type="range" class="mv-seek" id="mvSeek" min="0" max="1000" value="0" style="display:none" oninput="mvSeek(this.value)">
+      <button class="mv-glyph" id="mvPlayBtn" title="Pause" style="display:none" onclick="mvTogglePlay()"></button>
+      <button class="mv-glyph" id="mvMuteBtn" title="Mute" style="display:none" onclick="mvToggleMute()"></button>
     </div>
     <button class="mv-nav" id="mvNext" onclick="mvStep(1)"><svg width="20" height="20" viewBox="-4.5 0 20 20" fill="currentColor" fill-rule="evenodd" xmlns="http://www.w3.org/2000/svg"><g transform="translate(-249,-6519)"><path d="M249.365851,6538.70769 C249.770764,6539.09744 250.426289,6539.09744 250.830166,6538.70769 L259.393407,6530.44413 C260.202198,6529.66364 260.202198,6528.39747 259.393407,6527.61699 L250.768031,6519.29246 C250.367261,6518.90671 249.720021,6518.90172 249.314072,6519.28247 C248.899839,6519.67121 248.894661,6520.31179 249.302681,6520.70653 L257.196934,6528.32352 C257.601847,6528.71426 257.601847,6529.34685 257.196934,6529.73759 L249.365851,6537.29462 C248.960938,6537.68437 248.960938,6538.31795 249.365851,6538.70769"/></g></svg></button>
     <div class="mv-counter" id="mvCounter"></div>

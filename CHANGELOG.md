@@ -47,7 +47,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The TikTok Loops panel now toggles between the User and Sound loops with pills in the panel header, so the panel is the same height as on the other apps instead of stacking both loops
 
 ### Changed
-- Videos now play in the same viewer as stories instead of a separate bare player: play/pause and mute buttons sit at the top right of the screen with a seek bar along the bottom of the video (clicking the video also toggles playback), replacing the browser's native controls
+- Videos now play in the same viewer as stories instead of a separate bare player: bare white play/pause and mute glyphs sit on the video's lower corners with a seek bar between them, replacing the browser's native controls; the glyphs show the action a press triggers (pause while playing, mute while sound is on), clicking the video toggles playback, and manual toggles flash a brief state icon over the media (autoplay on open never does)
+- A Download button now sits on the viewer's top bar for every kind of media (videos, photos, multi-media posts, stories); it was previously story-only
+- Tapping back on the first story slide restarts that story from the beginning instead of doing nothing
 - The story viewer's action buttons (Download and the reserved slots) moved from a vertical rail beside the story to a horizontal row at the top of the screen next to the close button, so they no longer push the story off center on small screens
 - Stories can be paused: tapping the center of a story (the middle 60%; the outer edges still step back and forward) toggles pause with a brief play/pause flash over the media, freezing the video or photo timer and the progress bar exactly where they are; stories keep a clean face with no buttons or seek bar
 - The Stories calendar's month paging buttons moved from the top right of the panel into the calendar box itself, sitting in the lower left corner opposite the legend, and the panel's own header row is gone
