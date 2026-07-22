@@ -1712,6 +1712,11 @@ function closeMediaViewer() {
   }
   for (const id of ['mvPlayBtn', 'mvMuteBtn', 'mvSeek', 'mvSpinner'])
     document.getElementById(id).style.display = 'none';
+  // Clear the flash: a leftover .on replays its animation when the modal next
+  // returns from display:none, which looked like a phantom pause on open
+  const flash = document.getElementById('mvFlash');
+  flash.classList.remove('on');
+  flash.innerHTML = '';
   document.getElementById('mvModal').classList.remove('mv-single');
   document.getElementById('mvModal').style.display = 'none';
   document.getElementById('mvImg').src = '';
