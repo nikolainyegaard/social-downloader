@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Fixed
+- Expanding the bio on a banned or inactive creator card no longer shows the card's stats bleeding through the popover: the card dimming made the popover translucent, and it now lifts while the popover is open so the text reads at full contrast
 - The stories calendar's left edge fade works for every month alignment: with four narrow months the painted content fit inside the fixed viewport, leaving a bare gap on the left where the fade had nothing to fade. The calendar now paints six months so content always overflows the left edge, and paging forward stops at the current month (the button disables there), so the rightmost slot always shows the present month. The window also anchors mid-month: it was built from the 1st at local midnight, which resolves to the previous month in UTC and shifted the whole calendar one month back (the original cause of the wrong rightmost month)
 - The creator modal's star button reacts instantly: it waited for the server round-trip (and sometimes the next live-refresh event) before repainting, which read as a delay of up to a second
 - Inserted manual run log lines ("=== Manual quick run (inserted): ... ===") get the same session-separator styling as their completion lines instead of rendering as plain grey text

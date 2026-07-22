@@ -618,6 +618,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .user-card-inactive .user-card-top,
 .user-card-inactive .user-bio-area,
 .user-card-inactive .user-stats { opacity: 0.4; }
+/* The dim makes the whole area a translucent compositing group, so an open
+   bio popover inside it lets the stats behind bleed through; lift the dim
+   while the popover is open (full contrast for reading it anyway) */
+.user-card-inactive .user-bio-area:has(.xtext.open) { opacity: 1; }
 
 /* Banned / blocked card: muted red border, content dimmed same as inactive */
 .user-card-banned { border-color: color-mix(in srgb, var(--red) 40%, transparent) !important; box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 40%, transparent); }
