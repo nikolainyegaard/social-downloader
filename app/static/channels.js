@@ -390,12 +390,16 @@ function initChannelApp(cfg) {
     openImgModalUrl(`${API}/videos/${encodeURIComponent(videoId)}/thumbnail`);
   });
 
+  // Normal video playback goes through the shared carousel viewer as a
+  // single video slide (play/pause and mute chrome, no nav arrows).
   X('OpenVidModal', videoId => {
-    const vid = document.getElementById('vidModalPlayer');
-    vid.src = `${API}/videos/${encodeURIComponent(videoId)}/file`;
-    document.getElementById('vidModal').style.display = 'flex';
-    _lockScroll();
-    vid.play().catch(() => {});
+    const v   = _creatorState.videos.find(x => x.video_id === videoId);
+    const ext = (v && _mediaExt(v)) || 'mp4';
+    openCarouselSlides([{
+      url:  `${API}/videos/${encodeURIComponent(videoId)}/file`,
+      type: 'video',
+      name: `${videoId}.${ext}`,
+    }]);
   });
 
   X('OpenCarousel', async videoId => {
@@ -2206,7 +2210,7 @@ function initChannelApp(cfg) {
     // Overlay modals (carousel, image, video, sound, recent log, settings) sit
     // on top of the creator modal and close themselves via their own handler;
     // don't close both at once.
-    for (const id of ['carouselModal', 'imgModal', 'vidModal', 'soundModalBackdrop', 'settingsBackdrop']) {
+    for (const id of ['carouselModal', 'imgModal', 'soundModalBackdrop', 'settingsBackdrop']) {
       if (document.getElementById(id) && document.getElementById(id).style.display !== 'none') return;
     }
     if (_el('ModalBackdrop')?.style.display !== 'none') {

@@ -18,6 +18,12 @@ interface HTMLElement {
   placeholder: string;
   play(): Promise<void>;
   pause(): void;
+  paused: boolean;
+  ended: boolean;
+  muted: boolean;
+  controls: boolean;
+  currentTime: number;
+  duration: number;
 }
 
 interface Element {

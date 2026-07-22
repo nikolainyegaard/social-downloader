@@ -1355,14 +1355,6 @@ function openImgModalUrl(url) {
   _lockScroll();
 }
 
-function closeVidModal() {
-  const vid = document.getElementById('vidModalPlayer');
-  vid.pause();
-  vid.src = '';
-  document.getElementById('vidModal').style.display = 'none';
-  _unlockScroll();
-}
-
 function closeImgModal() {
   document.getElementById('imgModal').style.display = 'none';
   document.getElementById('imgModalImg').src = '';
@@ -1370,22 +1362,31 @@ function closeImgModal() {
 }
 
 // ── Media carousel modal ──────────────────────────────────────────────────────
-// Slides are plain image URL strings (TikTok photo posts) or
-// {url, type: 'image'|'video'} objects (multi-media tweets).
+// The one media viewer: photo posts, multi-media posts, normal video playback,
+// and stories. Slides are plain image URL strings (TikTok photo posts) or
+// {url, type: 'image'|'video'} objects.
 
-let _carouselUrls = [];
-let _carouselIdx  = 0;
+let _carouselUrls  = [];
+let _carouselIdx   = 0;
+let _carouselMuted = false;  // sticky across slides within one open, reset on close
 
 // Story mode: same modal plus per-slide progress bars, auto-advance, and tap
-// zones, with the nav arrows and video controls hidden. openStorySlides turns
-// it on; closeCarousel tears it down so normal carousels are unaffected.
+// zones, with the nav arrows hidden. openStorySlides turns it on; closeCarousel
+// tears it down so normal carousels are unaffected.
 const _STORY_IMAGE_SECS = 5;
-let _storyMode  = false;
-let _storyTimer = null;
+let _storyMode     = false;
+let _storyTimer    = null;
+let _storyPaused   = false;
+let _storyEndsAt   = 0;     // when the armed advance timer fires (ms epoch)
+let _storyRemainMs = 0;     // captured at pause, drives the resume timer
+let _storySlideCtx = null;  // {isVid, vid, fill} of the running slide
 
 function openCarouselSlides(slides) {
   if (!slides || !slides.length) return;
   _carouselUrls = slides;
+  // Single-slide carousels (normal video playback, lone photos) drop the nav
+  // arrows and let the media use the released width, like the old video modal
+  document.getElementById('carouselModal').classList.toggle('single-slide', slides.length === 1);
   _showCarouselSlide(0);
   document.getElementById('carouselModal').style.display = 'flex';
   _lockScroll();
@@ -1399,7 +1400,7 @@ function openStorySlides(slides) {
   bar.innerHTML = slides.map(() =>
     '<span class="story-progress-seg"><span class="story-progress-fill"></span></span>').join('');
   bar.style.display = '';
-  // Action rail beside the story: Download works, the other two are reserved
+  // Story actions on the topbar row: Download works, the other two are reserved
   // slots for future actions. Shown/hidden by the story-mode class alone.
   document.getElementById('storyActions').innerHTML = `
     <button class="story-action-btn" title="Download" onclick="storyDownloadCurrent()">${_dlIcon}</button>
@@ -1409,6 +1410,48 @@ function openStorySlides(slides) {
 }
 
 const _storyDotsIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
+const _cPlayIcon  = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.5 5.2v13.6c0 .8.9 1.3 1.6.9l10.4-6.8c.6-.4.6-1.4 0-1.8L10.1 4.3c-.7-.4-1.6.1-1.6.9z"/></svg>`;
+const _cPauseIcon = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="6.4" y="5" width="3.8" height="14" rx="1.2"/><rect x="13.8" y="5" width="3.8" height="14" rx="1.2"/></svg>`;
+const _soundIcon = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M4 9.5v5a1 1 0 0 0 1 1h2.8l4.6 3.7c.65.52 1.6.06 1.6-.78V5.58c0-.84-.95-1.3-1.6-.78L7.8 8.5H5a1 1 0 0 0-1 1z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M16.5 9a4.4 4.4 0 0 1 0 6M18.8 6.8a7.6 7.6 0 0 1 0 10.4"/></svg>`;
+const _mutedIcon = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M4 9.5v5a1 1 0 0 0 1 1h2.8l4.6 3.7c.65.52 1.6.06 1.6-.78V5.58c0-.84-.95-1.3-1.6-.78L7.8 8.5H5a1 1 0 0 0-1 1z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M16.3 9.7l5 5M21.3 9.7l-5 5"/></svg>`;
+
+// Play/pause and mute chrome on the topbar; shown for video slides (and any
+// story slide, where pausing also freezes the image timer and progress bar).
+function _carouselMediaSync() {
+  const ctrls = document.getElementById('carouselControls');
+  const vid   = document.getElementById('carouselVid');
+  const isVid = vid.style.display !== 'none';
+  const show  = isVid || _storyMode;
+  ctrls.style.display = show ? '' : 'none';
+  if (!show) return;
+  const playing = _storyMode ? !_storyPaused : !(vid.paused || vid.ended);
+  const playBtn = document.getElementById('carouselPlayBtn');
+  playBtn.innerHTML = playing ? _cPauseIcon : _cPlayIcon;
+  playBtn.title     = playing ? 'Pause' : 'Play';
+  const muteBtn = document.getElementById('carouselMuteBtn');
+  muteBtn.style.display = isVid ? '' : 'none';
+  muteBtn.innerHTML = vid.muted ? _mutedIcon : _soundIcon;
+  muteBtn.title     = vid.muted ? 'Unmute' : 'Mute';
+}
+
+function carouselTogglePlay() {
+  if (_storyMode) {
+    _storyPaused ? _storyResume() : _storyPause();
+    _carouselMediaSync();
+    return;
+  }
+  const vid = document.getElementById('carouselVid');
+  if (vid.style.display === 'none') return;
+  if (vid.paused) {
+    if (vid.ended) vid.currentTime = 0;
+    vid.play().catch(() => {});
+  } else vid.pause();
+}
+
+function carouselToggleMute() {
+  const vid = document.getElementById('carouselVid');
+  _carouselMuted = vid.muted = !vid.muted;
+}
 
 // Same anchor-click download as the Videos list-view Download button.
 function storyDownloadCurrent() {
@@ -1426,6 +1469,54 @@ function _storyClearTimer() {
   if (_storyTimer) { clearTimeout(_storyTimer); _storyTimer = null; }
 }
 
+// Every advance timer goes through here so pause can read how long remains.
+function _storyArm(ms) {
+  _storyClearTimer();
+  _storyEndsAt = Date.now() + ms;
+  _storyTimer  = setTimeout(_storyAdvance, ms);
+}
+
+function _storyPause() {
+  if (!_storyMode || _storyPaused || !_storySlideCtx) return;
+  _storyPaused   = true;
+  _storyRemainMs = Math.max(0, _storyEndsAt - Date.now());
+  _storyClearTimer();
+  const { isVid, vid, fill } = _storySlideCtx;
+  if (fill) {
+    // Freeze the bar where the animation currently has it
+    const w = getComputedStyle(fill).width;
+    fill.style.transition = 'none';
+    fill.style.width      = w;
+  }
+  if (isVid) vid.pause();
+}
+
+function _storyResume() {
+  if (!_storyMode || !_storyPaused || !_storySlideCtx) return;
+  _storyPaused = false;
+  const { isVid, vid, fill } = _storySlideCtx;
+  let ms = _storyRemainMs;
+  if (isVid) {
+    // Sync bar and timer to the actual playback position when known; the
+    // timer keeps the metadata path's 5 s pad since ended drives the advance
+    if (isFinite(vid.duration) && vid.duration > 0) {
+      const left = Math.max(0, vid.duration - vid.currentTime);
+      if (fill) {
+        void fill.offsetWidth;
+        fill.style.transition = `width ${left}s linear`;
+        fill.style.width      = '100%';
+      }
+      ms = (left + 5) * 1000;
+    }
+    vid.play().catch(() => {});
+  } else if (fill) {
+    void fill.offsetWidth;
+    fill.style.transition = `width ${ms / 1000}s linear`;
+    fill.style.width      = '100%';
+  }
+  _storyArm(ms);
+}
+
 function _storyAdvance() {
   _storyClearTimer();
   if (_carouselIdx >= _carouselUrls.length - 1) closeCarousel();
@@ -1434,19 +1525,21 @@ function _storyAdvance() {
 
 function _storyBeginSlide(idx, isVid, vid) {
   _storyClearTimer();
+  _storyPaused = false;
   const fills = document.querySelectorAll('#storyProgress .story-progress-fill');
   fills.forEach((f, i) => {
     f.style.transition = 'none';
     f.style.width      = i < idx ? '100%' : '0';
   });
   const fill = fills[idx];
+  _storySlideCtx = { isVid, vid, fill };
   const run  = secs => {
     if (fill) {
       void fill.offsetWidth;  // land the reset width before the animated one
       fill.style.transition = `width ${secs}s linear`;
       fill.style.width      = '100%';
     }
-    _storyTimer = setTimeout(_storyAdvance, secs * 1000);
+    _storyArm(secs * 1000);
   };
   if (!isVid) { run(_STORY_IMAGE_SECS); return; }
   // Video slides: the bar tracks the video duration and advance follows the
@@ -1483,18 +1576,17 @@ function _storyBeginSlide(idx, isVid, vid) {
     _storyAdvance();
   };
   vid.onloadedmetadata = () => {
-    if (!_storyMode) return;
-    _storyClearTimer();
+    if (!_storyMode || _storyPaused) return;
     const secs = (isFinite(vid.duration) && vid.duration > 0) ? vid.duration : 30;
     if (fill) {
       fill.style.transition = `width ${secs}s linear`;
       fill.style.width      = '100%';
     }
     // Fallback in case ended never fires (stalled stream)
-    _storyTimer = setTimeout(_storyAdvance, (secs + 5) * 1000);
+    _storyArm((secs + 5) * 1000);
   };
   // Until metadata arrives (or if it never does), do not stall forever
-  _storyTimer = setTimeout(_storyAdvance, 15 * 1000);
+  _storyArm(15 * 1000);
 }
 
 function _showCarouselSlide(idx) {
@@ -1510,11 +1602,11 @@ function _showCarouselSlide(idx) {
   // spurious "failed to play" warning. closeCarousel does the same dance.
   vid.onended = vid.onerror = vid.onloadedmetadata = null;
   vid.pause();
-  vid.controls = !_storyMode;
   if (isVid) {
     img.style.display = 'none';
     img.src = '';
     vid.style.display = '';
+    vid.muted = _carouselMuted;
     vid.src = url;
     vid.play().catch(() => {});
   } else {
@@ -1528,6 +1620,7 @@ function _showCarouselSlide(idx) {
   document.getElementById('carouselPrev').disabled = idx === 0;
   document.getElementById('carouselNext').disabled = idx === _carouselUrls.length - 1;
   if (_storyMode) _storyBeginSlide(idx, isVid, vid);
+  _carouselMediaSync();
 }
 
 function carouselStep(dir) {
@@ -1547,7 +1640,9 @@ function closeCarousel() {
   vid.onended = vid.onerror = vid.onloadedmetadata = null;
   vid.pause();
   vid.src = '';
-  vid.controls = true;
+  vid.muted = _carouselMuted = false;
+  _storyPaused   = false;
+  _storySlideCtx = null;
   if (_storyMode) {
     _storyMode = false;
     document.getElementById('carouselModal').classList.remove('story-mode');
@@ -1555,6 +1650,8 @@ function closeCarousel() {
     bar.innerHTML = '';
     bar.style.display = 'none';
   }
+  document.getElementById('carouselControls').style.display = 'none';
+  document.getElementById('carouselModal').classList.remove('single-slide');
   document.getElementById('carouselModal').style.display = 'none';
   document.getElementById('carouselImg').src = '';
   _carouselUrls = [];
@@ -1587,7 +1684,6 @@ document.addEventListener('keydown', e => {
   }
   if (e.key !== 'Escape') return;
   if (_open('imgModal'))           { closeImgModal(); return; }
-  if (_open('vidModal'))           { closeVidModal(); return; }
   if (_open('soundModalBackdrop')) { window.closeSoundModal?.(); return; }
   if (_open('settingsBackdrop'))   { window.closeSettings?.(); }
 });

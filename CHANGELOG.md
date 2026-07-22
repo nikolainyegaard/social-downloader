@@ -47,6 +47,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The TikTok Loops panel now toggles between the User and Sound loops with pills in the panel header, so the panel is the same height as on the other apps instead of stacking both loops
 
 ### Changed
+- Videos now play in the same viewer as stories instead of a separate bare player: play/pause and mute buttons sit at the top right of the screen (clicking the video also toggles playback), replacing the browser's native controls
+- The story viewer's action buttons (Download and the reserved slots) moved from a vertical rail beside the story to a horizontal row at the top of the screen next to the close button, so they no longer push the story off center on small screens
+- The story viewer gained play/pause and mute: pausing freezes the video or photo timer and the progress bar exactly where they are, and resuming continues from that point
 - The Stories calendar's month paging buttons moved from the top right of the panel into the calendar box itself, sitting in the lower left corner opposite the legend, and the panel's own header row is gone
 - The Stories calendar box no longer changes size while paging months: the newest painted month stays pinned to the right edge and older months drift off the left edge under a soft fade, instead of the box tracking how each month happens to align with the week grid
 - The History view's field filter is now a single-select Fields dropdown on the toolbar, matching the Sort/Status/Type dropdowns, instead of a row of toggle pills
@@ -124,6 +127,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel moved into the dashboard column beside the activity feed; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
+- The story viewer's progress bars are now anchored to the story media itself, so they always sit aligned over it; previously they tracked the whole viewer row and drifted out of alignment on small screens when the action buttons shared that row
 - Expandable text boxes (bios, descriptions) now close when you click anywhere outside them; previously an expanded bio stayed open when you expanded another one or clicked elsewhere on a card
 - The story viewer no longer throws a phantom "story video failed to play" warning and instantly skips photo stories that follow a video story: unloading the finished video fired its error handler against the next slide. The warning now only appears for genuinely unplayable files, and it carries a Details button with full diagnostics (media error, HTTP status of the file)
 - The story viewer no longer warns "a story video failed to play" forever for stories that can never be fixed: the Re-download job now removes expired unrecoverable stories (file missing or unplayable, and TikTok has already dropped the story) from the library, reporting how many were removed. These were leftovers from the earlier story corruption bug; new saves are validated before being accepted
