@@ -1111,7 +1111,7 @@ function _trackingBadge(tracking_enabled) {
 
 // Log console line colorization, shared by the TikTok and channel platform log viewers.
 function _logLineClass(line) {
-  if (/=== .+ (started|complete|aborted|stopped)/i.test(line))                            return 'log-sep';
+  if (/=== .+ (started|complete|aborted|stopped|\(inserted\))/i.test(line))               return 'log-sep';
   if (/\]\s+Processing @/.test(line) || /\[sound\] Processing sound/i.test(line))         return 'log-user';
   if (/error|failed|unexpected/i.test(line))                                              return 'log-err';
   if (/warn|deleted|corrupt/i.test(line))                                                 return 'log-warn';

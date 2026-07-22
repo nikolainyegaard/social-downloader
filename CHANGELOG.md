@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Fixed
+- Inserted manual run log lines ("=== Manual quick run (inserted): ... ===") get the same session-separator styling as their completion lines instead of rendering as plain grey text
 - The TikTok sound modal now uses the exact same shell as the creator modals instead of its own copy that had drifted: it gets the creator modal's layout classes, the mobile toolbar with sort/status/type dropdowns, the card-style mobile post rows with a per-row Download menu, and the back-to-top button; its markup now comes from the same shared template so the two cannot drift apart again
 - Adding a creator, running a diagnostics probe, or pressing Quick/Full on a creator while a loop sits in its between-creators sleep no longer waits out the timer: the sleeping session services the request immediately (on its warm browser for TikTok) and then resumes the remaining sleep, so an add toast resolves in seconds instead of hanging until the next creator check
 - Stop now stops the loop as soon as possible instead of letting the current phase run out: a loop sleeping between creators (or in a bot cooldown) wakes and stops immediately, a bulk download stops after the in-flight item finishes, and the remaining new posts are picked up by the next check. Previously a stop during a sleep waited out the timer and then still ran a full creator check. Applies to all platform loops and the TikTok sound loop, and the log now confirms the stop request the moment the button is clicked
