@@ -22,8 +22,8 @@ import zipfile
 from flask import jsonify, request, send_file, Response
 
 from config import DATA_DIR, MEDIA_DIR
-from platforms.tiktok.config import get_ms_token, get_cookies_flat, COOKIES_PATH
-from platforms.tiktok.api import create_tiktok_session, get_video_details
+from platforms.tiktok.config import get_cookies_flat, COOKIES_PATH
+from platforms.tiktok.api import get_video_details, run_browser_job
 from platforms.tiktok.store import TikTokStore
 from platforms.tiktok.sounds import get_sound_loop
 from thumbnailer import AVATARS_DIR
@@ -1105,20 +1105,15 @@ def register_tiktok_routes(bp, engine) -> None:
                 return jsonify({"ok": True, "output": json.dumps(info, indent=2, default=str)})
 
             elif source == "tiktokapi" and action == "user_info":
-                from TikTokApi import TikTokApi as _TikTokApi
-                handle   = inp.lstrip("@").strip()
-                ms_token = get_ms_token()
+                handle = inp.lstrip("@").strip()
 
-                async def _fetch_user_info_adhoc():
-                    cookies_flat = get_cookies_flat()
-                    async with _TikTokApi() as _api:
-                        await create_tiktok_session(_api, ms_token, cookies_flat)
-                        return await _api.make_request(
-                            url="https://www.tiktok.com/api/user/detail/",
-                            params={"uniqueId": handle, "secUid": ""},
-                        )
+                async def _fetch_user_info_adhoc(_api):
+                    return await _api.make_request(
+                        url="https://www.tiktok.com/api/user/detail/",
+                        params={"uniqueId": handle, "secUid": ""},
+                    )
 
-                data = asyncio.run(_fetch_user_info_adhoc())
+                data = run_browser_job(_fetch_user_info_adhoc)
                 if data is None:
                     data = {"error": "TikTok returned no data (None)"}
                 return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
@@ -1127,22 +1122,17 @@ def register_tiktok_routes(bp, engine) -> None:
             # numeric user id of a tracked user. Validates story fetching against
             # the live cookies before trusting the loop wiring.
             elif source == "tiktokapi" and action == "user_stories":
-                from TikTokApi import TikTokApi as _TikTokApi
                 from platforms.tiktok.api import get_user_stories, parse_story_item
                 _needle = inp.lstrip("@").strip().lower()
                 _match  = next((c for c in db.get_all_channels()
                                 if c["handle"].lower() == _needle or c["channel_id"] == _needle), None)
                 if not _match:
                     return jsonify({"ok": False, "output": f"Error: no tracked user matches {inp}"})
-                ms_token = get_ms_token()
 
-                async def _fetch_stories_adhoc():
-                    cookies_flat = get_cookies_flat()
-                    async with _TikTokApi() as _api:
-                        await create_tiktok_session(_api, ms_token, cookies_flat)
-                        return await get_user_stories(_api, _match["channel_id"])
+                async def _fetch_stories_adhoc(_api):
+                    return await get_user_stories(_api, _match["channel_id"])
 
-                items  = asyncio.run(_fetch_stories_adhoc())
+                items  = run_browser_job(_fetch_stories_adhoc)
                 parsed = [s for s in (parse_story_item(i) for i in items) if s]
                 out = {
                     "user":        f"@{_match['handle']} ({_match['channel_id']})",
@@ -1156,24 +1146,19 @@ def register_tiktok_routes(bp, engine) -> None:
             # bypasses the username guard in user.info(). Tests whether TikTok
             # resolves a user by secUid alone when uniqueId is empty.
             elif source == "tiktokapi" and action == "user_info_by_id":
-                from TikTokApi import TikTokApi as _TikTokApi
                 if ":" not in inp:
                     return jsonify({"ok": False, "output": "Error: input must be channel_id:sec_uid"})
                 channel_id, sec_uid = inp.split(":", 1)
                 channel_id = channel_id.strip()
                 sec_uid    = sec_uid.strip()
-                ms_token   = get_ms_token()
 
-                async def _fetch_by_sec_uid():
-                    cookies_flat = get_cookies_flat()
-                    async with _TikTokApi() as _api:
-                        await create_tiktok_session(_api, ms_token, cookies_flat)
-                        return await _api.make_request(
-                            url="https://www.tiktok.com/api/user/detail/",
-                            params={"secUid": sec_uid, "uniqueId": ""},
-                        )
+                async def _fetch_by_sec_uid(_api):
+                    return await _api.make_request(
+                        url="https://www.tiktok.com/api/user/detail/",
+                        params={"secUid": sec_uid, "uniqueId": ""},
+                    )
 
-                data = asyncio.run(_fetch_by_sec_uid())
+                data = run_browser_job(_fetch_by_sec_uid)
                 if data is None:
                     data = {"error": "TikTok returned no data (None)"}
                 return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
@@ -1185,45 +1170,33 @@ def register_tiktok_routes(bp, engine) -> None:
                     data = {"source": "database", "channel_id": db_chan["channel_id"], "sec_uid": db_chan["sec_uid"]}
                     return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
 
-                from TikTokApi import TikTokApi as _TikTokApi
-                ms_token = get_ms_token()
+                async def _resolve_handle(_api):
+                    return await _api.make_request(
+                        url="https://www.tiktok.com/api/user/detail/",
+                        params={"uniqueId": handle, "secUid": ""},
+                    )
 
-                async def _resolve_handle():
-                    cookies_flat = get_cookies_flat()
-                    async with _TikTokApi() as _api:
-                        await create_tiktok_session(_api, ms_token, cookies_flat)
-                        return await _api.make_request(
-                            url="https://www.tiktok.com/api/user/detail/",
-                            params={"uniqueId": handle, "secUid": ""},
-                        )
-
-                data = asyncio.run(_resolve_handle())
+                data = run_browser_job(_resolve_handle)
                 if data is None:
                     data = {"error": "TikTok returned no data (None)"}
                 return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
 
             elif source == "tiktokapi" and action == "item_list_username":
-                from TikTokApi import TikTokApi as _TikTokApi
                 from platforms.tiktok.api import get_user_videos_with_stats as _get_vws
                 handle = inp.lstrip("@").strip()
 
-                async def _item_list_by_handle():
-                    ms_token     = get_ms_token()
-                    cookies_flat = get_cookies_flat()
-                    async with _TikTokApi() as _api:
-                        await create_tiktok_session(_api, ms_token, cookies_flat)
-                        await asyncio.sleep(3)
-                        user_obj = _api.user(username=handle)
-                        await user_obj.info()  # resolve sec_uid
-                        sec_uid = getattr(user_obj, "sec_uid", None)
-                        results = await _get_vws(_api, sec_uid=sec_uid)
-                        return {"sec_uid_resolved": sec_uid, "count": len(results), "videos": results}
+                async def _item_list_by_handle(_api):
+                    await asyncio.sleep(3)
+                    user_obj = _api.user(username=handle)
+                    await user_obj.info()  # resolve sec_uid
+                    sec_uid = getattr(user_obj, "sec_uid", None)
+                    results = await _get_vws(_api, sec_uid=sec_uid)
+                    return {"sec_uid_resolved": sec_uid, "count": len(results), "videos": results}
 
-                result = asyncio.run(_item_list_by_handle())
+                result = run_browser_job(_item_list_by_handle)
                 return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
 
             elif source == "tiktokapi" and action == "item_list_by_id":
-                from TikTokApi import TikTokApi as _TikTokApi
                 from platforms.tiktok.api import get_user_videos_with_stats as _get_vws
                 if ":" not in inp:
                     return jsonify({"ok": False, "output": "Error: input must be channel_id:sec_uid"})
@@ -1231,21 +1204,16 @@ def register_tiktok_routes(bp, engine) -> None:
                 channel_id = channel_id.strip()
                 sec_uid    = sec_uid.strip()
 
-                async def _item_list_by_id():
-                    ms_token     = get_ms_token()
-                    cookies_flat = get_cookies_flat()
-                    async with _TikTokApi() as _api:
-                        await create_tiktok_session(_api, ms_token, cookies_flat)
-                        await asyncio.sleep(3)
-                        results = await _get_vws(_api, sec_uid=sec_uid)
-                        return {"channel_id": channel_id, "sec_uid": sec_uid,
-                                "count": len(results), "videos": results}
+                async def _item_list_by_id(_api):
+                    await asyncio.sleep(3)
+                    results = await _get_vws(_api, sec_uid=sec_uid)
+                    return {"channel_id": channel_id, "sec_uid": sec_uid,
+                            "count": len(results), "videos": results}
 
-                result = asyncio.run(_item_list_by_id())
+                result = run_browser_job(_item_list_by_id)
                 return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
 
             elif source == "tiktokapi" and action == "item_list_from_db":
-                from TikTokApi import TikTokApi as _TikTokApi
                 from platforms.tiktok.api import get_user_videos_with_stats as _get_vws
                 handle  = inp.lstrip("@").strip()
                 channel = db.get_channel_by_handle(handle)
@@ -1259,41 +1227,32 @@ def register_tiktok_routes(bp, engine) -> None:
                                     "output": f"Error: @{handle} has no sec_uid stored;"
                                               f" loop would skip item_list for this user"})
 
-                async def _item_list_from_db():
-                    ms_token     = get_ms_token()
-                    cookies_flat = get_cookies_flat()
-                    async with _TikTokApi() as _api:
-                        await create_tiktok_session(_api, ms_token, cookies_flat)
-                        await asyncio.sleep(3)
-                        results = await _get_vws(_api, sec_uid=sec_uid)
-                        return {"channel_id": channel_id, "handle": handle,
-                                "sec_uid": sec_uid, "count": len(results), "videos": results}
+                async def _item_list_from_db(_api):
+                    await asyncio.sleep(3)
+                    results = await _get_vws(_api, sec_uid=sec_uid)
+                    return {"channel_id": channel_id, "handle": handle,
+                            "sec_uid": sec_uid, "count": len(results), "videos": results}
 
-                result = asyncio.run(_item_list_from_db())
+                result = run_browser_job(_item_list_from_db)
                 return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
 
             elif source == "tiktokapi" and action == "sound_raw":
-                from TikTokApi import TikTokApi as _TikTokApi
                 sound_id = re.sub(r'[^0-9]', '', inp)
                 if not sound_id:
                     return jsonify({"ok": False, "output": "Error: could not extract a numeric sound_id from input"})
 
-                async def _fetch_sound_raw():
-                    ms_token     = get_ms_token()
-                    cookies_flat = get_cookies_flat()
-                    async with _TikTokApi() as _api:
-                        await create_tiktok_session(_api, ms_token, cookies_flat)
-                        raw_items = []
-                        total = 0
-                        async for video in _api.sound(id=sound_id).videos(count=3000):
-                            total += 1
-                            if total <= 3:
-                                raw_items.append(video.as_dict)
-                        return {"sound_id": sound_id, "total_fetched": total,
-                                "note": "first 3 raw items shown below",
-                                "items": raw_items}
+                async def _fetch_sound_raw(_api):
+                    raw_items = []
+                    total = 0
+                    async for video in _api.sound(id=sound_id).videos(count=3000):
+                        total += 1
+                        if total <= 3:
+                            raw_items.append(video.as_dict)
+                    return {"sound_id": sound_id, "total_fetched": total,
+                            "note": "first 3 raw items shown below",
+                            "items": raw_items}
 
-                result = asyncio.run(_fetch_sound_raw())
+                result = run_browser_job(_fetch_sound_raw)
                 return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
 
             else:

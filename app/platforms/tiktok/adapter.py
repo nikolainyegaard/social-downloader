@@ -29,28 +29,21 @@ def _normalize_handle(raw: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_.]", "", raw.strip().lstrip("@"))
 
 
-async def _api_lookup(handle: str, sec_uid: str | None):
-    from TikTokApi import TikTokApi
-    from platforms.tiktok.config import get_ms_token, get_cookies_flat
-    from platforms.tiktok.api import create_tiktok_session, get_user_info
-
-    ms_token = get_ms_token()
-    cookies  = get_cookies_flat()
-    async with TikTokApi() as api:
-        await create_tiktok_session(api, ms_token, cookies)
-        return await get_user_info(api, username=handle, sec_uid=sec_uid)
-
-
 def _lookup_profile(handle: str) -> dict:
-    """Add-flow resolve via a dedicated browser session. A soft-disabled stub
-    (sound-discovered author) resolves by its stored sec_uid, which survives
-    handle changes."""
+    """Add-flow resolve on the single browser turn: the running session's warm
+    browser when a loop is live, a dedicated session otherwise. A soft-disabled
+    stub (sound-discovered author) resolves by its stored sec_uid, which
+    survives handle changes."""
     from platforms.registry import ENGINES
+    from platforms.tiktok.api import get_user_info, run_browser_job
     engine  = ENGINES["tiktok"]
     stub    = engine.db.get_channel_by_handle(handle)
     sec_uid = (stub or {}).get("sec_uid")
 
-    info = asyncio.run(_api_lookup(handle, sec_uid))
+    async def _job(api):
+        return await get_user_info(api, username=handle, sec_uid=sec_uid)
+
+    info = run_browser_job(_job)
     if not info.get("tiktok_id"):
         return {}
     return {
@@ -72,14 +65,30 @@ def _lookup_profile(handle: str) -> dict:
 
 def _process_session(engine, channels, log, set_current, stop_event,
                      set_sleep=None, on_large_deletion=None) -> int:
-    return asyncio.run(tracker.process_user_session(
-        engine, channels, log, _logd, set_current, stop_event,
-        set_sleep=set_sleep, on_large_deletion=on_large_deletion)) or 0
+    from platforms.tiktok.api import browser_gate
+    if not browser_gate.turn.acquire(blocking=False):
+        log("Waiting for the active browser task to finish...")
+        browser_gate.turn.acquire()
+    try:
+        return asyncio.run(tracker.process_user_session(
+            engine, channels, log, _logd, set_current, stop_event,
+            set_sleep=set_sleep, on_large_deletion=on_large_deletion)) or 0
+    finally:
+        # Safety net: the tracker closes the job queue on every normal exit;
+        # this covers an exception escaping it, so no submitter hangs on a
+        # queue whose browser is gone.
+        browser_gate.close_jobs()
+        browser_gate.turn.release()
 
 
 def _process_single(engine, channel, log, set_current, profile_only=False, mode="full") -> None:
-    asyncio.run(tracker.run_single_user_with_session(
-        engine, channel, log, _logd, profile_only=profile_only, mode=mode))
+    from platforms.tiktok.api import browser_gate
+    browser_gate.turn.acquire()
+    try:
+        asyncio.run(tracker.run_single_user_with_session(
+            engine, channel, log, _logd, profile_only=profile_only, mode=mode))
+    finally:
+        browser_gate.turn.release()
 
 
 def _init_db_extra(engine) -> None:

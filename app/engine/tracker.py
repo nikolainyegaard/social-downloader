@@ -119,6 +119,37 @@ def save_new_stories(db, platform: str, channel_id: str, handle: str,
     return saved
 
 
+def drain_manual_runs(engine, log, set_current=None) -> set:
+    """Process every queued manual run inline, between session creators.
+
+    Runs on the session's own thread so a manual run never executes
+    concurrently with the session. Returns the channel_ids that completed
+    successfully; the session skips those when their due-list turn comes.
+    """
+    drained: set = set()
+    loop_obj = getattr(engine, "loop", None)
+    if loop_obj is None:
+        return drained
+    while True:
+        entry = loop_obj.pop_manual_run()
+        if entry is None:
+            return drained
+        channel, profile_only, mode = entry
+        kind  = "profile" if profile_only else mode
+        error = None
+        log(f"=== Manual {kind} run (inserted): @{channel['handle']} ===")
+        try:
+            process_single_channel(engine, channel, log, set_current,
+                                   profile_only=profile_only, mode=mode)
+            log(f"=== Manual {kind} run complete: @{channel['handle']} ===")
+        except Exception as e:
+            error = e
+            log(f"Manual run error for @{channel['handle']}: {e}")
+        loop_obj.finish_manual_run(channel, profile_only, mode, error=error)
+        if error is None and not profile_only:
+            drained.add(channel["channel_id"])
+
+
 def process_all_channels(
     engine,
     channels: list[dict],
@@ -146,6 +177,7 @@ def process_all_channels(
     random.shuffle(channels)
     completed = 0
     consecutive_failures = 0
+    drained: set = set()
     for i, channel in enumerate(channels):
         if stop_event and stop_event.is_set():
             log(f"=== {engine.label} loop stopped by request ===")
@@ -156,6 +188,11 @@ def process_all_channels(
                 stop_event.wait(gap)
             else:
                 time.sleep(gap)
+        drained |= drain_manual_runs(engine, log, set_current)
+        if channel["channel_id"] in drained:
+            log(f"Skipping @{channel.get('handle', '?')}: already checked by an inserted manual run")
+            completed += 1
+            continue
         now       = int(time.time())
         last_full = channel.get("last_full_refresh_at")
         mode      = "quick" if (last_full and now - last_full < full_secs) else "full"
@@ -183,6 +220,7 @@ def process_all_channels(
                 high_secs if channel.get("starred") else active_secs
             )
             set_channel_next_check(db, channel["channel_id"], int(time.time()) + interval)
+    drain_manual_runs(engine, log, set_current)
     return completed
 
 

@@ -18,6 +18,112 @@ import threading
 _PROFILE_LOCK = threading.Lock()
 
 
+class _JobOrphaned(Exception):
+    """The shared session ended before this queued job ran. run_browser_job
+    catches it and resubmits."""
+
+
+class _BrowserGate:
+    """Serializes TikTok browser ownership across every thread that wants one.
+
+    At most one live browser exists at a time: whoever runs one holds `turn`
+    for the browser's whole lifetime (a session loop run, a dedicated manual
+    run, an ad-hoc job). Since the turn holder is the only browser, the
+    persistent profile is always free for it, so the ephemeral-context
+    fallback (a fresh device identity carrying the account cookies) never
+    fires.
+
+    While the user-loop session holds the turn it opens the job queue and
+    services queued jobs between users, so ad-hoc callers (add lookups,
+    diagnostics, sound fetches) get the warm session instead of waiting hours
+    for the turn.
+    """
+
+    def __init__(self):
+        self.turn = threading.Lock()
+        self._jobs_lock = threading.Lock()
+        self._jobs: list = []       # (coro_fn, concurrent.futures.Future)
+        self._accepting = False
+
+    def open_jobs(self) -> None:
+        with self._jobs_lock:
+            self._accepting = True
+
+    def close_jobs(self) -> None:
+        """Stop accepting jobs and orphan anything still queued; the submitters
+        resubmit (to the next session, or to their own turn once it frees)."""
+        with self._jobs_lock:
+            self._accepting = False
+            pending, self._jobs = self._jobs, []
+        for _fn, fut in pending:
+            fut.set_exception(_JobOrphaned())
+
+    def try_submit(self, coro_fn):
+        """Queue a job for the live shared session. Returns a Future, or None
+        when no session is accepting jobs."""
+        import concurrent.futures
+        with self._jobs_lock:
+            if not self._accepting:
+                return None
+            fut = concurrent.futures.Future()
+            self._jobs.append((coro_fn, fut))
+            return fut
+
+    async def drain_jobs(self, api) -> None:
+        """Run every queued job on the given live session. Called by the
+        session loop between users."""
+        while True:
+            with self._jobs_lock:
+                if not self._jobs:
+                    return
+                coro_fn, fut = self._jobs.pop(0)
+            try:
+                fut.set_result(await coro_fn(api))
+            except Exception as e:
+                fut.set_exception(e)
+
+
+browser_gate = _BrowserGate()
+
+
+async def _own_session_job(coro_fn):
+    from TikTokApi import TikTokApi
+    from platforms.tiktok.config import get_ms_token, get_cookies_flat
+    async with TikTokApi() as api:
+        await create_tiktok_session(api, get_ms_token(), get_cookies_flat())
+        return await coro_fn(api)
+
+
+def run_browser_job(coro_fn, timeout: float = 1800):
+    """Run `async coro_fn(api)` on the platform's single browser turn.
+
+    If the user-loop session is live, the job runs on its warm session between
+    users. Otherwise this takes the turn and runs the job in a dedicated
+    session. Either way there is never a second browser next to an existing
+    one. Blocking; call from worker or request threads, or wrap in
+    asyncio.to_thread from async code. The timeout bounds the wait for a slot
+    between the session's users; a very long single-user check can exceed it,
+    which surfaces as a retryable error rather than a hang.
+    """
+    import concurrent.futures
+    while True:
+        fut = browser_gate.try_submit(coro_fn)
+        if fut is not None:
+            try:
+                return fut.result(timeout=timeout)
+            except _JobOrphaned:
+                continue
+            except concurrent.futures.TimeoutError:
+                raise RuntimeError(
+                    f"timed out after {int(timeout)}s waiting for a slot on the "
+                    f"running loop's browser session") from None
+        if browser_gate.turn.acquire(timeout=1.0):
+            try:
+                return asyncio.run(_own_session_job(coro_fn))
+            finally:
+                browser_gate.turn.release()
+
+
 def _profile_dir() -> str:
     from platforms.tiktok.config import TIKTOK_DATA_DIR
     return os.path.join(TIKTOK_DATA_DIR, "browser_profile")
@@ -1097,10 +1203,10 @@ async def get_user_videos_browser(api, username: str, sec_uid: str,
     return videos, complete
 
 
-async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
-                                cookies_flat: dict | None = None) -> list[str]:
+async def fetch_sound_video_ids(sound_id: str) -> list[str]:
     """Fetch all video IDs that use a given TikTok sound (up to ~3000).
-    Opens its own TikTokApi session.
+    Runs on the platform's single browser turn via run_browser_job: on the
+    user-loop session when one is live, in a dedicated session otherwise.
 
     Primary path: load the music page in the session's browser and sniff the
     item_list responses the page itself requests while scrolling.
@@ -1112,10 +1218,7 @@ async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
     must not reach the caller, whose deletion tracking reads every unseen
     association as a missing video.
     """
-    from TikTokApi import TikTokApi
-
-    async with TikTokApi() as api:
-        await create_tiktok_session(api, ms_token, cookies_flat)
+    async def _job(api) -> list[str]:
         tab = await api.sessions[0].page.context.new_page()
         try:
             ids, complete = await _sniff_music_item_list(tab, sound_id)
@@ -1138,6 +1241,8 @@ async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
                     f"more remaining, and the JSON endpoint fallback failed: {exc}"
                 ) from exc
             raise
+
+    return await asyncio.to_thread(run_browser_job, _job)
 
 
 def resolve_share_url(url: str) -> str:

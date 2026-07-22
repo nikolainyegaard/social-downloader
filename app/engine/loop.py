@@ -17,7 +17,6 @@ from __future__ import annotations
 import atexit
 import json
 import os
-import queue as _queue_module
 import threading
 import time
 from collections import deque
@@ -79,9 +78,18 @@ class ChannelLoop:
         self._trigger_scope      = None
         self._trigger_scope_lock = threading.Lock()
 
-        self._run_queue: _queue_module.Queue = _queue_module.Queue()
+        # Manual single-channel runs. The pending deque and the UI-facing
+        # _run_state are guarded by _run_state_lock. _work_lock serializes all
+        # channel processing on this platform: run_loop holds it for a whole
+        # session, the worker holds it per manual run, so a manual run never
+        # executes concurrently with a session. While a session runs, the
+        # session itself drains the pending deque between creators (see the
+        # trackers) and the worker stands down.
+        self._run_pending: deque = deque()   # (channel_id, profile_only, mode)
+        self._run_signal = threading.Event()
         self._run_state_lock = threading.Lock()
         self._run_state: dict = {"current": None, "queue": []}
+        self._work_lock = threading.Lock()
 
         # Pending midpoint re-scans, keyed by channel_id. Each entry holds the
         # Timer object and the Unix timestamp when it fires, so the UI can show
@@ -255,7 +263,8 @@ class ChannelLoop:
             if channel_id in self._run_state["queue"] or self._run_state["current"] == channel_id:
                 return False
             self._run_state["queue"].append(channel_id)
-        self._run_queue.put((channel_id, profile_only, mode))
+            self._run_pending.append((channel_id, profile_only, mode))
+        self._run_signal.set()
         return True
 
     def enqueue_channel_profile_run(self, channel_id: str) -> bool:
@@ -317,19 +326,69 @@ class ChannelLoop:
         label   = f"@{channel['handle']}" if channel else channel_id
         self._log(f"  Large deletion spike: isolated full re-scan for {label} in {mins}m")
 
-    def _run_worker(self) -> None:
+    def pop_manual_run(self):
+        """Claim the next queued manual run. Returns (channel, profile_only, mode)
+        or None when nothing is pending. Marks the run as current; the caller
+        must call finish_manual_run afterwards. Used by the worker when no
+        session is running, and by the session trackers to drain queued manual
+        runs between creators."""
         while True:
-            channel_id, profile_only, mode = self._run_queue.get()
             with self._run_state_lock:
+                if not self._run_pending:
+                    return None
+                channel_id, profile_only, mode = self._run_pending.popleft()
                 if channel_id in self._run_state["queue"]:
                     self._run_state["queue"].remove(channel_id)
                 self._run_state["current"] = channel_id
+            channel = self.db.get_channel(channel_id)
+            if channel:
+                return channel, profile_only, mode
+            self._log(f"Manual run: channel {channel_id} not found in DB")
+            with self._run_state_lock:
+                self._run_state["current"] = None
+
+    def finish_manual_run(self, channel: dict, profile_only: bool, mode: str, error=None) -> None:
+        """Bookkeeping after a manual run claimed via pop_manual_run: schedule
+        the channel's next check (successful runs only) and clear the current
+        marker."""
+        channel_id = channel["channel_id"]
+        try:
+            if error is None:
+                from scheduling import get_check_intervals, set_channel_last_full, set_channel_next_check
+                _high, _active, _ = get_check_intervals(self.db, self.engine.platform)
+                _interval = channel.get("check_interval_secs") or (_high if channel.get("starred") else _active)
+                set_channel_next_check(self.db, channel_id, int(time.time()) + _interval)
+                if not profile_only and mode == "full":
+                    set_channel_last_full(self.db, channel_id, int(time.time()))
+                    with self.db.get_db() as conn:
+                        conn.execute("UPDATE channels SET full_refresh_pending = 0 WHERE channel_id = ?",
+                                     (channel_id,))
+        finally:
+            with self._run_state_lock:
+                self._run_state["current"] = None
+            self._set_current_channel(None)
+
+    def _run_worker(self) -> None:
+        while True:
+            self._run_signal.wait(timeout=5.0)
+            with self._run_state_lock:
+                if not self._run_pending:
+                    self._run_signal.clear()
+                    continue
+            # A running session drains the queue itself between creators; only
+            # take a run when the work lock is free (no session, no other run).
+            if not self._work_lock.acquire(timeout=0.5):
+                continue
             try:
-                channel = self.db.get_channel(channel_id)
-                if channel:
-                    label = f"@{channel['handle']}"
-                    kind  = "profile" if profile_only else mode
-                    self._log(f"=== Manual {kind} run started: {label} ===")
+                entry = self.pop_manual_run()
+                if entry is None:
+                    continue
+                channel, profile_only, mode = entry
+                label = f"@{channel['handle']}"
+                kind  = "profile" if profile_only else mode
+                error = None
+                self._log(f"=== Manual {kind} run started: {label} ===")
+                try:
                     if self.adapter.process_single:
                         self.adapter.process_single(self.engine, channel, self._log,
                                                     self._set_current_channel,
@@ -339,25 +398,12 @@ class ChannelLoop:
                         process_single_channel(self.engine, channel, self._log, self._set_current_channel,
                                                profile_only=profile_only, mode=mode)
                     self._log(f"=== Manual {kind} run complete: {label} ===")
-                    # Schedule the next check based on the channel's computed interval
-                    from scheduling import get_check_intervals, set_channel_last_full, set_channel_next_check
-                    _high, _active, _ = get_check_intervals(self.db, self.engine.platform)
-                    _interval = channel.get("check_interval_secs") or (_high if channel.get("starred") else _active)
-                    set_channel_next_check(self.db, channel_id, int(time.time()) + _interval)
-                    if not profile_only and mode == "full":
-                        set_channel_last_full(self.db, channel_id, int(time.time()))
-                        with self.db.get_db() as conn:
-                            conn.execute("UPDATE channels SET full_refresh_pending = 0 WHERE channel_id = ?",
-                                         (channel_id,))
-                else:
-                    self._log(f"Manual run: channel {channel_id} not found in DB")
-            except Exception as e:
-                self._log(f"Manual run error for {channel_id}: {e}")
+                except Exception as e:
+                    error = e
+                    self._log(f"Manual run error for {channel['channel_id']}: {e}")
+                self.finish_manual_run(channel, profile_only, mode, error=error)
             finally:
-                with self._run_state_lock:
-                    self._run_state["current"] = None
-                self._set_current_channel(None)
-                self._run_queue.task_done()
+                self._work_lock.release()
 
     # ── Session run ───────────────────────────────────────────────────────────
 
@@ -372,6 +418,18 @@ class ChannelLoop:
         if issues:
             self._log(f"Loop blocked: {issues[0]['message']}")
             return
+        # One unit of work at a time per platform: wait for an in-flight manual
+        # run to finish before the session starts. Queued manual runs are then
+        # drained by the session itself between creators.
+        if not self._work_lock.acquire(blocking=False):
+            self._log("Session waiting for the active manual run to finish...")
+            self._work_lock.acquire()
+        try:
+            self._run_session(channels_due, manual)
+        finally:
+            self._work_lock.release()
+
+    def _run_session(self, channels_due: list[dict] | None, manual: bool) -> None:
         from engine.tracker import process_all_channels
         _run_start = datetime.now(timezone.utc).isoformat()
         with self._state_lock:

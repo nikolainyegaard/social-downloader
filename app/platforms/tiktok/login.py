@@ -57,8 +57,21 @@ def _run():
 
 async def _flow():
     from playwright.async_api import async_playwright
-    from platforms.tiktok.api import _profile_context_factory
+    from platforms.tiktok.api import _profile_context_factory, browser_gate
 
+    # Hold the browser turn for the whole login so a session starting mid-login
+    # waits instead of falling back to an ephemeral context next to us.
+    if not browser_gate.turn.acquire(blocking=False):
+        _set(status="error", qr=None,
+             message="The browser is in use, likely by a running loop. Try again when it finishes.")
+        return
+    try:
+        await _flow_with_turn(async_playwright, _profile_context_factory)
+    finally:
+        browser_gate.turn.release()
+
+
+async def _flow_with_turn(async_playwright, _profile_context_factory):
     factory, release = _profile_context_factory()
     if factory is None:
         _set(status="error", qr=None,

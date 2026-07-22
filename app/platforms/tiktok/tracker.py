@@ -17,7 +17,7 @@ from platforms.tiktok.config import (
 from platforms.tiktok.store import TikTokStore
 from scheduling import set_channel_next_check, set_channel_last_full
 from platforms.tiktok.api import (
-    create_tiktok_session,
+    browser_gate, create_tiktok_session,
     get_user_info, get_user_videos, get_user_videos_with_stats,
     get_user_videos_browser,
     fetch_sound_video_ids, get_video_details, get_user_stories, parse_story_item,
@@ -756,6 +756,37 @@ async def process_single_user(
             set_current_user(None)
 
 
+async def _drain_manual_runs_inline(engine, api, cookies, log, logd, set_current_user) -> set:
+    """Process queued manual runs on the session's warm browser, between users.
+
+    Returns the channel_ids that completed with videos fetched; the session
+    skips those when their due-list turn comes. Errors (including bot
+    detection) are logged like the worker logs them; the next scheduled user
+    triggers the session's normal recovery if TikTok is actually pushing back.
+    """
+    drained: set = set()
+    loop_obj = engine.loop
+    while True:
+        entry = loop_obj.pop_manual_run()
+        if entry is None:
+            return drained
+        user, profile_only, mode = entry
+        kind  = "profile" if profile_only else mode
+        error = None
+        log(f"=== Manual {kind} run (inserted): @{user['handle']} ===")
+        try:
+            await process_single_user(user, api, cookies,
+                                      fetch_videos=not profile_only, mode=mode,
+                                      log=log, logd=logd, set_current_user=set_current_user)
+            log(f"=== Manual {kind} run complete: @{user['handle']} ===")
+        except Exception as e:
+            error = e
+            log(f"Manual run error for @{user['handle']}: {e}")
+        loop_obj.finish_manual_run(user, profile_only, mode, error=error)
+        if error is None and not profile_only:
+            drained.add(user["channel_id"])
+
+
 async def process_user_session(
     engine,
     users: list[dict],
@@ -829,6 +860,7 @@ async def process_user_session(
     session_create_failed = False   # True if the most recent _make_session call failed
     cooldown_pending      = False
     cooldown_sleep        = 0
+    drained: set          = set()   # channel_ids already checked by inserted manual runs
 
     while start_idx < total:
         if cooldown_pending:
@@ -864,10 +896,15 @@ async def process_user_session(
 
             completed         = 0
             break_for_restart = False
+            # The session owns the browser turn: accept ad-hoc jobs (add
+            # lookups, diagnostics, sound fetches) and run them on this warm
+            # session between users instead of letting them wait for the turn.
+            browser_gate.open_jobs()
 
             for idx in range(start_idx, total):
                 if stop_event and stop_event.is_set():
                     log("=== User loop stopped by request ===")
+                    browser_gate.close_jobs()
                     return total_completed
                 user = users[idx]
                 if idx > 0:
@@ -878,6 +915,12 @@ async def process_user_session(
                     await asyncio.sleep(_gap)
                     if set_sleep:
                         set_sleep(None, None)
+                await browser_gate.drain_jobs(api)
+                drained |= await _drain_manual_runs_inline(engine, api, cookies, log, logd, set_current_user)
+                if user["channel_id"] in drained:
+                    log(f"  [{idx + 1}/{total}] @{user['handle']}: already checked by an inserted manual run")
+                    completed += 1
+                    continue
                 fetch_videos    = bool(user.get("tracking_enabled", 1))
                 progress        = f"{idx + 1}/{total}"
                 _now_ts         = int(time.time())
@@ -937,6 +980,7 @@ async def process_user_session(
                             f" (scheduled sessions skipped, manual triggers still run)"
                         )
                         total_completed += completed
+                        browser_gate.close_jobs()
                         return total_completed
                 except Exception as e:
                     log(f"Unhandled error for @{user['handle']}: {e}")
@@ -957,8 +1001,14 @@ async def process_user_session(
                                 log(f"  Deletion candidates found; scheduling ASAP re-check")
 
             if not break_for_restart:
+                # Final service pass on the still-warm session, then hand the
+                # queues back: later ad-hoc jobs run on their own turn and
+                # later manual runs go to the worker.
+                await browser_gate.drain_jobs(api)
+                drained |= await _drain_manual_runs_inline(engine, api, cookies, log, logd, set_current_user)
                 total_completed += completed
                 start_idx = total  # all users processed; exit outer while
+            browser_gate.close_jobs()
 
     # A run that made it here worked end to end, so the identity is not (or no
     # longer) flagged and any active cooldown can end early
@@ -1043,9 +1093,7 @@ async def process_single_sound(engine, sound: dict, log: Callable[[str], None]) 
     remote_ids: list[str] = []
     for _attempt in range(2):
         try:
-            ms_token   = get_ms_token()
-            remote_ids = await fetch_sound_video_ids(sound_id, ms_token,
-                                                     cookies_flat=get_cookies_flat())
+            remote_ids = await fetch_sound_video_ids(sound_id)
             break
         except Exception as e:
             if _attempt == 0:

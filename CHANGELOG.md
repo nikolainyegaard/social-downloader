@@ -6,6 +6,11 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Changed
+- One check at a time per platform: a manual Quick/Full run pressed while a loop session runs no longer executes alongside it. The run is queued and the session processes it between creators as an inserted run, using the session's already-warm browser on TikTok; the session's own progress numbering is unchanged and a creator already covered by an inserted run is skipped when its session turn comes. Log output is now strictly sequential instead of two runs interleaving
+- All TikTok browser work now shares a single browser slot: add lookups, diagnostics probes, and sound checks run on the loop's warm session between users while a session is live (instead of opening a second browser next to it), and take their own dedicated session otherwise. This removes the ephemeral-context fallback in practice, so every TikTok request now carries the persistent device identity; a second browser with the account's cookies but a fresh fingerprint can no longer occur
+- Starting a QR login now reserves the browser slot for the whole flow, so a loop session starting mid-login waits for it instead of running beside it
+
 ### Added
 - An action rail beside the story viewer on all platforms: a Download button saves the current story to your device (same icon and behaviour as the post list's Download), plus two reserved slots for future actions
 - Instagram authentication is now a cookies.txt upload, identical to Twitter's: export cookies from a logged-in browser session and upload them in Settings > Accounts > Instagram. The password login is gone; Instagram rate limits sessions created by tool logins from the first request, while cookies minted by a real browser carry that browser's trust. The file must include the sessionid and csrftoken cookies, and Remove logs the session out locally
