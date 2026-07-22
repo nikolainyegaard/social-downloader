@@ -6,6 +6,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Fixed
+- Bans now appear in the creator modal's Profile History tab: the transition to banned was previously not recorded at all (only the Recent activity feed's Banned event showed it), so a ban followed by a recovery read as an account status change out of nowhere. Every status transition is recorded now; the activity feed still shows a ban once, as its Banned event, while the recovery keeps showing as an account status change
+
 ### Changed
 - One check at a time per platform: a manual Quick/Full run pressed while a loop session runs no longer executes alongside it. The run is queued and the session processes it between creators as an inserted run, using the session's already-warm browser on TikTok; the session's own progress numbering is unchanged and a creator already covered by an inserted run is skipped when its session turn comes. Log output is now strictly sequential instead of two runs interleaving
 - All TikTok browser work now shares a single browser slot: add lookups, diagnostics probes, and sound checks run on the loop's warm session between users while a session is live (instead of opening a second browser next to it), and take their own dedicated session otherwise. This removes the ephemeral-context fallback in practice, so every TikTok request now carries the persistent device identity; a second browser with the account's cookies but a fresh fingerprint can no longer occur

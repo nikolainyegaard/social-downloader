@@ -482,10 +482,10 @@ class ChannelDB:
 
     def set_account_status(self, channel_id: str, status: str) -> None:
         """Set account_status; 'banned' also stamps banned_at (COALESCE, never
-        overwritten). Transitions away from banned (an unban) are recorded in
-        profile_history; a transition to banned is not, since the activity
-        feed already shows it as its own banned event and a second
-        account-status row would just duplicate it."""
+        overwritten). Every status transition is recorded in profile_history so
+        the modal's Profile History tab shows the full ban lifecycle; the
+        activity feed hides the to-banned rows (its own banned event covers
+        those, see get_activity_feed)."""
         with self.get_db() as conn:
             row = conn.execute(
                 "SELECT account_status FROM channels WHERE channel_id = ?", (channel_id,)
@@ -501,7 +501,7 @@ class ChannelDB:
                     "UPDATE channels SET account_status = ? WHERE channel_id = ?",
                     (status, channel_id)
                 )
-            if old_status and old_status != status and status != "banned":
+            if old_status and old_status != status:
                 conn.execute(
                     "INSERT INTO profile_history (channel_id, field, old_value, changed_at) VALUES (?, 'account_status', ?, ?)",
                     (channel_id, old_status, int(time.time()))
@@ -1190,10 +1190,14 @@ class ChannelDB:
             if kind in (None, "changed"):
                 w    = f"{flags}" + ("AND ph.changed_at < ?" if before else "")
                 args = (before, cap) if before else (cap,)
+                # Transitions to banned (an account_status row whose old value
+                # is not 'banned') are hidden here: the feed's banned event
+                # already shows them, so the row would be a duplicate. The
+                # unban (old_value = 'banned') stays visible.
                 rows = conn.execute(f"""
                     SELECT ph.field, ph.changed_at, c.handle, c.channel_id, c.starred, c.account_status
                     FROM profile_history ph JOIN channels c ON c.channel_id = ph.channel_id
-                    WHERE 1=1 {w}
+                    WHERE NOT (ph.field = 'account_status' AND ph.old_value != 'banned') {w}
                     ORDER BY ph.changed_at DESC LIMIT ?""", args).fetchall()
                 events += [{"ts": r["changed_at"], "kind": "changed", "item": dict(r)} for r in rows]
             if kind in (None, "banned"):

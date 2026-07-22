@@ -468,9 +468,10 @@ class TikTokStore:
                     "UPDATE channels SET account_status = ? WHERE channel_id = ?",
                     (status, channel_id),
                 )
-            # A transition to banned is not recorded: the feed already shows
-            # it as its own banned event (see ChannelDB.set_account_status).
-            if old_status and old_status != status and status != "banned":
+            # Every transition is recorded so the modal's Profile History shows
+            # the full ban lifecycle; the activity feed hides the to-banned
+            # rows since its own banned event covers those (get_activity_feed).
+            if old_status and old_status != status:
                 conn.execute(
                     "INSERT INTO profile_history (channel_id, field, old_value, changed_at) VALUES (?, 'account_status', ?, ?)",
                     (channel_id, old_status, int(time.time()))
