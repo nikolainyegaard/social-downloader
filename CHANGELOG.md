@@ -130,6 +130,9 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The desktop Track a user and Track a sound panels are gone on every platform, replaced by the unified add bar at the top of the tab; the Loops panel moved into the dashboard column beside the activity feed; TikTok sound labels are now set after adding via the sound card's Edit label action
 
 ### Fixed
+- Stories and plain videos now render at the same size in the media viewer; stories were capped at the narrower multi-slide width even though story mode has no side arrows
+- The viewer's top buttons no longer overlap tall media on mobile: media height now uses small-viewport units, since browser chrome inflates plain vh and ate the headroom the buttons sit in
+- Opening a story now shows the dark overlay and a spinner on the click itself instead of nothing happening until the story list arrives, which read as sluggish on mobile
 - The story viewer's progress bars are now anchored to the story media itself, so they always sit aligned over it; previously they tracked the whole viewer row and drifted out of alignment on small screens when the action buttons shared that row
 - Media viewer chrome cleanup: one consistent round button style for the controls, story actions, and close button (fixing misaligned and overlapping buttons and undersized icons), and video corners are rounded again on mobile (the radius now clips at the media wrapper, since mobile Safari ignores it on the video element itself)
 - Expandable text boxes (bios, descriptions) now close when you click anywhere outside them; previously an expanded bio stayed open when you expanded another one or clicked elsewhere on a card

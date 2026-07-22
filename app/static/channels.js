@@ -421,10 +421,13 @@ function initChannelApp(cfg) {
   // from the ringed avatars; the ring only renders when live_stories > 0, but
   // a story can expire between the poll and the click, hence the fallback.
   X('OpenStories', async channelId => {
+    openMediaViewerPending();  // overlay + spinner on the click itself
     const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(channelId)}/stories`);
-    if (!ok) return;
+    if (!_mvIsOpen()) return;  // closed while the list loaded
+    if (!ok) { closeMediaViewer(); return; }
     const live = (data || []).filter(s => s.live).reverse();
     if (!live.length) {
+      closeMediaViewer();
       showToast('No live stories right now.');
       return;
     }
@@ -1993,13 +1996,16 @@ function initChannelApp(cfg) {
 
   X('PlayStoriesOfDay', async day => {
     if (!modalCreatorId) return;
+    openMediaViewerPending();  // overlay + spinner on the click itself
     const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(modalCreatorId)}/stories`);
-    if (!ok) return;
+    if (!_mvIsOpen()) return;  // closed while the list loaded
+    if (!ok) { closeMediaViewer(); return; }
     const slides = (data || [])
       .filter(s => s.posted_at && new Date(s.posted_at * 1000).toLocaleDateString('sv') === day)
       .sort((a, b) => a.posted_at - b.posted_at)
       .map(_storySlide);
     if (slides.length) openStoryViewer(slides);
+    else closeMediaViewer();
   });
 
   function _renderStoriesPanel(dayCounts) {

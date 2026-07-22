@@ -1384,6 +1384,23 @@ let _storyEndsAt   = 0;     // when the armed advance timer fires (ms epoch)
 let _storyRemainMs = 0;     // captured at pause, drives the resume timer
 let _storySlideCtx = null;  // {isVid, vid, fill} of the running slide
 
+// Instant shell for async opens (the story-list fetch takes a beat on
+// mobile): the dark overlay and a spinner appear on the click itself, and the
+// caller swaps in slides when the data lands, or closes the viewer on
+// failure. _mvIsOpen lets the caller detect a close during the fetch.
+function openMediaViewerPending() {
+  const modal = document.getElementById('mvModal');
+  if (modal.style.display !== 'flex') {
+    modal.style.display = 'flex';
+    _lockScroll();
+  }
+  document.getElementById('mvSpinner').style.display = '';
+}
+
+function _mvIsOpen() {
+  return document.getElementById('mvModal').style.display === 'flex';
+}
+
 function openMediaViewer(slides) {
   if (!slides || !slides.length) return;
   _mvSlides = slides;
@@ -1391,8 +1408,12 @@ function openMediaViewer(slides) {
   // arrows and let the media use the released width
   document.getElementById('mvModal').classList.toggle('mv-single', slides.length === 1);
   _mvShowSlide(0);
-  document.getElementById('mvModal').style.display = 'flex';
-  _lockScroll();
+  const modal = document.getElementById('mvModal');
+  if (modal.style.display !== 'flex') {
+    modal.style.display = 'flex';
+    _lockScroll();  // skipped when a pending shell already holds the lock
+  }
+  document.getElementById('mvSpinner').style.display = 'none';
 }
 
 function openStoryViewer(slides) {
@@ -1689,7 +1710,7 @@ function closeMediaViewer() {
     bar.innerHTML = '';
     bar.style.display = 'none';
   }
-  for (const id of ['mvPlayBtn', 'mvMuteBtn', 'mvSeek'])
+  for (const id of ['mvPlayBtn', 'mvMuteBtn', 'mvSeek', 'mvSpinner'])
     document.getElementById(id).style.display = 'none';
   document.getElementById('mvModal').classList.remove('mv-single');
   document.getElementById('mvModal').style.display = 'none';
