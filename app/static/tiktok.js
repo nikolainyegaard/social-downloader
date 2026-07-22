@@ -526,6 +526,14 @@ function _ttOnStatus(state) {
     ? (state.sound_loop_stage || 'sound loop running')
     : null;
 
+  // Keep the open sound modal's Run button in step with the run queue, the
+  // same way the engine's updateRunStates patches the creator modal buttons
+  const _mRunBtn = document.getElementById('soundModalRunBtn');
+  if (_mRunBtn && _soundModal) {
+    _mRunBtn.disabled = soundRunQueue.includes(_soundModal.sound_id)
+      || soundRunCurrent === _soundModal.sound_id;
+  }
+
   const el = id => document.getElementById(id);
 
   const sMeta = el('soundLoopMeta');
@@ -991,6 +999,11 @@ const _SOUND_MODAL_CFG = {
       : `<span class="author-chip untracked" onclick="event.stopPropagation();closeSoundModal();openUntrackedUserModal('${esc(v.channel_id)}','${esc(name)}')">@${esc(name)}</span>`;
   },
   hasSearch: true, hasViewToggle: true, viewFn: 'setSoundModalView',
+  desktopTabs: true,
+  viewKeys: [
+    { key: 'list', icon: _listViewIcon, title: 'List view', label: 'Videos' },
+    { key: 'grid', icon: _gridViewIcon, title: 'Grid view', label: 'Grid' },
+  ],
   gridId: 'soundVideoGrid',
   thumbCellFn:  v => _soundThumbCell(v),
   actionBtnsFn: v => _ttVideoActionBtns(v),
@@ -1040,48 +1053,115 @@ function closeSoundModal() {
   _soundState.videos = [];
 }
 
-function _renderSoundModalHeader(s) {
-  const label  = s.label || s.sound_id;
-  const ttUrl  = `https://www.tiktok.com/music/-${esc(s.sound_id)}`;
-  const checked = _fmtLastChecked(s.last_checked);
-  const { cls: sSoundTrackingCls, label: sSoundTrackingLbl } = _trackingBadge(s.tracking_enabled);
-  const sSoundInactive = s.tracking_enabled === 0;
-  document.getElementById('soundModalHeader').innerHTML = `
+// Mirrors the engine's creator modal header: modal-header-left (avatar + name
+// row + actions + hidden note area) with the date tiles and stat pairs on the
+// right, and the mh card layout on mobile. Keep the class structure in sync
+// with channels.js _renderModalHeader / _renderModalHeaderMobile.
+const _soundAvatarHtml = `
     <div class="modal-avatar-wrap">
       <div class="sound-icon-wrap" style="width:56px;height:56px">
         <span class="sound-icon-letter" style="font-size:26px">♫</span>
       </div>
+    </div>`;
+
+function _soundHeaderMenu(s) {
+  return `<button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Edit label',onclick:()=>editSoundLabel('${esc(s.sound_id)}')},{label:'Add note',onclick:()=>soundToggleModalNote()}])">${_dotsIcon}</button>`;
+}
+
+function _soundRunBtn(s) {
+  const busy = soundRunQueue.includes(s.sound_id) || soundRunCurrent === s.sound_id;
+  return `<button id="soundModalRunBtn" class="btn-run" ${busy ? 'disabled' : ''} onclick="runSound('${esc(s.sound_id)}')">${_refreshIcon} Run</button>`;
+}
+
+function _soundNoteAreaHtml(s) {
+  return `
+    <div id="soundModalNoteArea" style="display:${s.comment ? '' : 'none'};margin-top:8px">
+      <textarea placeholder="Add a note about this sound…"
+        onblur="saveSoundComment('${esc(s.sound_id)}', this.value)"
+        style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
+               background:var(--raised);border:1px solid var(--border);border-radius:6px;
+               color:var(--text);font-family:inherit;line-height:1.5"
+      >${esc(s.comment || '')}</textarea>
+    </div>`;
+}
+
+function soundToggleModalNote() {
+  const area = document.getElementById('soundModalNoteArea');
+  if (!area) return;
+  const show = area.style.display === 'none';
+  area.style.display = show ? '' : 'none';
+  if (show) area.querySelector('textarea')?.focus();
+}
+
+function _renderSoundModalHeader(s) {
+  if (_mIsMobile()) return _renderSoundModalHeaderMobile(s);
+  const label = s.label || s.sound_id;
+  const ttUrl = `https://www.tiktok.com/music/-${esc(s.sound_id)}`;
+  const { cls: trackingCls, label: trackingLbl } = _trackingBadge(s.tracking_enabled);
+  const inactive = s.tracking_enabled === 0;
+  const _iso = u => new Date(u * 1000).toISOString();
+  const dateTiles = [
+    { v: fmtDateOnly(s.added_at),                                    l: 'Added' },
+    { v: s.last_checked ? fmt.rel(_iso(s.last_checked)) : 'never',   l: 'Last checked' },
+  ];
+  const statTiles = [{ v: _fmtLarge(s.video_count || 0), l: 'Saved' }];
+  if (s.video_deleted)   statTiles.push({ v: s.video_deleted,   l: 'Deleted',  cls: 'tred' });
+  if (s.video_undeleted) statTiles.push({ v: s.video_undeleted, l: 'Restored', cls: 'tyellow' });
+  const _tile = t => `<div class="tile${t.cls ? ' ' + t.cls : ''}"><span class="tv">${t.v}</span><span class="tl">${t.l}</span></div>`;
+  let statPairs = '';
+  for (let i = 0; i < statTiles.length; i += 2) statPairs += `<div class="stat-pair">${statTiles.slice(i, i + 2).map(_tile).join('')}</div>`;
+  document.getElementById('soundModalHeader').innerHTML = `
+    <div class="modal-header-left">
+      ${_soundAvatarHtml}
+      <div class="modal-user-body">
+        <div class="modal-name-row">
+          <span class="modal-name">${esc(label)}</span>
+          <span class="account-status ${trackingCls}">${trackingLbl}</span>
+          <label class="tracking-toggle" title="${inactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}">
+            <input type="checkbox" ${inactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">Track videos</span>
+          </label>
+        </div>
+        <div class="modal-handle">
+          <a href="${ttUrl}" target="_blank" rel="noopener" class="tt-link">${esc(s.sound_id)}</a>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
+          ${_soundRunBtn(s)}
+          ${_soundHeaderMenu(s)}
+        </div>
+        ${_soundNoteAreaHtml(s)}
+      </div>
     </div>
-    <div class="modal-user-body">
-      <div class="modal-name-row">
-        <span class="modal-name">${esc(label)}</span>
-        <button class="btn-ghost" style="font-size:11px;padding:3px 8px;margin-left:4px"
-          onclick="editSoundLabel('${esc(s.sound_id)}')">Edit label</button>
-        <span class="account-status ${sSoundTrackingCls}">${sSoundTrackingLbl}</span>
-        <label class="tracking-toggle" title="${sSoundInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}">
-          <input type="checkbox" ${sSoundInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
+    <div class="modal-header-meta">${dateTiles.map(_tile).join('')}</div>
+    <div class="modal-header-stats">${statPairs}</div>
+  `;
+}
+
+function _renderSoundModalHeaderMobile(s) {
+  const label = s.label || s.sound_id;
+  const ttUrl = `https://www.tiktok.com/music/-${esc(s.sound_id)}`;
+  const inactive = s.tracking_enabled === 0;
+  document.getElementById('soundModalHeader').innerHTML = `
+    <div class="mh">
+      <div class="mh-top">
+        ${_soundAvatarHtml}
+        <div class="mh-id">
+          <div class="mh-name">${esc(label)}</div>
+          <div class="mh-handle"><a href="${ttUrl}" target="_blank" rel="noopener" class="tt-link">${esc(s.sound_id)}</a></div>
+          <div class="mh-uid">${(s.video_count || 0).toLocaleString()} saved · ${esc(_fmtLastChecked(s.last_checked))}</div>
+        </div>
+      </div>
+      <div class="mh-actions">
+        ${_soundRunBtn(s)}
+        ${_soundHeaderMenu(s)}
+        <label class="tracking-toggle" title="${inactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}" style="margin-left:auto">
+          <input type="checkbox" ${inactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          <span class="toggle-label">Track videos</span>
+          <span class="toggle-label">Track</span>
         </label>
       </div>
-      <div class="modal-handle">
-        <a href="${ttUrl}" target="_blank" rel="noopener"
-           class="tt-link">${esc(s.sound_id)}</a>
-      </div>
-      <div class="modal-stats-row">
-        <span><strong>${s.video_count || 0}</strong> saved locally</span>
-        ${s.video_deleted   ? `<span style="color:var(--red)"><strong>${s.video_deleted}</strong> deleted</span>` : ''}
-        ${s.video_undeleted ? `<span style="color:var(--yellow)"><strong>${s.video_undeleted}</strong> restored</span>` : ''}
-        <span style="color:var(--muted)">${esc(checked)}</span>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
-        <textarea placeholder="Add a note about this sound…"
-          onblur="saveSoundComment('${esc(s.sound_id)}', this.value)"
-          style="flex:1;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
-                 background:var(--raised);border:1px solid var(--border);border-radius:6px;
-                 color:var(--text);font-family:inherit;line-height:1.5"
-        >${esc(s.comment || '')}</textarea>
-      </div>
+      ${_soundNoteAreaHtml(s)}
     </div>
   `;
 }
@@ -1093,11 +1173,9 @@ function setSoundModalSort(f)       { _mSetSort(_SOUND_MODAL_CFG, f); }
 
 function setSoundModalView(view) {
   _soundState.view = view;
-  const toolbar = document.getElementById('soundModalToolbar');
-  toolbar.querySelectorAll('[data-view-key]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.viewKey === view);
-  });
-  toolbar.querySelectorAll('.filter-pills').forEach(_placeGlider);
+  // Full toolbar re-render so the tab bar's active state follows (same as the
+  // engine's SetModalView)
+  _mRenderToolbar(_SOUND_MODAL_CFG, _soundState.videos);
   _mRenderList(_SOUND_MODAL_CFG);
 }
 
