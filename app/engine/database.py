@@ -183,6 +183,18 @@ class ChannelDB:
                     PRIMARY KEY (channel_id, day),
                     FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
                 );
+
+                -- Two-way links between creators on this platform (a person's
+                -- second channel, alt account, ...). One row per pair, stored
+                -- with channel_a < channel_b so a pair cannot exist twice.
+                CREATE TABLE IF NOT EXISTS channel_connections (
+                    channel_a  TEXT NOT NULL,
+                    channel_b  TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    PRIMARY KEY (channel_a, channel_b),
+                    FOREIGN KEY (channel_a) REFERENCES channels(channel_id),
+                    FOREIGN KEY (channel_b) REFERENCES channels(channel_id)
+                );
             """)
             needs_vacuum = self._migrate_db(conn)
             # One-time backfill: seed the add history from already tracked
@@ -344,6 +356,8 @@ class ChannelDB:
     def remove_channel(self, channel_id: str) -> None:
         with self.get_db() as conn:
             conn.execute("DELETE FROM channels WHERE channel_id = ?", (channel_id,))
+            conn.execute("DELETE FROM channel_connections WHERE ? IN (channel_a, channel_b)",
+                         (channel_id,))
 
 
     def get_all_channels(self) -> list[dict]:
@@ -658,6 +672,40 @@ class ChannelDB:
                    WHERE channel_id = ?
                    ORDER BY day""",
                 (channel_id,)
+            ).fetchall()]
+
+    # ── Channel connections ───────────────────────────────────────────────────
+    # Two-way links between creators (a person's second channel). Pairs are
+    # stored once, ordered channel_a < channel_b; every accessor takes either
+    # side.
+
+    def add_connection(self, channel_id: str, other_id: str) -> None:
+        a, b = sorted((str(channel_id), str(other_id)))
+        with self.get_db() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO channel_connections (channel_a, channel_b, created_at) VALUES (?, ?, ?)",
+                (a, b, int(time.time())))
+
+    def remove_connection(self, channel_id: str, other_id: str) -> None:
+        a, b = sorted((str(channel_id), str(other_id)))
+        with self.get_db() as conn:
+            conn.execute(
+                "DELETE FROM channel_connections WHERE channel_a = ? AND channel_b = ?",
+                (a, b))
+
+    def get_connections(self, channel_id: str) -> list[dict]:
+        """The channels connected to channel_id, with the fields the modal
+        panel renders (avatar, names), alphabetical by handle."""
+        with self.get_db() as conn:
+            return [dict(r) for r in conn.execute(
+                """SELECT c.channel_id, c.handle, c.display_name, c.avatar_cached,
+                          c.enabled, c.tracking_enabled, c.account_status
+                   FROM channel_connections cc
+                   JOIN channels c ON c.channel_id =
+                        CASE WHEN cc.channel_a = ? THEN cc.channel_b ELSE cc.channel_a END
+                   WHERE ? IN (cc.channel_a, cc.channel_b)
+                   ORDER BY c.handle COLLATE NOCASE""",
+                (channel_id, channel_id)
             ).fetchall()]
 
 

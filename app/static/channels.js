@@ -270,6 +270,23 @@ function initChannelApp(cfg) {
   document.getElementById(`platform-${cfg.id}`).innerHTML = _sectionHtml();
   document.body.insertAdjacentHTML('beforeend', _modalHtml());
 
+  // Compact list modal behind the connections panel's more/manage button:
+  // every connected creator with avatar and names, click opens their modal,
+  // the x detaches the connection (both directions, it is one link).
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="conn-backdrop" id="${P}ConnListModal" style="display:none" onclick="if(event.target===this)${P}CloseConnList()">
+      <div class="conn-list">
+        <div class="conn-list-head">
+          <span>Connected ${CREATORS}</span>
+          <button class="modal-close" onclick="${P}CloseConnList()" title="Close"></button>
+        </div>
+        <div class="conn-list-rows" id="${P}ConnListRows"></div>
+        <div class="conn-list-foot">
+          <button class="btn-sm" onclick="${P}ConnectAdd()">Connect a ${CREATOR}…</button>
+        </div>
+      </div>
+    </div>`);
+
   // ── State ─────────────────────────────────────────────────────────────────
 
   let creators       = [];
@@ -1457,6 +1474,8 @@ function initChannelApp(cfg) {
 
   let modalCreatorId        = null;
   let modalCreator          = null;
+  let _modalConnections     = null;  // null until the open creator's fetch lands
+  let _connSig              = '';
   let modalPendingHighlight = null;
 
   let phistData  = [];
@@ -1479,6 +1498,8 @@ function initChannelApp(cfg) {
   function _openModalRaw(ch, renderHeaderFn) {
     modalCreatorId = ch.channel_id;
     modalCreator   = ch;
+    _modalConnections = null;
+    _connSig          = '';
     Object.assign(_creatorState, {
       videos: [], filter: new Set(), typeFilter: new Set(), search: '',
       sort: { field: 'upload_date', dir: 'desc' }, loaded: 0, toolbarExpanded: false,
@@ -1509,7 +1530,106 @@ function initChannelApp(cfg) {
       `<div class="vlist-loading">Loading ${ITEMS}…</div>`;
 
     _loadModalVideos(ch.channel_id);
+    _loadConnections(ch.channel_id);
   }
+
+  // ── Connected creators ──────────────────────────────────────────────────────
+  // Two-way links between creators on this platform (a person's second
+  // channel). A compact panel in the modal header shows up to 3 avatars; the
+  // list modal shows everyone and holds the remove buttons.
+
+  async function _loadConnections(id) {
+    const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(id)}/connections`);
+    if (!ok || modalCreatorId !== id) return;
+    _applyConnections(data);
+  }
+
+  function _applyConnections(conns) {
+    const sig = JSON.stringify(conns);
+    if (sig === _connSig && _modalConnections !== null) return;
+    _modalConnections = conns;
+    _connSig          = sig;
+    _renderConnPanel();
+    _renderConnListRows();
+  }
+
+  function _connAvatar(c) {
+    return `<span class="conn-avatar-wrap" title="${esc(c.display_name || c.handle)} (@${esc(c.handle)})"
+      onclick="${P}OpenModal('${esc(c.channel_id)}')">
+      <span class="conn-letter">${esc((c.handle || '?')[0])}</span>
+      ${c.avatar_cached ? `<img class="conn-avatar" src="${API}/channels/${esc(c.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()">` : ''}
+    </span>`;
+  }
+
+  function _renderConnPanel() {
+    const host = _el('ModalConnections');
+    if (!host) return;
+    const conns  = _modalConnections || [];
+    const shown  = conns.slice(0, 3);
+    const hidden = conns.length - shown.length;
+    host.innerHTML = `
+      <span class="conn-title">Connected ${CREATORS}</span>
+      ${shown.map(_connAvatar).join('')}
+      ${hidden > 0
+        ? `<button class="conn-chip" onclick="${P}OpenConnList()" title="Show all ${conns.length}">+${hidden}</button>`
+        : conns.length
+          ? `<button class="conn-icon-btn" onclick="${P}OpenConnList()" title="View and manage">${_dotsIcon}</button>`
+          : ''}
+      <button class="conn-icon-btn conn-add" onclick="${P}ConnectAdd()" title="Connect a ${CREATOR}">+</button>`;
+  }
+
+  function _renderConnListRows() {
+    const host = _el('ConnListRows');
+    if (!host) return;
+    const conns = _modalConnections || [];
+    host.innerHTML = conns.length ? conns.map(c => `
+      <div class="conn-row" onclick="if(!event.target.closest('button')){${P}CloseConnList();${P}OpenModal('${esc(c.channel_id)}')}">
+        ${_connAvatar(c)}
+        <span class="conn-row-names">
+          <span class="conn-row-name">${esc(c.display_name || c.handle)}</span>
+          <span class="conn-row-handle">@${esc(c.handle)}</span>
+        </span>
+        <button class="conn-row-remove" onclick="${P}RemoveConnection('${esc(c.channel_id)}')" title="Remove connection"></button>
+      </div>`).join('')
+    : `<div class="conn-empty">No connected ${CREATORS} yet</div>`;
+  }
+
+  X('OpenConnList', () => {
+    _renderConnListRows();
+    _el('ConnListModal').style.display = 'flex';
+    _lockScroll();
+  });
+
+  X('CloseConnList', () => {
+    _el('ConnListModal').style.display = 'none';
+    _unlockScroll();
+  });
+
+  X('ConnectAdd', async () => {
+    if (!modalCreator) return;
+    const id  = modalCreator.channel_id;
+    const raw = await openPrompt({
+      title: `Connect a ${CREATOR}`, placeholder: `@handle of a tracked ${CREATOR}`,
+      confirmLabel: 'Connect',
+    });
+    if (raw === null || !raw.trim()) return;
+    const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(id)}/connections`, {
+      method: 'POST',
+      body: JSON.stringify({ handle: raw.trim() }),
+    });
+    if (!ok) { showToast(data.error || 'Could not connect.', { type: 'error' }); return; }
+    if (modalCreatorId === id) _applyConnections(data.connections);
+  });
+
+  X('RemoveConnection', async otherId => {
+    if (!modalCreator) return;
+    const id = modalCreator.channel_id;
+    const { ok, data } = await apiJSON(
+      `${API}/channels/${encodeURIComponent(id)}/connections/${encodeURIComponent(otherId)}`,
+      { method: 'DELETE' });
+    if (!ok) { showToast(data.error || 'Could not remove the connection.', { type: 'error' }); return; }
+    if (modalCreatorId === id) _applyConnections(data.connections);
+  });
 
   X('OpenModal', channelId => {
     const ch = creators.find(c => c.channel_id === channelId);
@@ -1667,6 +1787,7 @@ function initChannelApp(cfg) {
       const hdr = _el('ModalHeader');
       if (!hdr || !hdr.contains(document.activeElement)) _renderModalHeader(ch);
     }
+    _loadConnections(id);  // signature-gated inside _applyConnections
     const { ok, data } = await apiJSON(`${API}/channels/${id}/videos`);
     if (ok && modalCreatorId === id && JSON.stringify(data) !== _modalVidsSig) {
       _setModalVideos(data);
@@ -1810,6 +1931,7 @@ function initChannelApp(cfg) {
             <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
           </div>
           ${_noteFieldHtml(ch.comment, `${P}EditNote`, 8)}
+          <div class="conn-panel" id="${P}ModalConnections"></div>
         </div>
       </div>
       <div class="modal-header-meta">${dateTiles.map(_tile).join('')}</div>
@@ -1818,6 +1940,7 @@ function initChannelApp(cfg) {
 
     _fillStorage(ch.channel_id);
     _renderModalBanner(ch);
+    _renderConnPanel();  // header re-renders wipe the panel; refill from state
     _markXtextClipped(_el('ModalHeader'));
   }
 
@@ -1884,7 +2007,9 @@ function initChannelApp(cfg) {
           </label>
         </div>
         ${_noteFieldHtml(ch.comment, `${P}EditNote`, 4)}
+        <div class="conn-panel" id="${P}ModalConnections"></div>
       </div>`;
+    _renderConnPanel();
     _markXtextClipped(_el('ModalHeader'));
   }
 
@@ -2385,6 +2510,11 @@ function initChannelApp(cfg) {
     // don't close both at once.
     for (const id of ['mvModal', 'imgModal', 'soundModalBackdrop', 'settingsBackdrop']) {
       if (document.getElementById(id) && document.getElementById(id).style.display !== 'none') return;
+    }
+    // The connections list sits over the creator modal; close it first.
+    if (_el('ConnListModal')?.style.display !== 'none') {
+      window[`${P}CloseConnList`]();
+      return;
     }
     if (_el('ModalBackdrop')?.style.display !== 'none') {
       window[`${P}CloseModal`]();

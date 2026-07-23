@@ -483,6 +483,36 @@ def create_channel_blueprint(engine) -> Blueprint:
         # locally saved posts), oldest first; feeds the profile stats graphs
         return jsonify(db.get_stats_history(channel_id))
 
+    # ── Connected channels ────────────────────────────────────────────────────
+    # Two-way links between creators on this platform (a person's second
+    # channel). Creating a connection takes the other side's handle; both
+    # channels must already be tracked here.
+
+    @bp.route("/channels/<channel_id>/connections", methods=["GET"])
+    def channel_connections(channel_id: str):
+        return jsonify(db.get_connections(channel_id))
+
+    @bp.route("/channels/<channel_id>/connections", methods=["POST"])
+    def channel_connections_add(channel_id: str):
+        if not db.get_channel(channel_id):
+            return jsonify({"error": f"Unknown {adapter.creator_noun}"}), 404
+        body   = request.get_json(silent=True) or {}
+        handle = str(body.get("handle") or "").strip().lstrip("@")
+        if not handle:
+            return jsonify({"error": "handle required"}), 400
+        other = db.get_channel_by_handle(handle)
+        if not other:
+            return jsonify({"error": f"@{handle} is not a tracked {adapter.creator_noun}"}), 404
+        if other["channel_id"] == channel_id:
+            return jsonify({"error": f"Cannot connect a {adapter.creator_noun} to itself"}), 400
+        db.add_connection(channel_id, other["channel_id"])
+        return jsonify({"ok": True, "connections": db.get_connections(channel_id)})
+
+    @bp.route("/channels/<channel_id>/connections/<other_id>", methods=["DELETE"])
+    def channel_connections_remove(channel_id: str, other_id: str):
+        db.remove_connection(channel_id, other_id)
+        return jsonify({"ok": True, "connections": db.get_connections(channel_id)})
+
     # ── Avatar and banner ─────────────────────────────────────────────────────
 
     @bp.route("/channels/<channel_id>/avatar", methods=["GET"])
@@ -759,7 +789,7 @@ def create_channel_blueprint(engine) -> Blueprint:
     # sums each domain's table write-versions once a second and names the
     # changed domains in a 'changed' event; the frontend refetches only those.
     _DATA_DOMAINS = {
-        "creators": ("channels", "videos", "profile_history", "stories", "channel_stats_history"),
+        "creators": ("channels", "videos", "profile_history", "stories", "channel_stats_history", "channel_connections"),
         "recent":   ("channels", "videos", "profile_history"),
         "stats":    ("channels", "videos"),
         "sounds":   ("sounds", "sound_videos"),

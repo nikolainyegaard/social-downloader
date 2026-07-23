@@ -1409,6 +1409,71 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .modal-note { font-size: 13px; color: var(--text-dim); line-height: 1.5; max-width: 100%; }
 .note-empty { color: var(--muted); opacity: .55; font-style: italic; cursor: pointer; }
 .note-empty:hover { opacity: .85; }
+
+/* ── Connected creators (modal header panel + list modal) ─────────────────── */
+
+.conn-panel { display: flex; align-items: center; gap: 5px; margin-top: 10px; min-height: 22px; flex-wrap: wrap; }
+.conn-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-right: 3px; }
+.conn-avatar-wrap {
+  position: relative; width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  background: var(--raised); border: 1px solid var(--border); overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: border-color .15s;
+}
+.conn-avatar-wrap:hover { border-color: var(--accent); }
+.conn-letter { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+.conn-avatar { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.conn-chip, .conn-icon-btn {
+  height: 22px; min-width: 22px; padding: 0 4px; border-radius: var(--radius-pill);
+  background: var(--raised); border: 1px solid var(--border); color: var(--muted);
+  font-size: 11px; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.conn-icon-btn.conn-add { font-size: 15px; padding: 0 5px; }
+.conn-icon-btn .ic { width: 13px; height: 13px; }
+.conn-chip:hover, .conn-icon-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+
+.conn-backdrop {
+  position: fixed; inset: 0; z-index: 260;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  animation: overlay-in .15s ease;
+}
+.conn-list {
+  position: relative; width: min(340px, calc(100vw - 32px)); max-height: 60vh;
+  display: flex; flex-direction: column;
+  background: var(--nav); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2); animation: modal-in .18s ease;
+}
+.conn-list-head { display: flex; align-items: center; padding: 12px 44px 10px 14px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border); }
+.conn-list-rows { overflow-y: auto; padding: 6px; flex: 1; }
+.conn-row {
+  display: flex; align-items: center; gap: 9px; padding: 6px 8px;
+  border-radius: var(--radius-sm); cursor: pointer;
+}
+.conn-row:hover { background: var(--raised); }
+.conn-row .conn-avatar-wrap { width: 28px; height: 28px; }
+.conn-row-names { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.conn-row-name   { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn-row-handle { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn-row-remove {
+  position: relative; width: 22px; height: 22px; flex-shrink: 0; padding: 0;
+  background: none; border: none; border-radius: var(--radius-sm);
+  color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .15s;
+}
+.conn-row:hover .conn-row-remove { opacity: .7; }
+.conn-row-remove:hover { opacity: 1 !important; background: var(--red-bg); color: var(--red); }
+.conn-row-remove::before, .conn-row-remove::after {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 10px; height: 1.6px; background: currentColor; border-radius: 1px;
+}
+.conn-row-remove::before { transform: translate(-50%, -50%) rotate(45deg); }
+.conn-row-remove::after  { transform: translate(-50%, -50%) rotate(-45deg); }
+.conn-empty { padding: 18px 14px; text-align: center; color: var(--muted); font-size: 12px; font-style: italic; }
+/* No hover on touch screens: keep the remove x visible */
+@media (hover: none) { .conn-row-remove { opacity: .7; } }
+.conn-list-foot { padding: 8px 10px; border-top: 1px solid var(--border); display: flex; justify-content: center; }
 .confirm-check { margin-top: 16px; }
 .confirm-warn { margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--red); line-height: 1.45; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
