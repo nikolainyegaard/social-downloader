@@ -377,7 +377,8 @@ let _confirmState = null;
 
 function _openDialog(o) {
   return new Promise(resolve => {
-    _confirmState = { resolve, isPrompt: !!o.isPrompt, multiline: !!o.multiline, hasCheckbox: !!o.checkbox };
+    _confirmState = { resolve, isPrompt: !!o.isPrompt, multiline: !!o.multiline, hasCheckbox: !!o.checkbox,
+                      suggest: null, suggestItems: [] };
     document.getElementById('confirmTitle').textContent = o.title || '';
     const msgEl = document.getElementById('confirmMessage');
     msgEl.textContent   = o.message || '';
@@ -413,6 +414,12 @@ function _openDialog(o) {
       inp.style.display = 'none';
       ta.style.display  = 'none';
     }
+    // Optional typeahead under the input: o.suggest(query) returns
+    // [{value, label, sub, avatar}] rendered as clickable rows; picking one
+    // fills the input and accepts. Single-line prompts only.
+    _confirmState.suggest = (o.isPrompt && !o.multiline && o.suggest) || null;
+    inp.oninput = _confirmState.suggest ? () => _confirmRenderSuggest(inp.value) : null;
+    _confirmRenderSuggest('');
     const ok = document.getElementById('confirmOk');
     ok.textContent = o.confirmLabel || 'Confirm';
     ok.classList.toggle('danger', !!o.danger);
@@ -426,8 +433,8 @@ function openConfirm({ title = 'Are you sure?', message = '', confirmLabel = 'Co
   return _openDialog({ title, message, confirmLabel, danger, isPrompt: false });
 }
 
-function openPrompt({ title = '', message = '', value = '', placeholder = '', confirmLabel = 'Save', multiline = false } = {}) {
-  return _openDialog({ title, message, value, placeholder, confirmLabel, multiline, danger: false, isPrompt: true });
+function openPrompt({ title = '', message = '', value = '', placeholder = '', confirmLabel = 'Save', multiline = false, suggest = null } = {}) {
+  return _openDialog({ title, message, value, placeholder, confirmLabel, multiline, suggest, danger: false, isPrompt: true });
 }
 
 // Confirm with an extra opt-in checkbox. Resolves { confirmed, checked }.
@@ -457,8 +464,36 @@ function _confirmDismiss() {
 
 function _confirmClose() {
   document.getElementById('confirmModal').style.display = 'none';
+  document.getElementById('confirmSuggest').style.display = 'none';
+  document.getElementById('confirmInput').oninput = null;
   _unlockScroll();
   _confirmState = null;
+}
+
+// Typeahead rows for a prompt with a suggest hook. Re-rendered on every
+// keystroke from the hook's (local, instant) results; empty query or no
+// matches hides the list.
+function _confirmRenderSuggest(q) {
+  const s   = _confirmState;
+  const sug = document.getElementById('confirmSuggest');
+  if (!s || !s.suggest) { sug.style.display = 'none'; return; }
+  const items = s.suggest(q) || [];
+  s.suggestItems = items;
+  sug.innerHTML = items.map((it, i) => `
+    <button class="cs-row" onclick="_confirmPickSuggest(${i})">
+      <span class="cs-avatar">${it.avatar ? `<img src="${esc(it.avatar)}" loading="lazy" alt="" onerror="this.remove()">` : esc((it.sub || it.value || '?').replace(/^@/, '')[0] || '?')}</span>
+      <span class="cs-label">${esc(it.label || it.value)}</span>
+      ${it.sub ? `<span class="cs-sub">${esc(it.sub)}</span>` : ''}
+    </button>`).join('');
+  sug.style.display = items.length ? '' : 'none';
+}
+
+function _confirmPickSuggest(i) {
+  const s  = _confirmState;
+  const it = s && s.suggestItems && s.suggestItems[i];
+  if (!it) return;
+  document.getElementById('confirmInput').value = it.value;
+  _confirmAccept();
 }
 
 // ── Custom dropdown ─────────────────────────────────────────────────────────────

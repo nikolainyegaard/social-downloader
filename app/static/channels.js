@@ -1615,10 +1615,34 @@ function initChannelApp(cfg) {
 
   X('ConnectAdd', async () => {
     if (!modalCreator) return;
-    const id  = modalCreator.channel_id;
+    const id = modalCreator.channel_id;
+    // Typeahead over the already-loaded creators list (instant, no network):
+    // handle and display name substring match, prefix matches first, minus
+    // the open creator and everyone already connected.
+    const taken = new Set([id, ...(_modalConnections || []).map(c => c.channel_id)]);
+    const pool  = creators.filter(c => !taken.has(c.channel_id));
+    const suggest = q => {
+      q = q.trim().replace(/^@/, '').toLowerCase();
+      if (!q) return [];
+      const scored = [];
+      for (const c of pool) {
+        const h = (c.handle || '').toLowerCase();
+        const d = (c.display_name || '').toLowerCase();
+        const hi = h.indexOf(q), di = d.indexOf(q);
+        if (hi < 0 && di < 0) continue;
+        scored.push({ rank: (hi === 0 || di === 0) ? 0 : 1, c });
+      }
+      scored.sort((a, b) => a.rank - b.rank || a.c.handle.localeCompare(b.c.handle));
+      return scored.slice(0, 8).map(({ c }) => ({
+        value:  c.handle,
+        label:  c.display_name || c.handle,
+        sub:    '@' + c.handle,
+        avatar: c.avatar_cached ? `${API}/channels/${encodeURIComponent(c.channel_id)}/avatar?size=thumb` : null,
+      }));
+    };
     const raw = await openPrompt({
       title: `Connect a ${CREATOR}`, placeholder: `@handle of a tracked ${CREATOR}`,
-      confirmLabel: 'Connect',
+      confirmLabel: 'Connect', suggest,
     });
     if (raw === null || !raw.trim()) return;
     const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(id)}/connections`, {
