@@ -504,6 +504,14 @@ async function _ttAddHandler(val, addToasts) {
   return true;
 }
 
+// Original post URL: photo posts live under /photo/, everything else under
+// /video/. A wrong or stale handle is fine, TikTok redirects to the canonical
+// URL ("user" is the same placeholder trick get_video_details uses).
+function _ttVideoUrl(v, handle) {
+  const kind = v.type === 'photo' ? 'photo' : 'video';
+  return `https://www.tiktok.com/@${handle || 'user'}/${kind}/${v.video_id}`;
+}
+
 // Videos download as mp4, photo posts as a zip of all images
 function _ttVideoActionBtns(v) {
   const id = esc(v.video_id);
@@ -642,6 +650,7 @@ const tt = initChannelApp({
   addPlaceholder:    '@username, sound ID, or URL',
   addAriaLabel:      'TikTok username, sound ID, or URL',
   profileUrl:        h => `https://www.tiktok.com/@${h}`,
+  videoUrl:          (v, ch) => _ttVideoUrl(v, ch.handle),
   hasStories:        true,
   fieldLabels: {
     username: 'Handle', handle: 'Handle', display_name: 'Display name',
@@ -942,9 +951,9 @@ function _soundThumbCell(v) {
   const id    = esc(v.video_id);
   const badge = v.type === 'video' ? _playBadge : v.type === 'photo' ? (v.multi ? _photoBadge : _imageBadge) : '';
   const action = v.type === 'video'
-    ? `onclick="event.stopPropagation();ttOpenVidModal('${id}')" title="Play video" style="cursor:pointer"`
+    ? `onclick="event.stopPropagation();_soundOpenVid('${id}')" title="Play video" style="cursor:pointer"`
     : v.type === 'photo'
-      ? `onclick="event.stopPropagation();ttOpenCarousel('${id}')" title="View photos" style="cursor:pointer"`
+      ? `onclick="event.stopPropagation();_soundOpenCarousel('${id}')" title="View photos" style="cursor:pointer"`
       : 'style="cursor:default"';
   return `<div style="position:relative;line-height:0;width:90px;flex-shrink:0">
     <img class="video-thumb" src="/api/tiktok/videos/${id}/thumbnail" alt="" loading="lazy"
@@ -974,13 +983,45 @@ function _soundDownload(url, name) {
   a.click();
   a.remove();
 }
+function _soundVideoUrl(v) {
+  if (!v || v.status === 'deleted') return null;
+  return _ttVideoUrl(v, v.author_handle);
+}
 function soundVideoMenu(btn, vid) {
   const v = _soundState.videos.find(x => x.video_id === vid);
-  if (!v || !v.file_path) return;
-  const id = esc(v.video_id);
-  _openCardMenu(btn, [{ label: 'Download', onclick: () => v.type === 'photo'
-    ? _soundDownload(`/api/tiktok/videos/${id}/photos/zip`, `${id}_photos.zip`)
-    : _soundDownload(`/api/tiktok/videos/${id}/file`, `${id}.mp4`) }]);
+  if (!v) return;
+  const id    = esc(v.video_id);
+  const items = [];
+  if (v.file_path) {
+    items.push({ label: 'Download', onclick: () => v.type === 'photo'
+      ? _soundDownload(`/api/tiktok/videos/${id}/photos/zip`, `${id}_photos.zip`)
+      : _soundDownload(`/api/tiktok/videos/${id}/file`, `${id}.mp4`) });
+  }
+  const link = _soundVideoUrl(v);
+  items.push({ label: 'Open link', disabled: !link,
+               onclick: () => { if (link) window.open(link, '_blank', 'noopener'); } });
+  _openCardMenu(btn, items);
+}
+
+// Viewer openers for sound modal rows: same slides the engine's ttOpenVidModal
+// and ttOpenCarousel build, but the row lookup happens in _soundState (the
+// engine only knows the creator modal's videos), so the viewer's Link button
+// gets the post URL here too.
+function _soundOpenVid(vid) {
+  const v = _soundState.videos.find(x => x.video_id === vid);
+  openMediaViewer([{
+    url:  `/api/tiktok/videos/${encodeURIComponent(vid)}/file`,
+    type: 'video',
+    name: `${vid}.mp4`,
+    link: v ? _soundVideoUrl(v) : null,
+  }]);
+}
+async function _soundOpenCarousel(vid) {
+  const { ok, data } = await apiJSON(`/api/tiktok/videos/${encodeURIComponent(vid)}/files`);
+  if (!ok || !data.files || !data.files.length) return;
+  const v    = _soundState.videos.find(x => x.video_id === vid);
+  const link = v ? _soundVideoUrl(v) : null;
+  openMediaViewer(data.files.map(f => ({ ...f, link })));
 }
 
 const _SOUND_MODAL_CFG = {
@@ -992,6 +1033,7 @@ const _SOUND_MODAL_CFG = {
   filtersHostId: 'soundModalFilters',
   mSortFn: 'soundMSort', mStatusFn: 'soundMStatus', mTypeFn: 'soundMType',
   videoMenuFn: 'soundVideoMenu',
+  videoUrlFn:  v => _soundVideoUrl(v),
   authorCol: v => {
     const name = v.author_handle || v.channel_id || '?';
     return v.author_enabled === 1
@@ -1010,7 +1052,7 @@ const _SOUND_MODAL_CFG = {
   previewFn:    'ttOpenImgModal',
   typeIconFn:   v => v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? (v.multi ? _vgridPhotoIcon : _vgridImageIcon) : '',
   gridThumbSrc: v => `/api/tiktok/videos/${esc(v.video_id)}/thumbnail`,
-  gridCellOnclick: v => { if (v.type === 'video') ttOpenVidModal(v.video_id); else if (v.type === 'photo') ttOpenCarousel(v.video_id); },
+  gridCellOnclick: v => { if (v.type === 'video') _soundOpenVid(v.video_id); else if (v.type === 'photo') _soundOpenCarousel(v.video_id); },
 };
 
 let _soundModalId               = null;

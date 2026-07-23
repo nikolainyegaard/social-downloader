@@ -23,6 +23,7 @@ initChannelApp({
   addPlaceholder:    '@handle or channel URL',
   addAriaLabel:      'YouTube channel handle or URL',
   profileUrl:        h => `https://www.youtube.com/@${h}`,
+  videoUrl:          v => `https://www.youtube.com/watch?v=${v.video_id}`,
   fieldLabels: {
     handle: 'Handle', display_name: 'Display name', description: 'Description',
     avatar: 'Avatar', banner: 'Banner',

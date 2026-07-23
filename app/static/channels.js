@@ -51,7 +51,8 @@
  * @property {(v: Object) => string} [typeIconFn]
  * @property {(v: Object) => string} [thumbBadge]
  * @property {Function} [videoActionBtnsFn]
- * @property {(v: Object) => {label: string, danger?: boolean, onclick: () => void}[]} [videoMenuItemsFn]  Items for the mobile row ••• menu
+ * @property {(v: Object, ch: Object) => string} [videoUrl]  Original post URL on the platform (drives the Link buttons)
+ * @property {(v: Object) => {label: string, danger?: boolean, disabled?: boolean, onclick: () => void}[]} [videoMenuItemsFn]  Items for the mobile row ••• menu
  */
 
 /** @param {ChannelAppConfig} cfg */
@@ -358,6 +359,13 @@ function initChannelApp(cfg) {
 
   const _videoActionBtns = cfg.videoActionBtnsFn || _defaultVideoActionBtns;
 
+  // Original post URL for the Link buttons; null (greyed button) for deleted
+  // posts, whose URL is dead by definition.
+  function _videoUrl(v) {
+    if (!cfg.videoUrl || !modalCreator || v.status === 'deleted') return null;
+    return cfg.videoUrl(v, modalCreator);
+  }
+
   // Overflow (•••) menu for a post row, mirroring the channel-card menu. Currently
   // just Download; the list is here so future per-post actions slot straight in.
   function _downloadVideo(id, name) {
@@ -375,6 +383,11 @@ function initChannelApp(cfg) {
       const ext  = _mediaExt(v) || 'mp4';
       const name = _isMulti(v) ? (v.file_path.split('/').pop()) : `${id}.${ext}`;
       items.push({ label: 'Download', onclick: () => _downloadVideo(v.video_id, name) });
+    }
+    if (cfg.videoUrl) {
+      const link = _videoUrl(v);
+      items.push({ label: 'Open link', disabled: !link,
+                   onclick: () => { if (link) window.open(link, '_blank', 'noopener'); } });
     }
     return items;
   }
@@ -398,13 +411,16 @@ function initChannelApp(cfg) {
       url:  `${API}/videos/${encodeURIComponent(videoId)}/file`,
       type: 'video',
       name: `${videoId}.${ext}`,
+      link: v ? _videoUrl(v) : null,
     }]);
   });
 
   X('OpenCarousel', async videoId => {
     const { ok, data } = await apiJSON(`${API}/videos/${encodeURIComponent(videoId)}/files`);
     if (!ok || !data.files || !data.files.length) return;
-    openMediaViewer(data.files);
+    const v    = _creatorState.videos.find(x => x.video_id === videoId);
+    const link = v ? _videoUrl(v) : null;
+    openMediaViewer(data.files.map(f => ({ ...f, link })));
   });
 
   // Story row to viewer slide; name feeds the viewer's Download action (the
@@ -511,6 +527,7 @@ function initChannelApp(cfg) {
     gridId:       `${P}VideoGrid`,
     thumbCellFn:  _thumbCell,
     actionBtnsFn: _videoActionBtns,
+    videoUrlFn:   cfg.videoUrl ? _videoUrl : null,  // Link button beside Download in the actions cell
     videoMenuFn:  `${P}VideoMenu`,   // mobile list rows: ••• overflow menu (Download, ...)
     previewFn:    `${P}OpenImgModal`,
     gridThumbSrc: v => `${API}/videos/${esc(v.video_id)}/thumbnail`,

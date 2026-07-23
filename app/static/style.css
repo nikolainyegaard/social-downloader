@@ -336,7 +336,8 @@ svg.ic { width: 13px; height: 13px; display: block; flex-shrink: 0; }
   width: 100%;
   font-family: inherit;
 }
-.card-menu-item:hover { background: var(--raised); }
+.card-menu-item:hover:not(:disabled) { background: var(--raised); }
+.card-menu-item:disabled { opacity: .4; cursor: default; }
 .card-menu-item-danger { color: var(--red); }
 .card-menu-item-danger:hover { background: var(--red-bg); }
 
@@ -1292,6 +1293,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   width: 26px; height: 26px;
 }
 .play-btn:hover { opacity: 1; background: var(--accent-bg); }
+.play-btn.disabled { opacity: .25; cursor: default; color: var(--muted); }
+.play-btn.disabled:hover { opacity: .25; background: none; }
 
 /* ── Tracking view tabs (creators / extra views / log) ──────────────────── */
 
@@ -1702,6 +1705,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Story actions on the topbar row (Download plus reserved slots) */
 .story-actions { display: none; }
 .story-mode .story-actions { display: flex; gap: 8px; }
+/* Stories have no permanent URL; the link-out button is post-only chrome */
+.story-mode #mvLinkBtn { display: none; }
 
 /* ── Live story ring around avatars ──────────────────────────────────────── */
 
