@@ -1852,6 +1852,89 @@ function _modalShellScrollWiring(base) {
   }, { passive: true });
 }
 
+// Media views show the post list with search/filters; History, Stories, and
+// Stats are the non-media panel views. One predicate so a new panel view only
+// needs adding here.
+function _mIsMediaView(view) {
+  return view !== 'history' && view !== 'stories' && view !== 'stats';
+}
+
+// ── Profile stats graphs (the modal's Stats view) ───────────────────────────
+// Small-multiple line charts over the daily snapshots from /stats-history,
+// one single-series chart per metric (the card title carries identity, so no
+// legend), drawn with the vendored uPlot and themed from the CSS variables at
+// render time. Metrics a platform never reports (all-null column) are skipped.
+
+const _STAT_METRICS = [
+  { field: 'subscriber_count', label: 'Followers' },
+  { field: 'following_count',  label: 'Following' },
+  { field: 'video_count',      label: 'Posts on platform' },
+  { field: 'saved_count',      label: 'Posts saved' },
+];
+
+// canvas needs a resolved color; derive a translucent area fill from a hex accent
+function _hexFade(hex, alpha) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
+  return hex + Math.round(alpha * 255).toString(16).padStart(2, '0');
+}
+
+function _renderStatsCharts(host, rows) {
+  host.innerHTML = '';
+  if (!rows || rows.length < 2) {
+    host.innerHTML = `<div class="vlist-empty">${rows && rows.length === 1
+      ? 'First snapshot recorded. Graphs appear from the second day of data.'
+      : 'No stats recorded yet. A snapshot is stored on every profile check, one per day.'}</div>`;
+    return [];
+  }
+  const css    = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue('--accent').trim();
+  const muted  = css.getPropertyValue('--muted').trim();
+  const border = css.getPropertyValue('--border').trim();
+  const font   = '11px ' + (css.getPropertyValue('font-family').trim() || 'sans-serif');
+  const xs     = rows.map(r => r.ts);
+  const charts = [];
+  for (const m of _STAT_METRICS) {
+    const ys = rows.map(r => r[m.field]);
+    if (!ys.some(v => v != null)) continue;
+    const nonNull = ys.filter(v => v != null);
+    const cur     = nonNull[nonNull.length - 1];
+    const prev    = nonNull.length > 1 ? nonNull[nonNull.length - 2] : null;
+    const delta   = prev != null ? cur - prev : null;
+    const deltaHtml = delta
+      ? `<span class="stat-chart-delta ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? '+' : ''}${delta.toLocaleString()}</span>`
+      : '';
+    const card = document.createElement('div');
+    card.className = 'stat-chart-card';
+    card.innerHTML = `
+      <div class="stat-chart-hdr">
+        <span class="stat-chart-title">${m.label}</span>
+        <span class="stat-chart-cur">${_fmtLarge(cur)}</span>${deltaHtml}
+      </div>
+      <div class="stat-chart-plot"></div>`;
+    host.appendChild(card);
+    const plotEl = card.querySelector('.stat-chart-plot');
+    charts.push(new uPlot({
+      width:  Math.max(plotEl.clientWidth, 240),
+      height: 130,
+      series: [
+        {},
+        { label: m.label, stroke: accent, width: 2,
+          fill: _hexFade(accent, 0.08) || undefined,
+          points: { show: rows.length <= 30, size: 5 }, spanGaps: true },
+      ],
+      axes: [
+        { stroke: muted, font, grid: { show: false }, ticks: { show: false } },
+        { stroke: muted, font, size: 52, ticks: { show: false },
+          grid: { stroke: _hexFade(border.startsWith('#') ? border : '#333a45', 0.5) || border, width: 1 },
+          values: (u, vals) => vals.map(v => _fmtLarge(v)) },
+      ],
+      cursor: { y: false, points: { size: 7 } },
+      scales: { x: { time: true } },
+    }, [xs, ys], plotEl));
+  }
+  return charts;
+}
+
 function _mRenderToolbar(cfg, vids) {
   if (cfg.mobileToolbar && _mIsMobile()) { _mRenderToolbarMobile(cfg, vids); return; }
   const _fh = cfg.filtersHostId && document.getElementById(cfg.filtersHostId);
@@ -1869,10 +1952,11 @@ function _mRenderToolbar(cfg, vids) {
   const hasMultipleTypes = typeCounts.video > 0 && typeCounts.photo > 0;
   const pill     = (key, label) => _pill(key, label, cfg.st.filter,     cfg.filterFn,     counts);
   const typePill = (key, label) => _typePill(key, label, cfg.st.typeFilter, cfg.typeFilterFn);
-  // History and Stories are non-media views: they hide the post search/filters
-  // and (History) swap in their own field filters via cfg.contextFilters, which
-  // sits in the same context-filter area of the nav bar as the post filters.
-  const isMedia = cfg.st.view !== 'history' && cfg.st.view !== 'stories';
+  // History, Stories, and Stats are non-media views: they hide the post
+  // search/filters and (History) swap in their own field filters via
+  // cfg.contextFilters, which sits in the same context-filter area of the nav
+  // bar as the post filters.
+  const isMedia = _mIsMediaView(cfg.st.view);
   // History keeps the search box (it filters the change entries); Stories has
   // no search. Non-media count labels ("n changes", "n stories") come from the
   // cfg.viewCount hook since their data lives with the platform code.
@@ -2017,7 +2101,7 @@ function _mRenderToolbarMobile(cfg, vids) {
   const viewKeys = (typeof cfg.viewKeys === 'function' ? cfg.viewKeys() : cfg.viewKeys) || [];
   const tabs = viewKeys.map(vk =>
     `<button class="tab${cfg.st.view === vk.key ? ' active' : ''}" onclick="${cfg.viewFn}('${vk.key}')">${vk.label || (vk.title || '').replace(/ view$/, '') || vk.key}</button>`).join('');
-  const isMedia = cfg.st.view !== 'history' && cfg.st.view !== 'stories';
+  const isMedia = _mIsMediaView(cfg.st.view);
   let filters = '';
   if (isMedia) filters = _mFilterDds(cfg, counts, typeCounts);
   else if (cfg.mobileFilters) filters = cfg.mobileFilters(cfg.st.view);

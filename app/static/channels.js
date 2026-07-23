@@ -252,7 +252,8 @@ function initChannelApp(cfg) {
       bannerHtml: cfg.hasBanner ? `<div class="yt-modal-banner" id="${P}ModalBanner" style="display:none"></div>` : '',
       panelsHtml: `
     <div class="phist-panel"      id="${P}PhistPanel" style="display:none"></div>
-    <div class="stories-panel"    id="${P}StoriesPanel" style="display:none"></div>`,
+    <div class="stories-panel"    id="${P}StoriesPanel" style="display:none"></div>
+    <div class="stats-panel"      id="${P}StatsPanel" style="display:none"></div>`,
       scrollTopFn: `${P}ScrollModalTop`,
       afterHtml: `
   <div class="about-modal" id="${P}AboutModal" style="display:none" onclick="if(event.target===this)${P}CloseAbout()">
@@ -454,6 +455,7 @@ function initChannelApp(cfg) {
   // alongside the platform's media views (List/Grid) in the toolbar toggle.
   const _historyIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3.5 2"/></svg>`;
   const _storiesTabIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke-dasharray="3.2 2.6"/><polygon points="10,8.5 16.5,12 10,15.5" fill="currentColor" stroke="none"/></svg>`;
+  const _statsTabIcon   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,17 9,11 13,14 21,6"/><polyline points="15,6 21,6 21,12"/></svg>`;
   const _baseViewKeys = cfg.viewKeys || [
     { key: 'list',   icon: _listViewIcon, title: 'List view', label: 'Videos' },
     { key: 'videos', icon: _gridViewIcon, title: 'Grid view', label: 'Grid' },
@@ -461,7 +463,9 @@ function initChannelApp(cfg) {
   // History is always offered; Stories on any stories-capable platform (even
   // with no saved stories yet). label is the mobile tab text.
   const _modalViewKeys = () => {
-    const keys = [..._baseViewKeys, { key: 'history', icon: _historyIcon, title: 'Profile history', label: 'History' }];
+    const keys = [..._baseViewKeys,
+      { key: 'stats',   icon: _statsTabIcon, title: 'Statistics',      label: 'Stats' },
+      { key: 'history', icon: _historyIcon,  title: 'Profile history', label: 'History' }];
     // Stories tab shows on any stories-capable platform, even with no saved stories yet.
     if (cfg.hasStories)
       keys.push({ key: 'stories', icon: _storiesTabIcon, title: 'Stories', label: 'Stories' });
@@ -1474,6 +1478,7 @@ function initChannelApp(cfg) {
     phistChId  = null;
     _el('PhistPanel').style.display     = 'none';
     _destroyStoriesPanel();
+    _destroyStatsPanel();
     _el('ModalVideoList').style.display = '';
 
     _el('ModalBackdrop').style.display = 'flex';
@@ -1544,6 +1549,10 @@ function initChannelApp(cfg) {
     if (view === 'stories') {
       if (_storyTotal == null) return '';
       return _storyTotal === 1 ? '1 story' : `${_storyTotal.toLocaleString()} stories`;
+    }
+    if (view === 'stats') {
+      if (_statHistRows == null) return '';
+      return _statHistRows.length === 1 ? '1 day tracked' : `${_statHistRows.length.toLocaleString()} days tracked`;
     }
     return '';
   }
@@ -1645,12 +1654,13 @@ function initChannelApp(cfg) {
     if (ok && modalCreatorId === id && JSON.stringify(data) !== _modalVidsSig) {
       _setModalVideos(data);
       _mRenderToolbar(MODAL_CFG, _creatorState.videos);
-      if (_creatorState.view !== 'history' && _creatorState.view !== 'stories')
+      if (_mIsMediaView(_creatorState.view))
         _mRenderList(MODAL_CFG);
     }
     if (modalCreatorId !== id) return;
     if (_creatorState.view === 'history')      await _refreshPhist(id);
     else if (_creatorState.view === 'stories') await _refreshStoriesCal(id);
+    else if (_creatorState.view === 'stats')   await _refreshStatsPanel(id);
   }
 
   async function _refreshPhist(id) {
@@ -1694,7 +1704,7 @@ function initChannelApp(cfg) {
       // On History/Stories the list stays hidden; still refresh the toolbar so
       // the tab set and post counts reflect the loaded videos.
       _mRenderToolbar(MODAL_CFG, _creatorState.videos);
-      if (_creatorState.view !== 'history' && _creatorState.view !== 'stories')
+      if (_mIsMediaView(_creatorState.view))
         _mRenderList(MODAL_CFG);
     }
   }
@@ -1917,13 +1927,17 @@ function initChannelApp(cfg) {
     const vidList = _el('ModalVideoList');
     const phist   = _el('PhistPanel');
     const stories = _el('StoriesPanel');
+    const stats   = _el('StatsPanel');
     if (view !== 'stories') _destroyStoriesPanel();
-    if (vidList) vidList.style.display = (view === 'history' || view === 'stories') ? 'none' : '';
+    if (view !== 'stats')   _destroyStatsPanel();
+    if (vidList) vidList.style.display = _mIsMediaView(view) ? '' : 'none';
     if (phist)   phist.style.display   = view === 'history' ? '' : 'none';
     if (stories) stories.style.display = view === 'stories' ? '' : 'none';
+    if (stats)   stats.style.display   = view === 'stats' ? '' : 'none';
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);
     if (view === 'history')      await _loadPhist();
     else if (view === 'stories') await _loadStories();
+    else if (view === 'stats')   await _loadStatsPanel();
     else _mRenderList(MODAL_CFG);
   });
   X('OnModalSearch', val => {
@@ -2101,6 +2115,66 @@ function initChannelApp(cfg) {
     });
     _storyCal.on('mouseout', _calTipHide);
   }
+
+  // ── Profile stats graphs (Stats view) ─────────────────────────────────────
+  // Daily snapshots from /stats-history rendered as small-multiple line charts
+  // by the shared _renderStatsCharts (common.js). Signature-gated live repaints
+  // ride the same SSE creators domain as the other modal views.
+
+  let _statHistRows   = null;   // fetched snapshot rows; null until loaded
+  let _statHistSig    = null;   // JSON signature; gates live repaints
+  let _statHistCharts = [];     // live uPlot instances, destroyed on leave
+
+  function _destroyStatsCharts() {
+    _statHistCharts.forEach(c => { try { c.destroy(); } catch { /* already gone */ } });
+    _statHistCharts = [];
+  }
+
+  function _destroyStatsPanel() {
+    _destroyStatsCharts();
+    _statHistRows = null;
+    _statHistSig  = null;
+    const panel = _el('StatsPanel');
+    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+  }
+
+  async function _loadStatsPanel() {
+    const panel = _el('StatsPanel');
+    if (!panel || !modalCreatorId) return;
+    panel.style.display = '';
+    panel.innerHTML = '<div class="vlist-loading">Loading stats…</div>';
+    const chId = modalCreatorId;
+    const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(chId)}/stats-history`);
+    if (!ok || chId !== modalCreatorId || _creatorState.view !== 'stats') return;
+    _statHistRows = data || [];
+    _statHistSig  = JSON.stringify(data);
+    _statHistCharts = _renderStatsCharts(panel, _statHistRows);
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // day count now known
+  }
+
+  async function _refreshStatsPanel(id) {
+    const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(id)}/stats-history`);
+    if (!ok || modalCreatorId !== id || _creatorState.view !== 'stats') return;
+    if (JSON.stringify(data) === _statHistSig) return;
+    _statHistSig  = JSON.stringify(data);
+    _statHistRows = data || [];
+    _destroyStatsCharts();
+    _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statHistRows);
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);
+  }
+
+  // Charts size to the panel at render; re-render on a real resize (rotation,
+  // window change) while the Stats view is open, debounced.
+  let _statHistResizeT = null;
+  window.addEventListener('resize', () => {
+    if (_creatorState.view !== 'stats' || !_statHistRows) return;
+    clearTimeout(_statHistResizeT);
+    _statHistResizeT = setTimeout(() => {
+      if (_creatorState.view !== 'stats' || !_statHistRows) return;
+      _destroyStatsCharts();
+      _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statHistRows);
+    }, 200);
+  });
 
   const _PHIST_STATUS_LABELS = {
     active:              'Active',

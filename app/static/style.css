@@ -976,6 +976,36 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .stories-cal-legend span { margin: 0 4px; }
 .stories-cal-legend i { width: 15px; height: 15px; border-radius: 3px; border: 1px solid var(--border); }
+/* ── Profile stats graphs (modal Stats view) ─────────────────────────────── */
+.stats-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  padding: 4px 0 12px;
+}
+.stat-chart-card {
+  background: var(--nav);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px 8px;
+  min-width: 0;
+}
+.stat-chart-hdr {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-bottom: 8px;
+}
+.stat-chart-title { font-size: 12px; color: var(--muted); }
+.stat-chart-cur   { font-size: 16px; font-weight: 700; color: var(--text); margin-left: auto; }
+.stat-chart-delta       { font-size: 11px; font-weight: 600; }
+.stat-chart-delta.up    { color: var(--green); }
+.stat-chart-delta.down  { color: var(--red); }
+/* uPlot chrome: recessive axes and a small muted hover readout; the vendor
+   sheet's defaults are light-theme */
+.stat-chart-card .uplot { font-family: inherit; }
+.stat-chart-card .u-legend { font-size: 11px; color: var(--muted); text-align: left; padding-top: 2px; }
+.stat-chart-card .u-legend .u-marker { width: 8px; height: 8px; }
+.stat-chart-card .u-legend th, .stat-chart-card .u-legend td { padding: 0 4px; font-weight: 400; }
+
 /* GitHub-style hover detail bubble for the calendar cells */
 .cal-tip {
   position: fixed;

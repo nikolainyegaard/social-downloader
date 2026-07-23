@@ -50,6 +50,9 @@ interface EventTarget {
 // calendar; typed loosely since only paint/on/destroy are used.
 declare var CalHeatmap: any;
 
+// Vendored uPlot (vendor/uplot.min.js) global for the profile stats graphs.
+declare var uPlot: any;
+
 interface Window {
   // Legacy clipboard fallback used in the paste handler
   clipboardData?: { getData(format: string): string };
