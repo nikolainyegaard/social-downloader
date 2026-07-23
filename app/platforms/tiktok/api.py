@@ -611,7 +611,9 @@ def _recover_handle_via_ytdlp(sec_uid: str) -> tuple[str | None, bool]:
     not banned even when no handle is recoverable. `handle` is the author's
     current handle when an entry carries one; queried by secUid, yt-dlp often
     never learns the handle and builds entry URLs from the secUid itself, so
-    candidates that echo the secUid (or a truncation of it) are rejected.
+    candidates that echo the secUid (or a truncation of it) are rejected;
+    in that shape one video page scrape (get_video_details on the first
+    listed id) resolves the author's current handle instead.
     (False on both when nothing is listable, the true-ban shape.)
     """
     import yt_dlp
@@ -664,7 +666,32 @@ def _recover_handle_via_ytdlp(sec_uid: str) -> tuple[str | None, bool]:
         found = _handle_from(entry)
         if found:
             return found, True
-    return _handle_from(info), bool(entries)
+    found = _handle_from(info)
+    if found:
+        return found, bool(entries)
+
+    # Entries exist but none carried a handle (the secUid-echo shape). One
+    # video page scrape resolves the author: TikTok redirects
+    # /@user/video/{id} to the canonical URL and the page blob names the
+    # current handle. This is what heals a rename whose listing yt-dlp can
+    # read but never labels.
+    for entry in entries[:1]:
+        vid = str(entry.get("id") or "")
+        if not vid:
+            m = re.search(r"/video/(\d+)", str(entry.get("url") or ""))
+            vid = m.group(1) if m else ""
+        if not vid:
+            break
+        try:
+            from platforms.tiktok.config import get_cookies_flat
+            details = get_video_details(vid, "user", get_cookies_flat())
+        except Exception:
+            break
+        if details.get("author_sec_uid") == sec_uid:
+            found = _valid(details.get("author_username"))
+            if found:
+                return found, True
+    return None, bool(entries)
 
 
 async def get_user_info(api, username: str | None = None,

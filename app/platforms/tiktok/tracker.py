@@ -768,9 +768,10 @@ async def process_single_user(
                 log(f"  Undeleted: {vid_id}")
 
         # ── Stats upsert for already-known videos from item_list ─────────────
-        # Only on full-mode runs: item_list fetches all pages so stats are complete.
-        # Quick-mode runs only fetch the first page (30 videos) and skip this step.
-        if mode == "full":
+        # Runs on both modes with whatever the browser fetch captured: full
+        # mode has all pages, quick mode the first page (30 newest). The data
+        # is already in hand either way, so the quick upsert costs nothing.
+        if item_list_map:
             _stage("updating stats")
             for vid_id, details in item_list_map.items():
                 if vid_id in known_ids and vid_id not in new_ids:
