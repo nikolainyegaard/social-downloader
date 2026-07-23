@@ -472,6 +472,12 @@ def create_channel_blueprint(engine) -> Blueprint:
     def channel_profile_history(channel_id: str):
         return jsonify(db.get_profile_history(channel_id))
 
+    @bp.route("/channels/<channel_id>/stats-history", methods=["GET"])
+    def channel_stats_history(channel_id: str):
+        # Daily stats snapshots (followers, following, on-platform posts,
+        # locally saved posts), oldest first; feeds the profile stats graphs
+        return jsonify(db.get_stats_history(channel_id))
+
     # ── Avatar and banner ─────────────────────────────────────────────────────
 
     @bp.route("/channels/<channel_id>/avatar", methods=["GET"])
@@ -748,7 +754,7 @@ def create_channel_blueprint(engine) -> Blueprint:
     # sums each domain's table write-versions once a second and names the
     # changed domains in a 'changed' event; the frontend refetches only those.
     _DATA_DOMAINS = {
-        "creators": ("channels", "videos", "profile_history", "stories"),
+        "creators": ("channels", "videos", "profile_history", "stories", "channel_stats_history"),
         "recent":   ("channels", "videos", "profile_history"),
         "stats":    ("channels", "videos"),
         "sounds":   ("sounds", "sound_videos"),

@@ -457,6 +457,14 @@ def _update_profile(engine, channel: dict, info: dict, log: Callable[[str], None
         banner_url=info.get("banner_url"),
         raw_channel_data=info.get("raw_channel_data"),
     )
+    # Time series behind the profile stats graphs; a fetch with no stats
+    # (sparse profile) records nothing
+    db.record_stats_snapshot(
+        channel_id,
+        subscriber_count=info.get("subscriber_count"),
+        following_count=info.get("following_count"),
+        video_count=info.get("video_count"),
+    )
 
     if info.get("avatar_url"):
         try:

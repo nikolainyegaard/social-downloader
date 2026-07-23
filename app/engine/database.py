@@ -168,6 +168,21 @@ class ChannelDB:
                     created_at   INTEGER NOT NULL,
                     updated_at   INTEGER NOT NULL
                 );
+
+                -- Time series behind the profile stats graphs: one row per
+                -- creator per local calendar day, upserted by every profile
+                -- check that day so the day carries its latest values.
+                CREATE TABLE IF NOT EXISTS channel_stats_history (
+                    channel_id       TEXT NOT NULL,
+                    day              TEXT NOT NULL,
+                    ts               INTEGER NOT NULL,
+                    subscriber_count INTEGER,
+                    following_count  INTEGER,
+                    video_count      INTEGER,
+                    saved_count      INTEGER,
+                    PRIMARY KEY (channel_id, day),
+                    FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
+                );
             """)
             needs_vacuum = self._migrate_db(conn)
             # One-time backfill: seed the add history from already tracked
@@ -600,6 +615,48 @@ class ChannelDB:
                    FROM profile_history
                    WHERE channel_id = ?
                    ORDER BY changed_at DESC""",
+                (channel_id,)
+            ).fetchall()]
+
+
+    def record_stats_snapshot(self, channel_id: str, subscriber_count=None,
+                              following_count=None, video_count=None) -> None:
+        """Append today's stats snapshot for the creator, called after every
+        successful profile fetch. One row per creator per local calendar day:
+        a later check the same day updates that row (COALESCE, so a sparse
+        fetch never wipes values recorded earlier in the day). saved_count is
+        derived from the videos table at write time. Skipped entirely when the
+        fetch carried no stats at all."""
+        if subscriber_count is None and following_count is None and video_count is None:
+            return
+        import datetime
+        day = datetime.datetime.now().strftime("%Y-%m-%d")
+        with self.get_db() as conn:
+            saved = conn.execute(
+                "SELECT COUNT(*) FROM videos WHERE channel_id = ? AND file_path IS NOT NULL",
+                (channel_id,)).fetchone()[0]
+            conn.execute("""
+                INSERT INTO channel_stats_history
+                    (channel_id, day, ts, subscriber_count, following_count, video_count, saved_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(channel_id, day) DO UPDATE SET
+                    ts               = excluded.ts,
+                    subscriber_count = COALESCE(excluded.subscriber_count, subscriber_count),
+                    following_count  = COALESCE(excluded.following_count,  following_count),
+                    video_count      = COALESCE(excluded.video_count,      video_count),
+                    saved_count      = excluded.saved_count
+            """, (channel_id, day, int(time.time()),
+                  subscriber_count, following_count, video_count, saved))
+
+
+    def get_stats_history(self, channel_id: str) -> list[dict]:
+        """Daily stats snapshots for the profile graphs, oldest first."""
+        with self.get_db() as conn:
+            return [dict(r) for r in conn.execute(
+                """SELECT day, ts, subscriber_count, following_count, video_count, saved_count
+                   FROM channel_stats_history
+                   WHERE channel_id = ?
+                   ORDER BY day""",
                 (channel_id,)
             ).fetchall()]
 

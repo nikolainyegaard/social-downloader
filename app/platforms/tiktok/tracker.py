@@ -336,6 +336,13 @@ async def process_single_user(
                     bio_link=_bio_link_for_db,
                 )
                 store.reset_profile_fail_count(channel_id)
+                # Time series behind the profile stats graphs
+                db.record_stats_snapshot(
+                    channel_id,
+                    subscriber_count=info["follower_count"],
+                    following_count=info["following_count"],
+                    video_count=info["video_count"],
+                )
                 _profile_ok  = True
                 username     = info["username"]
                 display_name = info["display_name"] or username
