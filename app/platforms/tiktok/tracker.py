@@ -293,6 +293,7 @@ async def process_single_user(
                     store.set_account_status(channel_id, "active")
                     db.set_channel_tracking_enabled(channel_id, True)
                     log(f"  Account restored: ban cleared, {_npost(restored)} re-activated")
+                    _was_banned = False  # ban handled; the listing-based restore must not re-fire
 
                 # Record profile field changes before overwriting stored values.
                 # Skip bio/bio_link when the account was private_blocked last run OR is
