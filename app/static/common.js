@@ -1030,9 +1030,13 @@ function _expandableText(text) {
 // an empty one is a muted italic "Click to add a note" that opens the note
 // editor (editFn, also behind the header menu's Edit note item) directly.
 function _noteFieldHtml(note, editFn, marginTop) {
+  // The empty state reuses the xtext box chrome (same outline, fill, hover)
+  // so the field reads identically either way; it just opens the editor
+  // instead of a popover.
   const inner = note
     ? _expandableText(note)
-    : `<span class="note-empty" onclick="event.stopPropagation();${editFn}()">Click to add a note</span>`;
+    : `<div class="xtext" onclick="event.stopPropagation();${editFn}()">` +
+      `<div class="xtext-line"><span class="xtext-text note-empty">Click to add a note</span></div></div>`;
   return `<div class="modal-note" style="margin-top:${marginTop}px">${inner}</div>`;
 }
 

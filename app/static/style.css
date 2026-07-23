@@ -1412,25 +1412,44 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* ── Connected creators (modal header panel + list modal) ─────────────────── */
 
-.conn-panel { display: flex; align-items: center; gap: 5px; margin-top: 10px; min-height: 22px; flex-wrap: wrap; }
-.conn-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-right: 3px; }
+.conn-panel {
+  display: flex; flex-direction: column; gap: 7px; margin-top: 10px;
+  padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--raised) 45%, transparent);
+  align-self: start; justify-self: start;
+}
+/* In the desktop header it sits under the date tiles, spanning the meta grid;
+   the grid's row gap provides the spacing there */
+.modal-header-meta .conn-panel { grid-column: 1 / -1; margin-top: 0; }
+.conn-title { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.conn-slots { display: flex; align-items: center; gap: 6px; }
+.conn-slot  { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; box-sizing: border-box; }
 .conn-avatar-wrap {
-  position: relative; width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  position: relative; width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
   background: var(--raised); border: 1px solid var(--border); overflow: hidden;
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
   transition: border-color .15s;
 }
 .conn-avatar-wrap:hover { border-color: var(--accent); }
-.conn-letter { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+.conn-letter { font-size: 12px; color: var(--muted); text-transform: uppercase; }
 .conn-avatar { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* The first free slot invites the next connection; the remaining slots are
+   faint placeholders so the box always shows its full capacity */
+.conn-slot-add {
+  border: 1px dashed var(--muted); background: var(--raised); color: var(--text-dim);
+  font-size: 17px; line-height: 1; padding: 0; cursor: pointer; opacity: .55;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: opacity .15s, color .15s, border-color .15s;
+}
+.conn-slot-add:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
+.conn-slot-empty { border: 1px dashed var(--border); opacity: .3; display: inline-block; }
 .conn-chip, .conn-icon-btn {
-  height: 22px; min-width: 22px; padding: 0 4px; border-radius: var(--radius-pill);
+  height: 22px; min-width: 22px; padding: 0 5px; border-radius: var(--radius-pill);
   background: var(--raised); border: 1px solid var(--border); color: var(--muted);
   font-size: 11px; line-height: 1; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   transition: color .15s, border-color .15s, background .15s;
 }
-.conn-icon-btn.conn-add { font-size: 15px; padding: 0 5px; }
 .conn-icon-btn .ic { width: 13px; height: 13px; }
 .conn-chip:hover, .conn-icon-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 
@@ -1453,7 +1472,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-radius: var(--radius-sm); cursor: pointer;
 }
 .conn-row:hover { background: var(--raised); }
-.conn-row .conn-avatar-wrap { width: 28px; height: 28px; }
 .conn-row-names { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .conn-row-name   { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conn-row-handle { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

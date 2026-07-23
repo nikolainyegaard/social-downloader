@@ -1561,21 +1561,29 @@ function initChannelApp(cfg) {
     </span>`;
   }
 
+  // Three fixed avatar slots: connections fill from the left, the first free
+  // slot is the clickable Add placeholder (so it shifts right as connections
+  // land), and the rest are faint placeholders. Once all slots are filled,
+  // adding and managing move to the list modal (+N chip / manage button).
   function _renderConnPanel() {
     const host = _el('ModalConnections');
     if (!host) return;
-    const conns  = _modalConnections || [];
-    const shown  = conns.slice(0, 3);
-    const hidden = conns.length - shown.length;
+    const conns = _modalConnections || [];
+    const SLOTS = 3;
+    const slots = [];
+    for (let i = 0; i < SLOTS; i++) {
+      if (i < conns.length)        slots.push(_connAvatar(conns[i]));
+      else if (i === conns.length) slots.push(`<button class="conn-slot conn-slot-add" onclick="${P}ConnectAdd()" title="Connect a ${CREATOR}">+</button>`);
+      else                         slots.push(`<span class="conn-slot conn-slot-empty"></span>`);
+    }
+    const extra = conns.length > SLOTS
+      ? `<button class="conn-chip" onclick="${P}OpenConnList()" title="Show all ${conns.length}">+${conns.length - SLOTS}</button>`
+      : conns.length
+        ? `<button class="conn-icon-btn" onclick="${P}OpenConnList()" title="View and manage">${_dotsIcon}</button>`
+        : '';
     host.innerHTML = `
       <span class="conn-title">Connected ${CREATORS}</span>
-      ${shown.map(_connAvatar).join('')}
-      ${hidden > 0
-        ? `<button class="conn-chip" onclick="${P}OpenConnList()" title="Show all ${conns.length}">+${hidden}</button>`
-        : conns.length
-          ? `<button class="conn-icon-btn" onclick="${P}OpenConnList()" title="View and manage">${_dotsIcon}</button>`
-          : ''}
-      <button class="conn-icon-btn conn-add" onclick="${P}ConnectAdd()" title="Connect a ${CREATOR}">+</button>`;
+      <div class="conn-slots">${slots.join('')}${extra}</div>`;
   }
 
   function _renderConnListRows() {
@@ -1931,10 +1939,9 @@ function initChannelApp(cfg) {
             <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
           </div>
           ${_noteFieldHtml(ch.comment, `${P}EditNote`, 8)}
-          <div class="conn-panel" id="${P}ModalConnections"></div>
         </div>
       </div>
-      <div class="modal-header-meta">${dateTiles.map(_tile).join('')}</div>
+      <div class="modal-header-meta">${dateTiles.map(_tile).join('')}<div class="conn-panel" id="${P}ModalConnections"></div></div>
       <div class="modal-header-stats">${statPairs}</div>
     `;
 
