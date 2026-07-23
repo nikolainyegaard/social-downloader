@@ -1064,6 +1064,14 @@ function _expandableText(text) {
 // note renders as the same expandable xtext block as bios (click to expand);
 // an empty one is a muted italic "Click to add a note" that opens the note
 // editor (editFn, also behind the header menu's Edit note item) directly.
+// One ledger row of a modal header's data block (see .hdr-data): muted label
+// left, right-aligned semibold tabular value. cls carries the value state
+// (' tred' / ' tyellow' / ' tlink' / ' tzero' dim), click an optional handler.
+function _hgRow(label, value, cls = '', click = '') {
+  return `<div class="hg-row"><span class="hg-l">${label}</span>` +
+    `<span class="hg-v${cls}"${click ? ` onclick="${click}" role="button" title="Open profile change history"` : ''}>${value}</span></div>`;
+}
+
 // Static xtext-styled placeholder (same box chrome, not clickable): keeps
 // empty fields like a missing bio visually consistent with the note field.
 function _xtextPlaceholderHtml(label) {

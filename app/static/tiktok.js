@@ -1140,16 +1140,14 @@ function _renderSoundModalHeader(s) {
   const { cls: trackingCls, label: trackingLbl } = _trackingBadge(s.tracking_enabled);
   const inactive = s.tracking_enabled === 0;
   const _iso = u => new Date(u * 1000).toISOString();
-  const dateTiles = [
-    { v: fmtDateOnly(s.added_at),                                    l: 'Added' },
-    { v: s.last_checked ? fmt.rel(_iso(s.last_checked)) : 'never',   l: 'Last checked' },
-  ];
-  const statTiles = [{ v: _fmtLarge(s.video_count || 0), l: 'Saved' }];
-  if (s.video_deleted)   statTiles.push({ v: s.video_deleted,   l: 'Deleted',  cls: 'tred' });
-  if (s.video_undeleted) statTiles.push({ v: s.video_undeleted, l: 'Restored', cls: 'tyellow' });
-  const _tile = t => `<div class="tile${t.cls ? ' ' + t.cls : ''}"><span class="tv">${t.v}</span><span class="tl">${t.l}</span></div>`;
-  let statPairs = '';
-  for (let i = 0; i < statTiles.length; i += 2) statPairs += `<div class="stat-pair">${statTiles.slice(i, i + 2).map(_tile).join('')}</div>`;
+  // Same ledger-row data block as the creator header, with fixed slots
+  const activityRows =
+      _hgRow('Added',   fmtDateOnly(s.added_at))
+    + _hgRow('Checked', s.last_checked ? fmt.rel(_iso(s.last_checked)) : 'never');
+  const archiveRows =
+      _hgRow('Saved',    _fmtLarge(s.video_count || 0),      s.video_count      ? '' : ' tzero')
+    + _hgRow('Deleted',  String(s.video_deleted || 0),       s.video_deleted    ? ' tred'    : ' tzero')
+    + _hgRow('Restored', String(s.video_undeleted || 0),     s.video_undeleted  ? ' tyellow' : ' tzero');
   document.getElementById('soundModalHeader').innerHTML = `
     <div class="modal-header-left">
       ${_soundAvatarHtml}
@@ -1173,8 +1171,10 @@ function _renderSoundModalHeader(s) {
         ${_soundNoteAreaHtml(s)}
       </div>
     </div>
-    <div class="modal-header-meta">${dateTiles.map(_tile).join('')}</div>
-    <div class="modal-header-stats">${statPairs}</div>
+    <div class="hdr-data">
+      <div class="hdr-group"><div class="hg-title">Activity</div>${activityRows}</div>
+      <div class="hdr-group"><div class="hg-title">Archive</div>${archiveRows}</div>
+    </div>
   `;
   _markXtextClipped(document.getElementById('soundModalHeader'));
 }

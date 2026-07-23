@@ -1563,10 +1563,11 @@ function initChannelApp(cfg) {
     </span>`;
   }
 
-  // Three fixed avatar slots: connections fill from the left, the first free
-  // slot is the clickable Add placeholder (so it shifts right as connections
-  // land), and the rest are faint placeholders. Once all slots are filled,
-  // adding and managing move to the list modal (+N chip / manage button).
+  // Minimal 2x2 connections square under the avatar: three fixed avatar
+  // slots plus the always-present manage slot. Connections fill from the
+  // left, the first free slot is the clickable Add placeholder, the rest are
+  // faint placeholders; no title, the tooltips carry the labels. The manage
+  // slot shows the overflow count once the visible slots are full.
   function _renderConnPanel() {
     const host = _el('ModalConnections');
     if (!host) return;
@@ -1578,14 +1579,10 @@ function initChannelApp(cfg) {
       else if (i === conns.length) slots.push(`<button class="conn-slot conn-slot-add" onclick="${P}ConnectAdd()" title="Connect a ${CREATOR}">${_connPlusIcon}</button>`);
       else                         slots.push(`<span class="conn-slot conn-slot-empty"></span>`);
     }
-    // The manage slot is always present so the box width never changes; it
-    // carries the overflow count once the visible slots are full.
     const more = `<button class="conn-slot conn-more" onclick="${P}OpenConnList()"
-      title="${conns.length > SLOTS ? `Show all ${conns.length}` : 'View and manage'}">${
+      title="Connected ${CREATORS}: ${conns.length > SLOTS ? `show all ${conns.length}` : 'view and manage'}">${
       conns.length > SLOTS ? `+${conns.length - SLOTS}` : _dotsIcon}</button>`;
-    host.innerHTML = `
-      <span class="conn-title">Connected ${CREATORS}</span>
-      <div class="conn-slots">${slots.join('')}${more}</div>`;
+    host.innerHTML = slots.join('') + more;
   }
 
   function _renderConnListRows() {
@@ -1906,37 +1903,42 @@ function initChannelApp(cfg) {
       : (!ch.next_check_at || ch.next_check_at * 1000 <= Date.now()) ? 'next session'
       : fmt.relFuture(_iso(ch.next_check_at));
 
-    // Dates box (2x2) + stats box (paired chips). Stats are collected only from the
-    // fields this platform actually has, then chunked into pairs, so the layout
-    // stays even across TikTok / YouTube / Twitter / Instagram.
-    const dateTiles = [
-      { v: fmtDateOnly(ch.added_at),                                   l: 'Added' },
-      { v: ch.last_checked ? fmt.rel(_iso(ch.last_checked)) : 'never', l: 'Last checked' },
-      { v: ch.last_saved   ? fmt.rel(_iso(ch.last_saved))   : 'never', l: 'Last saved' },
-      { v: nextCheckVal,                                               l: 'Next check' },
-    ];
-    const statTiles = [];
-    if (ch.subscriber_count != null) statTiles.push({ v: _fmtLarge(ch.subscriber_count || 0), l: cfg.subLabelModal });
-    if (ch.following_count  != null) statTiles.push({ v: _fmtLarge(ch.following_count),       l: 'Following' });
-    if (ch.video_count      != null) statTiles.push({ v: _fmtLarge(ch.video_count || 0),      l: `On ${esc(platformLabel)}` });
-    statTiles.push({ v: _fmtLarge(ch.video_total || 0), l: 'Saved' });
-    if ((ch.video_deleted || 0) > 0) statTiles.push({ v: ch.video_deleted,   l: 'Deleted',  cls: 'tred' });
-    if (ch.video_undeleted)          statTiles.push({ v: ch.video_undeleted, l: 'Restored', cls: 'tyellow' });
-    if (cfg.hasStories && ch.story_count) statTiles.push({ v: _fmtLarge(ch.story_count), l: 'Stories' });
-    statTiles.push({ v: _storageTileVal(ch.channel_id), l: 'Storage' });
-    if (ch.profile_history_count)    statTiles.push({ v: ch.profile_history_count, l: 'Updates', click: `${P}SetModalView('history')` });
-
-    const _tile = t => `<div class="tile${t.cls ? ' ' + t.cls : ''}${t.click ? ' tlink' : ''}"${t.click ? ` onclick="${t.click}" title="Open profile change history"` : ''}><span class="tv">${t.v}</span><span class="tl">${t.l}</span></div>`;
-    let statPairs = '';
-    for (let i = 0; i < statTiles.length; i += 2) statPairs += `<div class="stat-pair">${statTiles.slice(i, i + 2).map(_tile).join('')}</div>`;
+    // The header's right side is one structured data block: three titled
+    // groups of label/value ledger rows. Every row is a fixed slot (zero or
+    // missing values render dimmed instead of despawning), so the header
+    // height is a constant per platform regardless of the creator's data.
+    const _num  = v => v != null ? _fmtLarge(v || 0) : '—';
+    const _zero = v => v == null || !v ? ' tzero' : '';
+    const activityRows =
+        _hgRow('Added',   fmtDateOnly(ch.added_at))
+      + _hgRow('Checked', ch.last_checked ? fmt.rel(_iso(ch.last_checked)) : 'never')
+      + _hgRow('Saved',   ch.last_saved   ? fmt.rel(_iso(ch.last_saved))   : 'never')
+      + _hgRow('Next',    nextCheckVal);
+    const updates = ch.profile_history_count || 0;
+    const platformRows =
+        _hgRow(cfg.subLabelModal, _num(ch.subscriber_count), _zero(ch.subscriber_count))
+      + _hgRow('Following',       _num(ch.following_count),  _zero(ch.following_count))
+      + _hgRow('Posts',           _num(ch.video_count),      _zero(ch.video_count))
+      + _hgRow('Updates',         String(updates),
+               updates ? ' tlink' : ' tzero',
+               updates ? `${P}SetModalView('history')` : '');
+    const archiveRows =
+        _hgRow('Saved',    _fmtLarge(ch.video_total || 0),   _zero(ch.video_total))
+      + _hgRow('Deleted',  String(ch.video_deleted || 0),    ch.video_deleted   ? ' tred'    : ' tzero')
+      + _hgRow('Restored', String(ch.video_undeleted || 0),  ch.video_undeleted ? ' tyellow' : ' tzero')
+      + (cfg.hasStories ? _hgRow('Stories', _fmtLarge(ch.story_count || 0), _zero(ch.story_count)) : '')
+      + _hgRow('Storage', _storageTileVal(ch.channel_id));
 
     _el('ModalHeader').innerHTML = `
       <div class="modal-header-left">
-        <div class="modal-avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
-          <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
-          ${ch.avatar_cached ? `<img class="modal-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar" alt=""
-               onerror="this.style.display='none'"
-               ${ch.live_stories ? '' : `onclick="openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}
+        <div class="modal-avatar-col">
+          <div class="modal-avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
+            <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
+            ${ch.avatar_cached ? `<img class="modal-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar" alt=""
+                 onerror="this.style.display='none'"
+                 ${ch.live_stories ? '' : `onclick="openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}
+          </div>
+          <div class="conn-square" id="${P}ModalConnections"></div>
         </div>
         <div class="modal-user-body">
           <div class="modal-name-row">
@@ -1953,24 +1955,29 @@ function initChannelApp(cfg) {
           <div class="modal-handle">
             <a href="${extUrl}" target="_blank" rel="noopener" class="tt-link">@${esc(ch.handle)}</a>${_oldNamesTag(ch)}
             <span style="color:var(--muted);font-size:12px;margin-left:6px">${esc(ch.channel_id)}${joinStr}</span>
+            ${banCountdownStr ? `<span class="modal-ban-countdown modal-ban-inline">${banCountdownStr}</span>` : ''}
           </div>
-          ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
           <div class="modal-bio">${ch.description ? _expandableText(ch.description) : _xtextPlaceholderHtml('No bio')}</div>
-          ${ch.bio_link ? `<div class="modal-bio-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
-          <div class="modal-note-actions-row">
+          <div class="modal-note-link-row">
             ${_noteFieldHtml(ch.comment, `${P}EditNote`, 0)}
-            <div class="modal-actions-group">
-              <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${_starIcon(ch.starred)}</button>
-              ${_bookmarkBtn(ch, false)}
-              <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
-              <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-              <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
-            </div>
+            <div class="modal-bio-link">${ch.bio_link
+              ? `<a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a>`
+              : '<span class="no-bio-link">No link</span>'}</div>
+          </div>
+          <div class="modal-actions-group">
+            <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${_starIcon(ch.starred)}</button>
+            ${_bookmarkBtn(ch, false)}
+            <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
+            <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
+            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
           </div>
         </div>
       </div>
-      <div class="modal-header-meta">${dateTiles.map(_tile).join('')}<div class="conn-panel" id="${P}ModalConnections"></div></div>
-      <div class="modal-header-stats">${statPairs}</div>
+      <div class="hdr-data">
+        <div class="hdr-group"><div class="hg-title">Activity</div>${activityRows}</div>
+        <div class="hdr-group"><div class="hg-title">Platform</div>${platformRows}</div>
+        <div class="hdr-group"><div class="hg-title">Archive</div>${archiveRows}</div>
+      </div>
     `;
 
     _fillStorage(ch.channel_id);
@@ -2042,7 +2049,7 @@ function initChannelApp(cfg) {
           </label>
         </div>
         ${_noteFieldHtml(ch.comment, `${P}EditNote`, 4)}
-        <div class="conn-panel" id="${P}ModalConnections"></div>
+        <div class="conn-square" id="${P}ModalConnections"></div>
       </div>`;
     _renderConnPanel();
     _markXtextClipped(_el('ModalHeader'));

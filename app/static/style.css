@@ -806,14 +806,20 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* ── Modal header ─────────────────────────────────────────────────────────── */
 
 .modal-header {
-  padding: 20px 24px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--border);
   display: flex;
   gap: 22px;
   align-items: stretch;
   flex-shrink: 0;
+  /* Size container so the ledger block can wrap below the identity column
+     based on the header's real width (the modal is 82vw, so viewport media
+     queries cannot see it); flex-wrap only bites once the identity column's
+     min-width stops fitting beside the block */
+  container-type: inline-size;
+  flex-wrap: wrap;
 }
-.modal-header-left { display: flex; gap: 16px; align-items: flex-start; flex: 1; min-width: 0; }
+.modal-header-left { display: flex; gap: 16px; align-items: flex-start; flex: 1; min-width: min(520px, 100%); }
 
 .modal-avatar-wrap {
   position: relative;
@@ -844,20 +850,30 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .modal-name-row   { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* Two-box header cluster: a dates box and a paired-stat box, each behind a hairline rule */
-.modal-header-meta, .modal-header-stats { flex-shrink: 0; padding-left: 22px; border-left: 1px solid var(--border); padding-top: 22px; }
-.modal-header-meta  { display: grid; grid-template-columns: auto auto; column-gap: 22px; row-gap: 14px; align-content: start; }
-.modal-header-stats { display: flex; gap: 12px; align-items: start; }
-.stat-pair { display: flex; flex-direction: column; gap: 8px; padding: 7px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--raised) 45%, transparent); }
-.modal-header .tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.modal-header .tile .tv { font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
-.modal-header .tile .tl { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
-.modal-header-meta  .tv { font-size: 12px; font-weight: 600; color: var(--text-dim); }
-.modal-header-stats .tv { font-size: 15px; font-weight: 700; color: var(--text); }
-.modal-header .tile.tred .tv        { color: var(--red); }
-.modal-header .tile.tyellow .tv     { color: var(--yellow); }
-.modal-header .tile.tlink           { cursor: pointer; }
-.modal-header .tile.tlink .tv       { text-decoration: underline dotted; text-underline-offset: 2px; }
-.modal-header .tile.tlink:hover .tv { color: var(--accent); }
+/* The header's right side: one structured data block of titled groups of
+   compact label/value ledger rows, hairline-separated. Every row is a fixed
+   slot (zero values dim via .tzero instead of despawning) so the header
+   height never changes with the creator's data. */
+.hdr-data  { display: flex; gap: 24px; flex-shrink: 0; padding-top: 2px; }
+.hdr-group { display: flex; flex-direction: column; gap: 3px; min-width: 150px; padding-left: 24px; border-left: 1px solid var(--border); }
+.hg-title  { font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.hg-row    { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 11px; line-height: 1.55; }
+.hg-l      { color: var(--muted); }
+.hg-v      { color: var(--text-dim); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hg-v.tred    { color: var(--red); }
+.hg-v.tyellow { color: var(--yellow); }
+.hg-v.tzero   { color: var(--muted); opacity: .45; }
+.hg-v.tlink   { color: var(--accent); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+/* Mid-width windows: once the header (content box) is too narrow for the
+   identity column (min 520px) plus the three-group block (~570px), the block
+   wraps below full-width under its own hairline; the first group goes flush
+   left, and the groups themselves wrap when even they stop fitting. The
+   threshold matches the flex minimums above so the border appears exactly
+   when the wrap happens. Below 640px viewport the mobile header takes over. */
+@container (max-width: 1112px) {
+  .hdr-data { flex-basis: 100%; flex-wrap: wrap; row-gap: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .hdr-group:first-child { border-left: 0; padding-left: 0; }
+}
 .modal-user-meta  { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 
 /* Untracked user: blur overlay covering the header until profile fetch completes */
@@ -1432,8 +1448,15 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .modal-note { font-size: 13px; color: var(--text-dim); line-height: 1.5; max-width: 100%; }
 /* Desktop modal: note field and action buttons share one row, note on the
    left filling the space, buttons keeping their natural width on the right */
-.modal-note-actions-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; min-width: 0; }
-.modal-note-actions-row .modal-note { flex: 1; min-width: 0; }
+/* Note field and bio link share one row (link fixed width, note flexes);
+   the action buttons follow as their own row */
+.modal-note-link-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; min-width: 0; }
+.modal-note-link-row .modal-note { flex: 1; min-width: 0; }
+.modal-note-link-row .modal-bio-link { flex-shrink: 0; max-width: 220px; margin-top: 0; }
+.no-bio-link { color: var(--muted); opacity: .45; font-style: italic; font-size: 12px; }
+.modal-user-body .modal-actions-group { margin-top: 8px; }
+.modal-avatar-col { display: flex; flex-direction: column; gap: 8px; align-items: center; flex-shrink: 0; }
+.modal-ban-inline { display: inline; margin: 0 0 0 8px; font-size: 11px; }
 .modal-actions-group { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 .note-empty { color: var(--muted); opacity: .55; font-style: italic; cursor: pointer; }
 .note-empty:hover { opacity: .85; }
@@ -1443,19 +1466,19 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .xtext-static .note-empty { cursor: default; }
 .xtext-static .note-empty:hover { opacity: .55; }
 
-/* ── Connected creators (modal header panel + list modal) ─────────────────── */
+/* ── Connected creators (avatar-column square + list modal) ───────────────── */
 
-.conn-panel {
-  display: flex; flex-direction: column; gap: 7px; margin-top: 10px;
-  padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+/* Minimal 2x2 square of slots under the avatar (desktop) or the note field
+   (mobile header); no title, the slot tooltips carry the labels */
+.conn-square {
+  display: grid; grid-template-columns: repeat(2, 24px); gap: 5px;
+  padding: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--raised) 45%, transparent);
-  align-self: start; justify-self: start;
+  justify-content: center;
 }
-/* In the desktop header it sits under the date tiles, spanning the meta grid;
-   the grid's row gap provides the spacing there */
-.modal-header-meta .conn-panel { grid-column: 1 / -1; margin-top: 0; }
-.conn-title { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.conn-slots { display: flex; align-items: center; gap: 6px; }
+.conn-square .conn-slot, .conn-square .conn-avatar-wrap { width: 24px; height: 24px; }
+.conn-square .conn-letter { font-size: 11px; }
+.mh .conn-square { margin-top: 8px; justify-self: start; width: max-content; }
 .conn-slot  { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; box-sizing: border-box; }
 .conn-avatar-wrap {
   position: relative; width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
@@ -2488,8 +2511,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   /* Header cluster stacks below the identity on narrow screens (full mobile
      rework pending); drop the hairline rules and top offset when stacked. */
   .modal-header-left { flex: 1 1 100%; }
-  .modal-header-meta, .modal-header-stats { border-left: 0; padding-left: 0; padding-top: 8px; }
-  .modal-header-stats { flex-wrap: wrap; }
+  .hdr-data { flex-wrap: wrap; padding-top: 8px; }
+  .hdr-group { border-left: 0; padding-left: 0; }
 
   /* Fix 1fr column so max-content is identical in header and every row,
      then let min-width: max-content expand elements to full grid width */
