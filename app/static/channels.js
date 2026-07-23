@@ -1955,8 +1955,9 @@ function initChannelApp(cfg) {
             <span style="color:var(--muted);font-size:12px;margin-left:6px">${esc(ch.channel_id)}${joinStr}</span>
           </div>
           ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
-          <div class="modal-bio">${ch.description ? _expandableText(ch.description) : '<span class="no-bio">No bio</span>'}</div>
+          <div class="modal-bio">${ch.description ? _expandableText(ch.description) : _xtextPlaceholderHtml('No bio')}</div>
           ${ch.bio_link ? `<div class="modal-bio-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
+          ${_noteFieldHtml(ch.comment, `${P}EditNote`, 8)}
           <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
             <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${_starIcon(ch.starred)}</button>
             ${_bookmarkBtn(ch, false)}
@@ -1964,7 +1965,6 @@ function initChannelApp(cfg) {
             <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
             <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
           </div>
-          ${_noteFieldHtml(ch.comment, `${P}EditNote`, 8)}
         </div>
       </div>
       <div class="modal-header-meta">${dateTiles.map(_tile).join('')}<div class="conn-panel" id="${P}ModalConnections"></div></div>

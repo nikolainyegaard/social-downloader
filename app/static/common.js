@@ -1064,6 +1064,12 @@ function _expandableText(text) {
 // note renders as the same expandable xtext block as bios (click to expand);
 // an empty one is a muted italic "Click to add a note" that opens the note
 // editor (editFn, also behind the header menu's Edit note item) directly.
+// Static xtext-styled placeholder (same box chrome, not clickable): keeps
+// empty fields like a missing bio visually consistent with the note field.
+function _xtextPlaceholderHtml(label) {
+  return `<div class="xtext xtext-static"><div class="xtext-line"><span class="xtext-text note-empty">${esc(label)}</span></div></div>`;
+}
+
 function _noteFieldHtml(note, editFn, marginTop) {
   // The empty state reuses the xtext box chrome (same outline, fill, hover)
   // so the field reads identically either way; it just opens the editor

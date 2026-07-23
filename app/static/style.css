@@ -1432,6 +1432,11 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .modal-note { font-size: 13px; color: var(--text-dim); line-height: 1.5; max-width: 100%; }
 .note-empty { color: var(--muted); opacity: .55; font-style: italic; cursor: pointer; }
 .note-empty:hover { opacity: .85; }
+/* Static placeholder box (No bio): same chrome, nothing to click */
+.xtext-static .xtext-line { cursor: default; }
+.xtext-static .xtext-line:hover { background: color-mix(in srgb, var(--raised) 65%, transparent); border-color: var(--border); }
+.xtext-static .note-empty { cursor: default; }
+.xtext-static .note-empty:hover { opacity: .55; }
 
 /* ── Connected creators (modal header panel + list modal) ─────────────────── */
 
