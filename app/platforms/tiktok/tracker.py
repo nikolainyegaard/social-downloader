@@ -604,15 +604,18 @@ async def process_single_user(
             store.update_privacy_status(channel_id, "public")
         # if is_private is None (profile fetch failed), leave privacy_status unchanged
 
-        # If the account was previously marked banned but videos are now accessible,
-        # clear the ban status. This covers 10222 private accounts: get_user_info raises
-        # UserPrivateException so the profile-level recovery block never runs.
-        # Public accounts that recover go through the profile-level block above; skip here.
-        if _was_banned and is_private is True and remote_ids:
-            store.restore_banned_videos(channel_id)
+        # If the account was previously marked banned but videos are now listable,
+        # clear the ban status. Covers 10222 private accounts (get_user_info raises
+        # UserPrivateException so the profile-level recovery block never runs) and
+        # unbanned accounts whose profile page has not resolved yet (fetch failed,
+        # but a listable catalog proves the account is back; seen right after
+        # unbans). Public accounts with a successful profile fetch go through the
+        # profile-level block above; skip here.
+        if _was_banned and remote_ids and (is_private is True or not _profile_ok):
+            restored = store.restore_banned_videos(channel_id)
             store.set_account_status(channel_id, "active")
             db.set_channel_tracking_enabled(channel_id, True)
-            log(f"  Account recovered (videos accessible): ban cleared")
+            log(f"  Account restored (videos are listable again): ban cleared, {_npost(restored)} re-activated")
 
         known_ids, active_ids, pending_ids = db.get_video_id_sets(channel_id)
 

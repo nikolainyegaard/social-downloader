@@ -601,15 +601,18 @@ async def _recover_handle_via_items(api, sec_uid: str) -> str | None:
     return None
 
 
-def _recover_handle_via_ytdlp(sec_uid: str) -> str | None:
-    """Read the current handle for a secUid off one yt-dlp flat entry.
+def _recover_handle_via_ytdlp(sec_uid: str) -> tuple[str | None, bool]:
+    """Probe a secUid with one yt-dlp flat entry. Returns (handle, listed).
 
     The last rename-vs-ban recovery tier: the endpoint and item_list probes
     are constructed requests TikTok currently blanks, while yt-dlp's listing
-    keeps working (the same reason it is the deletion authority). A renamed
-    account still lists under its secUid, and the entry's canonical video URL
-    carries the author's current handle. Returns None when nothing is
-    listable, which is what an actually banned or removed account looks like.
+    keeps working (the same reason it is the deletion authority). `listed`
+    reports whether the secUid listed any entries at all: proof the account is
+    not banned even when no handle is recoverable. `handle` is the author's
+    current handle when an entry carries one; queried by secUid, yt-dlp often
+    never learns the handle and builds entry URLs from the secUid itself, so
+    candidates that echo the secUid (or a truncation of it) are rejected.
+    (False on both when nothing is listable, the true-ban shape.)
     """
     import yt_dlp
     from platforms.tiktok.config import COOKIES_PATH, get_proxy
@@ -629,27 +632,39 @@ def _recover_handle_via_ytdlp(sec_uid: str) -> str | None:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(f"tiktokuser:{sec_uid}", download=False) or {}
     except Exception:
-        return None
+        return None, False
+
+    entries = [e for e in (info.get("entries") or []) if e]
+
+    def _valid(raw) -> str | None:
+        v = str(raw or "").lstrip("@")
+        if not v or v.isdigit() or not re.fullmatch(r"[A-Za-z0-9_.]+", v):
+            return None
+        # A secUid echo is not a handle. The URL regex stops at the secUid's
+        # first '-', so also reject any prefix of it.
+        if v.startswith("MS4wLjAB") or sec_uid.startswith(v):
+            return None
+        return v
 
     def _handle_from(obj) -> str | None:
         if not obj:
             return None
         m = re.search(r"tiktok\.com/@([A-Za-z0-9_.]+)", str(obj.get("url") or obj.get("webpage_url") or ""))
         if m and m.group(1) != "user":
-            return m.group(1)
+            found = _valid(m.group(1))
+            if found:
+                return found
         for field in ("uploader", "uploader_id", "channel"):
-            v = str(obj.get(field) or "").lstrip("@")
-            # uploader can be a display name on some extractor versions; only
-            # trust values shaped like a handle
-            if v and re.fullmatch(r"[A-Za-z0-9_.]+", v) and not v.isdigit():
-                return v
+            found = _valid(obj.get(field))
+            if found:
+                return found
         return None
 
-    for entry in (info.get("entries") or []):
+    for entry in entries:
         found = _handle_from(entry)
         if found:
-            return found
-    return _handle_from(info)
+            return found, True
+    return _handle_from(info), bool(entries)
 
 
 async def get_user_info(api, username: str | None = None,
@@ -701,11 +716,12 @@ async def get_user_info(api, username: str | None = None,
             # Endpoint dead or empty (TikTok's current behaviour for this
             # session). Probe item_list to tell a rename from a ban.
             handle = await _recover_handle_via_items(api, sec_uid)
+            ydlp_listed = False
             if not handle:
                 # item_list is a constructed request too and blanks with the
-                # endpoint; yt-dlp still lists by secUid and its entry URLs
-                # carry the current handle.
-                handle = await asyncio.to_thread(_recover_handle_via_ytdlp, sec_uid)
+                # endpoint; yt-dlp still lists by secUid and can carry the
+                # current handle in its entry URLs.
+                handle, ydlp_listed = await asyncio.to_thread(_recover_handle_via_ytdlp, sec_uid)
             if handle and handle != username:
                 renamed_detail = await _fetch_page_user_detail(api, handle)
                 if renamed_detail:
@@ -713,12 +729,15 @@ async def get_user_info(api, username: str | None = None,
                     if u.get("id") and u.get("secUid") == sec_uid:
                         _raise_for_user_status(renamed_detail, f"@{handle}")
                         return _degrade_page_relation(_normalise_user_info(renamed_detail, handle))
-            if handle:
+            if handle or ydlp_listed:
                 # The account demonstrably lists videos, so the not-found page
                 # under the stored handle was a wall or a transient: fail the
-                # fetch plainly instead of letting it read as a ban.
+                # fetch plainly instead of letting it read as a ban. The video
+                # fetch still runs on this check, and a listable catalog also
+                # clears a stale ban there.
+                _under = f" under @{handle}" if handle and handle != username else ""
                 raise RuntimeError(
-                    f"@{username} (sec_uid={sec_uid}) lists videos under @{handle} "
+                    f"@{username} (sec_uid={sec_uid}) still lists videos{_under} "
                     f"but the profile page did not resolve; transient failure"
                 ) from endpoint_exc
             if page_detail is not None:
