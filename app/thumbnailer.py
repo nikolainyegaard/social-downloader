@@ -339,7 +339,14 @@ def generate_thumbnail(video_id: str, file_path: str) -> str | None:
         "-b:v", "0",
         "-cpu-used", "6",
         "-threads", "2",
+        "-f", "avif",
     ]
+
+    # Encode to a .tmp and rename on success: a crash or container stop
+    # mid-encode otherwise leaves a partial AVIF at the final path, which the
+    # backfill then treats as an existing thumbnail forever while browsers
+    # refuse to decode it.
+    tmp_path = out_path + ".tmp"
 
     def _build_cmd(bsf: str | None = None, seek: float = 1.0) -> list[str]:
         # bsf: optional bitstream filter string placed before -i to patch
@@ -348,12 +355,12 @@ def generate_thumbnail(video_id: str, file_path: str) -> str | None:
         bsf_args = ["-bsf:v", bsf] if bsf else []
         ss_args  = ["-ss", str(seek)] if seek > 0 else []
         if is_image:
-            return ["ffmpeg", "-i", file_path, *avif_encode_args, "-y", out_path]
+            return ["ffmpeg", "-i", file_path, *avif_encode_args, "-y", tmp_path]
         if THUMBNAIL_USE_GPU:
             return ["ffmpeg", "-hwaccel", "cuda", *ss_args, *bsf_args, "-i", file_path,
-                    "-vframes", "1", *avif_encode_args, "-y", out_path]
+                    "-vframes", "1", *avif_encode_args, "-y", tmp_path]
         return ["ffmpeg", *ss_args, *bsf_args, "-i", file_path,
-                "-vframes", "1", *avif_encode_args, "-y", out_path]
+                "-vframes", "1", *avif_encode_args, "-y", tmp_path]
 
     def _run(cmd: list[str]) -> tuple[int, str]:
         result = subprocess.run(cmd, capture_output=True, timeout=120)
@@ -387,18 +394,19 @@ def generate_thumbnail(video_id: str, file_path: str) -> str | None:
 
             if bsf:
                 print(f"[{_ts()}] [thumb] Retrying {video_id} with {codec_label}_metadata BSF (reserved colour primaries)")
-                _try_remove(out_path)
+                _try_remove(tmp_path)
                 cmd = _build_cmd(bsf=bsf)
                 returncode, error_text = _run(cmd)
 
         # If ffmpeg exited 0 but wrote no file, the seek was past the end of the
         # video (common for Shorts under 1 s). Retry from the very first frame.
-        if returncode == 0 and not os.path.exists(out_path) and not is_image:
+        if returncode == 0 and not os.path.exists(tmp_path) and not is_image:
             print(f"[{_ts()}] [thumb] Retrying {video_id} seeking from start (video shorter than seek position)")
             cmd = _build_cmd(seek=0)
             returncode, error_text = _run(cmd)
 
-        if returncode == 0 and os.path.exists(out_path):
+        if returncode == 0 and os.path.exists(tmp_path):
+            os.replace(tmp_path, out_path)
             return out_path
         if returncode != 0:
             print(
@@ -416,7 +424,7 @@ def generate_thumbnail(video_id: str, file_path: str) -> str | None:
     except Exception as e:
         print(f"[{_ts()}] [thumb] ERROR {video_id}: {e}")
 
-    _try_remove(out_path)
+    _try_remove(tmp_path)
     return None
 
 
@@ -488,14 +496,20 @@ def backfill_thumbnails() -> None:
     )
 
 
-# ── Broken-colour thumbnail repair ────────────────────────────────────────────
+# ── Broken thumbnail repair ───────────────────────────────────────────────────
 #
-# Thumbnails encoded before the colour-tag fix inherited their source's
-# reserved/unspecified CICP, which Firefox refuses to decode (renders a 0x0
-# blank image while Chrome tolerates it). They exist on disk and are valid to
-# ffprobe, so the backfill (an existence check) never touches them. This job
-# finds them by reading the AVIF colr box and regenerates each from its source
-# with the fixed encoder.
+# Two classes of broken-but-present thumbnail, both invisible to the backfill
+# (an existence check):
+#   1. Reserved colour tags: thumbnails encoded before the colour-tag fix
+#      inherited their source's reserved CICP, which Firefox refuses to decode
+#      (renders a 0x0 blank image while Chrome tolerates it). Found by reading
+#      the AVIF colr box.
+#   2. Truncated files: thumbnails from before the tmp-and-rename write, cut
+#      off by a crash or container stop mid-encode. No browser can decode
+#      them. Found by walking the top-level ISOBMFF boxes and checking they
+#      fit the file size.
+# This job scans every thumbnail and regenerates the flagged ones from their
+# sources with the fixed encoder.
 
 _repair_lock = threading.Lock()
 _repair_state: dict = {
@@ -534,6 +548,33 @@ def _colr_reserved(path: str) -> bool:
     return any(v in _CICP_BAD for v in vals)
 
 
+def _avif_truncated(path: str) -> bool:
+    """True if the file's top-level ISOBMFF boxes do not exactly cover the file
+    size: a partial write's last box (usually mdat) claims bytes past EOF, or
+    the file ends mid box header. An unreadable file is treated as fine, same
+    as _colr_reserved."""
+    try:
+        size = os.path.getsize(path)
+        if size < 16:
+            return True
+        with open(path, "rb") as f:
+            pos = 0
+            while pos + 8 <= size:
+                f.seek(pos)
+                hdr = f.read(8)
+                n = int.from_bytes(hdr[:4], "big")
+                if n == 1:
+                    n = int.from_bytes(f.read(8), "big")
+                elif n == 0:
+                    n = size - pos
+                if n < 8:
+                    return True
+                pos += n
+            return pos != size
+    except OSError:
+        return False
+
+
 def _source_for_thumb(thumb_path: str, video_id: str) -> str | None:
     """The media file a thumbnail was generated from: {video_id}.* or
     {video_id}_NN.* sitting in the creator folder (the thumbs dir's parent)."""
@@ -553,8 +594,9 @@ def _source_for_thumb(thumb_path: str, video_id: str) -> str | None:
 
 def repair_broken_thumbnails() -> dict:
     """Scan every platform's thumbnails and regenerate the ones with reserved
-    colour tags. Deletes each broken thumbnail and rebuilds it from its source
-    with the fixed encoder. Updates _repair_state for the polling job."""
+    colour tags or a truncated file structure. Deletes each broken thumbnail
+    and rebuilds it from its source with the fixed encoder. Updates
+    _repair_state for the polling job."""
     from platforms.registry import ENGINES
 
     _repair_stop.clear()
@@ -565,14 +607,14 @@ def repair_broken_thumbnails() -> dict:
     with _repair_lock:
         _repair_state.update({"running": True, "scanned": 0, "total": len(thumbs),
                               "broken": 0, "repaired": 0, "failed": 0, "done": False})
-    print(f"[{_ts()}] [thumb-repair] Scanning {len(thumbs)} thumbnails for reserved colour tags...")
+    print(f"[{_ts()}] [thumb-repair] Scanning {len(thumbs)} thumbnails for reserved colour tags and truncation...")
 
     broken = repaired = failed = 0
     try:
         for idx, thumb in enumerate(thumbs, 1):
             if _repair_stop.is_set():
                 break
-            if _colr_reserved(thumb):
+            if _colr_reserved(thumb) or _avif_truncated(thumb):
                 broken += 1
                 vid = os.path.splitext(os.path.basename(thumb))[0]
                 src = _source_for_thumb(thumb, vid)

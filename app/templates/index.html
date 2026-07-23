@@ -612,11 +612,12 @@
           <div class="job-card">
             <div class="job-card-hdr">
               <div style="flex:1">
-                <div class="job-card-title">Fix blank thumbnails</div>
+                <div class="job-card-title">Fix broken thumbnails</div>
                 <div class="job-card-desc">
-                  Rebuilds thumbnails (all apps) that show up blank in Firefox. TikTok's
-                  source videos carry reserved colour tags that older thumbnails inherited,
-                  and Firefox refuses to decode them (Chrome tolerates it). Scans every
+                  Rebuilds thumbnails (all apps) that browsers cannot decode. Covers two
+                  cases: reserved colour tags older thumbnails inherited from TikTok's
+                  source videos (blank in Firefox, Chrome tolerates it), and files
+                  truncated by an interrupted write (broken everywhere). Scans every
                   thumbnail and regenerates only the affected ones from their source.
                 </div>
               </div>
