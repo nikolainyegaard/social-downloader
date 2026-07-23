@@ -1957,13 +1957,15 @@ function initChannelApp(cfg) {
           ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
           <div class="modal-bio">${ch.description ? _expandableText(ch.description) : _xtextPlaceholderHtml('No bio')}</div>
           ${ch.bio_link ? `<div class="modal-bio-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
-          ${_noteFieldHtml(ch.comment, `${P}EditNote`, 8)}
-          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
-            <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${_starIcon(ch.starred)}</button>
-            ${_bookmarkBtn(ch, false)}
-            <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
-            <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
+          <div class="modal-note-actions-row">
+            ${_noteFieldHtml(ch.comment, `${P}EditNote`, 0)}
+            <div class="modal-actions-group">
+              <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${_starIcon(ch.starred)}</button>
+              ${_bookmarkBtn(ch, false)}
+              <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
+              <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
+              <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
+            </div>
           </div>
         </div>
       </div>

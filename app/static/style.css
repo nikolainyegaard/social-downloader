@@ -1430,6 +1430,11 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Modal note field: a populated note is a bio-style xtext block; an empty one
    is a low-key invitation to add one */
 .modal-note { font-size: 13px; color: var(--text-dim); line-height: 1.5; max-width: 100%; }
+/* Desktop modal: note field and action buttons share one row, note on the
+   left filling the space, buttons keeping their natural width on the right */
+.modal-note-actions-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; min-width: 0; }
+.modal-note-actions-row .modal-note { flex: 1; min-width: 0; }
+.modal-actions-group { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 .note-empty { color: var(--muted); opacity: .55; font-style: italic; cursor: pointer; }
 .note-empty:hover { opacity: .85; }
 /* Static placeholder box (No bio): same chrome, nothing to click */
