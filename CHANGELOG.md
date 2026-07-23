@@ -19,6 +19,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Bans now appear in the creator modal's Profile History tab: the transition to banned was previously not recorded at all (only the Recent activity feed's Banned event showed it), so a ban followed by a recovery read as an account status change out of nowhere. Every status transition is recorded now; the activity feed still shows a ban once, as its Banned event, while the recovery keeps showing as an account status change. Bans from before this fix are backfilled into the history on startup from each creator's recorded ban time
 
 ### Changed
+- Adding a creator now narrates in the log console: lookup start, added/not found/already tracked outcomes, and the sound-discovered promotion case, alongside the existing rename and failure lines
 - The media viewer's mute glyph now shows the current state instead of the action: sound waves while audible, crossed speaker while muted
 - Media in the viewer keeps fixed clearance from the top action buttons: tall videos and stories no longer render flush against the Download/close row
 - The Tracked users/channels/accounts/profiles stat on every platform's dashboard counts only actively tracked creators: creators with tracking disabled and soft-disabled sound-discovered authors no longer inflate the number

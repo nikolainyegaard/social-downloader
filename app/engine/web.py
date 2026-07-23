@@ -84,6 +84,7 @@ def create_channel_blueprint(engine) -> Blueprint:
         return "error"
 
     def _process_add(handle: str) -> None:
+        loop._log(f"Add: looking up @{handle}...")
         try:
             info = adapter.lookup_profile(handle)
         except Exception as e:
@@ -95,6 +96,7 @@ def create_channel_blueprint(engine) -> Blueprint:
 
         channel_id = info.get("channel_id")
         if not channel_id:
+            loop._log(f"Add: @{handle} not found")
             db.add_queue_resolve(handle, "error", "not found", f"{noun} not found")
             return
 
@@ -112,6 +114,7 @@ def create_channel_blueprint(engine) -> Blueprint:
                     avatar_url=info.get("avatar_url"),
                     raw_channel_data=info.get("raw_channel_data"),
                 )
+                loop._log(f"Add: @{handle} was already known from sound discovery; now fully tracked")
                 db.add_queue_resolve(handle, "ok")
                 loop.enqueue_channel_run(channel_id, mode="quick")
                 return
@@ -131,6 +134,7 @@ def create_channel_blueprint(engine) -> Blueprint:
                 db.add_queue_resolve(handle, "ok")
                 loop.enqueue_channel_run(channel_id, mode="quick")
                 return
+            loop._log(f"Add: @{handle} is already being tracked")
             db.add_queue_resolve(handle, "error", "duplicate", f"{noun} is already being tracked")
             return
 
@@ -150,6 +154,7 @@ def create_channel_blueprint(engine) -> Blueprint:
             verified=info.get("verified"),
             bio_link=info.get("bio_link"),
         )
+        loop._log(f"Add: @{info.get('handle') or handle} added; running a first check")
         db.add_queue_resolve(handle, "ok")
         # Kick off a Quick fetch right away so a freshly added creator gets its
         # posts (and, for a re-added unbanned account, its ban lifecycle cleared)
