@@ -377,7 +377,7 @@ let _confirmState = null;
 
 function _openDialog(o) {
   return new Promise(resolve => {
-    _confirmState = { resolve, isPrompt: !!o.isPrompt, hasCheckbox: !!o.checkbox };
+    _confirmState = { resolve, isPrompt: !!o.isPrompt, multiline: !!o.multiline, hasCheckbox: !!o.checkbox };
     document.getElementById('confirmTitle').textContent = o.title || '';
     const msgEl = document.getElementById('confirmMessage');
     msgEl.textContent   = o.message || '';
@@ -399,20 +399,26 @@ function _openDialog(o) {
       warn.style.display    = 'none';
     }
 
+    // Prompts use the single-line input by default; multiline prompts (notes)
+    // swap in the textarea so Enter inserts a newline instead of accepting.
     const inp = document.getElementById('confirmInput');
+    const ta  = document.getElementById('confirmTextarea');
+    const field = o.multiline ? ta : inp;
     if (o.isPrompt) {
-      inp.style.display = '';
-      inp.value       = o.value || '';
-      inp.placeholder = o.placeholder || '';
+      field.style.display = '';
+      (o.multiline ? inp : ta).style.display = 'none';
+      field.value       = o.value || '';
+      field.placeholder = o.placeholder || '';
     } else {
       inp.style.display = 'none';
+      ta.style.display  = 'none';
     }
     const ok = document.getElementById('confirmOk');
     ok.textContent = o.confirmLabel || 'Confirm';
     ok.classList.toggle('danger', !!o.danger);
     document.getElementById('confirmModal').style.display = 'flex';
     _lockScroll();
-    (o.isPrompt ? inp : ok).focus();
+    (o.isPrompt ? field : ok).focus();
   });
 }
 
@@ -420,8 +426,8 @@ function openConfirm({ title = 'Are you sure?', message = '', confirmLabel = 'Co
   return _openDialog({ title, message, confirmLabel, danger, isPrompt: false });
 }
 
-function openPrompt({ title = '', message = '', value = '', placeholder = '', confirmLabel = 'Save' } = {}) {
-  return _openDialog({ title, message, value, placeholder, confirmLabel, danger: false, isPrompt: true });
+function openPrompt({ title = '', message = '', value = '', placeholder = '', confirmLabel = 'Save', multiline = false } = {}) {
+  return _openDialog({ title, message, value, placeholder, confirmLabel, multiline, danger: false, isPrompt: true });
 }
 
 // Confirm with an extra opt-in checkbox. Resolves { confirmed, checked }.
@@ -435,7 +441,7 @@ function _confirmAccept() {
   if (!s) return;
   let result;
   if (s.hasCheckbox)    result = { confirmed: true, checked: document.getElementById('confirmCheck').checked };
-  else if (s.isPrompt)  result = document.getElementById('confirmInput').value;
+  else if (s.isPrompt)  result = document.getElementById(s.multiline ? 'confirmTextarea' : 'confirmInput').value;
   else                  result = true;
   _confirmClose();
   s.resolve(result);
@@ -1019,6 +1025,17 @@ function _expandableText(text) {
     `<div class="xtext-pop" onclick="event.stopPropagation()">` +
     `<button class="xtext-close" onclick="_xtextClose(this)" aria-label="Close">${_xCloseIcon}</button>${t}</div></div>`;
 }
+// Always-present note field under a detail modal's action row. A populated
+// note renders as the same expandable xtext block as bios (click to expand);
+// an empty one is a muted italic "Click to add a note" that opens the note
+// editor (editFn, also behind the header menu's Edit note item) directly.
+function _noteFieldHtml(note, editFn, marginTop) {
+  const inner = note
+    ? _expandableText(note)
+    : `<span class="note-empty" onclick="event.stopPropagation();${editFn}()">Click to add a note</span>`;
+  return `<div class="modal-note" style="margin-top:${marginTop}px">${inner}</div>`;
+}
+
 function _xtextToggle(el) { el.classList.toggle('open'); }
 function _xtextClose(btn) { btn.closest('.xtext')?.classList.remove('open'); }
 // Capture phase: the xtext toggles and many card controls stopPropagation, so a

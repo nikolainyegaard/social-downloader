@@ -1107,7 +1107,7 @@ const _soundAvatarHtml = `
     </div>`;
 
 function _soundHeaderMenu(s) {
-  return `<button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Edit label',onclick:()=>editSoundLabel('${esc(s.sound_id)}')},{label:'Add note',onclick:()=>soundToggleModalNote()}])">${_dotsIcon}</button>`;
+  return `<button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Edit label',onclick:()=>editSoundLabel('${esc(s.sound_id)}')},{label:'Edit note',onclick:()=>soundEditNote()}])">${_dotsIcon}</button>`;
 }
 
 function _soundRunBtn(s) {
@@ -1116,23 +1116,21 @@ function _soundRunBtn(s) {
 }
 
 function _soundNoteAreaHtml(s) {
-  return `
-    <div id="soundModalNoteArea" style="display:${s.comment ? '' : 'none'};margin-top:8px">
-      <textarea placeholder="Add a note about this sound…"
-        onblur="saveSoundComment('${esc(s.sound_id)}', this.value)"
-        style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
-               background:var(--raised);border:1px solid var(--border);border-radius:6px;
-               color:var(--text);font-family:inherit;line-height:1.5"
-      >${esc(s.comment || '')}</textarea>
-    </div>`;
+  return _noteFieldHtml(s.comment, 'soundEditNote', 8);
 }
 
-function soundToggleModalNote() {
-  const area = document.getElementById('soundModalNoteArea');
-  if (!area) return;
-  const show = area.style.display === 'none';
-  area.style.display = show ? '' : 'none';
-  if (show) area.querySelector('textarea')?.focus();
+// Same editor flow as the creator modals' EditNote: reached from the empty
+// field's "Click to add a note" and the header menu's Edit note item.
+async function soundEditNote() {
+  if (!_soundModal) return;
+  const id  = _soundModal.sound_id;
+  const val = await openPrompt({
+    title: 'Edit note', value: _soundModal.comment || '',
+    placeholder: 'Note about this sound…', confirmLabel: 'Save', multiline: true,
+  });
+  if (val === null) return;
+  await saveSoundComment(id, val);
+  if (_soundModal && _soundModal.sound_id === id) _renderSoundModalHeader(_soundModal);
 }
 
 function _renderSoundModalHeader(s) {
@@ -1178,6 +1176,7 @@ function _renderSoundModalHeader(s) {
     <div class="modal-header-meta">${dateTiles.map(_tile).join('')}</div>
     <div class="modal-header-stats">${statPairs}</div>
   `;
+  _markXtextClipped(document.getElementById('soundModalHeader'));
 }
 
 function _renderSoundModalHeaderMobile(s) {
@@ -1206,6 +1205,7 @@ function _renderSoundModalHeaderMobile(s) {
       ${_soundNoteAreaHtml(s)}
     </div>
   `;
+  _markXtextClipped(document.getElementById('soundModalHeader'));
 }
 
 function setSoundModalFilter(f)     { _mSetFilter(_SOUND_MODAL_CFG, f); }

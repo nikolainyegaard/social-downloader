@@ -1402,6 +1402,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   font-size: 13px; font-family: inherit; outline: none;
 }
 .confirm-input:focus { border-color: var(--accent); }
+.confirm-textarea { resize: vertical; min-height: 80px; max-height: 240px; font-family: inherit; line-height: 1.5; }
+
+/* Modal note field: a populated note is a bio-style xtext block; an empty one
+   is a low-key invitation to add one */
+.modal-note { font-size: 13px; color: var(--text-dim); line-height: 1.5; max-width: 100%; }
+.note-empty { color: var(--muted); opacity: .55; font-style: italic; cursor: pointer; }
+.note-empty:hover { opacity: .85; }
 .confirm-check { margin-top: 16px; }
 .confirm-warn { margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--red); line-height: 1.45; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }

@@ -1807,16 +1807,9 @@ function initChannelApp(cfg) {
             ${_bookmarkBtn(ch, false)}
             <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
             <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
+            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
           </div>
-          <div id="${P}ModalNoteArea" style="display:${ch.comment ? '' : 'none'};margin-top:8px">
-            <textarea placeholder="Add a note about this ${CREATOR}…"
-              onblur="${P}SaveComment('${esc(ch.channel_id)}', this.value)"
-              style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;
-                     background:var(--raised);border:1px solid var(--border);border-radius:6px;
-                     color:var(--text);font-family:inherit;line-height:1.5"
-            >${esc(ch.comment || '')}</textarea>
-          </div>
+          ${_noteFieldHtml(ch.comment, `${P}EditNote`, 8)}
         </div>
       </div>
       <div class="modal-header-meta">${dateTiles.map(_tile).join('')}</div>
@@ -1883,25 +1876,34 @@ function initChannelApp(cfg) {
           ${_bookmarkBtn(ch, false)}
           <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
           <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Add note',onclick:()=>${P}ToggleModalNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
           <label class="tracking-toggle" title="${isInactive ? `${ItemsCap} tracking off (profile changes still tracked)` : `${ItemsCap} tracking on`}" style="margin-left:auto">
             <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="${P}SetTracking('${esc(ch.channel_id)}', this.checked)">
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
             <span class="toggle-label">Track</span>
           </label>
         </div>
-        <div id="${P}ModalNoteArea" style="display:${ch.comment ? '' : 'none'};margin-top:4px">
-          <textarea placeholder="Add a note about this ${CREATOR}…"
-            onblur="${P}SaveComment('${esc(ch.channel_id)}', this.value)"
-            style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;resize:vertical;min-height:48px;max-height:160px;background:var(--raised);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;line-height:1.5"
-          >${esc(ch.comment || '')}</textarea>
-        </div>
+        ${_noteFieldHtml(ch.comment, `${P}EditNote`, 4)}
       </div>`;
+    _markXtextClipped(_el('ModalHeader'));
   }
 
-  X('SaveComment', async (id, value) => {
-    const ok = await _saveCreatorComment(`${API}/channels`, id, value, creators, 'channel_id');
-    if (ok && modalCreator && modalCreator.channel_id === id) modalCreator.comment = value.trim() || null;
+  // Note editor behind both the empty field's "Click to add a note" and the
+  // header menu's Edit note item. Saves via the same comment PATCH the old
+  // inline textarea used, then repaints the header so the field re-renders.
+  X('EditNote', async () => {
+    if (!modalCreator) return;
+    const id  = modalCreator.channel_id;
+    const val = await openPrompt({
+      title: 'Edit note', value: modalCreator.comment || '',
+      placeholder: `Note about this ${CREATOR}…`, confirmLabel: 'Save', multiline: true,
+    });
+    if (val === null) return;
+    const ok = await _saveCreatorComment(`${API}/channels`, id, val, creators, 'channel_id');
+    if (ok && modalCreator && modalCreator.channel_id === id) {
+      modalCreator.comment = val.trim() || null;
+      _renderModalHeader(modalCreator);
+    }
   });
 
   X('ToggleStarModal', id => {
@@ -1918,14 +1920,6 @@ function initChannelApp(cfg) {
       _renderModalHeader(modalCreator);
     }
     return done;
-  });
-
-  X('ToggleModalNote', () => {
-    const area = _el('ModalNoteArea');
-    if (!area) return;
-    const show = area.style.display === 'none';
-    area.style.display = show ? '' : 'none';
-    if (show) area.querySelector('textarea')?.focus();
   });
 
   // Bio popover: the full description opens over the content instead of expanding
