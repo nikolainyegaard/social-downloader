@@ -1499,7 +1499,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .conn-slot-add svg { display: block; }
 .conn-slot-add:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
-.conn-slot-empty { border: 1px dashed var(--border); opacity: .3; display: inline-block; }
+.conn-slot-empty { border: 1px dashed var(--muted); opacity: .4; display: inline-block; }
 /* Always present so the box width never changes: dots normally, +N overflow */
 .conn-more {
   background: var(--raised); border: 1px solid var(--border); color: var(--muted);
