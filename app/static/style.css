@@ -1460,21 +1460,22 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    faint placeholders so the box always shows its full capacity */
 .conn-slot-add {
   border: 1px dashed var(--muted); background: var(--raised); color: var(--text-dim);
-  font-size: 17px; line-height: 1; padding: 0; cursor: pointer; opacity: .55;
+  padding: 0; cursor: pointer; opacity: .55;
   display: inline-flex; align-items: center; justify-content: center;
   transition: opacity .15s, color .15s, border-color .15s;
 }
+.conn-slot-add svg { display: block; }
 .conn-slot-add:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
 .conn-slot-empty { border: 1px dashed var(--border); opacity: .3; display: inline-block; }
-.conn-chip, .conn-icon-btn {
-  height: 22px; min-width: 22px; padding: 0 5px; border-radius: var(--radius-pill);
+/* Always present so the box width never changes: dots normally, +N overflow */
+.conn-more {
   background: var(--raised); border: 1px solid var(--border); color: var(--muted);
-  font-size: 11px; line-height: 1; cursor: pointer;
+  font-size: 11px; font-weight: 600; line-height: 1; padding: 0; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   transition: color .15s, border-color .15s, background .15s;
 }
-.conn-icon-btn .ic { width: 13px; height: 13px; }
-.conn-chip:hover, .conn-icon-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.conn-more .ic { width: 14px; height: 14px; }
+.conn-more:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 
 .conn-backdrop {
   position: fixed; inset: 0; z-index: 260;

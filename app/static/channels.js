@@ -1553,6 +1553,8 @@ function initChannelApp(cfg) {
     _renderConnListRows();
   }
 
+  const _connPlusIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14M5 12h14"/></svg>`;
+
   function _connAvatar(c) {
     return `<span class="conn-avatar-wrap" title="${esc(c.display_name || c.handle)} (@${esc(c.handle)})"
       onclick="${P}OpenModal('${esc(c.channel_id)}')">
@@ -1573,17 +1575,17 @@ function initChannelApp(cfg) {
     const slots = [];
     for (let i = 0; i < SLOTS; i++) {
       if (i < conns.length)        slots.push(_connAvatar(conns[i]));
-      else if (i === conns.length) slots.push(`<button class="conn-slot conn-slot-add" onclick="${P}ConnectAdd()" title="Connect a ${CREATOR}">+</button>`);
+      else if (i === conns.length) slots.push(`<button class="conn-slot conn-slot-add" onclick="${P}ConnectAdd()" title="Connect a ${CREATOR}">${_connPlusIcon}</button>`);
       else                         slots.push(`<span class="conn-slot conn-slot-empty"></span>`);
     }
-    const extra = conns.length > SLOTS
-      ? `<button class="conn-chip" onclick="${P}OpenConnList()" title="Show all ${conns.length}">+${conns.length - SLOTS}</button>`
-      : conns.length
-        ? `<button class="conn-icon-btn" onclick="${P}OpenConnList()" title="View and manage">${_dotsIcon}</button>`
-        : '';
+    // The manage slot is always present so the box width never changes; it
+    // carries the overflow count once the visible slots are full.
+    const more = `<button class="conn-slot conn-more" onclick="${P}OpenConnList()"
+      title="${conns.length > SLOTS ? `Show all ${conns.length}` : 'View and manage'}">${
+      conns.length > SLOTS ? `+${conns.length - SLOTS}` : _dotsIcon}</button>`;
     host.innerHTML = `
       <span class="conn-title">Connected ${CREATORS}</span>
-      <div class="conn-slots">${slots.join('')}${extra}</div>`;
+      <div class="conn-slots">${slots.join('')}${more}</div>`;
   }
 
   function _renderConnListRows() {
