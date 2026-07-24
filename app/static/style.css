@@ -2196,22 +2196,43 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   height: 540px; max-height: 90vh;
 }
 
+/* Navigation rail pattern: icons always visible, labels revealed by the
+   hamburger toggle. Desktop expands in flow (pushes content); on mobile the
+   nav is an absolute overlay over the reserved rail width (see the mobile
+   media block). State lives on the modal as .nav-collapsed. */
 .settings-nav {
   width: 160px; flex-shrink: 0;
   background: var(--nav);
   border-right: 1px solid var(--border);
-  padding: 52px 8px 16px;
+  padding: 10px 8px 16px;
   display: flex; flex-direction: column; gap: 2px;
+  overflow: hidden;
+  transition: width .18s ease;
 }
+.settings-modal.nav-collapsed .settings-nav { width: 52px; }
+
+.settings-nav-burger {
+  width: 36px; height: 32px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: background .1s, color .1s;
+}
+.settings-nav-burger:hover { background: var(--raised); color: var(--text); }
 
 .settings-nav-item {
-  padding: 8px 12px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
   border-radius: var(--radius);
   font-size: 13px; font-weight: 600;
   color: var(--text-dim);
   cursor: pointer; user-select: none;
+  white-space: nowrap;
   transition: background .1s, color .1s;
 }
+.settings-nav-item svg { flex-shrink: 0; }
 .settings-nav-item:hover { background: var(--raised); color: var(--text); }
 .settings-nav-group {
   font-size: 9px;
@@ -2221,9 +2242,17 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   color: var(--muted);
   padding: 14px 12px 4px;
   user-select: none;
+  white-space: nowrap;
 }
-.settings-nav-group:first-child { padding-top: 0; }
 .settings-nav-item.active { background: var(--accent-bg); color: var(--accent); }
+/* Collapsed rail: fade the text out but keep its layout space so the icons
+   never shift and the group gaps still read as separators */
+.snav-label, .settings-nav-group { transition: opacity .12s ease; }
+.settings-modal.nav-collapsed .snav-label,
+.settings-modal.nav-collapsed .settings-nav-group { opacity: 0; }
+
+/* Scrim behind the mobile overlay nav; inert on desktop */
+.settings-nav-scrim { display: none; }
 
 .settings-content { flex: 1; overflow-y: auto; padding: 28px 24px; }
 
@@ -2499,6 +2528,23 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
     border-radius: 0;
     border: none;
   }
+
+  /* Settings nav on mobile: always out of flow, with the content reserving
+     the rail width, so expanding overlays the content instead of shifting it */
+  .settings-nav {
+    position: absolute; top: 0; left: 0; bottom: 0;
+    z-index: 6;
+    width: 220px;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, .35);
+  }
+  .settings-modal.nav-collapsed .settings-nav { width: 52px; box-shadow: none; }
+  .settings-content { margin-left: 52px; }
+  .settings-nav-scrim {
+    position: absolute; inset: 0;
+    z-index: 5;
+    background: rgba(0, 0, 0, .4);
+  }
+  .settings-modal:not(.nav-collapsed) .settings-nav-scrim { display: block; }
 
   /* Creator modal header: compact avatar and name, tighter padding */
   .modal-header { padding: 12px 16px; gap: 12px; flex-wrap: wrap; }

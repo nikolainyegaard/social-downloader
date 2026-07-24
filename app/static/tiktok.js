@@ -1380,6 +1380,12 @@ async function _trackUser(tiktokId, username) {
 
 let _settingsSection = 'accounts';
 
+const _settingsNavMobile = () => window.matchMedia('(max-width: 640px)').matches;
+
+function toggleSettingsNav() {
+  document.querySelector('.settings-modal').classList.toggle('nav-collapsed');
+}
+
 function openSettings(section) {
   const _OLD_TO_NEW = { cookies: 'accounts', loops: 'schedules', backfill: 'jobs', utils: 'jobs', migrate: 'jobs', auth: 'access' };
   const target = _OLD_TO_NEW[section] || section || _settingsSection;
@@ -1391,6 +1397,8 @@ function openSettings(section) {
   } else {
     switchSettingsSection(target);
   }
+  // Nav starts as the icon rail on mobile, expanded on desktop
+  document.querySelector('.settings-modal').classList.toggle('nav-collapsed', _settingsNavMobile());
   document.getElementById('settingsBackdrop').style.display = 'flex';
   _lockScroll();
 }
@@ -1411,6 +1419,8 @@ function closeSettings() {
 
 function switchSettingsSection(name) {
   _settingsSection = name;
+  // Mobile drawer behavior: picking a section collapses the overlay back to the rail
+  if (_settingsNavMobile()) document.querySelector('.settings-modal').classList.add('nav-collapsed');
   // Every settings section needs an entry here or its ssec-* div will never be shown.
   // When adding a new section: add the id to this list AND add ssec-*/snav-* elements in index.html.
   ['accounts', 'schedules', 'network', 'jobs', 'diag', 'database', 'access'].forEach(s => {
