@@ -42,6 +42,7 @@
  * @property {Object<string, () => void>} [extraDomainLoaders]  Platform panels refetched on SSE 'changed' domains (TikTok: sounds)
  * @property {() => void} [onCreatorsRefetched]  Called after the SSE creators domain refetches (TikTok: refresh the open sound modal)
  * @property {(state: Object) => boolean} [statusActive]  Extra 'running' signal for the header badge
+ * @property {string} [statusActiveLabel]  What statusActive means, as a noun for the badge ("sound loop")
  * @property {() => (string|null)} [currentActivity]  Extra-loop activity line for the log bar (TikTok: sound loop stage)
  * @property {(state: Object) => {iso: string, label: string}[]} [nextRunCandidates]
  * @property {boolean} [hasStories]     Platform saves stories: adds the Stories card stat and sort option
@@ -800,11 +801,16 @@ function initChannelApp(cfg) {
     const text   = document.getElementById('statusText');
     const active = location.hash === `#${cfg.id}`;
     if (active && badge && text) {
-      const anyActive = loopRunning || !!runCurrent || !!(cfg.statusActive && cfg.statusActive(state));
-      badge.className  = `status-badge${anyActive ? ' running' : ''}`;
-      text.textContent = anyActive
-        ? (currentCreator ? `Downloading @${currentCreator}` : 'Running…')
+      // Broad states in sync with the loop panels: loop_running covers the whole
+      // session including its sleeps, run_current covers worker manual runs, and
+      // statusActive covers platform extra loops (TikTok sounds)
+      const manualHandle = runCurrent ? creators.find(c => c.channel_id === runCurrent)?.handle : null;
+      const label = loopRunning ? `Running ${CREATOR} loop`
+        : runCurrent ? `Running manual run${manualHandle ? ` for @${manualHandle}` : ''}`
+        : (cfg.statusActive && cfg.statusActive(state)) ? `Running ${cfg.statusActiveLabel || 'loop'}`
         : 'Idle';
+      badge.className  = `status-badge${label === 'Idle' ? '' : ' running'}`;
+      text.textContent = label;
     }
 
     _renderLogs(state.logs, state.log_seq);

@@ -701,6 +701,7 @@ const tt = initChannelApp({
     ? `openSoundModalAndHighlight('${esc(item.sound_id)}','${esc(item.video_id)}')`
     : '',
   statusActive:      state => state.sound_loop_running || !!state.sound_run_current,
+  statusActiveLabel: 'sound loop',
   currentActivity:   () => _soundActivity,
   nextRunCandidates: state => [
     state.loop_next       ? { iso: state.loop_next,       label: 'user loop'  } : null,
