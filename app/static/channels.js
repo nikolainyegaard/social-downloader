@@ -182,6 +182,13 @@ function initChannelApp(cfg) {
         </span>
       </div>
       <div id="${P}Controls" class="filter-control-group edge-fade" style="margin-top:10px">
+        <div class="filter-row">
+          <span class="filter-row-label">Flags</span>
+          <div class="filter-pills multi">
+            <button class="filter-pill" id="${P}fStarStarred" onclick="${P}SetFilter('star','starred')">Starred</button>
+            <button class="filter-pill" id="${P}fBookBookmarked" onclick="${P}SetFilter('book','bookmarked')">Bookmarked</button>
+          </div>
+        </div>
         ${EXTRA_FILTER_GROUPS.map(g => `
         <div class="filter-row">
           <span class="filter-row-label">${g.label}</span>
@@ -197,16 +204,10 @@ function initChannelApp(cfg) {
           </div>
         </div>
         <div class="filter-row">
-          <span class="filter-row-label">Flags</span>
-          <div class="filter-pills multi">
-            <button class="filter-pill" id="${P}fStarStarred" onclick="${P}SetFilter('star','starred')">Starred</button>
-            <button class="filter-pill" id="${P}fBookBookmarked" onclick="${P}SetFilter('book','bookmarked')">Bookmarked</button>
-          </div>
-        </div>
-        <div class="filter-row">
           <span class="filter-row-label">Sort</span>
           <div class="sort-controls">
             ${_ddHtml(`${P}SortField`, [
+              { value: 'random',           label: 'Random' },
               { value: 'handle',           label: 'Handle' },
               { value: 'display_name',     label: 'Display name' },
               { value: 'subscriber_count', label: cfg.subLabelSort },
@@ -316,6 +317,7 @@ function initChannelApp(cfg) {
   let cleanupPoll    = null;
 
   const SORT_DIR_LABELS = {
+    random:           { asc: 'Shuffle',      desc: 'Shuffle'      },
     handle:           { asc: 'A → Z',        desc: 'Z → A'        },
     display_name:     { asc: 'A → Z',        desc: 'Z → A'        },
     subscriber_count: { asc: 'Low → High',   desc: 'High → Low'   },
@@ -1185,6 +1187,7 @@ function initChannelApp(cfg) {
   });
 
   X('ToggleSortDir', () => {
+    if (sort.field === 'random') _randKeys.clear();
     sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
     _updateSortBtn();
     renderCreators();
@@ -1239,8 +1242,16 @@ function initChannelApp(cfg) {
     });
   }
 
+  // Stable per-creator random keys so polls and paging don't reshuffle the grid;
+  // cleared by the Shuffle button (ToggleSortDir) for a fresh order
+  const _randKeys = new Map();
+  const _randKey = id => _randKeys.get(id) ?? (_randKeys.set(id, Math.random()), _randKeys.get(id));
+
   function _sortedCreators() {
     const { field, dir } = sort;
+    if (field === 'random') {
+      return _filteredCreators().sort((a, b) => _randKey(a.channel_id) - _randKey(b.channel_id));
+    }
     return _filteredCreators().sort((a, b) => {
       const av = field === 'display_name' ? (a.display_name || a.handle) : (a[field] ?? (field === 'handle' ? '' : 0));
       const bv = field === 'display_name' ? (b.display_name || b.handle) : (b[field] ?? (field === 'handle' ? '' : 0));
