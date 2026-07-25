@@ -99,7 +99,9 @@ function initChannelApp(cfg) {
 
   <div class="qa-panel">
     <button class="qa-title" onclick="${P}OpenQaList()" title="Manage Quick Access">Quick Access</button>
-    <div class="qa-row" id="${P}QuickAccess"></div>
+    <!-- Placeholder slots reserve the row height until the creators load,
+         so the avatars swap in without shifting the page (5 = _QA_MIN_SLOTS) -->
+    <div class="qa-row" id="${P}QuickAccess">${'<span class="conn-slot conn-slot-empty"></span>'.repeat(5)}</div>
   </div>
 
   <!-- Desktop renders the strip directly (display:contents); on mobile the
