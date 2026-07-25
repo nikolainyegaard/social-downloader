@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Fixed
+- The creator count next to the search box now reflects the Privacy and Relation filters: with only those active it showed the plain total and never moved when they changed (an old bug; the Privacy pills had it too)
 - The yellow highlight on a video row opened from the Recent activity feed survives the cursor already resting on it: hovering a highlighted row now tints yellow instead of the grey hover swallowing it, and dismissing the highlight fades out slowly instead of vanishing
 - The Stats tab's chart axis labels render in the app font instead of the browser's serif default (the chart code read the font off the root element, which carries no font; it now reads body)
 - iOS no longer zooms in when focusing the Quick Access, Connect, or note edit prompt fields (font size on mobile raised to Safari's 16px no-zoom threshold)

@@ -1438,7 +1438,8 @@ function initChannelApp(cfg) {
     const grid = _el('Grid');
     if (!grid) return;
     const filtered   = _filteredCreators();
-    const isFiltered = filter.stat.size > 0 || filter.star.size > 0 || filter.book.size > 0 || !!search;
+    const isFiltered = filter.stat.size > 0 || filter.star.size > 0 || filter.book.size > 0 || !!search
+      || EXTRA_FILTER_GROUPS.some(g => filter[g.key].size > 0);
     const countEl    = _el('Count');
     if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${creators.length}` : `${creators.length}`;
 
