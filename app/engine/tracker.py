@@ -360,6 +360,12 @@ def process_single_channel(
         deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
         undeleted_ids = (known_ids - active_ids) & remote_ids
 
+        # Posts recorded earlier whose media download failed (file_path NULL):
+        # the listing just handed us fresh URLs, so download them again. Bounded
+        # by the listing itself; a post that stays broken costs one attempt per
+        # check it appears in.
+        retry_ids = (db.get_video_ids_missing_file(channel_id) & remote_ids) - new_ids
+
         # Deletion spike guard: a truncated listing looks like a mass deletion.
         # Skip the increments this run and let the ASAP re-check verify.
         deletion_spike = bool(deleted_ids) and len(deleted_ids) >= max(10, len(active_ids) // 4)
@@ -375,14 +381,16 @@ def process_single_channel(
 
         if new_ids:
             log(f"  New: {len(new_ids)}")
+        if retry_ids:
+            log(f"  Retrying failed downloads: {len(retry_ids)}")
         if deleted_ids:
             log(f"  Missing (checking for deletion): {len(deleted_ids)}")
         if undeleted_ids:
             log(f"  Undeleted: {len(undeleted_ids)}")
-        if not (new_ids or deleted_ids or undeleted_ids or recovered):
+        if not (new_ids or retry_ids or deleted_ids or undeleted_ids or recovered):
             log("  No changes.")
 
-        _new_sorted = sorted(new_ids)
+        _new_sorted = sorted(new_ids | retry_ids)
         for _n, vid_id in enumerate(_new_sorted, 1):
             if stop_event and stop_event.is_set():
                 log("  Loop stop requested: skipping remaining downloads")

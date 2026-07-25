@@ -800,6 +800,18 @@ class ChannelDB:
         return known, active, pending
 
 
+    def get_video_ids_missing_file(self, channel_id: str) -> set:
+        """Videos recorded without a media file (the download failed after
+        add_video): retry candidates whenever they reappear in a listing."""
+        with self.get_db() as conn:
+            rows = conn.execute(
+                "SELECT video_id FROM videos WHERE channel_id = ? "
+                "AND file_path IS NULL AND status IN ('up', 'undeleted')",
+                (channel_id,)
+            ).fetchall()
+        return {r["video_id"] for r in rows}
+
+
     def add_video(self, video_id: str, channel_id: str, title: str | None, upload_date: int | None,
                   view_count: int | None = None, duration: float | None = None,
                   content_type: str | None = None) -> None:

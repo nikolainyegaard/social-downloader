@@ -265,6 +265,11 @@ def download_post_media(files: list[dict], video_id: str, dest_dir: str,
 
     Photos are converted to AVIF (original kept only if the encode fails);
     videos and audio are saved as-is. Same policy as the other platforms.
+
+    ponytail: partial failures still return the first saved path, which marks
+    the post downloaded and stops the engine's retry. Post-level retry would
+    re-fetch every sibling forever when one file is permanently broken; if
+    partial losses show up in practice, track per-file success instead.
     """
     from photo_converter import encode_avif, CRF_PHOTO
 
