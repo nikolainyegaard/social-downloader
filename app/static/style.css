@@ -2549,6 +2549,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
     border: none;
   }
 
+  /* Full-screen modals: pin the close button to the viewport so it stays
+     reachable while the modal content scrolls. Direct child only, so the
+     small dialogs nested inside a backdrop (connections list) keep theirs */
+  .modal > .modal-close,
+  .settings-modal > .modal-close,
+  .report-view-modal > .modal-close { position: fixed; }
+
   /* Settings nav on mobile: always out of flow, with the content reserving
      the rail width, so expanding overlays the content instead of shifting it */
   .settings-nav {
