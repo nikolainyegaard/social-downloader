@@ -1429,6 +1429,7 @@ function initChannelApp(cfg) {
     creators = data;
     renderCreators();
     _renderQuickAccess();
+    _qaMigrateLocal();
   });
 
   X('GetCreators', () => creators);
@@ -1691,22 +1692,19 @@ function initChannelApp(cfg) {
   // ── Quick Access ──────────────────────────────────────────────────────────
   // Pinned creators under the add bar; the avatar slots and add prompt mirror
   // the Connected panel. Clicking an avatar opens the creator modal, nothing
-  // else reads the pins.
-  // ponytail: pins live in localStorage (per browser); move to a channels
-  // column if cross-device sync is ever wanted.
+  // else reads the pins. Server-side state (channels.pinned_at, ordered by
+  // pin time) so pins are the same on every device; the creators poll and SSE
+  // refresh keep the row current.
 
   const _QA_MIN_SLOTS = 5;
-  const _qaIds  = () => { try { return JSON.parse(localStorage.getItem(`${P}-quickAccess`) || '[]'); } catch { return []; } };
-  const _qaSave = ids => localStorage.setItem(`${P}-quickAccess`, JSON.stringify(ids));
+  const _qaPinned = () => creators.filter(c => c.pinned_at)
+    .sort((a, b) => a.pinned_at - b.pinned_at);
   let _qaSig = null;
 
   function _renderQuickAccess() {
     const host = _el('QuickAccess');
     if (!host) return;
-    const ids    = _qaIds();
-    const pinned = ids.map(id => creators.find(c => c.channel_id === id)).filter(Boolean);
-    // Prune pins whose creator was removed, but only once the list has loaded
-    if (creators.length && pinned.length !== ids.length) _qaSave(pinned.map(c => c.channel_id));
+    const pinned = _qaPinned();
     const sig = JSON.stringify(pinned.map(c => [c.channel_id, c.handle, c.display_name, c.avatar_cached]));
     if (sig === _qaSig) return;
     _qaSig = sig;
@@ -1717,24 +1715,41 @@ function initChannelApp(cfg) {
     host.innerHTML = slots.join('');
   }
 
+  async function _qaSetPin(id, pinned) {
+    const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(id)}/pin`, {
+      method: 'PATCH', body: JSON.stringify({ pinned }),
+    });
+    if (!ok) { showToast(data.error || 'Could not update Quick Access.', { type: 'error' }); return; }
+    const ch = creators.find(c => c.channel_id === id);
+    if (ch) ch.pinned_at = pinned ? Math.floor(Date.now() / 1000) : null;
+    _renderQuickAccess();
+  }
+
+  // One-shot migration of the short-lived localStorage pins to the server
+  async function _qaMigrateLocal() {
+    const raw = localStorage.getItem(`${P}-quickAccess`);
+    if (!raw || !creators.length) return;
+    localStorage.removeItem(`${P}-quickAccess`);
+    let ids = [];
+    try { ids = JSON.parse(raw) || []; } catch { /* malformed, drop it */ }
+    for (const id of ids) {
+      if (creators.some(c => c.channel_id === id)) await _qaSetPin(id, true);
+    }
+  }
+
   X('QuickAccessAdd', async () => {
     const raw = await openPrompt({
       title: 'Add to Quick Access', placeholder: `@handle of a tracked ${CREATOR}`,
-      confirmLabel: 'Add', suggest: _creatorSuggest(new Set(_qaIds())),
+      confirmLabel: 'Add', suggest: _creatorSuggest(new Set(_qaPinned().map(c => c.channel_id))),
     });
     if (raw === null || !raw.trim()) return;
     const handle = raw.trim().replace(/^@/, '').toLowerCase();
     const ch = creators.find(c => (c.handle || '').toLowerCase() === handle);
     if (!ch) { showToast(`No tracked ${CREATOR} matches @${handle}.`, { type: 'error' }); return; }
-    const ids = _qaIds();
-    if (!ids.includes(ch.channel_id)) { ids.push(ch.channel_id); _qaSave(ids); }
-    _renderQuickAccess();
+    if (!ch.pinned_at) _qaSetPin(ch.channel_id, true);
   });
 
-  X('QuickAccessRemove', id => {
-    _qaSave(_qaIds().filter(x => x !== id));
-    _renderQuickAccess();
-  });
+  X('QuickAccessRemove', id => _qaSetPin(id, false));
 
   X('OpenModal', channelId => {
     const ch = creators.find(c => c.channel_id === channelId);

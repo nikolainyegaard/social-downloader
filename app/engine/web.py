@@ -462,6 +462,17 @@ def create_channel_blueprint(engine) -> Blueprint:
         db.set_channel_bookmarked(channel_id, bookmarked)
         return jsonify({"ok": True})
 
+    @bp.route("/channels/<channel_id>/pin", methods=["PATCH"])
+    def set_channel_pin(channel_id: str):
+        if not db.get_channel(channel_id):
+            return jsonify({"error": f"{noun} not found"}), 404
+        body   = request.get_json(silent=True) or {}
+        pinned = body.get("pinned")
+        if not isinstance(pinned, bool):
+            return jsonify({"error": "pinned must be a boolean"}), 400
+        db.set_channel_pinned(channel_id, pinned)
+        return jsonify({"ok": True})
+
     @bp.route("/channels/<channel_id>/comment", methods=["PATCH"])
     def set_channel_comment(channel_id: str):
         if not db.get_channel(channel_id):
