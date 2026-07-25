@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Fixed
+- The yellow highlight on a video row opened from the Recent activity feed survives the cursor already resting on it: hovering a highlighted row now tints yellow instead of the grey hover swallowing it, and dismissing the highlight fades out slowly instead of vanishing
 - The Stats tab's chart axis labels render in the app font instead of the browser's serif default (the chart code read the font off the root element, which carries no font; it now reads body)
 - iOS no longer zooms in when focusing the Quick Access, Connect, or note edit prompt fields (font size on mobile raised to Safari's 16px no-zoom threshold)
 - The Fix blank thumbnails job (renamed to Fix broken thumbnails) now also repairs thumbnails truncated by an interrupted write: a crash or container stop mid-encode left a partial AVIF that no browser can decode, and the job's colour-tag scan never flagged it. Thumbnails are also now written to a temp file and renamed on success, so an interrupted encode can no longer leave a partial file behind

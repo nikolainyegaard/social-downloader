@@ -2011,7 +2011,14 @@ function initChannelApp(cfg) {
       if (row) {
         row.scrollIntoView({ block: 'center' });
         row.classList.add('video-row-highlight');
-        row.addEventListener('mouseenter', () => row.classList.remove('video-row-highlight'), { once: true });
+        // Dismiss on mouseenter with a slow fade: the fade class stretches the
+        // background transition while the yellow drains out, then cleans itself
+        // up so normal hover snaps again
+        row.addEventListener('mouseenter', () => {
+          row.classList.add('video-row-hl-fade');
+          row.classList.remove('video-row-highlight');
+          row.addEventListener('transitionend', () => row.classList.remove('video-row-hl-fade'), { once: true });
+        }, { once: true });
       }
     } else {
       // On History/Stories the list stays hidden; still refresh the toolbar so
