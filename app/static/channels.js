@@ -498,7 +498,7 @@ function initChannelApp(cfg) {
     { field: null,            label: '' },
     { field: null,            label: cfg.titleColLabel || 'Title' },
     { field: 'status',        label: 'Status' },
-    { field: 'view_count',    label: 'Views' },
+    { field: 'view_count',    label: cfg.viewsLabel || 'Views' },
     { field: 'upload_date',   label: cfg.uploadDateLabel },
     { field: 'download_date', label: 'Saved' },
     { field: 'deleted_at',    label: 'Deleted' },
@@ -542,6 +542,7 @@ function initChannelApp(cfg) {
     // Date plus time of day by default; platforms whose API only provides a
     // calendar date (YouTube) set cfg.uploadDateOnly
     uploadDateFmt:  cfg.uploadDateOnly ? fmtDateOnly : fmtDateShort,
+    viewsNoun:      (cfg.viewsLabel || 'Views').toLowerCase(),  // mobile row meta text
     filterFn:     `${P}SetModalFilter`,
     typeFilterFn: `${P}SetModalTypeFilter`,
     sortFn:       `${P}SetModalSort`,

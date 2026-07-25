@@ -800,6 +800,29 @@ class ChannelDB:
         return known, active, pending
 
 
+    def update_video_view_counts(self, counts: dict) -> int:
+        """Set view_count for {video_id: count}, writing only rows whose stored
+        value differs. Fed the fresh per-post counts from each fetched listing
+        (views, or likes on OnlyFans) so archived posts do not freeze at their
+        add-time numbers. Returns the number of rows updated."""
+        if not counts:
+            return 0
+        ids = list(counts)
+        changed: list[tuple] = []
+        with self.get_db() as conn:
+            for i in range(0, len(ids), 500):
+                chunk = ids[i:i + 500]
+                rows = conn.execute(
+                    f"SELECT video_id, view_count FROM videos "
+                    f"WHERE video_id IN ({','.join('?' * len(chunk))})",
+                    chunk).fetchall()
+                changed += [(counts[r["video_id"]], r["video_id"])
+                            for r in rows if r["view_count"] != counts[r["video_id"]]]
+            if changed:
+                conn.executemany("UPDATE videos SET view_count = ? WHERE video_id = ?", changed)
+        return len(changed)
+
+
     def get_video_ids_missing_file(self, channel_id: str) -> set:
         """Videos recorded without a media file (the download failed after
         add_video): retry candidates whenever they reappear in a listing."""

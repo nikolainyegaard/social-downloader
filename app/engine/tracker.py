@@ -390,6 +390,15 @@ def process_single_channel(
         deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
         undeleted_ids = (known_ids - active_ids) & remote_ids
 
+        # Fresh listings carry per-post counts (views, or likes on OnlyFans);
+        # refresh stored values so archived posts do not freeze at their
+        # add-time numbers. Only rows whose value changed are written.
+        _counts = {v: p["view_count"] for v, p in remote_posts.items()
+                   if p.get("view_count") is not None and v in known_ids}
+        _n_counts = db.update_video_view_counts(_counts)
+        if _n_counts:
+            log(f"  Refreshed view counts: {_n_counts}")
+
         # Posts recorded earlier whose media download failed (file_path NULL):
         # the listing just handed us fresh URLs, so download them again. Bounded
         # by the listing itself; a post that stays broken costs one attempt per

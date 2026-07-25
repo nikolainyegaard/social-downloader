@@ -2692,7 +2692,7 @@ function _mAppendVideosMobile(cfg, vids) {
       <div class="yt-thumb${cls !== 'up' ? ' ' + cls : ''}"><img src="${thumb}" alt="" onerror="this.style.opacity='.15'"><span class="yt-thumb-badge">${badge}</span></div>
       <div class="yt-body">
         <div class="yt-title">${v.description ? _expandableText(v.description) : '<span class="yt-title-empty">(no description)</span>'}</div>
-        <div class="yt-meta">${status}<span>${fmtCount(v.view_count)} views · ${fmtUpload(v.upload_date)}</span></div>
+        <div class="yt-meta">${status}<span>${fmtCount(v.view_count)} ${cfg.viewsNoun || 'views'} · ${fmtUpload(v.upload_date)}</span></div>
       </div>
       ${cfg.videoMenuFn ? `<button class="btn-menu yt-row-menu" title="More" onclick="event.stopPropagation();${cfg.videoMenuFn}(this,'${esc(v.video_id)}')">${_dotsIcon}</button>` : ''}`;
     if (cfg.gridCellOnclick) row.onclick = () => cfg.gridCellOnclick(v);

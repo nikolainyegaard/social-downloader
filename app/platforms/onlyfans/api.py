@@ -317,7 +317,10 @@ async def _collect_posts(authed, user, limit: int | None = None) -> list[tuple[d
             "upload_date":  int(created.timestamp()) if created else None,
             "duration":     next((f["duration"] for f in files
                                   if f["type"] in ("video", "gif") and f["duration"]), None),
-            "view_count":   None,
+            # OnlyFans exposes likes, not views; stored as view_count so the
+            # column, sorting, and count refresh work unchanged. The UI labels
+            # it "Likes" for this platform (viewsLabel in onlyfans.js).
+            "view_count":   getattr(post, "favoritesCount", None),
             "content_type": content_type,
             "media_count":  len(files),
         }, files))

@@ -13,6 +13,7 @@ initChannelApp({
   subLabelModal:     'subscribers',
   subLabelSort:      'Subscribers',
   uploadDateLabel:   'Posted',
+  viewsLabel:        'Likes',   // OnlyFans has no view counts; likes fill the column
   loopLabel:         'Creator Loop',
   addPlaceholder:    '@username or profile URL',
   addAriaLabel:      'OnlyFans username',
