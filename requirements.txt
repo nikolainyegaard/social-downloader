@@ -8,3 +8,4 @@ authlib
 flask-session
 instaloader>=4.15.2
 gallery-dl
+ultima-scraper-api>=2.2.45

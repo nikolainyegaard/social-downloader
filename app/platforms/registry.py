@@ -15,8 +15,9 @@ from platforms.tiktok.adapter import tiktok_adapter
 from platforms.twitter.adapter import twitter_adapter
 from platforms.instagram.adapter import instagram_adapter
 from platforms.youtube.adapter import youtube_adapter
+from platforms.onlyfans.adapter import onlyfans_adapter
 
 ENGINES: dict[str, ChannelEngine] = {
     adapter.platform: ChannelEngine(adapter)
-    for adapter in (tiktok_adapter, twitter_adapter, instagram_adapter, youtube_adapter)
+    for adapter in (tiktok_adapter, twitter_adapter, instagram_adapter, youtube_adapter, onlyfans_adapter)
 }
