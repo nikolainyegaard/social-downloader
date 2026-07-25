@@ -66,6 +66,14 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     bp = Blueprint(platform, __name__, url_prefix=f"/api/{platform}")
 
+    # Disabled platform (Settings > General): every route on this blueprint,
+    # including the adapter extras, is rejected so nothing can start work.
+    @bp.before_request
+    def _reject_when_disabled():
+        from config import platform_enabled
+        if not platform_enabled(platform):
+            return jsonify({"error": f"{adapter.label} is disabled in Settings"}), 403
+
     _add_queue = _queue_module.Queue()
 
     _cleanup_lock  = threading.Lock()
@@ -162,8 +170,12 @@ def create_channel_blueprint(engine) -> Blueprint:
         loop.enqueue_channel_run(channel_id, mode="quick")
 
     def _add_worker() -> None:
+        from config import platform_enabled
         while True:
             handle = _add_queue.get()
+            # Disabled platform: park pending lookups until re-enabled
+            while not platform_enabled(platform):
+                time.sleep(5)
             try:
                 _process_add(handle)
             except Exception as e:

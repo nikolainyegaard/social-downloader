@@ -1,7 +1,7 @@
 """Twitter data fetching via gallery-dl.
 
 gallery-dl drives the same internal web endpoints a logged-in browser uses,
-authenticated with the cookies.txt uploaded in Settings > Twitter. Accounts
+authenticated with the cookies.txt uploaded in Settings > Twitter > Account. Accounts
 are identified by their numeric user ID (gallery-dl's id: URL syntax), which
 survives handle changes.
 """

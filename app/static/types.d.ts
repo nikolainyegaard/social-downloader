@@ -56,6 +56,8 @@ declare var uPlot: any;
 interface Window {
   // Legacy clipboard fallback used in the paste handler
   clipboardData?: { getData(format: string): string };
+  // Platform list injected inline by index.html (backend registry order)
+  __PLATFORMS__?: { id: string, label: string, enabled: boolean }[];
 }
 
 // Cross-file references to functions that initChannelApp (channels.js)

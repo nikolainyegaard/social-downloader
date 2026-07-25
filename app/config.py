@@ -58,7 +58,7 @@ SECRET_KEY = _load_secret_key()
 # provider goes down and you are locked out of the Settings UI.
 OAUTH_FORCE_DISABLE = os.environ.get("OAUTH_FORCE_DISABLE", "").lower() in ("1", "true", "yes")
 
-# OAuth / OIDC configuration -- managed via Settings > Authentication in the UI.
+# OAuth / OIDC configuration -- managed via Settings > General > Access in the UI.
 # Persisted to DATA_DIR/oauth.json; not set via env vars.
 _OAUTH_CONFIG_PATH = os.path.join(DATA_DIR, "oauth.json")
 
@@ -88,6 +88,34 @@ def save_oauth_config(config: dict) -> None:
     with open(tmp, "w") as f:
         json.dump(config, f, indent=2)
     os.replace(tmp, _OAUTH_CONFIG_PATH)
+
+
+# Platform enable/disable, managed via Settings > General in the UI.
+# Persisted to DATA_DIR/platforms.json. A disabled platform runs no sessions,
+# no manual runs, and rejects its API routes; its tab and settings are hidden.
+_PLATFORMS_CONFIG_PATH = os.path.join(DATA_DIR, "platforms.json")
+
+
+def get_disabled_platforms() -> set[str]:
+    """Read the disabled-platform set. Safe to call frequently."""
+    try:
+        with open(_PLATFORMS_CONFIG_PATH) as f:
+            return set(json.load(f).get("disabled", []))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return set()
+
+
+def save_disabled_platforms(disabled: set[str]) -> None:
+    """Persist platforms.json atomically."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = _PLATFORMS_CONFIG_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"disabled": sorted(disabled)}, f, indent=2)
+    os.replace(tmp, _PLATFORMS_CONFIG_PATH)
+
+
+def platform_enabled(platform: str) -> bool:
+    return platform not in get_disabled_platforms()
 
 
 def get_path_issues() -> list[dict]:

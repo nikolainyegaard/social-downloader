@@ -44,13 +44,28 @@ initChannelApp({
   },
   gridClassFn: view => view === 'videos' ? 'video-grid--wide' : '',
   typeIconFn:  v => v.content_type === 'short' ? _vgridShortIcon : _vgridPlayIcon,
+  settings: {
+    account: {
+      html: `<p class="settings-note" style="margin-top:4px">YouTube fetches public data with yt-dlp and needs no login.</p>`,
+    },
+    diag: {
+      html: `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+          Runs yt-dlp flat extraction on a channel and returns the first 5 entries per tab
+          (Videos, Shorts, Streams) with all raw fields. Useful for checking which date
+          fields yt-dlp returns.
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <input id="ytDiagInput" class="text-input" type="text" placeholder="Channel ID (UCxxx) or @handle" style="flex:1">
+          <button class="btn-primary" id="ytDiagRunBtn" onclick="ytDiagRun()" style="flex-shrink:0">Run</button>
+        </div>
+        <div style="position:relative">
+          <pre id="ytDiagOutput" class="diag-output">No output yet.</pre>
+          <button onclick="ytDiagCopy()" title="Copy output" class="diag-copy-btn">Copy</button>
+        </div>`,
+    },
+  },
 });
-
-// ── Settings (schedule) ───────────────────────────────────────────────────────
-
-async function loadYtSettings() {
-  return _scheduleSettingsLoad('youtube', 'ytSettings');
-}
 
 // ── Diagnostics ───────────────────────────────────────────────────────────────
 

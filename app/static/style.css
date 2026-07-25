@@ -2279,6 +2279,16 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   white-space: nowrap;
 }
 .settings-nav-item.active { background: var(--accent-bg); color: var(--accent); }
+/* Letter badge: the nav icon for platform entries, so any future platform gets
+   a collapsed-rail icon without shipping a logo */
+.snav-badge {
+  width: 18px; height: 18px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  font-size: 10px; font-weight: 700;
+}
 /* Collapsed rail: fade the text out but keep its layout space so the icons
    never shift and the group gaps still read as separators */
 .snav-label, .settings-nav-group { transition: opacity .12s ease; }
@@ -2384,7 +2394,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* ── Diag output pre ────────────────────────────────────────────────────────── */
 
 .settings-content.diag-fill { overflow: hidden; display: flex; flex-direction: column; }
-.settings-content.diag-fill #ssec-diag { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.settings-content.diag-fill .settings-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.settings-content.diag-fill .ssec-diag { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #diag-tiktok { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #diagOutputWrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #diagResolveHint a { color: var(--accent); text-decoration: none; }

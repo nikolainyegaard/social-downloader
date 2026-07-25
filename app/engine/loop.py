@@ -384,12 +384,17 @@ class ChannelLoop:
             self._set_current_channel(None)
 
     def _run_worker(self) -> None:
+        import config as _config
         while True:
             self._run_signal.wait(timeout=5.0)
             with self._run_state_lock:
                 if not self._run_pending:
                     self._run_signal.clear()
                     continue
+            # Disabled platform: park queued manual runs until re-enabled
+            if not _config.platform_enabled(self.engine.platform):
+                time.sleep(5)
+                continue
             # A running session drains the queue itself between creators; only
             # take a run when the work lock is free (no session, no other run).
             if not self._work_lock.acquire(timeout=0.5):

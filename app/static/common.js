@@ -1,17 +1,18 @@
-const PLATFORMS = [
-  { id: 'tiktok',    label: 'TikTok'    },
-  { id: 'twitter',   label: 'Twitter'   },
-  { id: 'instagram', label: 'Instagram' },
-  { id: 'youtube',   label: 'YouTube'   },
-];
+// Platform list served by the backend (registry order, with enabled flags),
+// injected as window.__PLATFORMS__ by index.html before this script loads.
+// PLATFORMS is the enabled subset every tab, poll, and pane renders from;
+// disabled platforms only appear in the Settings > General toggle list.
+const _ALL_PLATFORMS = window.__PLATFORMS__ || [];
+const PLATFORMS = _ALL_PLATFORMS.filter(p => p.enabled);
 
 // ── Header auth pill ──────────────────────────────────────────────────────────
 // Each platform app reports its auth state via setHdrAuth(); the header pill
 // shows the state for the active platform tab. Platforms that never call
 // setHdrAuth (YouTube needs no authentication) get no pill.
 
+/** @type {Object<string, {present: boolean, label: string}>} */
 const _hdrAuth = {};  // platform -> {present, label}
-let _activePlatform = 'tiktok';
+let _activePlatform = PLATFORMS[0]?.id || '';
 
 function setHdrAuth(platform, present, label) {
   _hdrAuth[platform] = { present, label };
@@ -32,7 +33,8 @@ function _updateHdrAuthPill() {
 }
 
 function switchPlatform(name) {
-  if (!PLATFORMS.some(p => p.id === name)) name = 'tiktok';
+  if (!PLATFORMS.some(p => p.id === name)) name = PLATFORMS[0]?.id;
+  if (!name) return;  // every platform disabled; only Settings > General is usable
   _activePlatform = name;
   _updateHdrAuthPill();
   history.replaceState(null, '', '#' + name);
@@ -49,34 +51,253 @@ function switchPlatform(name) {
   if (typeof _initAllGliders === 'function') _initAllGliders();
 }
 
-// ── Settings platform selector ───────────────────────────────────────────────
-// One global platform switcher for the whole settings modal: switching it
-// swaps the {section}-{platform} pane in every platform-varying section at
-// once, so the chosen platform follows you between Accounts, Schedules,
-// Network, Jobs, Diagnostics, and Database.
+// ── Settings modal ────────────────────────────────────────────────────────────
+// The modal is fully generated: a nav rail with General plus one entry per
+// enabled platform, and a lazily built pane per nav target. Platforms register
+// their pane through _settingsRegister (initChannelApp does this from the
+// platform cfg), so a new platform gets its settings for free and a disabled
+// platform simply never registers.
+//
+// Section shape: { id, label, html, onShow?, onHide?, onRender?, diagFill? }
+//   html      pane markup (wiring functions are referenced by name on window)
+//   onRender  called once, right after the section's html first enters the DOM
+//   onShow    called every time the section becomes visible
+//   onHide    called when the section is left, or on modal close while active
+//   diagFill  section stretches to fill the modal height (diagnostics panes)
 
-const _SETTINGS_PLATFORM_SECTIONS = ['accounts', 'schedules', 'network', 'jobs', 'diag', 'database'];
-let _settingsPlatform = PLATFORMS[0].id;
+/** @typedef {{id: string, label: string, html: string, onShow?: () => void, onHide?: () => void, onRender?: () => void, diagFill?: boolean}} SettingsSection */
+/** @type {{id: string, label: string, sections: SettingsSection[]}[]} */
+const _settingsRegistry = [];
+let _settingsTarget = '';           // 'general' or a platform id
+/** @type {Object<string, string>} */
+const _settingsSectionByTarget = {};  // target id -> last active section id
 
-function initSettingsPlatformTabs() {
-  const container = document.getElementById('settingsPlatformTabs');
-  if (!container) return;
-  container.innerHTML = PLATFORMS.map(p =>
-    `<button class="tab" id="stab-${p.id}" onclick="switchSettingsPlatform('${p.id}')">${p.label}</button>`
-  ).join('');
-  switchSettingsPlatform(_settingsPlatform);
+const _settingsNavMobile = () => window.matchMedia('(max-width: 640px)').matches;
+
+function _settingsRegister(id, label, sections) {
+  _settingsRegistry.push({ id, label, sections });
+  // Nav order: General first, then platforms in the served (registry) order
+  const order = t => t.id === 'general' ? -1 : PLATFORMS.findIndex(p => p.id === t.id);
+  _settingsRegistry.sort((a, b) => order(a) - order(b));
 }
 
-function switchSettingsPlatform(platformId) {
-  _settingsPlatform = platformId;
-  PLATFORMS.forEach(p => {
-    document.getElementById(`stab-${p.id}`)?.classList.toggle('active', p.id === platformId);
-    _SETTINGS_PLATFORM_SECTIONS.forEach(sec => {
-      const pane = document.getElementById(`${sec}-${p.id}`);
-      if (pane) pane.style.display = p.id === platformId ? '' : 'none';
-    });
+function toggleSettingsNav() {
+  document.querySelector('.settings-modal').classList.toggle('nav-collapsed');
+}
+
+function _settingsRenderNav() {
+  const nav = document.getElementById('settingsNav');
+  if (!nav) return;
+  const item = t => `
+    <div class="settings-nav-item${t.id === _settingsTarget ? ' active' : ''}" id="snav-${t.id}" title="${esc(t.label)}" onclick="switchSettingsTarget('${t.id}')">
+      ${t.id === 'general'
+        ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
+        : `<span class="snav-badge">${esc(t.label.charAt(0))}</span>`}
+      <span class="snav-label">${esc(t.label)}</span>
+    </div>`;
+  const general   = _settingsRegistry.filter(t => t.id === 'general');
+  const platforms = _settingsRegistry.filter(t => t.id !== 'general');
+  nav.innerHTML = `
+    <button class="settings-nav-burger" onclick="toggleSettingsNav()" title="Menu" aria-label="Expand or collapse the navigation menu">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="settings-nav-group">App</div>
+    ${general.map(item).join('')}
+    ${platforms.length ? '<div class="settings-nav-group">Platforms</div>' : ''}
+    ${platforms.map(item).join('')}`;
+}
+
+// Build (once) and return the pane element for a nav target.
+function _settingsPaneEl(target) {
+  let pane = document.getElementById(`spane-${target.id}`);
+  if (pane) return pane;
+  pane = document.createElement('div');
+  pane.className = 'settings-pane';
+  pane.id = `spane-${target.id}`;
+  pane.style.display = 'none';
+  pane.innerHTML = `
+    <div class="settings-section-title">${esc(target.label)}</div>
+    <div class="settings-sub-tabs">${target.sections.map(s =>
+      `<button class="tab" id="stab-${target.id}-${s.id}" onclick="switchSettingsSection('${s.id}')">${esc(s.label)}</button>`).join('')}</div>
+    ${target.sections.map(s =>
+      `<div class="${s.diagFill ? 'ssec-diag' : ''}" id="ssec-${target.id}-${s.id}" style="display:none">${s.html}</div>`).join('')}`;
+  document.getElementById('settingsContent').appendChild(pane);
+  target.sections.forEach(s => s.onRender?.());
+  return pane;
+}
+
+function switchSettingsSection(name) {
+  const target = _settingsRegistry.find(t => t.id === _settingsTarget);
+  if (!target) return;
+  const prev = target.sections.find(s => s.id === _settingsSectionByTarget[target.id]);
+  const next = target.sections.find(s => s.id === name) || target.sections[0];
+  if (prev && prev !== next) prev.onHide?.();
+  _settingsSectionByTarget[target.id] = next.id;
+  target.sections.forEach(s => {
+    const el = document.getElementById(`ssec-${target.id}-${s.id}`);
+    if (el) el.style.display = s === next ? '' : 'none';
+    document.getElementById(`stab-${target.id}-${s.id}`)?.classList.toggle('active', s === next);
   });
+  document.querySelector('.settings-content').classList.toggle('diag-fill', !!next.diagFill);
+  next.onShow?.();
 }
+
+function switchSettingsTarget(id) {
+  const target = _settingsRegistry.find(t => t.id === id) || _settingsRegistry[0];
+  if (!target) return;
+  if (_settingsTarget && _settingsTarget !== target.id) {
+    const prevT = _settingsRegistry.find(t => t.id === _settingsTarget);
+    prevT?.sections.find(s => s.id === _settingsSectionByTarget[prevT.id])?.onHide?.();
+    const prevPane = document.getElementById(`spane-${_settingsTarget}`);
+    if (prevPane) prevPane.style.display = 'none';
+  }
+  _settingsTarget = target.id;
+  _settingsRegistry.forEach(t =>
+    document.getElementById(`snav-${t.id}`)?.classList.toggle('active', t.id === target.id));
+  _settingsPaneEl(target).style.display = '';
+  // Mobile drawer behavior: picking a target collapses the overlay back to the rail
+  if (_settingsNavMobile()) document.querySelector('.settings-modal').classList.add('nav-collapsed');
+  switchSettingsSection(_settingsSectionByTarget[target.id] || target.sections[0].id);
+}
+
+function openSettings(target, section) {
+  // Aliases from older markup, toasts, and bookmarked behaviors
+  /** @type {Object<string, [string, string?]>} */
+  const ALIAS = {
+    backfill: ['tiktok', 'jobs'],  migrate: ['tiktok', 'jobs'],
+    auth: ['general', 'access'],   access: ['general', 'access'],
+    cookies: [_activePlatform, 'account'],  accounts: [_activePlatform, 'account'],
+    loops: [_activePlatform, 'schedule'],   schedules: [_activePlatform, 'schedule'],
+    utils: [_activePlatform, 'jobs'],       jobs: [_activePlatform, 'jobs'],
+    network: [_activePlatform, 'network'],  diag: [_activePlatform, 'diag'],
+    database: [_activePlatform, 'database'],
+  };
+  if (target && ALIAS[target]) [target, section] = ALIAS[target];
+  const known = _settingsRegistry.some(t => t.id === target);
+  const id = known ? target : (_settingsTarget || _settingsRegistry[0]?.id);
+  if (!id) return;
+  if (section) _settingsSectionByTarget[id] = section;
+  _settingsRenderNav();
+  // Nav starts as the icon rail on mobile, expanded on desktop
+  document.querySelector('.settings-modal').classList.toggle('nav-collapsed', _settingsNavMobile());
+  document.getElementById('settingsBackdrop').style.display = 'flex';
+  _lockScroll();
+  switchSettingsTarget(id);
+}
+
+function closeSettings() {
+  const target = _settingsRegistry.find(t => t.id === _settingsTarget);
+  target?.sections.find(s => s.id === _settingsSectionByTarget[target.id])?.onHide?.();
+  document.getElementById('settingsBackdrop').style.display = 'none';
+  _unlockScroll();
+}
+
+// ── Settings > General ────────────────────────────────────────────────────────
+// App-wide settings that belong to no platform: the platform on/off toggles
+// and the app's own OIDC login.
+
+function _generalPlatformsHtml() {
+  return `
+    <p class="settings-note">
+      Turn platforms on or off. Disabling a platform stops all of its checks,
+      loops, and background work immediately, and removes its tab and settings
+      until it is enabled again. Saved media and tracked creators are kept.
+    </p>
+    <div class="settings-group" style="margin-top:16px">
+      ${_ALL_PLATFORMS.map(p => `
+        <label class="tracking-toggle lg" style="margin-bottom:12px">
+          <input type="checkbox" id="ptoggle-${p.id}" ${p.enabled ? 'checked' : ''} onchange="_platformToggle('${p.id}', this)">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          <span class="toggle-label" style="font-size:13px;color:var(--text)">${esc(p.label)}</span>
+        </label>`).join('')}
+    </div>
+    <p class="settings-note">Changes apply immediately; the page reloads to update the tabs.</p>`;
+}
+
+async function _platformToggle(id, input) {
+  const label   = _ALL_PLATFORMS.find(p => p.id === id)?.label || id;
+  const enabled = input.checked;
+  if (!enabled) {
+    const go = await openConfirm({
+      title: `Disable ${label}?`,
+      message: 'All checks, loops, and background work for this platform stop immediately, and its tab disappears until re-enabled. Saved media and tracked creators are kept.',
+      confirmLabel: 'Disable',
+    });
+    if (!go) { input.checked = true; return; }
+  }
+  input.disabled = true;
+  const { ok, data } = await apiJSON(`/api/platforms/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) });
+  if (!ok) {
+    input.disabled = false;
+    input.checked  = !enabled;
+    showToast(data.error || `Could not update ${label}.`, { type: 'error' });
+    return;
+  }
+  showToast(`${label} ${enabled ? 'enabled' : 'disabled'}. Reloading…`, { type: 'success', duration: 1500 });
+  setTimeout(() => location.reload(), 600);
+}
+
+const _GENERAL_ACCESS_HTML = `
+  <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:4px">
+    Require login before accessing the app via any OIDC provider (Authentik, Keycloak, etc.).
+  </p>
+  <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:20px">
+    <strong>Changes take effect after restarting the container.</strong>
+    The secret key and session files are managed automatically.
+  </p>
+  <div id="authForceDisabledBanner" style="display:none;background:var(--raised);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--red)">
+    <strong>OAUTH_FORCE_DISABLE=true</strong> is set in your environment. Auth enforcement is bypassed regardless of the toggle below. Remove it to re-enable enforcement after fixing your configuration.
+  </div>
+  <div id="authRestartBanner" style="display:none;background:var(--raised);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--accent)">
+    Saved settings differ from the running configuration. Restart the container to apply.
+  </div>
+  <label class="tracking-toggle lg" style="margin-bottom:20px">
+    <input type="checkbox" id="authEnabled">
+    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+    <span class="toggle-label" style="font-size:13px;color:var(--text)">Enable OAuth login</span>
+  </label>
+  <div style="display:flex;flex-direction:column;gap:14px;max-width:500px;margin-bottom:20px">
+    <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+      <span>Discovery URL <span style="color:var(--red)">*</span></span>
+      <input type="text" id="authDiscoveryUrl" class="text-input" placeholder="https://auth.example.com/application/o/my-app/.well-known/openid-configuration" spellcheck="false">
+      <span style="font-size:11px;color:var(--muted)">Authentik: application provider settings &gt; OpenID Configuration URL</span>
+    </label>
+    <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+      <span>Client ID <span style="color:var(--red)">*</span></span>
+      <input type="text" id="authClientId" class="text-input" placeholder="your-client-id" autocomplete="off" spellcheck="false">
+    </label>
+    <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+      <span>Client secret <span style="color:var(--red)">*</span></span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="password" id="authClientSecret" class="text-input" style="flex:1" placeholder="leave blank to keep existing" autocomplete="new-password" spellcheck="false">
+        <button id="authSecretToggle" onclick="toggleAuthSecretVisibility()" style="flex-shrink:0;font-size:12px;padding:5px 10px;background:var(--raised);border:1px solid var(--border);border-radius:6px;color:var(--text-dim);cursor:pointer">Show</button>
+      </div>
+      <span id="authSecretStatus" style="font-size:11px;color:var(--muted)"></span>
+    </label>
+    <label class="settings-label">
+      <span>Session lifetime</span>
+      <div class="loop-interval-field">
+        <input type="number" id="authSessionDays" min="1" max="365" class="loop-interval-input" value="7">
+        <span>days</span>
+      </div>
+    </label>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:24px">
+    <button class="btn-primary btn-sm" onclick="saveAuthSettings()">Save</button>
+  </div>
+  <hr style="border:none;border-top:1px solid var(--border);margin-bottom:16px">
+  <div class="settings-subtitle">Locked out?</div>
+  <p style="font-size:12px;color:var(--text-dim);line-height:1.6;margin:0">
+    If the OIDC provider is unreachable and you cannot log in, add
+    <code>OAUTH_FORCE_DISABLE: "true"</code> to your docker-compose.yml environment
+    block and restart. This bypasses auth enforcement so you can access Settings and
+    fix the configuration, then remove the override and restart again.
+  </p>`;
+
+_settingsRegister('general', 'General', [
+  { id: 'platforms', label: 'Platforms', html: _generalPlatformsHtml() },
+  { id: 'access',    label: 'Access',    html: _GENERAL_ACCESS_HTML, onShow: loadAuthSettings },
+]);
 
 // ── Cookies panel (shared by cookies-based platforms) ─────────────────────────
 // Renders into elements named {idPrefix}Pill, {idPrefix}PillText, {idPrefix}Meta,
@@ -128,6 +349,38 @@ async function _cookiesDelete(platform, idPrefix) {
   if (ok) _cookiesLoad(platform, idPrefix);
 }
 
+// Settings account pane for cookies-based platforms (Twitter, Instagram).
+// opts: { site, uploadFn, deleteFn, note }; note is trailing html inside the
+// cookie-note block, after the shared extension links.
+function _cookiesPaneHtml(idPrefix, opts) {
+  const ext = (href, icon, label) =>
+    `<a href="${href}" class="browser-ext-link" target="_blank" rel="noopener noreferrer"><img src="/static/icons/${icon}.svg" width="16" height="16" alt="">${label}</a>`;
+  return `
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+      <span class="cookie-pill absent" id="${idPrefix}Pill">
+        <span class="dot"></span>
+        <span id="${idPrefix}PillText">No cookies file</span>
+      </span>
+      <span class="cookie-meta" id="${idPrefix}Meta"></span>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label class="cookie-upload-label">
+          <input type="file" id="${idPrefix}FileInput" accept=".txt,text/plain" style="display:none" onchange="${opts.uploadFn}(this)">
+          Upload cookies.txt
+        </label>
+        <button class="btn-danger" id="${idPrefix}DeleteBtn" onclick="${opts.deleteFn}()" style="display:none">Remove</button>
+      </div>
+    </div>
+    <div class="cookie-note">
+      Export cookies from a logged-in ${opts.site} session using the <strong>Get cookies.txt LOCALLY</strong> extension:
+      <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
+        ${ext('https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc', 'chrome', 'Chrome')}
+        ${ext('https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp', 'edge', 'Edge')}
+        ${ext('https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/', 'firefox', 'Firefox')}
+      </div>
+      ${opts.note}
+    </div>`;
+}
+
 // ── Loop schedule settings (shared by session-scheduled platforms) ────────────
 // Elements: {idPrefix}SessionsPerDay, {idPrefix}HighPriorityHours,
 // {idPrefix}ActiveHours, {idPrefix}InactiveHours.
@@ -161,6 +414,36 @@ async function _scheduleSettingsSave(platform, idPrefix) {
   const { ok, data } = await apiJSON(`/api/${platform}/settings`, { method: 'PATCH', body: JSON.stringify(body) });
   if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
   showToast('Settings saved.', { type: 'success', duration: 2500 });
+}
+
+// Settings schedule pane for session-scheduled platforms; field ids match
+// _scheduleSettingsLoad/_scheduleSettingsSave ({idPrefix}SessionsPerDay, ...).
+function _schedulePaneHtml(idPrefix, saveFn, creatorNounPlural) {
+  const field = (label, suffix, min, max, unit, title) => `
+    <label class="settings-label"${title ? ` title="${title}"` : ''}>
+      <span>${label}</span>
+      <div class="loop-interval-field">
+        <input type="number" id="${idPrefix}${suffix}" min="${min}" max="${max}" class="loop-interval-input">
+        <span>${unit}</span>
+      </div>
+    </label>`;
+  return `
+    <p class="settings-note">
+      Check sessions are spread randomly across each 24 hour window. Each session
+      processes only the ${creatorNounPlural} whose check interval has come due.
+      Changes take effect at the next scheduled session.
+    </p>
+    <div class="settings-group">
+      ${field('Sessions per day',        'SessionsPerDay',    1, 24,  '')}
+      ${field('Starred check interval',  'HighPriorityHours', 1, 168, 'h')}
+      ${field('Active check interval',   'ActiveHours',       1, 168, 'h')}
+      ${field('Inactive check interval', 'InactiveHours',     1, 720, 'h')}
+      ${field('Full check interval',     'FullRefreshDays',   1, 90,  'd',
+              'Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff')}
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+      <button class="btn-primary btn-sm" onclick="${saveFn}()">Save</button>
+    </div>`;
 }
 
 const _vgridPlayIcon = `<svg width="12" height="12" viewBox="0 0 9 9" fill="rgba(255,255,255,.9)"><polygon points="1.5,0.5 8.5,4.5 1.5,8.5"/></svg>`;
@@ -227,11 +510,36 @@ function _platformDiagCopy(idPrefix) {
   navigator.clipboard.writeText(text).catch(() => {});
 }
 
+// Settings diagnostics pane driven by _platformDiagRun/_platformDiagCopy
+// (Twitter, Instagram). opts: { note, placeholder, runFn, copyFn,
+// actions: [{value, label}] }; element ids follow the {idPrefix}Diag* shape.
+function _diagPaneHtml(idPrefix, opts) {
+  return `
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">${opts.note}</div>
+    <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <div class="dd" id="${idPrefix}Action" data-value="${opts.actions[0].value}" style="flex:1;min-width:160px">
+        <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">${opts.actions[0].label}</span><span class="dd-caret">▾</span></button>
+        <div class="dd-menu" role="listbox">
+          ${opts.actions.map((a, i) =>
+            `<button type="button" class="dd-opt${i === 0 ? ' active' : ''}" data-value="${a.value}" role="option" onclick="_ddPick(this)">${a.label}</button>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <input id="${idPrefix}Input" class="text-input" type="text" placeholder="${opts.placeholder}" style="flex:1">
+      <button class="btn-primary" id="${idPrefix}RunBtn" onclick="${opts.runFn}()" style="flex-shrink:0">Run</button>
+    </div>
+    <div id="${idPrefix}OutputWrap" style="position:relative">
+      <pre id="${idPrefix}Output" class="diag-output">No output yet.</pre>
+      <button onclick="${opts.copyFn}()" title="Copy output" class="diag-copy-btn">Copy</button>
+    </div>`;
+}
+
 window.addEventListener('hashchange', () => {
-  switchPlatform(location.hash.slice(1) || 'tiktok');
+  switchPlatform(location.hash.slice(1) || _activePlatform);
 });
 
-switchPlatform(location.hash.slice(1) || 'tiktok');
+switchPlatform(location.hash.slice(1) || _activePlatform);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 
@@ -755,8 +1063,7 @@ function initDbQueryPane(platform) {
   if (!pane) return;
   const label = platform.charAt(0).toUpperCase() + platform.slice(1);
   const id    = 'dbq-' + platform;
-  const defaultSqls = { tiktok: 'SELECT * FROM users LIMIT 10;', youtube: 'SELECT * FROM channels LIMIT 10;' };
-  const ph = defaultSqls[platform] || 'SELECT 1;';
+  const ph = 'SELECT * FROM channels LIMIT 10;';
   pane.innerHTML = `
     <p style="font-size:12px;color:var(--muted);margin-bottom:16px">
       Run raw SQLite commands against the ${label} database.
@@ -1386,14 +1693,18 @@ function _doToggleToolbar(expanded, toolbarId, hasActiveFn) {
 // steps:  array of completed-step strings (optional; shown as green lines)
 
 function _makeJobWidget(id) {
-  const statusEl = document.getElementById(`job-${id}-status`);
-  const barWrap  = document.getElementById(`job-${id}-bar-wrap`);
-  const barEl    = document.getElementById(`job-${id}-bar`);
-  const textEl   = document.getElementById(`job-${id}-text`);
-  const stepsEl  = document.getElementById(`job-${id}-steps`);
+  // Element lookups are lazy: widgets are created at script load, but the
+  // settings pane holding their markup only renders on first open.
+  const el = suffix => document.getElementById(`job-${id}-${suffix}`);
   return {
     /** @param {{barPct?: number, label?: string, steps?: string[]}} [state] */
     update({ barPct, label, steps } = {}) {
+      const statusEl = el('status');
+      const barWrap  = el('bar-wrap');
+      const barEl    = el('bar');
+      const textEl   = el('text');
+      const stepsEl  = el('steps');
+      if (!statusEl) return;
       statusEl.style.display = '';
       const hasBar = barPct !== undefined;
       if (barWrap) barWrap.style.display = hasBar ? '' : 'none';
@@ -1409,7 +1720,7 @@ function _makeJobWidget(id) {
       if (textEl) textEl.textContent = label ?? '';
       if (stepsEl) stepsEl.innerHTML = (steps || []).map(s => `<div class="job-step">${esc(s)}</div>`).join('');
     },
-    hide() { statusEl.style.display = 'none'; },
+    hide() { const statusEl = el('status'); if (statusEl) statusEl.style.display = 'none'; },
   };
 }
 

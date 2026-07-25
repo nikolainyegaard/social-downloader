@@ -630,6 +630,437 @@ function _patchSoundRunStates() {
   });
 }
 
+// ── Settings panes ────────────────────────────────────────────────────────────
+// TikTok's settings markup, registered through the engine's cfg.settings hook.
+// The wiring functions (QR login, viewer, proxy, WireGuard, jobs, diagnostics)
+// live in this file; the pane html references them by name.
+
+const _TT_SETTINGS_ACCOUNT_HTML = `
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+    <span class="cookie-pill absent" id="cookiePill">
+      <span class="dot"></span>
+      <span id="cookiePillText">No cookies file</span>
+    </span>
+    <span class="cookie-meta" id="cookieMeta"></span>
+    <button class="btn-danger" id="cookieDeleteBtn" onclick="ttResetSession()" style="display:none;margin-left:auto">Reset session</button>
+  </div>
+  <div class="settings-group">
+    <span class="settings-label">Sign in with QR code</span>
+    <div class="settings-note">
+      Signs in inside the app's own browser, so the session is created with the
+      fingerprint that will use it. Open TikTok on your phone, tap the scan icon
+      in the top bar of your Profile tab, and scan the code.
+      The session cookies are stored server-side on success.
+    </div>
+    <button class="btn-sm" id="ttQrBtn" onclick="ttQrStart()">Generate QR code</button>
+    <div class="settings-note" id="ttQrStatus" style="display:none"></div>
+    <img id="ttQrImg" style="display:none;width:220px;border-radius:var(--radius);margin-top:8px;image-rendering:pixelated" alt="TikTok login QR code">
+  </div>
+  <div class="settings-group">
+    <span class="settings-label">Live browser view</span>
+    <div class="settings-note">
+      Opens a live view of the app's TikTok browser so you can solve a captcha or
+      verification wall by hand. The view is black unless a session is running:
+      start a QR login or trigger a check first, then watch and interact here.
+    </div>
+    <button class="btn-sm" id="ttViewerBtn" onclick="ttViewerOpen()">Open browser view</button>
+  </div>`;
+
+const _TT_SETTINGS_SCHEDULE_HTML = `
+  <p class="settings-note">
+    Check sessions are spread randomly across each 24 hour window. Each session
+    processes only the users whose check interval has come due.
+    Changes take effect at the next scheduled session.
+  </p>
+  <div class="settings-subtitle">User Loop</div>
+  <div class="settings-group">
+    <label class="settings-label">
+      <span>Sessions per day</span>
+      <div class="loop-interval-field">
+        <input type="number" id="settingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
+        <span></span>
+      </div>
+    </label>
+    <label class="settings-label">
+      <span>Starred check interval</span>
+      <div class="loop-interval-field">
+        <input type="number" id="settingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
+        <span>h</span>
+      </div>
+    </label>
+    <label class="settings-label">
+      <span>Active user check interval</span>
+      <div class="loop-interval-field">
+        <input type="number" id="settingsActiveHours" min="1" max="168" class="loop-interval-input">
+        <span>h</span>
+      </div>
+    </label>
+    <label class="settings-label">
+      <span>Inactive user check interval</span>
+      <div class="loop-interval-field">
+        <input type="number" id="settingsInactiveHours" min="1" max="720" class="loop-interval-input">
+        <span>h</span>
+      </div>
+    </label>
+    <label class="settings-label">
+      <span>Full refresh cycle</span>
+      <div class="loop-interval-field">
+        <input type="number" id="settingsStatsRefreshDays" min="1" max="30" class="loop-interval-input">
+        <span>days</span>
+      </div>
+    </label>
+  </div>
+  <div class="settings-subtitle">Sound Loop</div>
+  <div class="settings-group">
+    <label class="settings-label">
+      <span>Sound loop interval</span>
+      <div class="loop-interval-field">
+        <input type="number" id="soundLoopIntervalInput" min="1" max="9999" class="loop-interval-input">
+        <span>min</span>
+      </div>
+    </label>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+    <button class="btn-primary btn-sm" onclick="saveLoopSettings()">Save</button>
+  </div>`;
+
+const _TT_SETTINGS_NETWORK_HTML = `
+  <div class="settings-group">
+    <label class="tracking-toggle lg">
+      <input type="checkbox" id="ttProxyEnabled" onchange="ttProxyToggle()">
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span style="font-size:15px;font-weight:600;color:var(--text)">Enable VPN</span>
+    </label>
+    <div class="settings-note" style="margin-top:6px;margin-bottom:0">
+      Route all TikTok traffic through a VPN or proxy. The rest of the app is unaffected.
+    </div>
+  </div>
+  <div class="hr-divider"></div>
+  <div class="settings-group">
+    <span class="settings-label">Proxy</span>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;max-width:560px">
+      <div class="filter-pills multi">
+        <button class="filter-pill" id="ttProxyModeGluetun" onclick="ttProxySetMode('gluetun')">Gluetun VPN</button>
+        <button class="filter-pill" id="ttProxyModeCustom" onclick="ttProxySetMode('custom')">Other proxy</button>
+      </div>
+      <input type="text" id="ttProxyUrl" class="text-input" style="flex:1;min-width:200px" placeholder="http://proxy:8888" autocomplete="off" spellcheck="false">
+      <button class="btn-sm" id="ttProxySaveBtn" onclick="ttProxySave()">Save</button>
+      <button class="btn-sm" id="ttProxyTestBtn" onclick="ttProxyTest()">Test connection</button>
+    </div>
+    <span class="hdr-link" style="margin-top:8px;display:inline-block" onclick="_ttHelpToggle('ttProxyHelp')">How this works</span>
+    <div class="settings-note" id="ttProxyHelp" style="display:none;margin-top:8px">
+      With Enable VPN on, all TikTok traffic (the browser, page fetches, and
+      downloads) leaves through the proxy configured here instead of the
+      server's own connection. Gluetun VPN mode expects the gluetun container
+      from the README example, reachable as <code>gluetun:8888</code> on the
+      Docker network, and manages its WireGuard credentials below. Other proxy
+      mode takes any HTTP proxy address instead. Changes apply from the next
+      browser session, no restart needed. Test connection works either way,
+      whether the VPN is enabled or not, and shows the exit IP the proxy
+      provides.
+    </div>
+  </div>
+  <div class="settings-group" id="ttWgGroup">
+    <span class="settings-label">WireGuard config (gluetun)</span>
+    <div class="settings-note" id="ttWgMeta" style="margin-bottom:10px"></div>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:500px">
+      <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+        <span>Private key</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="password" id="ttWgPrivateKey" class="text-input" style="flex:1" placeholder="from the [Interface] section" autocomplete="new-password" spellcheck="false">
+          <button class="btn-sm" id="ttWgKeyEye" onclick="ttWgToggleKey()" title="Show the key" style="flex-shrink:0;padding:5px 8px"></button>
+        </div>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+        <span>Address</span>
+        <input type="text" id="ttWgAddress" class="text-input" placeholder="10.2.0.2/32" autocomplete="off" spellcheck="false">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+        <span>Server public key</span>
+        <input type="text" id="ttWgPublicKey" class="text-input" placeholder="from the [Peer] section" autocomplete="off" spellcheck="false">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+        <span>Server endpoint</span>
+        <input type="text" id="ttWgEndpoint" class="text-input" placeholder="146.70.170.18:51820" autocomplete="off" spellcheck="false">
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+      <button class="btn-sm" onclick="ttWgParseOpen()">Paste full config</button>
+      <button class="btn-sm" onclick="ttWgSave()">Save config</button>
+      <button class="btn-danger" id="ttWgDeleteBtn" onclick="ttWgDelete()" style="display:none">Remove</button>
+    </div>
+    <span class="hdr-link" style="margin-top:8px;display:inline-block" onclick="_ttHelpToggle('ttWgHelp')">How this works</span>
+    <div class="settings-note" id="ttWgHelp" style="display:none;margin-top:8px">
+      These are the VPN credentials for the gluetun container behind the proxy
+      above, from a WireGuard config file (ProtonVPN: account page &gt; Downloads
+      &gt; WireGuard configuration). Paste full config fills the fields from a
+      pasted file, keeping only what gluetun needs; comments and IPv6 entries are
+      discarded automatically. Saving writes a clean
+      <code>data/gluetun/wireguard/wg0.conf</code>, where gluetun's
+      <code>./data/gluetun:/gluetun</code> volume reads it. Gluetun only loads the
+      config at startup, so restart that container after saving. With the host's
+      Docker socket mounted into the app container (see the README), the save
+      notification offers a Restart gluetun now action that does that for you.
+    </div>
+  </div>`;
+
+const _TT_SETTINGS_JOBS_HTML = `
+  <div class="job-card">
+    <div class="job-card-hdr">
+      <div style="flex:1">
+        <div class="job-card-title">Stats backfill</div>
+        <div class="job-card-desc">
+          Fetches view counts, likes, and other metadata for downloaded videos that
+          are missing stats.
+        </div>
+      </div>
+      <button class="btn-primary" id="backfillBtn" onclick="triggerBackfill()" style="flex-shrink:0;align-self:flex-start">Run</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;min-height:16px">
+      <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
+      <span id="statsFailedCount"  style="font-size:12px;color:var(--red);display:none;cursor:pointer;text-decoration:underline dotted" onclick="toggleFailedList()" title="Click to see which videos"></span>
+      <button id="retryFailedBtn" onclick="retryFailed()" style="display:none;font-size:12px;padding:3px 10px;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-dim);cursor:pointer" title="Clear error counts so these videos are retried on the next backfill run">Retry failed</button>
+      <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div id="failedList" style="display:none;font-size:11px;color:var(--muted);line-height:1.7"></div>
+    <div class="report-widget">
+      <div class="job-card-desc" style="margin-bottom:8px">
+        Reset marks every video as needing a stats backfill. Use it after adding new
+        tracked columns; the next run will re-fetch all videos.
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="btn-danger" id="resetBackfillBtn" onclick="resetBackfillStep()">Reset all backfill status</button>
+        <span id="resetBackfillStatus" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="job-card">
+    <div class="job-card-hdr">
+      <div style="flex:1">
+        <div class="job-card-title">Convert photos to AVIF</div>
+        <div class="job-card-desc">
+          Converts all existing photo post images, thumbnails, and profile avatars
+          from JPEG to AVIF. Runs automatically at startup; already-converted files
+          are skipped. New downloads are saved as AVIF directly.
+        </div>
+      </div>
+      <button class="btn-primary" id="job-avif-btn" onclick="triggerAvifJob()" style="flex-shrink:0;align-self:flex-start">Run</button>
+    </div>
+    <div class="job-status" id="job-avif-status" style="display:none">
+      <div id="job-avif-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-avif-bar"></div></div></div>
+      <div class="job-status-text" id="job-avif-text"></div>
+    </div>
+  </div>
+
+  <div class="job-card">
+    <div class="job-card-hdr">
+      <div style="flex:1">
+        <div class="job-card-title">Missing file check</div>
+        <div class="job-card-desc">
+          Scans saved video records for files no longer present on disk.
+          Scan reports what would be removed. Purge removes the DB records,
+          after which videos will be re-downloaded on the next loop run.
+          Purge also runs automatically at midnight and noon.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
+        <button class="btn-primary" id="job-filecheck-scan-btn" onclick="triggerFileScan()">Scan</button>
+        <button class="btn-danger"  id="job-filecheck-purge-btn" onclick="triggerFilePurge()">Purge</button>
+      </div>
+    </div>
+    <div class="job-status" id="job-filecheck-status" style="display:none">
+      <div id="job-filecheck-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-filecheck-bar"></div></div></div>
+      <div class="job-status-text" id="job-filecheck-text"></div>
+      <div class="report-widget" id="job-filecheck-report" style="display:none">
+        <div class="report-preview" id="job-filecheck-preview"></div>
+        <div class="report-actions">
+          <button class="btn-report" id="job-filecheck-view-btn" onclick="openReportView(_filecheckReportFile, 'Missing file check')">View full report</button>
+          <a id="job-filecheck-download-link" style="display:none">
+            <button class="btn-report">Download report</button>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="job-card">
+    <div class="job-card-hdr">
+      <div style="flex:1">
+        <div class="job-card-title">Corrupted story recovery</div>
+        <div class="job-card-desc">
+          Scans saved stories for missing or unplayable files. Re-download
+          fetches fresh copies of the afflicted ones, but only while a story
+          is still live: TikTok drops stories 24 hours after posting, and
+          expired ones cannot be recovered, so Re-download removes them from
+          the library instead (they would otherwise warn in the story viewer
+          forever). Video stories only; photo stories are re-fetched by the
+          next loop check of their user.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
+        <button class="btn-primary" id="job-storyfix-scan-btn" onclick="triggerStoryScan()">Scan</button>
+        <button class="btn-primary" id="job-storyfix-redl-btn" onclick="triggerStoryRedownload()">Re-download</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="job-card">
+    <div class="job-card-hdr">
+      <div style="flex:1">
+        <div class="job-card-title">Fix broken thumbnails</div>
+        <div class="job-card-desc">
+          Rebuilds thumbnails (all apps) that browsers cannot decode. Covers two
+          cases: reserved colour tags older thumbnails inherited from TikTok's
+          source videos (blank in Firefox, Chrome tolerates it), and files
+          truncated by an interrupted write (broken everywhere). Scans every
+          thumbnail and regenerates only the affected ones from their source.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
+        <button class="btn-primary" id="job-thumbfix-btn" onclick="triggerThumbnailRepair()">Fix</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="job-card">
+    <div class="job-card-hdr">
+      <div style="flex:1">
+        <div class="job-card-title">Remove audio-only files</div>
+        <div class="job-card-desc">
+          Scans the videos folder for audio-only files (.mp3, .m4a, etc.) that were
+          downloaded before yt-dlp was restricted to video-only formats. Deletes each
+          file from disk and removes its database entry. Safe to run multiple times.
+        </div>
+      </div>
+      <button class="btn-danger" id="job-audio-btn" onclick="triggerAudioCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+    </div>
+    <div class="job-status" id="job-audio-status" style="display:none">
+      <div id="job-audio-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-audio-bar"></div></div></div>
+      <div class="job-status-text" id="job-audio-text"></div>
+    </div>
+  </div>
+
+  <div class="job-card">
+    <div class="job-card-hdr">
+      <div style="flex:1">
+        <div class="job-card-title">Delete all avatars</div>
+        <div class="job-card-desc">
+          Deletes the current cached profile picture for tracked users. Archived avatar
+          history is preserved. On the next loop run, avatars will be re-downloaded and
+          saved without triggering a profile change event. Banned users are excluded by
+          default; their avatars cannot be re-fetched from TikTok.
+        </div>
+        <label class="tracking-toggle" style="margin-top:8px">
+          <input type="checkbox" id="util-clear-avatars-include-banned">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          <span class="toggle-label">Include banned users</span>
+        </label>
+      </div>
+      <button class="btn-danger" id="util-clear-avatars-btn" onclick="triggerClearAvatars()" style="flex-shrink:0;align-self:flex-start">Delete</button>
+    </div>
+    <div class="job-status" id="util-clear-avatars-status" style="display:none">
+      <div class="job-status-text" id="util-clear-avatars-text"></div>
+    </div>
+  </div>
+
+  <div class="job-card">
+    <div class="job-card-hdr">
+      <div style="flex:1">
+        <div class="job-card-title">Delete all thumbnails</div>
+        <div class="job-card-desc">
+          Deletes all generated thumbnails for videos and photo posts. Thumbnails will
+          be regenerated automatically on the next startup backfill.
+        </div>
+      </div>
+      <button class="btn-danger" id="util-clear-thumbs-btn" onclick="triggerClearThumbnails()" style="flex-shrink:0;align-self:flex-start">Delete</button>
+    </div>
+    <div class="job-status" id="util-clear-thumbs-status" style="display:none">
+      <div class="job-status-text" id="util-clear-thumbs-text"></div>
+    </div>
+  </div>
+
+  <div class="job-card">
+    <div class="job-card-hdr">
+      <div style="flex:1">
+        <div class="job-card-title">Path migration</div>
+        <div class="job-card-desc">
+          Upgrades from tiktok-downloader stored video files under <code>videos/</code> but the
+          new layout uses <code>media/</code>. This tool rewrites the stored file paths in the
+          TikTok database to match your current folder layout. Before running: stop the
+          container, rename <code>videos/</code> to <code>media/</code> on the host, update your
+          docker-compose.yml volumes, then restart and open this panel.
+        </div>
+      </div>
+    </div>
+    <div id="migrate-preview" style="margin:10px 0 0;font-size:13px;"></div>
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:440px;margin:10px 0 12px">
+      <label style="display:flex;gap:8px;font-size:13px">
+        <span style="color:var(--text-dim)">Old prefix</span>
+        <input type="text" id="migrateOldPrefix" class="text-input" placeholder="/app/videos">
+      </label>
+      <label style="display:flex;gap:8px;font-size:13px">
+        <span style="color:var(--text-dim)">New prefix</span>
+        <input type="text" id="migrateNewPrefix" class="text-input" placeholder="/app/media">
+      </label>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn-primary btn-sm" onclick="loadMigratePreview()">Scan database</button>
+      <button class="btn-danger" id="migrateRunBtn" onclick="runMigration()" style="display:none;font-size:12px;padding:5px 14px">Rewrite paths</button>
+      <span id="migrateStatus" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+  </div>`;
+
+const _TT_SETTINGS_DIAG_HTML = `
+  <div id="diag-tiktok">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+      Run raw API calls and inspect the response. Useful for debugging download issues.
+      TikTokApi calls open a browser session and may take 10-30 seconds.
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <div class="dd" id="diagSource" data-value="get_video_details" style="flex:1;min-width:160px">
+        <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">get_video_details</span><span class="dd-caret">▾</span></button>
+        <div class="dd-menu" role="listbox">
+          <button type="button" class="dd-opt active" data-value="get_video_details" role="option" onclick="_ddPick(this);diagSourceChanged()">get_video_details</button>
+          <button type="button" class="dd-opt" data-value="ytdlp" role="option" onclick="_ddPick(this);diagSourceChanged()">yt-dlp</button>
+          <button type="button" class="dd-opt" data-value="tiktokapi" role="option" onclick="_ddPick(this);diagSourceChanged()">TikTokApi</button>
+        </div>
+      </div>
+      <div class="dd" id="diagAction" data-value="" style="flex:1;min-width:160px">
+        <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">(paste a URL below)</span><span class="dd-caret">▾</span></button>
+        <div class="dd-menu" role="listbox"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <input id="diagInput" class="text-input" type="text"
+             placeholder="https://www.tiktok.com/@user/video/123... or user ID"
+             style="flex:1">
+      <button class="btn-primary" id="diagRunBtn" onclick="diagRun()" style="flex-shrink:0">Run</button>
+    </div>
+    <div id="diagOutputWrap" style="position:relative">
+      <pre id="diagOutput" class="diag-output">No output yet.</pre>
+      <button onclick="diagCopy()" title="Copy output" class="diag-copy-btn">Copy</button>
+    </div>
+    <div id="diagResolveHint" style="display:none;margin-top:8px;font-size:12px;color:var(--muted)"></div>
+  </div>`;
+
+function _ttJobsShow() {
+  _avifLoadStatus();
+  _startJobsPoll();
+  _resumeBackfillPoll();
+}
+
+function _ttJobsHide() {
+  // Capture running state before _stopJobsPoll() nulls out _jobsPoll
+  const avifRunning = _jobsPoll !== null;
+  _stopJobsPoll();
+  // Clear finished job widgets so the pane shows a clean state next time
+  if (!avifRunning)    { _avifWidget.hide(); const b = document.getElementById('job-avif-btn'); if (b) b.disabled = false; }
+  if (!_audioPoll)     { _audioWidget.hide(); const b = document.getElementById('job-audio-btn'); if (b) b.disabled = false; }
+  if (!_filecheckPoll) { _filecheckWidget.hide(); _filecheckReport.hide(); _setFilecheckBtns(false); }
+  if (!_backfillPoll)  { const s = document.getElementById('backfillStatus'); if (s) s.textContent = ''; }
+}
+
 // ── App init ──────────────────────────────────────────────────────────────────
 
 const tt = initChannelApp({
@@ -719,6 +1150,13 @@ const tt = initChannelApp({
     state.sound_loop_next ? { iso: state.sound_loop_next, label: 'sound loop' } : null,
   ],
   onStatus:          _ttOnStatus,
+  settings: {
+    account:  { html: _TT_SETTINGS_ACCOUNT_HTML,  onShow: () => loadCookies() },
+    schedule: { html: _TT_SETTINGS_SCHEDULE_HTML, onShow: () => loadSettings() },
+    network:  { html: _TT_SETTINGS_NETWORK_HTML,  onShow: () => ttProxyLoad() },
+    jobs:     { html: _TT_SETTINGS_JOBS_HTML, onShow: _ttJobsShow, onHide: _ttJobsHide },
+    diag:     { html: _TT_SETTINGS_DIAG_HTML, onShow: () => diagSourceChanged() },
+  },
 });
 
 // ── Sound loop triggers ───────────────────────────────────────────────────────
@@ -1388,69 +1826,7 @@ async function _trackUser(tiktokId, username) {
   unsub = tt.onQueue(onQueue);
 }
 
-// ── Settings modal ────────────────────────────────────────────────────────────
-
-let _settingsSection = 'accounts';
-
-const _settingsNavMobile = () => window.matchMedia('(max-width: 640px)').matches;
-
-function toggleSettingsNav() {
-  document.querySelector('.settings-modal').classList.toggle('nav-collapsed');
-}
-
-function openSettings(section) {
-  const _OLD_TO_NEW = { cookies: 'accounts', loops: 'schedules', backfill: 'jobs', utils: 'jobs', migrate: 'jobs', auth: 'access' };
-  const target = _OLD_TO_NEW[section] || section || _settingsSection;
-  if (PLATFORMS.some(p => p.id === target)) {
-    // A platform id (gear button, header auth pill) selects that platform
-    // globally and lands on its Accounts section
-    switchSettingsPlatform(target);
-    switchSettingsSection('accounts');
-  } else {
-    switchSettingsSection(target);
-  }
-  // Nav starts as the icon rail on mobile, expanded on desktop
-  document.querySelector('.settings-modal').classList.toggle('nav-collapsed', _settingsNavMobile());
-  document.getElementById('settingsBackdrop').style.display = 'flex';
-  _lockScroll();
-}
-
-function closeSettings() {
-  // Capture running state before _stopJobsPoll() nulls out _jobsPoll
-  const avifRunning = _jobsPoll !== null;
-  _stopJobsPoll();
-  document.getElementById('settingsBackdrop').style.display = 'none';
-  _unlockScroll();
-  // Clear finished job widgets so reopening the panel shows a clean state
-  if (!avifRunning)    { _avifWidget.hide();     document.getElementById('job-avif-btn').disabled     = false; }
-  if (!_cleanupPoll)   { _cleanupWidget.hide();  document.getElementById('job-cleanup-btn').disabled  = false; }
-  if (!_audioPoll)     { _audioWidget.hide();     document.getElementById('job-audio-btn').disabled    = false; }
-  if (!_filecheckPoll) { _filecheckWidget.hide(); _filecheckReport.hide(); _setFilecheckBtns(false); }
-  if (!_backfillPoll)  { document.getElementById('backfillStatus').textContent = ''; }
-}
-
-function switchSettingsSection(name) {
-  _settingsSection = name;
-  // Mobile drawer behavior: picking a section collapses the overlay back to the rail
-  if (_settingsNavMobile()) document.querySelector('.settings-modal').classList.add('nav-collapsed');
-  // Every settings section needs an entry here or its ssec-* div will never be shown.
-  // When adding a new section: add the id to this list AND add ssec-*/snav-* elements in index.html.
-  ['accounts', 'schedules', 'network', 'jobs', 'diag', 'database', 'access'].forEach(s => {
-    document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
-    document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
-  });
-  document.querySelector('.settings-content').classList.toggle('diag-fill', name === 'diag');
-  // The global platform selector applies to every section except Access
-  const ptabs = document.getElementById('settingsPlatformTabs');
-  if (ptabs) ptabs.style.display = name === 'access' ? 'none' : '';
-  if (name === 'accounts')  { loadCookies(); twLoadCookies(); igLoadCookies(); }
-  if (name === 'network')   { ttProxyLoad(); }  // also refreshes the WireGuard meta
-  if (name === 'schedules') { loadSettings(); loadYtSettings(); _scheduleSettingsLoad('twitter', 'twSettings'); _scheduleSettingsLoad('instagram', 'igSettings'); }
-  if (name === 'access')    { loadAuthSettings(); }
-  if (name === 'jobs')      { _avifLoadStatus(); _startJobsPoll(); }
-  else                      { _stopJobsPoll(); }
-  if (name === 'diag')      { diagSourceChanged(); }
-}
+// ── Settings (schedule load/save; the pane itself registers via cfg.settings) ──
 
 async function loadSettings() {
   const { ok, data } = await apiJSON('/api/tiktok/settings');
@@ -1547,11 +1923,9 @@ async function runMigration() {
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
 let _jobsPoll    = null;
-let _cleanupPoll = null;
 let _audioPoll   = null;
 
 const _avifWidget      = _makeJobWidget('avif');
-const _cleanupWidget   = _makeJobWidget('cleanup');
 const _audioWidget     = _makeJobWidget('audio');
 const _filecheckWidget = _makeJobWidget('filecheck');
 
@@ -1599,31 +1973,8 @@ function _stopJobsPoll() {
   if (_jobsPoll) { clearInterval(_jobsPoll); _jobsPoll = null; }
 }
 
-// Database cleanup
-
-async function triggerCleanup() {
-  const btn = document.getElementById('job-cleanup-btn');
-  btn.disabled = true;
-  const { ok, data } = await apiJSON('/api/tiktok/db/cleanup', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Could not start cleanup', { type: 'error' }); btn.disabled = false; return; }
-  _cleanupWidget.update({ barPct: null, label: 'Running…' });
-  if (_cleanupPoll) return;
-  _cleanupPoll = setInterval(async () => {
-    const { ok, data } = await apiJSON('/api/tiktok/db/cleanup');
-    if (!ok) return;
-    if (data.running) {
-      _cleanupWidget.update({ barPct: null, label: data.current || 'Running…', steps: data.steps });
-    } else {
-      clearInterval(_cleanupPoll); _cleanupPoll = null;
-      document.getElementById('job-cleanup-btn').disabled = false;
-      _cleanupWidget.update({
-        barPct: 100,
-        label: `Done: ${data.removed} item${data.removed !== 1 ? 's' : ''} removed`,
-        steps: data.steps,
-      });
-    }
-  }, 800);
-}
+// Database cleanup runs through the engine's ttTriggerCleanup export
+// (channels.js) on the engine-generated cleanup card.
 
 // Audio cleanup
 
@@ -2082,19 +2433,18 @@ setInterval(() => { if (_ttTabActive() && !tt.isLive()) loadSounds(); }, 60000);
 window.addEventListener('hashchange', () => { if (_ttTabActive()) { loadCookies(); loadSounds(); } });
 _initAllGliders();
 
-// Global settings platform selector
-initSettingsPlatformTabs();
-PLATFORMS.forEach(p => initDbQueryPane(p.id));
-
-// Resume backfill poll if it was running before page load
-(async () => {
+// Resume the backfill poll when the jobs pane opens while a run is live
+// (also covers a run started before this page load).
+async function _resumeBackfillPoll() {
   const { ok, data } = await apiJSON('/api/tiktok/backfill');
   if (ok && data.running) {
-    document.getElementById('backfillBtn').disabled = true;
-    document.getElementById('backfillStatus').textContent = `Backfilling… ${data.done}/${data.total}`;
+    const btn = document.getElementById('backfillBtn');
+    if (btn) btn.disabled = true;
+    const status = document.getElementById('backfillStatus');
+    if (status) status.textContent = `Backfilling… ${data.done}/${data.total}`;
     _startBackfillPoll();
   }
-})();
+}
 
 // Migration warning
 

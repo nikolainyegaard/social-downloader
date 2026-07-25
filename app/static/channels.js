@@ -54,6 +54,7 @@
  * @property {Function} [videoActionBtnsFn]
  * @property {(v: Object, ch: Object) => string} [videoUrl]  Original post URL on the platform (drives the Link buttons)
  * @property {(v: Object) => {label: string, danger?: boolean, disabled?: boolean, onclick: () => void}[]} [videoMenuItemsFn]  Items for the mobile row ••• menu
+ * @property {{account?: {html: string, onShow?: () => void}, schedule?: {html: string, onShow?: () => void}, network?: {html: string, onShow?: () => void, onHide?: () => void}, jobs?: {html?: string, onShow?: () => void, onHide?: () => void, onRender?: () => void}, diag?: {html: string, onShow?: () => void}}} [settings]  Settings pane overrides and extras; Account/Schedule/Jobs/Database always exist, Network and Diagnostics only when provided
  */
 
 /** @param {ChannelAppConfig} cfg */
@@ -2862,6 +2863,61 @@ function initChannelApp(cfg) {
   // Relative timestamps ("3m ago" on cards and feed rows) still need a
   // clock: re-render from memory once a minute, no fetch.
   setInterval(() => { if (_es) { renderCreators(); _renderFeed(); } }, 60000);
+
+  // ── Settings pane registration ────────────────────────────────────────────
+  // Every platform gets Account, Schedule, Jobs, and Database sections by
+  // default; cfg.settings overrides or extends them. The Jobs section always
+  // ends with the engine's DB cleanup card, and the Database section is the
+  // shared query pane.
+  {
+    const S = cfg.settings || {};
+    const platformLabel = (PLATFORMS.find(p => p.id === cfg.id) || {}).label || cfg.id;
+    const cleanupCard = `
+      <div class="job-card">
+        <div class="job-card-hdr">
+          <div style="flex:1">
+            <div class="job-card-title">Database cleanup</div>
+            <div class="job-card-desc">
+              Removes orphaned thumbnails and cached images left behind when
+              ${CREATORS} are removed from tracking. Also runs VACUUM on the
+              ${platformLabel} SQLite database to compact freed space.
+            </div>
+          </div>
+          <button class="btn-primary" id="job-${P}-cleanup-btn" onclick="${P}TriggerCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+        </div>
+        <div class="job-status" id="job-${P}-cleanup-status" style="display:none">
+          <div id="job-${P}-cleanup-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-${P}-cleanup-bar"></div></div></div>
+          <div class="job-status-text" id="job-${P}-cleanup-text"></div>
+          <div class="job-steps" id="job-${P}-cleanup-steps"></div>
+        </div>
+      </div>`;
+    const sections = [];
+    sections.push({
+      id: 'account', label: 'Account',
+      html:   S.account?.html ?? `<p class="settings-note">${platformLabel} fetches public data and needs no account.</p>`,
+      onShow: S.account?.onShow,
+    });
+    sections.push({
+      id: 'schedule', label: 'Schedule',
+      html:   S.schedule?.html ?? _schedulePaneHtml(`${P}Settings`, `${P}SaveLoopSettings`, CREATORS),
+      onShow: S.schedule?.onShow ?? (() => _scheduleSettingsLoad(cfg.id, `${P}Settings`)),
+    });
+    if (S.network) sections.push({ id: 'network', label: 'Network', ...S.network });
+    sections.push({
+      id: 'jobs', label: 'Jobs',
+      html:     (S.jobs?.html || '') + cleanupCard,
+      onShow:   S.jobs?.onShow,
+      onHide:   S.jobs?.onHide,
+      onRender: S.jobs?.onRender,
+    });
+    if (S.diag) sections.push({ id: 'diag', label: 'Diagnostics', diagFill: true, ...S.diag });
+    sections.push({
+      id: 'database', label: 'Database',
+      html: `<div id="database-${cfg.id}"></div>`,
+      onRender: () => initDbQueryPane(cfg.id),
+    });
+    _settingsRegister(cfg.id, platformLabel, sections);
+  }
 
   // App handle for platform extras (e.g. the TikTok sounds catalog and
   // untracked-user modal) that need to drive the engine-generated UI.

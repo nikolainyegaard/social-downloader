@@ -18,6 +18,8 @@ import random
 import time
 from datetime import datetime, timezone
 
+import config
+
 _24H = 24 * 3600
 
 SESSION_GAP_MIN_SECS = 15  # minimum inter-channel gap within a session
@@ -261,6 +263,12 @@ def run_session_scheduler(platform: str, db, loop_mod,
             # Scheduled wake-up: consume this session slot. Manual triggers do not
             # consume a slot so the next scheduled session still fires as planned.
             session_times = session_times[1:]
+
+        # Disabled platform (Settings > General): nothing runs, not even manual
+        # triggers. Slots are still consumed so re-enabling resumes the cadence.
+        if not config.platform_enabled(platform):
+            print(f"{_ts()} {label} loop: session skipped (platform disabled).")
+            continue
 
         # Paused: scheduled sessions are skipped (their slot is still consumed,
         # so unpausing resumes the normal cadence). Manual triggers run anyway

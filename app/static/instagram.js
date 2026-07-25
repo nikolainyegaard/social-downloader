@@ -21,18 +21,34 @@ initChannelApp({
   profileUrl:        h => `https://www.instagram.com/${h}`,
   videoUrl:          v => `https://www.instagram.com/p/${v.video_id}/`,
   hasStories:        true,
+  settings: {
+    account: {
+      html: _cookiesPaneHtml('igCookie', {
+        site: 'instagram.com',
+        uploadFn: 'igUploadCookies',
+        deleteFn: 'igDeleteCookies',
+        note: `The file must be in Netscape format and include the <code>sessionid</code> and <code>csrftoken</code> cookies.
+          Instagram rate limits sessions created by password logins from tools, so cookies exported from a real
+          browser session are the reliable way in. Profile lookups, post fetching, and stories all need them.`,
+      }),
+      onShow: () => igLoadCookies(),
+    },
+    diag: {
+      html: _diagPaneHtml('igDiag', {
+        note: 'Run raw instaloader API calls and inspect the response. Requires a public account.',
+        placeholder: 'Instagram handle or profile URL',
+        runFn: 'igDiagRun', copyFn: 'igDiagCopy',
+        actions: [{ value: 'profile', label: 'Profile info' }, { value: 'posts', label: 'First 5 posts' }],
+      }),
+    },
+  },
 });
 
-// ── Settings (cookies + schedule) ─────────────────────────────────────────────
+// ── Settings (cookies) ────────────────────────────────────────────────────────
 
 async function igLoadCookies()        { return _cookiesLoad('instagram', 'igCookie'); }
 async function igUploadCookies(input) { return _cookiesUpload('instagram', 'igCookie', input); }
 async function igDeleteCookies()      { return _cookiesDelete('instagram', 'igCookie'); }
-
-async function loadIgSettings() {
-  igLoadCookies();
-  return _scheduleSettingsLoad('instagram', 'igSettings');
-}
 
 // ── Diagnostics ───────────────────────────────────────────────────────────────
 

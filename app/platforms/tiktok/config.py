@@ -39,7 +39,7 @@ def get_proxy_settings() -> dict:
 
     mode is "gluetun" (fixed GLUETUN_PROXY_URL, WireGuard config managed in
     the UI) or "custom" (user-entered url). Settings live in the TikTok DB
-    (Settings > Network > TikTok); the TIKTOK_PROXY env var seeds a custom
+    (Settings > TikTok > Network); the TIKTOK_PROXY env var seeds a custom
     url and enables routing until the UI writes its own values. Installs that
     saved a url before modes existed keep it via the custom default.
     """

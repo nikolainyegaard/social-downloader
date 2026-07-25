@@ -145,9 +145,43 @@ def create_app() -> Flask:
     for _engine in ENGINES.values():
         app.register_blueprint(_engine.create_blueprint())
 
+    from config import platform_enabled, get_disabled_platforms, save_disabled_platforms
+
+    def _platform_list() -> list[dict]:
+        return [{"id": e.platform, "label": e.adapter.label,
+                 "enabled": platform_enabled(e.platform)} for e in ENGINES.values()]
+
     @app.route("/")
     def index():
-        return render_template("index.html", version=APP_VERSION)
+        return render_template("index.html", version=APP_VERSION, platforms=_platform_list())
+
+    # Platform enable/disable (Settings > General). Disabling takes effect
+    # immediately: the scheduler and manual-run worker skip the platform, an
+    # in-flight session is stopped, and the platform's API routes return 403.
+    @app.route("/api/platforms")
+    def get_platforms():
+        return jsonify(_platform_list())
+
+    @app.route("/api/platforms/<platform_id>", methods=["PATCH"])
+    def patch_platform(platform_id):
+        engine = ENGINES.get(platform_id)
+        if engine is None:
+            return jsonify({"error": "unknown platform"}), 404
+        body    = request.get_json(silent=True) or {}
+        enabled = bool(body.get("enabled"))
+        disabled = get_disabled_platforms()
+        if enabled:
+            disabled.discard(platform_id)
+        else:
+            disabled.add(platform_id)
+        save_disabled_platforms(disabled)
+        if not enabled:
+            # Stop everything the platform has running right now
+            engine.loop.request_stop()
+            if platform_id == "tiktok":
+                from platforms.tiktok.sounds import get_sound_loop
+                get_sound_loop(engine).request_stop()
+        return jsonify({"ok": True, "id": platform_id, "enabled": enabled})
 
     @app.route("/api/health")
     def health():

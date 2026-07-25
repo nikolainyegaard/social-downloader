@@ -52,17 +52,23 @@ All loop settings can also be changed from the UI without restarting; the UI val
 
 ## Signing in
 
-**TikTok:** Settings > Accounts > TikTok has a QR code sign-in. Scan it with the TikTok app on your phone; the session is created inside the app's own browser profile, so it carries the right fingerprint from birth. The Reset session button signs out fully by deleting both the cookies and the browser identity, which is also the recovery move when TikTok has flagged the current identity.
+**TikTok:** Settings > TikTok > Account has a QR code sign-in. Scan it with the TikTok app on your phone; the session is created inside the app's own browser profile, so it carries the right fingerprint from birth. The Reset session button signs out fully by deleting both the cookies and the browser identity, which is also the recovery move when TikTok has flagged the current identity.
 
-**Twitter and Instagram:** upload a `cookies.txt` exported from a logged-in browser session under Settings > Accounts, using the [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) extension (Netscape format). The Instagram file must include the `sessionid` and `csrftoken` cookies.
+**Twitter and Instagram:** upload a `cookies.txt` exported from a logged-in browser session under the platform's Account tab in Settings, using the [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) extension (Netscape format). The Instagram file must include the `sessionid` and `csrftoken` cookies.
 
 **YouTube:** no sign-in needed.
 
 ---
 
+## Enabling and disabling platforms
+
+Settings > General lists every platform with an on/off toggle. Disabling a platform stops all of its checks, loops, and background work immediately and removes its tab and settings until it is enabled again; saved media and tracked creators are kept, and re-enabling resumes the normal schedule.
+
+---
+
 ## TikTok VPN / proxy (optional)
 
-Settings > Network can route all TikTok traffic (browser, page fetches, downloads) through a proxy while the web UI and the other platforms stay on the server's own connection. Two modes: any HTTP proxy address, or a [gluetun](https://github.com/qdm12/gluetun) VPN sidecar. For gluetun, add a service named exactly `gluetun` next to the app (the app targets its fixed address `http://gluetun:8888`):
+Settings > TikTok > Network can route all TikTok traffic (browser, page fetches, downloads) through a proxy while the web UI and the other platforms stay on the server's own connection. Two modes: any HTTP proxy address, or a [gluetun](https://github.com/qdm12/gluetun) VPN sidecar. For gluetun, add a service named exactly `gluetun` next to the app (the app targets its fixed address `http://gluetun:8888`):
 
 ```yaml
 services:
@@ -79,7 +85,7 @@ services:
       - ./data/gluetun:/gluetun
 ```
 
-WireGuard credentials are managed in Settings > Network (paste your provider's config file and the fields fill in); the app writes a clean `wg0.conf` under `./data/gluetun/wireguard/`, which gluetun reads at its next container restart.
+WireGuard credentials are managed in Settings > TikTok > Network (paste your provider's config file and the fields fill in); the app writes a clean `wg0.conf` under `./data/gluetun/wireguard/`, which gluetun reads at its next container restart.
 
 **Docker socket (optional):** uncommenting the `/var/run/docker.sock` volume line in `docker-compose.yml` lets the app offer a "Restart gluetun now" action after saving credentials, so new VPN credentials apply without shell access. Be aware of what this grants: the Docker socket gives the container full control of the Docker daemon, equivalent to root on the host. Leave it out unless you use the gluetun setup and accept that tradeoff.
 
@@ -104,7 +110,7 @@ On first startup, the app automatically moves files from the old layout into the
 
 **Fix database paths:**
 
-6. Open the web UI, go to **Settings** (gear icon) > **Jobs** > **TikTok**
+6. Open the web UI, go to **Settings** (gear icon) > **TikTok** > **Jobs**
 7. Click **Scan database** in the path migration card; it detects the old `/app/videos` prefix automatically
 8. The new prefix auto-fills as `/app/media/tiktok`; click **Rewrite paths**
 9. Done; existing videos play immediately without re-downloading

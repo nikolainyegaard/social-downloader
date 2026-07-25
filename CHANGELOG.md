@@ -6,6 +6,14 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ## [Unreleased]
 
+### Added
+- Platforms can now be enabled and disabled from Settings > General. Disabling a platform takes effect immediately: its scheduled sessions, manual runs, and background loops stop (an in-flight session is stopped ASAP), its API routes are rejected, and its tab and settings disappear until it is enabled again. Saved media and tracked creators are kept, and re-enabling resumes the normal schedule
+- A new General settings page holds everything that belongs to no platform: the platform on/off toggles and the app's OIDC login (moved from the old Access section)
+
+### Changed
+- The settings modal was rebuilt around platforms instead of functions: the side menu now lists General plus one entry per enabled platform, and each platform page carries its own Account, Schedule, Jobs, Diagnostics, and Database tabs (plus Network for TikTok). Every pane is generated from the platform's own configuration, so new platforms get their settings automatically
+- The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
+
 ### Fixed
 - The creator count next to the search box now reflects the Privacy and Relation filters: with only those active it showed the plain total and never moved when they changed (an old bug; the Privacy pills had it too)
 - The yellow highlight on a video row opened from the Recent activity feed survives the cursor already resting on it: hovering a highlighted row now tints yellow instead of the grey hover swallowing it, and dismissing the highlight fades out slowly instead of vanishing

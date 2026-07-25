@@ -18,6 +18,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
+import config
 from platforms.tiktok.config import SOUND_LOOP_INTERVAL_MINUTES
 from platforms.tiktok.store import TikTokStore
 
@@ -197,6 +198,9 @@ class SoundLoop:
         from platforms.tiktok.tracker import process_single_sound
         while True:
             sound_id = self._run_queue.get()
+            # Disabled platform: park queued manual runs until re-enabled
+            while not config.platform_enabled("tiktok"):
+                time.sleep(5)
             with self._run_state_lock:
                 if sound_id in self._run_state["queue"]:
                     self._run_state["queue"].remove(sound_id)
@@ -283,6 +287,12 @@ class SoundLoop:
 
             if triggered:
                 print(f"{_ts()} Sound loop: manual trigger received.")
+
+            # Disabled platform (Settings > General): nothing runs, not even
+            # manual triggers.
+            if not config.platform_enabled("tiktok"):
+                print(f"{_ts()} Sound loop: run skipped (platform disabled).")
+                continue
 
             # Paused: skip scheduled runs; manual triggers run anyway.
             if not triggered and str(self.db.get_setting("sound_loop_paused", "0")) == "1":
