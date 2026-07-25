@@ -2024,7 +2024,7 @@ function initChannelApp(cfg) {
             row.classList.remove('video-row-highlight');
             row.addEventListener('transitionend', () => row.classList.remove('video-row-hl-fade'), { once: true });
           }, { once: true });
-        }, 200);
+        }, 100);
       }
     } else {
       // On History/Stories the list stays hidden; still refresh the toolbar so
