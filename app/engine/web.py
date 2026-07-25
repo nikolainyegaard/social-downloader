@@ -129,7 +129,7 @@ def create_channel_blueprint(engine) -> Blueprint:
                 )
                 loop._log(f"Add: @{handle} was already known from sound discovery; now fully tracked")
                 db.add_queue_resolve(handle, "ok")
-                loop.enqueue_channel_run(channel_id, mode="quick")
+                loop.enqueue_channel_run(channel_id, mode="full")
                 return
             # Already tracked. If the lookup resolved to a different current handle
             # than we have stored, the account was renamed on the platform: the id
@@ -169,10 +169,10 @@ def create_channel_blueprint(engine) -> Blueprint:
         )
         loop._log(f"Add: @{info.get('handle') or handle} added; running a first check")
         db.add_queue_resolve(handle, "ok")
-        # Kick off a Quick fetch right away so a freshly added creator gets its
-        # posts (and, for a re-added unbanned account, its ban lifecycle cleared)
-        # without waiting for the next scheduled session.
-        loop.enqueue_channel_run(channel_id, mode="quick")
+        # Kick off a Full fetch right away so a freshly added creator gets its
+        # whole archive (and, for a re-added unbanned account, its ban lifecycle
+        # cleared) without waiting for the next scheduled session.
+        loop.enqueue_channel_run(channel_id, mode="full")
 
     def _add_worker() -> None:
         from config import platform_enabled
