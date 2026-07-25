@@ -4,8 +4,8 @@
 The first OnlyFans build stored user.about and post.text verbatim, so bios
 and post titles in the DB carry <br /> / <p> tags and HTML entities like
 &lt;3. The fetch path now flattens them via api.clean_html; this repairs the
-rows written before that existed: channels.description, videos.title, and
-profile_history old_value rows for the description field.
+rows written before that existed. Same job as the Strip stored HTML card in
+Settings > OnlyFans > Jobs, plus a dry-run mode.
 
 Run inside the container so DATA_DIR and the DB file match the app:
   docker compose exec social-downloader python3 /app/scripts/clean_onlyfans_html.py         # dry run, reports only
@@ -25,14 +25,7 @@ APP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 sys.path.insert(0, APP)
 
 from config import DATA_DIR  # noqa: E402
-from platforms.onlyfans.api import clean_html  # noqa: E402
-
-# (table, id column, text column, extra WHERE)
-TARGETS = [
-    ("channels",        "channel_id", "description", ""),
-    ("videos",          "video_id",   "title",       ""),
-    ("profile_history", "id",         "old_value",   "AND field IN ('description', 'bio')"),
-]
+from platforms.onlyfans.api import clean_stored_html  # noqa: E402
 
 
 def main() -> int:
@@ -48,19 +41,14 @@ def main() -> int:
     print(f"Mode: {'REWRITE' if args.run else 'dry run'}\n")
 
     conn = sqlite3.connect(db_path)
-    total = 0
-    for table, id_col, col, extra in TARGETS:
-        rows = conn.execute(
-            f"SELECT {id_col}, {col} FROM {table} WHERE {col} IS NOT NULL AND {col} != '' {extra}"
-        ).fetchall()
-        changed = [(clean_html(v), rid) for rid, v in rows if clean_html(v) != v]
-        if args.run and changed:
-            conn.executemany(f"UPDATE {table} SET {col} = ? WHERE {id_col} = ?", changed)
-            conn.commit()
-        print(f"{table + '.' + col:30s} rows: {len(rows):5d}   dirty: {len(changed):5d}")
-        total += len(changed)
-
+    results = clean_stored_html(conn, apply=args.run)
+    if args.run:
+        conn.commit()
     conn.close()
+
+    for r in results:
+        print(f"{r['column']:30s} rows: {r['rows']:5d}   dirty: {r['dirty']:5d}")
+    total = sum(r["dirty"] for r in results)
     verb = "rewrote" if args.run else "would rewrite"
     print(f"\nTotal {verb}: {total} rows")
     if not args.run and total:

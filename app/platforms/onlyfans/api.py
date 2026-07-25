@@ -50,6 +50,32 @@ def clean_html(text: str | None) -> str | None:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
+# Stored columns that may hold raw HTML from before clean_html existed:
+# (table, id column, text column, extra WHERE)
+_HTML_TARGETS = (
+    ("channels",        "channel_id", "description", ""),
+    ("videos",          "video_id",   "title",       ""),
+    ("profile_history", "id",         "old_value",   "AND field IN ('description', 'bio')"),
+)
+
+
+def clean_stored_html(conn, apply: bool = True) -> list[dict]:
+    """Strip stored HTML from bios and post titles written before clean_html
+    existed. Returns per-column {column, rows, dirty} counts; apply=False only
+    reports. Idempotent: already-clean rows are never rewritten. Used by the
+    Jobs card (Settings > OnlyFans > Jobs) and scripts/clean_onlyfans_html.py."""
+    results = []
+    for table, id_col, col, extra in _HTML_TARGETS:
+        rows = conn.execute(
+            f"SELECT {id_col}, {col} FROM {table} WHERE {col} IS NOT NULL AND {col} != '' {extra}"
+        ).fetchall()
+        changed = [(clean_html(v), rid) for rid, v in rows if clean_html(v) != v]
+        if apply and changed:
+            conn.executemany(f"UPDATE {table} SET {col} = ? WHERE {id_col} = ?", changed)
+        results.append({"column": f"{table}.{col}", "rows": len(rows), "dirty": len(changed)})
+    return results
+
+
 def normalize_handle(handle: str) -> str:
     """Normalize user handle or URL to plain handle string."""
     handle = handle.strip().lstrip("@")

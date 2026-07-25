@@ -33,6 +33,26 @@ initChannelApp({
       }),
       onShow: () => ofLoadCookies(),
     },
+    jobs: {
+      html: `
+        <div class="job-card">
+          <div class="job-card-hdr">
+            <div style="flex:1">
+              <div class="job-card-title">Strip stored HTML</div>
+              <div class="job-card-desc">
+                Rewrites creator bios and post titles saved before the HTML
+                cleanup existed: br and p tags become line breaks, entities
+                like &amp;lt;3 are decoded. Already-clean rows are left
+                untouched, so this is safe to run repeatedly.
+              </div>
+            </div>
+            <button class="btn-primary" id="job-of-cleanhtml-btn" onclick="ofCleanHtml()" style="flex-shrink:0;align-self:flex-start">Run</button>
+          </div>
+          <div class="job-status" id="job-of-cleanhtml-status" style="display:none">
+            <div class="job-status-text" id="job-of-cleanhtml-text"></div>
+          </div>
+        </div>`,
+    },
     diag: {
       html: _diagPaneHtml('ofDiag', {
         note: 'Run API calls and inspect the response. Requires uploaded OnlyFans auth.',
@@ -48,6 +68,21 @@ initChannelApp({
 async function ofLoadCookies()        { return _cookiesLoad('onlyfans', 'ofCookie'); }
 async function ofUploadCookies(/** @type {any} */ input) { return _cookiesUpload('onlyfans', 'ofCookie', input); }
 async function ofDeleteCookies()      { return _cookiesDelete('onlyfans', 'ofCookie'); }
+
+// Jobs
+async function ofCleanHtml() {
+  const btn    = document.getElementById('job-of-cleanhtml-btn');
+  const status = document.getElementById('job-of-cleanhtml-status');
+  const text   = document.getElementById('job-of-cleanhtml-text');
+  btn.disabled = true;
+  const { ok, data } = await apiJSON('/api/onlyfans/jobs/clean-html', { method: 'POST' });
+  btn.disabled = false;
+  status.style.display = '';
+  if (!ok) { text.textContent = data.error || 'Job failed'; return; }
+  text.textContent = data.rewrote
+    ? `Rewrote ${data.rewrote} row${data.rewrote === 1 ? '' : 's'} (${data.results.filter(r => r.dirty).map(r => `${r.column}: ${r.dirty}`).join(', ')})`
+    : 'Nothing to rewrite: all stored rows are clean';
+}
 
 // Diagnostics
 function ofDiagRun()  { _platformDiagRun('onlyfans', 'ofDiag'); }

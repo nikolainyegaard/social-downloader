@@ -47,6 +47,13 @@ def _register_extra_routes(bp, engine) -> None:
 
     register_cookie_routes(bp, "onlyfans", on_change=api.validate_auth_file)
 
+    @bp.route("/jobs/clean-html", methods=["POST"])
+    def clean_html_job():
+        with engine.db.get_db() as conn:
+            results = api.clean_stored_html(conn)
+        return jsonify({"ok": True, "results": results,
+                        "rewrote": sum(r["dirty"] for r in results)})
+
     @bp.route("/diagnostics", methods=["POST"])
     def run_diagnostics():
         body = request.get_json(silent=True) or {}
