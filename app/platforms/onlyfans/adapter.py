@@ -9,7 +9,10 @@ from engine import ChannelAdapter, ChannelGoneError
 from platforms.onlyfans import api
 from thumbnailer import generate_thumbnail
 
-_GONE_MARKERS = ("not found", "suspended", "disabled", "does not exist")
+# Definitive account-gone signals. Kept narrow: an unsubscribed or renamed
+# creator also reads as "not found", so the ban clears itself once the account
+# is accessible again. Auth failures use different wording and stay transient.
+_GONE_MARKERS = ("not found", "suspended", "does not exist")
 
 
 def _fetch_profile(channel: dict) -> dict:
@@ -42,7 +45,7 @@ def _register_extra_routes(bp, engine) -> None:
     from flask import jsonify, request
     from cookies import register_cookie_routes
 
-    register_cookie_routes(bp, "onlyfans")
+    register_cookie_routes(bp, "onlyfans", on_change=api.validate_auth_file)
 
     @bp.route("/diagnostics", methods=["POST"])
     def run_diagnostics():

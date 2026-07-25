@@ -23,13 +23,13 @@ initChannelApp({
         site: 'onlyfans.com',
         uploadFn: 'ofUploadCookies',
         deleteFn: 'ofDeleteCookies',
-        note: `Upload Netscape format <code>cookies.txt</code> exported from a logged-in OnlyFans browser session.`,
+        note: `Upload an <code>auth.json</code> from a logged-in OnlyFans session (cookie with auth_id and sess, plus x_bc and user_agent). A plain cookies.txt is not enough: OnlyFans keeps x-bc outside cookies.`,
       }),
       onShow: () => ofLoadCookies(),
     },
     diag: {
       html: _diagPaneHtml('ofDiag', {
-        note: 'Run API calls and inspect the response. Requires uploaded OnlyFans cookies.',
+        note: 'Run API calls and inspect the response. Requires uploaded OnlyFans auth.',
         placeholder: 'OnlyFans username or profile URL',
         runFn: 'ofDiagRun', copyFn: 'ofDiagCopy',
         actions: [{ value: 'profile', label: 'Profile info' }, { value: 'posts', label: 'First 5 posts' }],
