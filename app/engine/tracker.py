@@ -377,7 +377,13 @@ def process_single_channel(
         remote_ids = set(remote_posts)
         known_ids, active_ids, _confirm_pending = db.get_video_id_sets(channel_id)
 
-        new_ids       = remote_ids - known_ids
+        # Posts present in the listing with nothing downloadable (OnlyFans
+        # posts whose media is all locked/unpurchased): they count as present
+        # so the deletion diff leaves them alone, but are never recorded,
+        # downloaded, or retried.
+        listing_only = {v for v, p in remote_posts.items() if p.get("listing_only")}
+
+        new_ids       = remote_ids - known_ids - listing_only
         deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
         undeleted_ids = (known_ids - active_ids) & remote_ids
 
@@ -385,7 +391,7 @@ def process_single_channel(
         # the listing just handed us fresh URLs, so download them again. Bounded
         # by the listing itself; a post that stays broken costs one attempt per
         # check it appears in.
-        retry_ids = (db.get_video_ids_missing_file(channel_id) & remote_ids) - new_ids
+        retry_ids = (db.get_video_ids_missing_file(channel_id) & remote_ids) - new_ids - listing_only
 
         # Partial downloads: adapters that report media_count on their posts
         # (OnlyFans, Twitter) let us spot posts with files missing on disk,

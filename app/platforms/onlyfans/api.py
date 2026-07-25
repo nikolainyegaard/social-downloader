@@ -226,7 +226,13 @@ async def _collect_posts(authed, user, limit: int | None = None) -> list[tuple[d
                 "type":      mtype,
                 "duration":  media.get("duration"),
             })
-        if not files:                       # text-only or fully locked: nothing to archive
+        if not files:
+            if not post.media:              # text-only: nothing to archive, ever
+                continue
+            # Media exists but none of it is downloadable (locked/unpurchased):
+            # keep the post in the listing so it does not read as deleted, but
+            # record and download nothing.
+            result.append(({"video_id": str(post.id), "listing_only": True}, []))
             continue
 
         has_video = any(f["type"] in ("video", "gif") for f in files)
@@ -240,7 +246,7 @@ async def _collect_posts(authed, user, limit: int | None = None) -> list[tuple[d
         created = post.created_at
         result.append(({
             "video_id":     str(post.id),
-            "title":        (clean_html(post.text) or "")[:500],
+            "title":        clean_html(post.text) or "",
             "upload_date":  int(created.timestamp()) if created else None,
             "duration":     next((f["duration"] for f in files
                                   if f["type"] in ("video", "gif") and f["duration"]), None),
