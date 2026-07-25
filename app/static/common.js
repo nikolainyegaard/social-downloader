@@ -1987,7 +1987,9 @@ function _renderStatsCharts(host, rows) {
   const accent = css.getPropertyValue('--accent').trim();
   const muted  = css.getPropertyValue('--muted').trim();
   const border = css.getPropertyValue('--border').trim();
-  const font   = '11px ' + (css.getPropertyValue('font-family').trim() || 'sans-serif');
+  // The app font lives on body, not :root; the root's computed font is the
+  // browser's serif default, which uPlot would paint onto the axis labels
+  const font   = '11px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
   const xs     = rows.map(r => r.ts);
   const charts = [];
   for (const m of _STAT_METRICS) {

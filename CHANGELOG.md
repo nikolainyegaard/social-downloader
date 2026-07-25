@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Fixed
+- The Stats tab's chart axis labels render in the app font instead of the browser's serif default (the chart code read the font off the root element, which carries no font; it now reads body)
 - iOS no longer zooms in when focusing the Quick Access, Connect, or note edit prompt fields (font size on mobile raised to Safari's 16px no-zoom threshold)
 - The Fix blank thumbnails job (renamed to Fix broken thumbnails) now also repairs thumbnails truncated by an interrupted write: a crash or container stop mid-encode left a partial AVIF that no browser can decode, and the job's colour-tag scan never flagged it. Thumbnails are also now written to a temp file and renamed on success, so an interrupted encode can no longer leave a partial file behind
 - A banned TikTok user who comes back under a new username is now caught by a normal check: the rename-recovery probes all relied on API endpoints TikTok currently blanks, so the check re-read the dead old profile page as "still banned" until the new handle was added manually. Recovery now also asks yt-dlp (which keeps working) for the current handle, and an account that demonstrably lists videos can no longer be re-confirmed as banned by a failed page read. When yt-dlp lists the videos but never names their author, one video page scrape resolves the current handle instead, so the rename is caught rather than the profile fetch failing on every check
