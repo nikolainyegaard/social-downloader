@@ -56,9 +56,10 @@ def clean_html(text: str | None) -> str | None:
 # Stored columns that may hold raw HTML from before clean_html existed:
 # (table, id column, text column, extra WHERE)
 _HTML_TARGETS = (
-    ("channels",        "channel_id", "description", ""),
-    ("videos",          "video_id",   "title",       ""),
-    ("profile_history", "id",         "old_value",   "AND field IN ('description', 'bio')"),
+    ("channels",        "channel_id", "description",  ""),
+    ("channels",        "channel_id", "display_name", ""),
+    ("videos",          "video_id",   "title",        ""),
+    ("profile_history", "id",         "old_value",    "AND field IN ('description', 'bio', 'display_name')"),
 )
 
 
@@ -231,7 +232,7 @@ async def _profile(authed, user) -> dict:
     return {
         "channel_id":       str(user.id),
         "handle":           user.username,
-        "display_name":     user.name or user.username,
+        "display_name":     clean_html(user.name) or user.username,
         "description":      clean_html(user.about) or None,
         "subscriber_count": None,          # OnlyFans hides a creator's subscriber count from subscribers
         "video_count":      user.posts_count or None,
@@ -251,7 +252,7 @@ async def _profile(authed, user) -> dict:
 
 def fetch_profile_info(handle: str) -> dict:
     """Fetch OnlyFans profile metadata."""
-    return asyncio.run(_run(normalize_handle(handle), _profile))
+    return _run(normalize_handle(handle), _profile)
 
 
 def _ext_from_url(url: str) -> str:
@@ -261,9 +262,19 @@ def _ext_from_url(url: str) -> str:
 
 
 async def _collect_posts(authed, user, limit: int | None = None) -> list[tuple[dict, list[dict]]]:
-    # limit counts total posts (newest first): the library turns it into
-    # ceil(limit/50) page requests; None pages the full archive.
-    posts = await user.get_posts(limit=limit)
+    if limit is None:
+        posts = await user.get_posts()
+    else:
+        # get_posts always pages the creator's full archive (its limit param is
+        # a page size, the total comes from the profile's post count), so a
+        # capped fetch builds just the first page links the same way get_posts
+        # does. Newest posts come first. Tied to ultima-scraper-api==2.2.45.
+        from ultima_scraper_api.apis.onlyfans.classes.extras import endpoint_links
+
+        epl   = endpoint_links()
+        link  = epl.list_posts(user.id)
+        links = epl.create_links(link, min(limit, user.posts_count or limit), limit=50)
+        posts = user.finalize_content_set(await user.scrape_manager.bulk_scrape(links))
     result: list[tuple[dict, list[dict]]] = []
     for post in posts:
         files: list[dict] = []
@@ -317,7 +328,7 @@ async def _collect_stories(authed, user) -> list[dict]:
     stories = await user.get_stories()
     result: list[dict] = []
     for story in stories:
-        for m in story.media:                # OnlyFans stories carry one media each
+        for m in story.media:                # media dicts; usually one per story
             try:
                 picked = story.url_picker(m)
             except Exception:
@@ -330,9 +341,9 @@ async def _collect_stories(authed, user) -> list[dict]:
                     expires = int(datetime.fromisoformat(story.expiredAt).timestamp())
                 except ValueError:
                     pass
-            mtype = getattr(m, "type", "") or "photo"
+            mtype = m.get("type") or "photo"
             result.append({
-                "story_id":     str(m.id) if len(story.media) > 1 else str(story.id),
+                "story_id":     str(m.get("id")) if len(story.media) > 1 else str(story.id),
                 "content_type": "photo" if mtype == "photo" else "video",
                 "posted_at":    int(story.created_at.timestamp()),
                 "expires_at":   expires,
@@ -353,7 +364,7 @@ def iter_profile_posts(channel_id: str, limit: int | None = None) -> Generator[t
     page request instead of the whole archive); None fetches everything."""
     async def _fn(authed, user):
         return await _collect_posts(authed, user, limit)
-    for pair in asyncio.run(_run(_coerce_identifier(channel_id), _fn)):
+    for pair in _run(_coerce_identifier(channel_id), _fn):
         yield pair
 
 
@@ -442,6 +453,7 @@ if __name__ == "__main__":
     assert _validate_auth(ofdl) is None
 
     assert clean_html("Hi!<br /> Bye<br /> <br /> &lt;3") == "Hi!\n Bye\n\n <3"
+    assert clean_html("Lily &lt;3") == "Lily <3"
     assert clean_html("<p>Marin Kitagawa ! I’m here</p>") == "Marin Kitagawa ! I’m here"
     assert clean_html(None) is None and clean_html("") == ""
     print("ok")
