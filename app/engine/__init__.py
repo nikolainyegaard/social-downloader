@@ -36,6 +36,10 @@ class ChannelAdapter:
     normalize_handle: Callable      # (raw: str) -> str
     lookup_profile: Callable        # (handle: str) -> info dict; the add flow
     fetch_profile: Callable         # (channel: dict) -> info dict; the loop flow
+    # iter_posts post_dict convention: view_count holds the platform's headline
+    # engagement number: real views where the platform has them, otherwise likes
+    # (OnlyFans, Instagram). The frontend labels the column via cfg.viewsLabel
+    # ("Likes"), and the tracker refreshes stored values from every listing.
     iter_posts: Callable            # (channel_id: str, limit: int | None) -> iterator of (post_dict, raw_post); limit caps eager fetches, quick mode passes quick_limit
     download_item: Callable         # (engine, channel_id, handle, display_name, vid_id, post, raw, log) -> None
 

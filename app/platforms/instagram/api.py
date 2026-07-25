@@ -186,18 +186,15 @@ def iter_profile_posts(user_id: str, limit: int | None = None) -> Generator[tupl
         data = _web_api_get(url, params, "https://www.instagram.com/")
         for item in data.get("items") or []:
             post = instaloader.Post.from_iphone_struct(_L.context, item)
-            try:
-                view_count = post.video_view_count if post.is_video else None
-            except Exception:
-                # Missing from the feed item; fetching full post metadata
-                # uses another retired doc_id, so never fall through to it
-                view_count = None
             yield {
                 "video_id":     post.shortcode,
                 "title":        (post.caption or "")[:500],
                 "upload_date":  int(post.date_utc.timestamp()),
                 "duration":     None,
-                "view_count":   view_count,
+                # Headline count convention (see engine iter_posts): this feed
+                # has no view counts except play_count on reels, so likes fill
+                # the column; the UI labels it "Likes" via viewsLabel.
+                "view_count":   item.get("like_count"),
                 "content_type": "video" if post.is_video else "image",
             }, post
         if not data.get("more_available"):
