@@ -1127,13 +1127,21 @@ function initChannelApp(cfg) {
     return `<div class="ah-row${actions ? ' has-actions' : ''}">
       <div class="ah-row-content">
         <span class="ah-icon ah-${esc(e.status)}">${icon}</span>
-        <span class="ah-handle">@${esc(e.handle)}</span>
+        <span class="ah-handle" onclick="${P}AhOpen('${esc(e.handle)}')" title="Open @${esc(e.handle)}">@${esc(e.handle)}</span>
         ${status}
         <span class="ah-time">${_recentDate(e.updated_at)}</span>
       </div>
       ${actions ? `<span class="ah-actions">${actions}</span>` : ''}
     </div>`;
   }
+
+  // Resolve at click time (not render time), so rows rendered before the
+  // creators list loads, or after a rename, still find the current creator
+  X('AhOpen', handle => {
+    const ch = creators.find(c => (c.handle || '').toLowerCase() === handle.toLowerCase());
+    if (ch) window[`${P}OpenModal`](ch.channel_id);
+    else showToast(`@${handle} is not tracked.`, { type: 'info' });
+  });
 
   function _renderAddHistory() {
     const el = document.getElementById(`${P}AddHistory`);

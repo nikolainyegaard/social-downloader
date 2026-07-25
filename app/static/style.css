@@ -2032,7 +2032,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
 }
+.ah-handle:hover { color: var(--accent); }
 .ah-ok      { color: var(--green); }
 .ah-error   { color: var(--red); }
 .ah-status.ah-error { cursor: help; }
