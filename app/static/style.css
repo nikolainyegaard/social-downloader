@@ -1358,16 +1358,19 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* ── Custom dropdown (themed <select> replacement) ──────────────────────── */
 
 .dd { position: relative; display: inline-block; }
+/* One typography for every dd (sort, filter, diagnostics): the pill look,
+   11px/600/dim at 26px, so dropdowns and pill groups read as one control set */
 .dd-btn {
   display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
   width: 100%; box-sizing: border-box;
+  height: 26px;
   background: var(--raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  color: var(--text);
-  font-size: 12px;
+  color: var(--text-dim);
+  font-size: 11px; font-weight: 600;
   font-family: inherit;
-  padding: 4px 10px;
+  padding: 0 10px;
   cursor: pointer;
   outline: none;
   white-space: nowrap;
@@ -1394,17 +1397,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   display: block; width: 100%; text-align: left;
   background: none; border: none;
   color: var(--text-dim);
-  font-size: 12.5px; font-family: inherit;
+  font-size: 11px; font-weight: 600; font-family: inherit;
   padding: 7px 10px; border-radius: var(--radius-sm);
   cursor: pointer; white-space: nowrap;
 }
 .dd-opt:hover { background: var(--border); color: var(--text); }
 .dd-opt.active { color: var(--accent); }
-/* Multi-select dropdown (filter groups): pill typography on the button and
-   options so it sits in the filter bar like the pill groups, checkmark on
-   selected options */
-.dd-multi .dd-btn { font-size: 11px; font-weight: 600; color: var(--text-dim); height: 26px; padding: 0 10px; }
-.dd-multi .dd-opt { position: relative; padding-right: 28px; font-size: 11px; font-weight: 600; }
+/* Multi-select dropdown (filter groups): checkmark on selected options */
+.dd-multi .dd-opt { position: relative; padding-right: 28px; }
 .dd-multi .dd-opt.active::after {
   content: ''; position: absolute; right: 11px; top: 50%;
   width: 4px; height: 8px;
