@@ -97,6 +97,11 @@ function initChannelApp(cfg) {
     <button class="btn-primary" onclick="${P}AddCreator()">Add</button>
   </div>
 
+  <div class="qa-panel">
+    <span class="qa-title">Quick Access</span>
+    <div class="qa-row" id="${P}QuickAccess"></div>
+  </div>
+
   <!-- Desktop renders the strip directly (display:contents); on mobile the
        panel becomes a collapsible with the Statistics toggle, closed by default -->
   <div class="stats-panel">
@@ -1423,6 +1428,7 @@ function initChannelApp(cfg) {
     _lastGridRender = Date.now();
     creators = data;
     renderCreators();
+    _renderQuickAccess();
   });
 
   X('GetCreators', () => creators);
@@ -1629,15 +1635,12 @@ function initChannelApp(cfg) {
     _unlockScroll();
   });
 
-  X('ConnectAdd', async () => {
-    if (!modalCreator) return;
-    const id = modalCreator.channel_id;
-    // Typeahead over the already-loaded creators list (instant, no network):
-    // handle and display name substring match, prefix matches first, minus
-    // the open creator and everyone already connected.
-    const taken = new Set([id, ...(_modalConnections || []).map(c => c.channel_id)]);
-    const pool  = creators.filter(c => !taken.has(c.channel_id));
-    const suggest = q => {
+  // Typeahead over the already-loaded creators list (instant, no network):
+  // handle and display name substring match, prefix matches first, minus the
+  // ids in `taken`. Shared by the Connect and Quick Access add prompts.
+  function _creatorSuggest(taken) {
+    const pool = creators.filter(c => !taken.has(c.channel_id));
+    return q => {
       q = q.trim().replace(/^@/, '').toLowerCase();
       if (!q) return [];
       const scored = [];
@@ -1656,9 +1659,15 @@ function initChannelApp(cfg) {
         avatar: c.avatar_cached ? `${API}/channels/${encodeURIComponent(c.channel_id)}/avatar?size=thumb` : null,
       }));
     };
+  }
+
+  X('ConnectAdd', async () => {
+    if (!modalCreator) return;
+    const id = modalCreator.channel_id;
     const raw = await openPrompt({
       title: `Connect a ${CREATOR}`, placeholder: `@handle of a tracked ${CREATOR}`,
-      confirmLabel: 'Connect', suggest,
+      confirmLabel: 'Connect',
+      suggest: _creatorSuggest(new Set([id, ...(_modalConnections || []).map(c => c.channel_id)])),
     });
     if (raw === null || !raw.trim()) return;
     const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(id)}/connections`, {
@@ -1677,6 +1686,54 @@ function initChannelApp(cfg) {
       { method: 'DELETE' });
     if (!ok) { showToast(data.error || 'Could not remove the connection.', { type: 'error' }); return; }
     if (modalCreatorId === id) _applyConnections(data.connections);
+  });
+
+  // ── Quick Access ──────────────────────────────────────────────────────────
+  // Pinned creators under the add bar; the avatar slots and add prompt mirror
+  // the Connected panel. Clicking an avatar opens the creator modal, nothing
+  // else reads the pins.
+  // ponytail: pins live in localStorage (per browser); move to a channels
+  // column if cross-device sync is ever wanted.
+
+  const _QA_MIN_SLOTS = 5;
+  const _qaIds  = () => { try { return JSON.parse(localStorage.getItem(`${P}-quickAccess`) || '[]'); } catch { return []; } };
+  const _qaSave = ids => localStorage.setItem(`${P}-quickAccess`, JSON.stringify(ids));
+  let _qaSig = null;
+
+  function _renderQuickAccess() {
+    const host = _el('QuickAccess');
+    if (!host) return;
+    const ids    = _qaIds();
+    const pinned = ids.map(id => creators.find(c => c.channel_id === id)).filter(Boolean);
+    // Prune pins whose creator was removed, but only once the list has loaded
+    if (creators.length && pinned.length !== ids.length) _qaSave(pinned.map(c => c.channel_id));
+    const sig = JSON.stringify(pinned.map(c => [c.channel_id, c.handle, c.display_name, c.avatar_cached]));
+    if (sig === _qaSig) return;
+    _qaSig = sig;
+    const slots = pinned.map(c => `<span class="qa-slot">${_connAvatar(c)}
+      <button class="conn-row-remove qa-remove" onclick="${P}QuickAccessRemove('${esc(c.channel_id)}')" title="Remove from Quick Access"></button></span>`);
+    slots.push(`<button class="conn-slot conn-slot-add" onclick="${P}QuickAccessAdd()" title="Add a ${CREATOR} to Quick Access">${_connPlusIcon}</button>`);
+    while (slots.length < _QA_MIN_SLOTS) slots.push(`<span class="conn-slot conn-slot-empty"></span>`);
+    host.innerHTML = slots.join('');
+  }
+
+  X('QuickAccessAdd', async () => {
+    const raw = await openPrompt({
+      title: 'Add to Quick Access', placeholder: `@handle of a tracked ${CREATOR}`,
+      confirmLabel: 'Add', suggest: _creatorSuggest(new Set(_qaIds())),
+    });
+    if (raw === null || !raw.trim()) return;
+    const handle = raw.trim().replace(/^@/, '').toLowerCase();
+    const ch = creators.find(c => (c.handle || '').toLowerCase() === handle);
+    if (!ch) { showToast(`No tracked ${CREATOR} matches @${handle}.`, { type: 'error' }); return; }
+    const ids = _qaIds();
+    if (!ids.includes(ch.channel_id)) { ids.push(ch.channel_id); _qaSave(ids); }
+    _renderQuickAccess();
+  });
+
+  X('QuickAccessRemove', id => {
+    _qaSave(_qaIds().filter(x => x !== id));
+    _renderQuickAccess();
   });
 
   X('OpenModal', channelId => {

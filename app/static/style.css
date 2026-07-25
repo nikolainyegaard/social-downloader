@@ -1549,6 +1549,26 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* No hover on touch screens: keep the remove x visible */
 @media (hover: none) { .conn-row-remove { opacity: .7; } }
 .conn-list-foot { padding: 8px 10px; border-top: 1px solid var(--border); display: flex; justify-content: center; }
+
+/* ── Quick Access (front page, under the add bar) ─────────────────────────── */
+/* Reuses the Connected panel's slot classes; desktop is a left-aligned row of
+   fixed-size avatars, mobile becomes a 5-wide evenly spaced grid */
+.qa-panel { display: flex; flex-direction: column; gap: 8px; }
+.qa-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); user-select: none;
+}
+.qa-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.qa-row .conn-slot, .qa-row .conn-avatar-wrap, .qa-slot { width: 48px; height: 48px; }
+.qa-row .conn-letter { font-size: 18px; }
+.qa-slot { position: relative; display: inline-block; }
+.qa-remove {
+  position: absolute; top: -5px; right: -5px; width: 18px; height: 18px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 50%;
+  z-index: 1;
+}
+.qa-slot:hover .qa-remove { opacity: .7; }
+@media (hover: none) { .qa-remove { opacity: .7; } }
 .confirm-check { margin-top: 16px; }
 .confirm-warn { margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--red); line-height: 1.45; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
@@ -2545,6 +2565,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
     background: rgba(0, 0, 0, .4);
   }
   .settings-modal:not(.nav-collapsed) .settings-nav-scrim { display: block; }
+
+  /* Quick Access: 5 avatars per row, evenly spaced across the full width */
+  .qa-row { display: grid; grid-template-columns: repeat(5, 1fr); justify-items: center; gap: 10px 0; }
 
   /* Creator modal header: compact avatar and name, tighter padding */
   .modal-header { padding: 12px 16px; gap: 12px; flex-wrap: wrap; }
