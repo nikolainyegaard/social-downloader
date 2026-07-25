@@ -1921,24 +1921,28 @@ function initChannelApp(cfg) {
   // Per-creator media folder size, fetched lazily when the Info panel or header
   // renders (a folder walk is too costly to run on the channel list). Cached per
   // channel so header re-renders on status polls do not refetch.
-  const _storageCache = {};
+  const _storageCache = {};      // chId -> bytes
+  const _mediaCountCache = {};   // chId -> {photos, videos}: individual files on disk
   const _storageTileVal = chId =>
     _storageCache[chId] != null ? _fmtBytes(_storageCache[chId]) : '<span class="storage-val">…</span>';
+  const _mediaCountVal = (chId, key) =>
+    _mediaCountCache[chId] ? _mediaCountCache[chId][key].toLocaleString() : `<span class="${key}-val">…</span>`;
   async function _fillStorage(chId) {
-    if (_storageCache[chId] != null) return;
-    // Tracked creators already carry the size from the channel list's cached
-    // walk, so reuse it; only untracked ones (not in the list) hit the live route.
+    if (_storageCache[chId] != null && _mediaCountCache[chId]) return;
+    // The channel list's cached walk already carries the size for tracked
+    // creators; show it immediately while the route computes the file counts.
     const listed = creators.find(c => c.channel_id === chId);
-    let bytes;
-    if (listed && listed.media_size_bytes != null) {
-      bytes = listed.media_size_bytes;
-    } else {
-      const { ok, data } = await apiJSON(`${API}/channels/${chId}/storage`);
-      if (!ok || !data || modalCreatorId !== chId) return;
-      bytes = data.bytes || 0;
+    if (_storageCache[chId] == null && listed && listed.media_size_bytes != null) {
+      _storageCache[chId] = listed.media_size_bytes;
+      document.querySelectorAll('.storage-val').forEach(el => { el.textContent = _fmtBytes(listed.media_size_bytes); });
     }
-    _storageCache[chId] = bytes;
-    document.querySelectorAll('.storage-val').forEach(el => { el.textContent = _fmtBytes(bytes); });
+    const { ok, data } = await apiJSON(`${API}/channels/${chId}/storage`);
+    if (!ok || !data || modalCreatorId !== chId) return;
+    _storageCache[chId]    = data.bytes || 0;
+    _mediaCountCache[chId] = { photos: data.photo_files || 0, videos: data.video_files || 0 };
+    document.querySelectorAll('.storage-val').forEach(el => { el.textContent = _fmtBytes(_storageCache[chId]); });
+    document.querySelectorAll('.videos-val').forEach(el => { el.textContent = _mediaCountCache[chId].videos.toLocaleString(); });
+    document.querySelectorAll('.photos-val').forEach(el => { el.textContent = _mediaCountCache[chId].photos.toLocaleString(); });
   }
 
   X('OpenAbout', () => {
@@ -1959,6 +1963,8 @@ function initChannelApp(cfg) {
     if (ch.following_count  != null) statTiles.push({ v: _fmtLarge(ch.following_count),       l: 'Following' });
     if (ch.video_count      != null) statTiles.push({ v: _fmtLarge(ch.video_count || 0),      l: `On ${esc(platformLabel)}` });
     statTiles.push({ v: _fmtLarge(ch.video_total || 0), l: 'Saved' });
+    statTiles.push({ v: _mediaCountVal(ch.channel_id, 'videos'), l: 'Videos' });
+    statTiles.push({ v: _mediaCountVal(ch.channel_id, 'photos'), l: 'Photos' });
     if ((ch.video_deleted || 0) > 0) statTiles.push({ v: ch.video_deleted,   l: 'Deleted',  cls: 'tred' });
     if (ch.video_undeleted)          statTiles.push({ v: ch.video_undeleted, l: 'Restored', cls: 'tyellow' });
     if (cfg.hasStories && ch.story_count) statTiles.push({ v: _fmtLarge(ch.story_count), l: 'Stories' });
@@ -2127,6 +2133,8 @@ function initChannelApp(cfg) {
                updates ? `${P}SetModalView('history')` : '');
     const archiveRows =
         _hgRow('Saved',    _fmtLarge(ch.video_total || 0),   _zero(ch.video_total))
+      + _hgRow('Videos',   _mediaCountVal(ch.channel_id, 'videos'))
+      + _hgRow('Photos',   _mediaCountVal(ch.channel_id, 'photos'))
       + _hgRow('Deleted',  String(ch.video_deleted || 0),    ch.video_deleted   ? ' tred'    : ' tzero')
       + _hgRow('Restored', String(ch.video_undeleted || 0),  ch.video_undeleted ? ' tyellow' : ' tzero')
       + (cfg.hasStories ? _hgRow('Stories', _fmtLarge(ch.story_count || 0), _zero(ch.story_count)) : '')

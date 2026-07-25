@@ -24,6 +24,11 @@ from thumbnailer import thumb_path_for
 REPORTS_DIR = os.path.join(DATA_DIR, "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
+# Individual media files by extension: one post can hold 20 photos, so these
+# counts differ from post counts. Thumbnails are excluded wherever they apply.
+_PHOTO_EXTS = {".avif", ".jpg", ".jpeg", ".png", ".webp"}
+_VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v", ".mkv", ".gif", ".ts"}
+
 
 def _write_report(slug: str, header: str, lines: list[str]) -> str:
     ts       = time.strftime("%Y%m%d-%H%M%S")
@@ -384,20 +389,29 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     @bp.route("/channels/<channel_id>/storage", methods=["GET"])
     def channel_storage(channel_id: str):
-        """Total on-disk size of this creator's media folder, computed on demand
-        (only when the modal Info panel opens, so no cost on the channel list)."""
+        """Size and individual photo/video file counts of this creator's media
+        folder, computed on demand (only when the modal opens, so no cost on
+        the channel list)."""
         ch = db.get_channel(channel_id)
         if not ch:
             return jsonify({"error": "Not found"}), 404
         folder = os.path.join(MEDIA_DIR, platform, f"@{ch['handle']}")
-        total  = 0
+        total = photos = videos = 0
         for dirpath, _dirs, files in os.walk(folder):
+            is_thumbs = os.path.basename(dirpath) == "thumbs"
             for name in files:
                 try:
                     total += os.path.getsize(os.path.join(dirpath, name))
                 except OSError:
-                    pass
-        return jsonify({"bytes": total})
+                    continue
+                if is_thumbs:
+                    continue
+                ext = os.path.splitext(name)[1].lower()
+                if ext in _PHOTO_EXTS:
+                    photos += 1
+                elif ext in _VIDEO_EXTS:
+                    videos += 1
+        return jsonify({"bytes": total, "photo_files": photos, "video_files": videos})
 
     @bp.route("/channels/<channel_id>/videos", methods=["GET"])
     def channel_videos(channel_id: str):
@@ -717,11 +731,6 @@ def create_channel_blueprint(engine) -> Blueprint:
     # (stats poll every 60 s, the channel list every 15 s). Both the aggregate
     # size and the per-creator card sizes are served from this one map.
     _media_size_cache = {"ts": 0.0, "by_handle": {}, "total": 0, "video_files": 0, "photo_files": 0}
-
-    # Individual media files by extension, counted in the same walk that sizes
-    # storage: one post can hold 20 photos, so these differ from post counts.
-    _PHOTO_EXTS = {".avif", ".jpg", ".jpeg", ".png", ".webp"}
-    _VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v", ".mkv", ".gif", ".ts"}
 
     def _media_sizes_by_handle() -> dict:
         now = time.time()
