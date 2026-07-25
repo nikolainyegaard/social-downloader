@@ -1258,7 +1258,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    specificity when the cursor already sits where the row appears) */
 .video-row-highlight:hover { background: color-mix(in srgb, var(--yellow) 30%, transparent); }
 /* Carries the highlight's slow fade-out while the class is being removed */
-.video-row-hl-fade { transition: background 1.5s ease; }
+.video-row-hl-fade { transition: background .5s ease; }
 
 /* Grid view */
 .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 3px; padding: 8px; align-content: start; }
