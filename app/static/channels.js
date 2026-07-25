@@ -1794,6 +1794,18 @@ function initChannelApp(cfg) {
 
   X('QuickAccessRemove', id => _qaSetPin(id, false));
 
+  // Behind the header menu's Add to/Remove from Quick Access item; repaint the
+  // header so the menu label flips (modalCreator can be a different object
+  // than the creators entry _qaSetPin updates, so mirror the field onto it)
+  X('TogglePinModal', async id => {
+    const ch = creators.find(c => c.channel_id === id);
+    await _qaSetPin(id, !(ch && ch.pinned_at));
+    if (modalCreator && modalCreator.channel_id === id) {
+      modalCreator.pinned_at = ch ? ch.pinned_at : null;
+      _renderModalHeader(modalCreator);
+    }
+  });
+
   X('OpenModal', channelId => {
     const ch = creators.find(c => c.channel_id === channelId);
     if (!ch) return;
@@ -2101,7 +2113,7 @@ function initChannelApp(cfg) {
             ${_bookmarkBtn(ch, false)}
             <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
             <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
+            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'${ch.pinned_at ? 'Remove from Quick Access' : 'Add to Quick Access'}',onclick:()=>${P}TogglePinModal('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
           </div>
         </div>
       </div>
@@ -2173,7 +2185,7 @@ function initChannelApp(cfg) {
           ${_bookmarkBtn(ch, false)}
           <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
           <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'${ch.pinned_at ? 'Remove from Quick Access' : 'Add to Quick Access'}',onclick:()=>${P}TogglePinModal('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
           <label class="tracking-toggle" title="${isInactive ? `${ItemsCap} tracking off (profile changes still tracked)` : `${ItemsCap} tracking on`}" style="margin-left:auto">
             <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="${P}SetTracking('${esc(ch.channel_id)}', this.checked)">
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
