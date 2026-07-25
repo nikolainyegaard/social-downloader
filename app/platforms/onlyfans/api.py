@@ -11,6 +11,7 @@ and read back from cookies_path("onlyfans").
 from __future__ import annotations
 
 import asyncio
+import glob
 import html
 import json
 import os
@@ -245,6 +246,7 @@ async def _collect_posts(authed, user, limit: int | None = None) -> list[tuple[d
                                   if f["type"] in ("video", "gif") and f["duration"]), None),
             "view_count":   None,
             "content_type": content_type,
+            "media_count":  len(files),
         }, files))
     return result
 
@@ -266,10 +268,10 @@ def download_post_media(files: list[dict], video_id: str, dest_dir: str,
     Photos are converted to AVIF (original kept only if the encode fails);
     videos and audio are saved as-is. Same policy as the other platforms.
 
-    ponytail: partial failures still return the first saved path, which marks
-    the post downloaded and stops the engine's retry. Post-level retry would
-    re-fetch every sibling forever when one file is permanently broken; if
-    partial losses show up in practice, track per-file success instead.
+    Files already on disk are skipped, so a retry of a partially failed post
+    (the engine requeues posts whose media_count exceeds the files found)
+    only fetches the gaps. Assumes the post's media order is stable between
+    fetches, since files are named by position.
     """
     from photo_converter import encode_avif, CRF_PHOTO
 
@@ -281,6 +283,11 @@ def download_post_media(files: list[dict], video_id: str, dest_dir: str,
 
     for i, file in enumerate(files, 1):
         base = video_id if total == 1 else f"{video_id}_{i:02d}"
+        existing = glob.glob(os.path.join(glob.escape(dest_dir), glob.escape(base) + ".*"))
+        if existing:
+            if first_path is None:
+                first_path = os.path.abspath(existing[0])
+            continue
         ext  = file.get("extension") or ("jpg" if file.get("type") == "photo" else "mp4")
         path = target / f"{base}.{ext}"
         try:

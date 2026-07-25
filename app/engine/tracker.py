@@ -8,7 +8,9 @@ spike guard, and consecutive-failure abort are identical everywhere.
 
 from __future__ import annotations
 
+import os
 import random
+import re
 import threading
 import time
 from typing import Callable
@@ -22,6 +24,25 @@ from thumbnailer import cache_avatar, cache_banner
 
 _CONFIRM_THRESHOLD    = 2
 _ABORT_AFTER_FAILURES = 3  # consecutive channel failures that abort the session (rate limit or auth wall)
+
+# Media filename shapes: {id}.ext single file, {id}_NN.ext numbered siblings.
+_MEDIA_NAME_RX = re.compile(r"^(.+?)(?:_\d+)?\.\w+$")
+
+
+def _media_file_counts(media_dir: str) -> dict[str, int]:
+    """Count media files per post id in a directory; {id}.ext and {id}_NN.ext
+    both count toward id. An id that itself ends in _NN would undercount, but
+    the platforms that report media_count (OnlyFans, Twitter) use numeric ids."""
+    counts: dict[str, int] = {}
+    try:
+        names = os.listdir(media_dir)
+    except OSError:
+        return counts
+    for name in names:
+        m = _MEDIA_NAME_RX.match(name)
+        if m:
+            counts[m.group(1)] = counts.get(m.group(1), 0) + 1
+    return counts
 
 
 def scan_afflicted_stories(db) -> list[dict]:
@@ -366,6 +387,28 @@ def process_single_channel(
         # check it appears in.
         retry_ids = (db.get_video_ids_missing_file(channel_id) & remote_ids) - new_ids
 
+        # Partial downloads: adapters that report media_count on their posts
+        # (OnlyFans, Twitter) let us spot posts with files missing on disk,
+        # counted next to file_path with one listdir per media dir. Shortfalls
+        # rejoin the download queue and the platform downloader skips files
+        # that already exist, so only the gaps are fetched. Also self-heals
+        # files lost from disk.
+        incomplete_ids: set = set()
+        _candidates = [v for v in (remote_ids & known_ids) - new_ids - retry_ids
+                       if remote_posts[v].get("media_count")]
+        if _candidates:
+            file_paths = db.get_video_file_paths(channel_id)
+            dir_counts: dict[str, dict] = {}
+            for vid_id in _candidates:
+                path = file_paths.get(vid_id)
+                if not path:
+                    continue
+                d = os.path.dirname(path)
+                if d not in dir_counts:
+                    dir_counts[d] = _media_file_counts(d)
+                if dir_counts[d].get(vid_id, 0) < remote_posts[vid_id]["media_count"]:
+                    incomplete_ids.add(vid_id)
+
         # Deletion spike guard: a truncated listing looks like a mass deletion.
         # Skip the increments this run and let the ASAP re-check verify.
         deletion_spike = bool(deleted_ids) and len(deleted_ids) >= max(10, len(active_ids) // 4)
@@ -383,14 +426,16 @@ def process_single_channel(
             log(f"  New: {len(new_ids)}")
         if retry_ids:
             log(f"  Retrying failed downloads: {len(retry_ids)}")
+        if incomplete_ids:
+            log(f"  Retrying incomplete downloads: {len(incomplete_ids)}")
         if deleted_ids:
             log(f"  Missing (checking for deletion): {len(deleted_ids)}")
         if undeleted_ids:
             log(f"  Undeleted: {len(undeleted_ids)}")
-        if not (new_ids or retry_ids or deleted_ids or undeleted_ids or recovered):
+        if not (new_ids or retry_ids or incomplete_ids or deleted_ids or undeleted_ids or recovered):
             log("  No changes.")
 
-        _new_sorted = sorted(new_ids | retry_ids)
+        _new_sorted = sorted(new_ids | retry_ids | incomplete_ids)
         for _n, vid_id in enumerate(_new_sorted, 1):
             if stop_event and stop_event.is_set():
                 log("  Loop stop requested: skipping remaining downloads")

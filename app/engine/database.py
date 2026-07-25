@@ -812,6 +812,17 @@ class ChannelDB:
         return {r["video_id"] for r in rows}
 
 
+    def get_video_file_paths(self, channel_id: str) -> dict:
+        """{video_id: file_path} for a channel's downloaded videos."""
+        with self.get_db() as conn:
+            rows = conn.execute(
+                "SELECT video_id, file_path FROM videos "
+                "WHERE channel_id = ? AND file_path IS NOT NULL",
+                (channel_id,)
+            ).fetchall()
+        return {r["video_id"]: r["file_path"] for r in rows}
+
+
     def add_video(self, video_id: str, channel_id: str, title: str | None, upload_date: int | None,
                   view_count: int | None = None, duration: float | None = None,
                   content_type: str | None = None) -> None:

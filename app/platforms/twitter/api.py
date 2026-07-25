@@ -8,6 +8,7 @@ survives handle changes.
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import pathlib
@@ -104,6 +105,7 @@ def iter_profile_posts(user_id: str, limit: int | None = None) -> Generator[tupl
             continue
         if tweet_id != current_id:
             if current_id is not None:
+                current_post["media_count"] = len(current_files)
                 yield current_post, current_files
             date = kw.get("date")
             current_id    = tweet_id
@@ -129,6 +131,7 @@ def iter_profile_posts(user_id: str, limit: int | None = None) -> Generator[tupl
         current_files.append(file)
 
     if current_id is not None:
+        current_post["media_count"] = len(current_files)
         yield current_post, current_files
 
 
@@ -138,6 +141,10 @@ def download_post_media(files: list[dict], video_id: str, dest_dir: str,
 
     Videos are saved as-is; photos are converted to AVIF with the original
     kept only if the encode fails (same policy as TikTok photo posts).
+
+    Files already on disk are skipped, so a retry of a partially failed post
+    (the engine requeues posts whose media_count exceeds the files found)
+    only fetches the gaps.
     """
     from photo_converter import encode_avif, CRF_PHOTO
 
@@ -149,6 +156,11 @@ def download_post_media(files: list[dict], video_id: str, dest_dir: str,
 
     for i, file in enumerate(files, 1):
         base = video_id if total == 1 else f"{video_id}_{i:02d}"
+        existing = glob.glob(os.path.join(glob.escape(dest_dir), glob.escape(base) + ".*"))
+        if existing:
+            if first_path is None:
+                first_path = os.path.abspath(existing[0])
+            continue
         ext  = file.get("extension") or ("mp4" if file.get("type") != "photo" else "jpg")
         path = target / f"{base}.{ext}"
         try:
