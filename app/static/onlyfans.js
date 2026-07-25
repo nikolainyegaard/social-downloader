@@ -8,6 +8,7 @@ initChannelApp({
   creatorNounPlural: 'creators',
   itemNoun:          'post',
   itemNounPlural:    'posts',
+  hasStories:        true,
   subLabelCard:      'subscribers',
   subLabelModal:     'subscribers',
   subLabelSort:      'Subscribers',

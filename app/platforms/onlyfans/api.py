@@ -17,6 +17,8 @@ import json
 import os
 import pathlib
 import re
+import threading
+from datetime import datetime
 from typing import Generator
 from urllib.parse import urlparse
 
@@ -148,27 +150,81 @@ def _coerce_identifier(value: str) -> int | str:
     return int(value) if value.isdigit() else value
 
 
-async def _run(identifier, fn):
-    """Authenticate and run fn(authed, user) inside the live session.
+# ── Persistent session ─────────────────────────────────────────────────────────
+# One background event loop owns a single logged-in UltimaScraperAPI session,
+# shared by profile, post, and story fetches (previously every call was a fresh
+# login, so two or three per creator per check). The session is dropped when the
+# uploaded auth file changes or a call fails unexpectedly; the next call then
+# logs in fresh.
 
-    login_context closes its aiohttp session on exit, so every call to the API
-    must happen inside this block, never on the returned objects afterwards.
+_session: dict = {"loop": None, "lock": None, "ctx": None, "authed": None, "auth_mtime": None}
+_session_thread_lock = threading.Lock()
 
-    ponytail: re-authenticates on every call (profile fetch and post fetch are
-    separate engine hooks, so that is two logins per creator per check). Fine at
-    a handful of creators; if OnlyFans rate-limits the re-auth, cache one authed
-    session per loop pass the way TikTok's browser_gate does.
-    """
-    import ultima_scraper_api
 
-    api = ultima_scraper_api.select_api("onlyfans")
-    async with api.login_context(auth_json=_load_auth()) as authed:
+def _session_loop() -> asyncio.AbstractEventLoop:
+    with _session_thread_lock:
+        if _session["loop"] is None:
+            loop = asyncio.new_event_loop()
+            threading.Thread(target=loop.run_forever, daemon=True, name="of-session").start()
+            _session["loop"] = loop
+        return _session["loop"]
+
+
+async def _close_session() -> None:
+    ctx = _session["ctx"]
+    _session["ctx"] = _session["authed"] = _session["auth_mtime"] = None
+    if ctx is not None:
+        try:
+            await ctx.__aexit__(None, None, None)
+        except Exception:
+            pass
+
+
+async def _get_authed():
+    """Return the cached logged-in session, logging in (again) when there is
+    none or the auth file changed since the last login."""
+    if _session["lock"] is None:            # bg loop is single-threaded: no race
+        _session["lock"] = asyncio.Lock()
+    async with _session["lock"]:
+        auth  = _load_auth()                 # clear error if missing or invalid
+        mtime = os.path.getmtime(cookies_path("onlyfans"))
+        if _session["authed"] is not None and _session["auth_mtime"] == mtime:
+            return _session["authed"]
+        await _close_session()
+        import ultima_scraper_api
+
+        api = ultima_scraper_api.select_api("onlyfans")
+        ctx = api.login_context(auth_json=auth)
+        authed = await ctx.__aenter__()
         if not authed:
+            await ctx.__aexit__(None, None, None)
             raise RuntimeError("OnlyFans authentication failed; re-upload auth")
+        _session.update(ctx=ctx, authed=authed, auth_mtime=mtime)
+        return authed
+
+
+async def _use_session(identifier, fn):
+    authed = await _get_authed()
+    try:
         user = await authed.get_user(identifier)
         if not user:
             raise ValueError(f"OnlyFans user {identifier} not found")
         return await fn(authed, user)
+    except ValueError:
+        raise                                # creator gone; the session is fine
+    except Exception:
+        async with _session["lock"]:         # anything else may be a dead session
+            await _close_session()
+        raise
+
+
+def _run(identifier, fn):
+    """Run fn(authed, user) on the shared logged-in session.
+
+    All API calls must happen inside fn, never on returned objects afterwards:
+    the session can be replaced between _run calls."""
+    fut = asyncio.run_coroutine_threadsafe(_use_session(identifier, fn), _session_loop())
+    return fut.result()
 
 
 async def _profile(authed, user) -> dict:
@@ -255,6 +311,40 @@ async def _collect_posts(authed, user, limit: int | None = None) -> list[tuple[d
             "media_count":  len(files),
         }, files))
     return result
+
+
+async def _collect_stories(authed, user) -> list[dict]:
+    stories = await user.get_stories()
+    result: list[dict] = []
+    for story in stories:
+        for m in story.media:                # OnlyFans stories carry one media each
+            try:
+                picked = story.url_picker(m)
+            except Exception:
+                picked = None
+            if not picked:                   # locked or DRM: nothing to save
+                continue
+            expires = None
+            if story.expiredAt:
+                try:
+                    expires = int(datetime.fromisoformat(story.expiredAt).timestamp())
+                except ValueError:
+                    pass
+            mtype = getattr(m, "type", "") or "photo"
+            result.append({
+                "story_id":     str(m.id) if len(story.media) > 1 else str(story.id),
+                "content_type": "photo" if mtype == "photo" else "video",
+                "posted_at":    int(story.created_at.timestamp()),
+                "expires_at":   expires,
+                "media_url":    picked.geturl(),
+            })
+    return result
+
+
+def fetch_stories(channel_id: str) -> list[dict]:
+    """Currently live stories of a creator, mapped to the engine story contract
+    ({story_id, content_type, posted_at, expires_at, media_url})."""
+    return _run(_coerce_identifier(channel_id), _collect_stories)
 
 
 def iter_profile_posts(channel_id: str, limit: int | None = None) -> Generator[tuple[dict, list[dict]], None, None]:
