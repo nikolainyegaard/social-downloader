@@ -667,7 +667,7 @@ const tt = initChannelApp({
     { label: 'Storage',       value: _fmtBytes(s.media_size_bytes || 0) },
   ],
   extraFilterGroups: [{
-    key: 'priv', label: 'Privacy',
+    key: 'priv', label: 'Privacy', dropdown: true,
     options: [
       { key: 'public',  label: 'Public'  },
       { key: 'private', label: 'Private' },
@@ -682,6 +682,17 @@ const tt = initChannelApp({
         : 'public';  // includes not-yet-checked users so new adds show under the default filter
       return set.has(key);
     },
+  }, {
+    key: 'rel', label: 'Relation', dropdown: true,
+    options: [
+      { key: 'friends',     label: 'Friends'     },
+      { key: 'following',   label: 'Following'   },
+      { key: 'follows_you', label: 'Follows you' },
+      { key: 'none',        label: 'No relation' },
+    ],
+    // Same relation codes the card pills render; unknown relation only shows
+    // while the filter is inactive
+    test: (u, set) => set.has({ 2: 'friends', 1: 'following', 6: 'follows_you', 0: 'none' }[u.relation]),
   }],
   extraViews: [{
     key: 'sounds', label: 'Sounds',

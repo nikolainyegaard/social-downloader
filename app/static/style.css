@@ -1400,6 +1400,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .dd-opt:hover { background: var(--border); color: var(--text); }
 .dd-opt.active { color: var(--accent); }
+/* Multi-select dropdown (filter groups): checkmark on selected options */
+.dd-multi .dd-opt { position: relative; padding-right: 28px; }
+.dd-multi .dd-opt.active::after {
+  content: ''; position: absolute; right: 11px; top: 50%;
+  width: 4px; height: 8px;
+  border: solid currentColor; border-width: 0 2px 2px 0;
+  transform: translateY(-60%) rotate(45deg);
+}
 
 /* ── Confirm / prompt dialog ────────────────────────────────────────────── */
 

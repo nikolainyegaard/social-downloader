@@ -33,7 +33,7 @@
  * @property {boolean} [uploadDateOnly]  Render dates without time (YouTube)
  * @property {boolean} [hasBanner]       Show the banner slot in the detail modal
  * @property {Object<string, string>} [fieldLabels]     profile_history field -> label
- * @property {{key: string, label: string, defaults?: string[], options: {key: string, label: string}[], test: (ch: Object, active: Set<string>) => boolean}[]} [extraFilterGroups]
+ * @property {{key: string, label: string, defaults?: string[], dropdown?: boolean, options: {key: string, label: string}[], test: (ch: Object, active: Set<string>) => boolean}[]} [extraFilterGroups]
  * @property {{key: string, label: string, controlsHtml?: string, emptyLabel?: string, show: (search: string) => void}[]} [extraViews]
  * @property {{key: string, icon: string, title: string, label?: string}[]} [viewKeys]  Video-type filter tabs in the detail modal (label is the tab text)
  * @property {(view: string, vids: Object[]) => Object[]} [viewVideoFilter]
@@ -200,9 +200,9 @@ function initChannelApp(cfg) {
         ${EXTRA_FILTER_GROUPS.map(g => `
         <div class="filter-row">
           <span class="filter-row-label">${g.label}</span>
-          <div class="filter-pills multi">
+          ${g.dropdown ? _fdHtml(g) : `<div class="filter-pills multi">
             ${g.options.map(o => `<button class="filter-pill${(g.defaults || []).includes(o.key) ? ' active' : ''}" id="${P}f_${g.key}_${o.key}" onclick="${P}SetFilter('${g.key}','${o.key}')">${o.label}</button>`).join('')}
-          </div>
+          </div>`}
         </div>`).join('')}
         <div class="filter-row">
           <span class="filter-row-label">Tracking</span>
@@ -1205,6 +1205,7 @@ function initChannelApp(cfg) {
         document.getElementById(id)?.classList.toggle('active', filter[group].has(v));
       });
     }
+    EXTRA_FILTER_GROUPS.forEach(g => { if (g.dropdown) _fdSyncLabel(g); });
   }
 
   X('SetFilter', (group, value) => {
@@ -1213,8 +1214,39 @@ function initChannelApp(cfg) {
     Object.entries(_filterPillIds(group)).forEach(([v, id]) => {
       document.getElementById(id)?.classList.toggle('active', set.has(v));
     });
+    const g = EXTRA_FILTER_GROUPS.find(g => g.key === group);
+    if (g && g.dropdown) _fdSyncLabel(g);
     renderCreators();
   });
+
+  // Multi-select dropdown variant of a filter group (extraFilterGroups
+  // dropdown: true). Options reuse the pill id scheme and SetFilter toggling,
+  // so the active-class sync above covers them; clicking an option keeps the
+  // menu open (only outside clicks and _ddPick close a .dd), and the button
+  // label summarizes the selection. Function declarations: _sectionHtml runs
+  // before this point in the closure.
+  function _fdLabel(g, set) {
+    const sel = g.options.filter(o => set.has(o.key));
+    if (!sel.length) return 'Any';
+    if (sel.length === g.options.length) return 'All';
+    if (sel.length <= 2) return sel.map(o => o.label).join(', ');
+    return `${sel[0].label} +${sel.length - 1}`;
+  }
+
+  function _fdHtml(g) {
+    const sel = new Set(g.defaults || []);
+    return `<div class="dd dd-multi" id="${P}Fd_${g.key}">
+      <button type="button" class="dd-btn" onclick="_ddToggle(this)">
+        <span class="dd-label">${esc(_fdLabel(g, sel))}</span><span class="dd-caret">▾</span></button>
+      <div class="dd-menu" role="listbox">
+        ${g.options.map(o => `<button type="button" class="dd-opt${sel.has(o.key) ? ' active' : ''}" id="${P}f_${g.key}_${o.key}" onclick="${P}SetFilter('${g.key}','${o.key}')">${esc(o.label)}</button>`).join('')}
+      </div></div>`;
+  }
+
+  function _fdSyncLabel(g) {
+    const el = document.querySelector(`#${P}Fd_${g.key} .dd-label`);
+    if (el) el.textContent = _fdLabel(g, filter[g.key]);
+  }
 
   X('SetSortField', field => {
     sort.field = field;
