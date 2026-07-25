@@ -584,9 +584,13 @@ function initChannelApp(cfg) {
 
   // ── Stats panel ───────────────────────────────────────────────────────────
 
+  // Videos/Photos count individual media files on disk (one post can be 20
+  // photos), unlike Saved which counts posts. Same layout as TikTok's bar.
   const _statsRows = cfg.statsRows || (s => [
     { label: `Tracked ${CREATORS}`, value: (s.channel_count || 0).toLocaleString() },
     { label: `Saved ${ITEMS}`,      value: (s.saved_count   || 0).toLocaleString() },
+    { label: 'Videos',              value: (s.media_video_files || 0).toLocaleString() },
+    { label: 'Photos',              value: (s.media_photo_files || 0).toLocaleString() },
     { label: 'Deleted',             value: (s.deleted_count || 0).toLocaleString() },
     { label: 'Latest saved',        value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
     { label: 'Storage',             value: _fmtBytes(s.media_size_bytes || 0) },

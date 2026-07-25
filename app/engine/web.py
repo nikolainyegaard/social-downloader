@@ -716,24 +716,39 @@ def create_channel_blueprint(engine) -> Blueprint:
     # file under its @handle folder and the result is cached for 15 minutes
     # (stats poll every 60 s, the channel list every 15 s). Both the aggregate
     # size and the per-creator card sizes are served from this one map.
-    _media_size_cache = {"ts": 0.0, "by_handle": {}, "total": 0}
+    _media_size_cache = {"ts": 0.0, "by_handle": {}, "total": 0, "video_files": 0, "photo_files": 0}
+
+    # Individual media files by extension, counted in the same walk that sizes
+    # storage: one post can hold 20 photos, so these differ from post counts.
+    _PHOTO_EXTS = {".avif", ".jpg", ".jpeg", ".png", ".webp"}
+    _VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v", ".mkv", ".gif", ".ts"}
 
     def _media_sizes_by_handle() -> dict:
         now = time.time()
         if now - _media_size_cache["ts"] > 900:
             by_handle: dict = {}
+            video_files = photo_files = 0
             root = os.path.join(MEDIA_DIR, platform)
             for dirpath, _dirs, files in os.walk(root):
                 top = os.path.relpath(dirpath, root).split(os.sep)[0]
                 if not top.startswith("@"):
                     continue
-                handle = top[1:]
+                handle    = top[1:]
+                is_thumbs = os.path.basename(dirpath) == "thumbs"
                 for name in files:
                     try:
                         by_handle[handle] = by_handle.get(handle, 0) + os.path.getsize(os.path.join(dirpath, name))
                     except OSError:
-                        pass
-            _media_size_cache.update(ts=now, by_handle=by_handle, total=sum(by_handle.values()))
+                        continue
+                    if is_thumbs:
+                        continue                 # thumbnails size storage but are not saved media
+                    ext = os.path.splitext(name)[1].lower()
+                    if ext in _PHOTO_EXTS:
+                        photo_files += 1
+                    elif ext in _VIDEO_EXTS:
+                        video_files += 1
+            _media_size_cache.update(ts=now, by_handle=by_handle, total=sum(by_handle.values()),
+                                     video_files=video_files, photo_files=photo_files)
         return _media_size_cache["by_handle"]
 
     def _media_size_bytes() -> int:
@@ -743,7 +758,9 @@ def create_channel_blueprint(engine) -> Blueprint:
     @bp.route("/stats", methods=["GET"])
     def get_aggregate_stats():
         stats = db.get_aggregate_stats()
-        stats["media_size_bytes"] = _media_size_bytes()
+        stats["media_size_bytes"]  = _media_size_bytes()  # refreshes the cache
+        stats["media_video_files"] = _media_size_cache["video_files"]
+        stats["media_photo_files"] = _media_size_cache["photo_files"]
         return jsonify(stats)
 
     @bp.route("/recent", methods=["GET"])
