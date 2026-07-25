@@ -203,8 +203,10 @@ def _ext_from_url(url: str) -> str:
     return ext if ext.isalnum() and len(ext) <= 5 else ""
 
 
-async def _collect_posts(authed, user) -> list[tuple[dict, list[dict]]]:
-    posts = await user.get_posts()          # defaults fetch the full post count
+async def _collect_posts(authed, user, limit: int | None = None) -> list[tuple[dict, list[dict]]]:
+    # limit counts total posts (newest first): the library turns it into
+    # ceil(limit/50) page requests; None pages the full archive.
+    posts = await user.get_posts(limit=limit)
     result: list[tuple[dict, list[dict]]] = []
     for post in posts:
         files: list[dict] = []
@@ -247,9 +249,13 @@ async def _collect_posts(authed, user) -> list[tuple[dict, list[dict]]]:
     return result
 
 
-def iter_profile_posts(channel_id: str) -> Generator[tuple[dict, list[dict]], None, None]:
-    """Yield (post_dict, media_files) pairs for an OnlyFans creator's posts."""
-    for pair in asyncio.run(_run(_coerce_identifier(channel_id), _collect_posts)):
+def iter_profile_posts(channel_id: str, limit: int | None = None) -> Generator[tuple[dict, list[dict]], None, None]:
+    """Yield (post_dict, media_files) pairs for an OnlyFans creator's posts,
+    newest first. limit caps the fetch (quick checks pass quick_limit, one
+    page request instead of the whole archive); None fetches everything."""
+    async def _fn(authed, user):
+        return await _collect_posts(authed, user, limit)
+    for pair in asyncio.run(_run(_coerce_identifier(channel_id), _fn)):
         yield pair
 
 

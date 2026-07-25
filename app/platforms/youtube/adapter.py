@@ -27,9 +27,10 @@ def _fetch_profile(channel: dict) -> dict:
         raise
 
 
-def _iter_posts(channel_id: str):
-    # yt-dlp flat extraction returns the full list in one call either way, so
-    # quick mode saves no API calls here; the semantics match the other platforms.
+def _iter_posts(channel_id: str, limit: int | None = None):
+    # limit is unused: yt-dlp flat extraction returns the full list in one call
+    # either way, so quick mode saves no API calls here; the semantics match the
+    # other platforms.
     for v in api.fetch_channel_videos(channel_id):
         yield v, None
 

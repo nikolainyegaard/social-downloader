@@ -80,8 +80,11 @@ def fetch_profile_info(handle: str) -> dict:
     }
 
 
-def iter_profile_posts(user_id: str) -> Generator[tuple[dict, list[dict]], None, None]:
+def iter_profile_posts(user_id: str, limit: int | None = None) -> Generator[tuple[dict, list[dict]], None, None]:
     """Yield (post_dict, media_files) pairs for all media tweets of a user.
+
+    limit is unused: gallery-dl paginates lazily, so the engine stopping
+    consumption already stops the fetching.
 
     media_files is a list of {url, extension, type, duration} dicts straight
     from gallery-dl, consumed by download_post_media.

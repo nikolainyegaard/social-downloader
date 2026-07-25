@@ -166,8 +166,11 @@ def fetch_profile_info(handle: str) -> dict:
     }
 
 
-def iter_profile_posts(user_id: str) -> Generator[tuple[dict, object], None, None]:
+def iter_profile_posts(user_id: str, limit: int | None = None) -> Generator[tuple[dict, object], None, None]:
     """Yield (post_dict, raw_post) pairs for all posts of a profile, newest first.
+
+    limit is unused: pagination is lazy, so the engine stopping consumption
+    already stops the fetching.
 
     Paginates the web frontend's /api/v1/feed/user/ endpoint directly:
     instaloader's Profile.get_posts uses a GraphQL doc_id Instagram retired,

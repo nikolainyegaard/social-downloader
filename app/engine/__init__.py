@@ -36,7 +36,7 @@ class ChannelAdapter:
     normalize_handle: Callable      # (raw: str) -> str
     lookup_profile: Callable        # (handle: str) -> info dict; the add flow
     fetch_profile: Callable         # (channel: dict) -> info dict; the loop flow
-    iter_posts: Callable            # (channel_id: str) -> iterator of (post_dict, raw_post)
+    iter_posts: Callable            # (channel_id: str, limit: int | None) -> iterator of (post_dict, raw_post); limit caps eager fetches, quick mode passes quick_limit
     download_item: Callable         # (engine, channel_id, handle, display_name, vid_id, post, raw, log) -> None
 
     register_extra_routes: Callable | None = None   # (bp, engine) -> None

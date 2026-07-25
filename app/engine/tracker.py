@@ -334,7 +334,11 @@ def process_single_channel(
             _stage(f"fetching {noun} list")
             remote_posts: dict[str, dict]   = {}
             raw_posts:    dict[str, object] = {}
-            for post_dict, raw_post in adapter.iter_posts(channel_id):
+            # The limit reaches adapters whose fetch is eager (OnlyFans pages the
+            # whole archive before yielding); lazy generators may ignore it since
+            # the break below already stops their pagination.
+            _limit = adapter.quick_limit if mode == "quick" else None
+            for post_dict, raw_post in adapter.iter_posts(channel_id, limit=_limit):
                 if stop_event and stop_event.is_set():
                     # A truncated listing must not feed the deletion diff; the
                     # channel stays due and is fetched fresh next session

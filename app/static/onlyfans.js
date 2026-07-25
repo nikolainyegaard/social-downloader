@@ -16,7 +16,7 @@ initChannelApp({
   addPlaceholder:    '@username or profile URL',
   addAriaLabel:      'OnlyFans username',
   profileUrl:        h => `https://onlyfans.com/${h}`,
-  videoUrl:          (v, ch) => `https://onlyfans.com/${ch.handle}`,
+  videoUrl:          (v, ch) => `https://onlyfans.com/${v.video_id}/${ch.handle}`,
   settings: {
     account: {
       html: _cookiesPaneHtml('ofCookie', {

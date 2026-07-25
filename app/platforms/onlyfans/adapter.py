@@ -68,7 +68,9 @@ def _register_extra_routes(bp, engine) -> None:
             elif action == "posts":
                 info = api.fetch_profile_info(handle)
                 posts = []
-                for post_dict, files in api.iter_profile_posts(info["channel_id"]):
+                # limit=20 not 5: text-only and fully locked posts are filtered
+                # out of the iterator, so leave headroom to still fill 5.
+                for post_dict, files in api.iter_profile_posts(info["channel_id"], limit=20):
                     posts.append({**post_dict, "media": files})
                     if len(posts) >= 5:
                         break
