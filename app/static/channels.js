@@ -98,7 +98,7 @@ function initChannelApp(cfg) {
   </div>
 
   <div class="qa-panel">
-    <span class="qa-title">Quick Access</span>
+    <button class="qa-title" onclick="${P}OpenQaList()" title="Manage Quick Access">Quick Access</button>
     <div class="qa-row" id="${P}QuickAccess"></div>
   </div>
 
@@ -290,6 +290,22 @@ function initChannelApp(cfg) {
         <div class="conn-list-rows" id="${P}ConnListRows"></div>
         <div class="conn-list-foot">
           <button class="btn-sm" onclick="${P}ConnectAdd()">Connect a ${CREATOR}…</button>
+        </div>
+      </div>
+    </div>`);
+
+  // Same list modal shape for managing Quick Access pins (opened from the
+  // panel title); rows open the creator's modal, the x unpins.
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="conn-backdrop" id="${P}QaListModal" style="display:none" onclick="if(event.target===this)${P}CloseQaList()">
+      <div class="conn-list">
+        <div class="conn-list-head">
+          <span>Quick Access</span>
+          <button class="modal-close" onclick="${P}CloseQaList()" title="Close"></button>
+        </div>
+        <div class="conn-list-rows" id="${P}QaListRows"></div>
+        <div class="conn-list-foot">
+          <button class="btn-sm" onclick="${P}QuickAccessAdd()">Add a ${CREATOR}…</button>
         </div>
       </div>
     </div>`);
@@ -1708,12 +1724,39 @@ function initChannelApp(cfg) {
     const sig = JSON.stringify(pinned.map(c => [c.channel_id, c.handle, c.display_name, c.avatar_cached]));
     if (sig === _qaSig) return;
     _qaSig = sig;
-    const slots = pinned.map(c => `<span class="qa-slot">${_connAvatar(c)}
-      <button class="conn-row-remove qa-remove" onclick="${P}QuickAccessRemove('${esc(c.channel_id)}')" title="Remove from Quick Access"></button></span>`);
+    const slots = pinned.map(c => _connAvatar(c));
     slots.push(`<button class="conn-slot conn-slot-add" onclick="${P}QuickAccessAdd()" title="Add a ${CREATOR} to Quick Access">${_connPlusIcon}</button>`);
     while (slots.length < _QA_MIN_SLOTS) slots.push(`<span class="conn-slot conn-slot-empty"></span>`);
     host.innerHTML = slots.join('');
+    _renderQaListRows();
   }
+
+  function _renderQaListRows() {
+    const host = _el('QaListRows');
+    if (!host) return;
+    const pinned = _qaPinned();
+    host.innerHTML = pinned.length ? pinned.map(c => `
+      <div class="conn-row" onclick="if(!event.target.closest('button')){${P}CloseQaList();${P}OpenModal('${esc(c.channel_id)}')}">
+        ${_connAvatar(c)}
+        <span class="conn-row-names">
+          <span class="conn-row-name">${esc(c.display_name || c.handle)}</span>
+          <span class="conn-row-handle">@${esc(c.handle)}</span>
+        </span>
+        <button class="conn-row-remove" onclick="${P}QuickAccessRemove('${esc(c.channel_id)}')" title="Remove from Quick Access"></button>
+      </div>`).join('')
+    : `<div class="conn-empty">No pinned ${CREATORS} yet</div>`;
+  }
+
+  X('OpenQaList', () => {
+    _renderQaListRows();
+    _el('QaListModal').style.display = 'flex';
+    _lockScroll();
+  });
+
+  X('CloseQaList', () => {
+    _el('QaListModal').style.display = 'none';
+    _unlockScroll();
+  });
 
   async function _qaSetPin(id, pinned) {
     const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(id)}/pin`, {
@@ -2645,6 +2688,10 @@ function initChannelApp(cfg) {
     // The connections list sits over the creator modal; close it first.
     if (_el('ConnListModal')?.style.display !== 'none') {
       window[`${P}CloseConnList`]();
+      return;
+    }
+    if (_el('QaListModal')?.style.display !== 'none') {
+      window[`${P}CloseQaList`]();
       return;
     }
     if (_el('ModalBackdrop')?.style.display !== 'none') {
