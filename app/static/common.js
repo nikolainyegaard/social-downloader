@@ -19,6 +19,30 @@ function setHdrAuth(platform, present, label) {
   _updateHdrAuthPill();
 }
 
+// ── Header status pill ────────────────────────────────────────────────────────
+// Each platform app reports its latest loop-status label via setHdrStatus();
+// the pill always renders the ACTIVE tab's state, so a loop running on another
+// platform never bleeds through (Instagram shows Idle while the Twitter loop
+// runs), and switching tabs updates the pill immediately instead of waiting
+// for the next status tick.
+
+/** @type {Object<string, string>} */
+const _hdrStatus = {};  // platform -> latest status label
+
+function setHdrStatus(platform, label) {
+  _hdrStatus[platform] = label;
+  if (platform === _activePlatform) _updateHdrStatusPill();
+}
+
+function _updateHdrStatusPill() {
+  const badge = document.getElementById('statusBadge');
+  const text  = document.getElementById('statusText');
+  if (!badge || !text) return;
+  const label = _hdrStatus[_activePlatform] || 'Idle';
+  badge.className  = `status-badge${label === 'Idle' ? '' : ' running'}`;
+  text.textContent = label;
+}
+
 function _updateHdrAuthPill() {
   const pill = document.getElementById('hdrCookiePill');
   const txt  = document.getElementById('hdrCookiePillText');
@@ -37,6 +61,7 @@ function switchPlatform(name) {
   if (!name) return;  // every platform disabled; only Settings > General is usable
   _activePlatform = name;
   _updateHdrAuthPill();
+  _updateHdrStatusPill();
   history.replaceState(null, '', '#' + name);
   document.querySelectorAll('.platform-tabs .tab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.platform === name);

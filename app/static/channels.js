@@ -826,21 +826,15 @@ function initChannelApp(cfg) {
     const stopBtn = _el('StopBtn');
     if (stopBtn) stopBtn.disabled = !loopRunning;
 
-    const badge  = document.getElementById('statusBadge');
-    const text   = document.getElementById('statusText');
-    const active = location.hash === `#${cfg.id}`;
-    if (active && badge && text) {
-      // Broad states in sync with the loop panels: loop_running covers the whole
-      // session including its sleeps, run_current covers worker manual runs, and
-      // statusActive covers platform extra loops (TikTok sounds)
-      const manualHandle = runCurrent ? creators.find(c => c.channel_id === runCurrent)?.handle : null;
-      const label = loopRunning ? `Running ${CREATOR} loop`
-        : runCurrent ? `Running manual run${manualHandle ? ` for @${manualHandle}` : ''}`
-        : (cfg.statusActive && cfg.statusActive(state)) ? `Running ${cfg.statusActiveLabel || 'loop'}`
-        : 'Idle';
-      badge.className  = `status-badge${label === 'Idle' ? '' : ' running'}`;
-      text.textContent = label;
-    }
+    // Broad states in sync with the loop panels: loop_running covers the whole
+    // session including its sleeps, run_current covers worker manual runs, and
+    // statusActive covers platform extra loops (TikTok sounds). The label is
+    // reported per platform; the header pill renders the active tab's state.
+    const manualHandle = runCurrent ? creators.find(c => c.channel_id === runCurrent)?.handle : null;
+    setHdrStatus(cfg.id, loopRunning ? `Running ${CREATOR} loop`
+      : runCurrent ? `Running manual run${manualHandle ? ` for @${manualHandle}` : ''}`
+      : (cfg.statusActive && cfg.statusActive(state)) ? `Running ${cfg.statusActiveLabel || 'loop'}`
+      : 'Idle');
 
     _renderLogs(state.logs, state.log_seq);
     if (cfg.onStatus) cfg.onStatus(state);
