@@ -39,7 +39,7 @@
     </div>
   </header>
 
-  <nav class="platform-tabs">
+  <nav class="platform-tabs edge-fade">
     {% for p in platforms if p.enabled %}
     <button class="tab{% if loop.first %} active{% endif %}" data-platform="{{ p.id }}" onclick="switchPlatform('{{ p.id }}')">{{ p.label }}</button>
     {% endfor %}

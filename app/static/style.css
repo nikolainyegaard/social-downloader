@@ -2726,7 +2726,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* Button styling from the shared .tab rule above; the top nav just wants a
    larger hit area. */
-.platform-tabs .tab { padding: 9px 18px; }
+/* flex-shrink/nowrap so narrow screens overflow into the edge-fade scroll
+   instead of squashing the buttons. */
+.platform-tabs .tab { padding: 9px 18px; flex-shrink: 0; white-space: nowrap; }
 
 /* ── Platform sections ────────────────────────────────────────────────────── */
 

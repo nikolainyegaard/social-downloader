@@ -545,6 +545,9 @@ window.addEventListener('hashchange', () => {
 
 switchPlatform(location.hash.slice(1) || _activePlatform);
 
+// The platform tab row clips on narrow screens; scroll it with the fade mask.
+_attachEdgeFade(document.querySelector('.platform-tabs'));
+
 // ── Health check ──────────────────────────────────────────────────────────────
 
 async function checkHealth() {
