@@ -219,8 +219,8 @@ function initChannelApp(cfg) {
               { value: 'added_at',         label: 'Date added' },
               { value: 'last_checked',     label: 'Last checked' },
               { value: 'last_saved',       label: 'Last saved' },
-            ], { value: 'handle', onchange: `${P}SetSortField(_ddValue('${P}SortField'))` })}
-            <button class="sort-dir-btn" id="${P}SortDirBtn" onclick="${P}ToggleSortDir()">A → Z</button>
+            ], { value: 'random', onchange: `${P}SetSortField(_ddValue('${P}SortField'))` })}
+            <button class="sort-dir-btn" id="${P}SortDirBtn" onclick="${P}ToggleSortDir()">Shuffle</button>
             <button class="sort-dir-btn controls-reset" onclick="${P}ResetFilters()" title="Reset filters and sort">Reset</button>
           </div>
         </div>
@@ -292,7 +292,7 @@ function initChannelApp(cfg) {
   // ── State ─────────────────────────────────────────────────────────────────
 
   let creators       = [];
-  let sort           = { field: 'handle', dir: 'asc' };
+  let sort           = { field: 'random', dir: 'asc' };
   // Default filter: hide inactive creators; Starred and Bookmarked stay off
   const _defaultFilter = () => {
     const f = { stat: new Set(['active']), star: new Set(), book: new Set() };
@@ -1205,12 +1205,12 @@ function initChannelApp(cfg) {
   }
 
   X('ResetFilters', () => {
-    sort   = { field: 'handle', dir: 'asc' };
+    sort   = { field: 'random', dir: 'asc' };
     filter = _defaultFilter();
     search = '';
     const searchEl = _el('Search');
     if (searchEl) searchEl.value = '';
-    _ddSetValue(`${P}SortField`, 'handle');
+    _ddSetValue(`${P}SortField`, 'random');
     _updateSortBtn();
     _syncFilterPills();
     renderCreators();
