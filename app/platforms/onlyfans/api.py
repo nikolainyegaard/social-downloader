@@ -11,9 +11,11 @@ and read back from cookies_path("onlyfans").
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import os
 import pathlib
+import re
 from typing import Generator
 from urllib.parse import urlparse
 
@@ -31,6 +33,23 @@ _ALLOWED_AUTH_KEYS = {
 }
 
 
+def clean_html(text: str | None) -> str | None:
+    """Flatten the HTML OnlyFans returns in bios and post text to plain text.
+
+    <br> and </p> become newlines, all other tags are dropped, entities are
+    unescaped. Also used by scripts/clean_onlyfans_html.py to repair rows
+    stored before this existed.
+    """
+    if not text:
+        return text
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
+    text = re.sub(r"</p\s*>", "\n", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text)
+    text = re.sub(r"\n[ \t]+\n", "\n\n", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
 def normalize_handle(handle: str) -> str:
     """Normalize user handle or URL to plain handle string."""
     handle = handle.strip().lstrip("@")
@@ -44,9 +63,12 @@ def _normalize_auth(raw: dict) -> dict:
     """Coerce an uploaded auth file into the flat shape login_context wants."""
     if isinstance(raw.get("auth"), dict):        # some exports wrap it as {"auth": {...}}
         raw = raw["auth"]
-    data = dict(raw)
+    data = {k.lower(): v for k, v in raw.items()}  # OF-DL Auth Helper exports USER_ID/X_BC/COOKIE
+    uid = data.get("user_id")
+    if uid is not None and "id" not in data:
+        data["id"] = int(uid) if str(uid).isdigit() else 0
     if not data.get("cookie"):                   # legacy format: build the cookie string
-        auth_id = data.get("auth_id") or data.get("authId")
+        auth_id = data.get("auth_id") or data.get("authid")
         sess = data.get("sess")
         if auth_id and sess:
             data["cookie"] = f"auth_id={auth_id}; sess={sess}"
@@ -127,7 +149,7 @@ async def _profile(authed, user) -> dict:
         "channel_id":       str(user.id),
         "handle":           user.username,
         "display_name":     user.name or user.username,
-        "description":      user.about or None,
+        "description":      clean_html(user.about) or None,
         "subscriber_count": None,          # OnlyFans hides a creator's subscriber count from subscribers
         "video_count":      user.posts_count or None,
         "avatar_url":       user.avatar or None,
@@ -189,7 +211,7 @@ async def _collect_posts(authed, user) -> list[tuple[dict, list[dict]]]:
         created = post.created_at
         result.append(({
             "video_id":     str(post.id),
-            "title":        (post.text or "")[:500],
+            "title":        (clean_html(post.text) or "")[:500],
             "upload_date":  int(created.timestamp()) if created else None,
             "duration":     next((f["duration"] for f in files
                                   if f["type"] in ("video", "gif") and f["duration"]), None),
@@ -274,4 +296,12 @@ if __name__ == "__main__":
     assert _validate_auth({"cookie": "auth_id=1; sess=z", "user_agent": "u"})    # missing x_bc
     assert _ext_from_url("https://cdn.onlyfans.com/files/a/ab/xyz.mp4?Tag=1") == "mp4"
     assert _ext_from_url("https://cdn.onlyfans.com/noext") == ""
+
+    ofdl = _normalize_auth({"USER_ID": "77", "USER_AGENT": "UA", "X_BC": "xb", "COOKIE": "auth_id=77; sess=s"})
+    assert ofdl["id"] == 77 and ofdl["x_bc"] == "xb" and ofdl["user_agent"] == "UA", ofdl
+    assert _validate_auth(ofdl) is None
+
+    assert clean_html("Hi!<br /> Bye<br /> <br /> &lt;3") == "Hi!\n Bye\n\n <3"
+    assert clean_html("<p>Marin Kitagawa ! I’m here</p>") == "Marin Kitagawa ! I’m here"
+    assert clean_html(None) is None and clean_html("") == ""
     print("ok")

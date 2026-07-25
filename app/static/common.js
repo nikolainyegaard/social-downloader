@@ -351,10 +351,19 @@ async function _cookiesDelete(platform, idPrefix) {
 
 // Settings account pane for cookies-based platforms (Twitter, Instagram).
 // opts: { site, uploadFn, deleteFn, note }; note is trailing html inside the
-// cookie-note block, after the shared extension links.
+// cookie-note block, after the shared extension links. Optional overrides:
+// uploadLabel + accept (file button), extBlock (replaces the cookies.txt
+// export line + extension links, for platforms that upload something else).
 function _cookiesPaneHtml(idPrefix, opts) {
   const ext = (href, icon, label) =>
     `<a href="${href}" class="browser-ext-link" target="_blank" rel="noopener noreferrer"><img src="/static/icons/${icon}.svg" width="16" height="16" alt="">${label}</a>`;
+  const extBlock = opts.extBlock || `
+      Export cookies from a logged-in ${opts.site} session using the <strong>Get cookies.txt LOCALLY</strong> extension:
+      <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
+        ${ext('https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc', 'chrome', 'Chrome')}
+        ${ext('https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp', 'edge', 'Edge')}
+        ${ext('https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/', 'firefox', 'Firefox')}
+      </div>`;
   return `
     <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
       <span class="cookie-pill absent" id="${idPrefix}Pill">
@@ -364,19 +373,14 @@ function _cookiesPaneHtml(idPrefix, opts) {
       <span class="cookie-meta" id="${idPrefix}Meta"></span>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <label class="cookie-upload-label">
-          <input type="file" id="${idPrefix}FileInput" accept=".txt,text/plain" style="display:none" onchange="${opts.uploadFn}(this)">
-          Upload cookies.txt
+          <input type="file" id="${idPrefix}FileInput" accept="${opts.accept || '.txt,text/plain'}" style="display:none" onchange="${opts.uploadFn}(this)">
+          ${opts.uploadLabel || 'Upload cookies.txt'}
         </label>
         <button class="btn-danger" id="${idPrefix}DeleteBtn" onclick="${opts.deleteFn}()" style="display:none">Remove</button>
       </div>
     </div>
     <div class="cookie-note">
-      Export cookies from a logged-in ${opts.site} session using the <strong>Get cookies.txt LOCALLY</strong> extension:
-      <div style="display:flex;gap:8px;margin:10px 0 8px;flex-wrap:wrap">
-        ${ext('https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc', 'chrome', 'Chrome')}
-        ${ext('https://microsoftedge.microsoft.com/addons/detail/get-cookies-txt/ebbdheafhjncoeidpdijmfmkicnejelp', 'edge', 'Edge')}
-        ${ext('https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/', 'firefox', 'Firefox')}
-      </div>
+      ${extBlock}
       ${opts.note}
     </div>`;
 }
