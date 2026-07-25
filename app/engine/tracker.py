@@ -383,6 +383,9 @@ def process_single_channel(
         # downloaded, or retried.
         listing_only = {v for v, p in remote_posts.items() if p.get("listing_only")}
 
+        _locked = f" ({len(listing_only)} locked)" if listing_only else ""
+        log(f"  {len(remote_posts)} {noun}{'' if len(remote_posts) == 1 else 's'} found{_locked}")
+
         new_ids       = remote_ids - known_ids - listing_only
         deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
         undeleted_ids = (known_ids - active_ids) & remote_ids
