@@ -870,6 +870,8 @@ function initChannelApp(cfg) {
     if (!body) return;
     body.insertAdjacentHTML('beforeend',
       newLines.map(l => `<div class="log-line ${_logLineClass(l)}">${esc(l)}</div>`).join(''));
+    // Cap the DOM at the server deque's size so a long-lived tab never grows unboundedly
+    while (body.childElementCount > 1000) body.firstElementChild.remove();
     if (_el('AutoScroll')?.checked !== false) body.scrollTop = body.scrollHeight;
   }
 
