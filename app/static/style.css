@@ -37,8 +37,9 @@
   --radius-sm:    6px;
   --radius-pill:  99px;
 
-  /* Elevation */
-  --shadow-1:     0 1px 2px rgba(0,0,0,.25);
+  /* Elevation: shadows belong to floating layers only (menus, popovers,
+     dialogs, toasts). In-page cards separate with borders and background
+     steps, never shadows. */
   --shadow-2:     0 10px 28px rgba(0,0,0,.4);
   --shadow-modal: 0 24px 64px rgba(0,0,0,.5);
 
@@ -280,13 +281,11 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, var(--accent), var(--accent-h));
+  background: var(--accent);
   color: var(--on-accent);
-  box-shadow: 0 1px 2px rgba(0,0,0,.3);
 }
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, white), var(--accent));
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 88%, white);
 }
 
 .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 5px 10px; font-size: 12px; }
@@ -328,7 +327,7 @@ svg.ic { width: 13px; height: 13px; display: block; flex-shrink: 0; }
   inset: auto;
   margin: 0;
   color: var(--text);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--raised) 30%, var(--surface)), var(--surface));
+  background: var(--raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-modal);
@@ -354,7 +353,7 @@ svg.ic { width: 13px; height: 13px; display: block; flex-shrink: 0; }
   width: 100%;
   font-family: inherit;
 }
-.card-menu-item:hover:not(:disabled) { background: var(--raised); }
+.card-menu-item:hover:not(:disabled) { background: var(--border); }
 .card-menu-item:disabled { opacity: .4; cursor: default; }
 .card-menu-item-danger { color: var(--red); }
 .card-menu-item-danger:hover { background: var(--red-bg); }
@@ -541,10 +540,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 
 .user-card {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--raised) 25%, var(--surface)), var(--surface));
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -747,15 +745,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .user-card {
   cursor: pointer;
   /* 50ms delay on fade-out so a DOM rebuild that briefly drops hover is invisible */
-  transition: border-color .15s 50ms, box-shadow .15s 50ms, transform .18s ease;
+  transition: border-color .15s 50ms, background .15s 50ms;
 }
 .user-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
-  box-shadow: var(--shadow-2), 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
-  transform: translateY(-2px);
-  transition: border-color .15s, box-shadow .15s, transform .18s ease; /* hover-in: no delay */
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  background: var(--hdr);
+  transition: border-color .15s, background .15s; /* hover-in: no delay */
 }
-.user-card-current:hover { box-shadow: var(--shadow-2), 0 0 0 2px var(--green); }
+.user-card-current:hover { box-shadow: 0 0 0 2px var(--green); }
 
 /* ── Modal ───────────────────────────────────────────────────────────────── */
 
@@ -790,7 +787,7 @@ dialog:not([open]) { display: none !important; }
 .modal-backdrop .modal-base { animation: modal-in .18s ease; }
 
 .modal-base {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--raised) 15%, var(--surface)), var(--surface));
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   display: flex;
@@ -1074,7 +1071,7 @@ dialog:not([open]) { display: none !important; }
 .phist-entry {
   padding: 10px 12px;
   border-radius: var(--radius);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--raised) 25%, var(--surface)), var(--surface));
+  background: var(--surface);
   border: 1px solid var(--border);
   display: flex; flex-direction: column; gap: 8px;
 }
@@ -1155,13 +1152,13 @@ dialog:not([open]) { display: none !important; }
   background: var(--nav);
 }
 
-.filter-pills { display: flex; gap: 4px; position: relative; background: var(--raised); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.25); padding: 4px; border-radius: var(--radius-pill); }
+.filter-pills { display: flex; gap: 4px; position: relative; background: var(--raised); border: 1px solid var(--border); padding: 4px; border-radius: var(--radius-pill); }
 
 /* Low-profile loop view toggle: absolutely positioned inside the panel
    header so it can never influence the header height */
 .loop-view-toggle {
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-  padding: 2px; box-shadow: none;
+  padding: 2px;
 }
 .loop-view-toggle .filter-pill { height: 18px; padding: 0 8px; font-size: 11px; }
 .filter-pill {
@@ -2023,10 +2020,9 @@ dialog:not([open]) { display: none !important; }
 .rf-empty, .ah-empty { color: var(--muted); font-size: 12px; padding: 24px 16px; text-align: center; }
 
 .panel-card {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--raised) 30%, var(--surface)), var(--surface));
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255,255,255,.03);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2166,16 +2162,15 @@ dialog:not([open]) { display: none !important; }
 .stat-strip .stat-item {
   padding: 6px 12px;
   border-radius: var(--radius);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--raised) 35%, var(--surface)), var(--surface));
+  background: var(--surface);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-1);
   display: flex;
   flex-direction: column;
   gap: 2px;
   transition: border-color .15s, background .15s;
 }
 .stat-strip .stat-item:hover {
-  background: var(--raised);
+  background: var(--hdr);
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 
@@ -2372,10 +2367,9 @@ dialog:not([open]) { display: none !important; }
 .tc-encoder-badge.missing { color: var(--red);   }
 
 .job-card {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--raised) 35%, var(--surface)), var(--surface));
+  background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
   margin-bottom: 16px;
-  box-shadow: var(--shadow-1);
 }
 .job-card-hdr  { display: flex; align-items: flex-start; gap: 16px; }
 .job-card-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
@@ -2478,10 +2472,9 @@ dialog:not([open]) { display: none !important; }
 /* ── Log panel ───────────────────────────────────────────────────────────── */
 
 .log-panel {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--raised) 30%, var(--surface)), var(--surface));
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255,255,255,.03);
   overflow: hidden;
 }
 
