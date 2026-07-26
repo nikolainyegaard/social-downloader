@@ -1352,8 +1352,11 @@ function initChannelApp(cfg) {
 
   const _isPrivateAccount = ch => ['private_accessible', 'private_blocked', 'blocked'].includes(ch.privacy_status);
 
-  const _oldNamesTag = ch => {
-    const oldNames = (ch.old_handles || []).map(n => `@${esc(n)}`).join(' · ');
+  // latestOnly: cards show just the most recent previous handle (the list is
+  // oldest first); the modal header keeps the full history.
+  const _oldNamesTag = (ch, latestOnly) => {
+    const names    = latestOnly ? (ch.old_handles || []).slice(-1) : (ch.old_handles || []);
+    const oldNames = names.map(n => `@${esc(n)}`).join(' · ');
     return oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
   };
 
@@ -1409,7 +1412,7 @@ function initChannelApp(cfg) {
       icon,
       namePrefix: _isPrivateAccount(ch) ? LOCK_SVG : '',
       name:       ch.display_name || ch.handle,
-      sub:        `@${esc(ch.handle)}${_oldNamesTag(ch)}`,
+      sub:        `@${esc(ch.handle)}${_oldNamesTag(ch, true)}`,
       idLine:     ch.channel_id,
       badges:     `<span class="account-status ${trackingCls}">${trackingLabel}</span>${_relationPill(ch)}`,
       bio:        ch.description ? _expandableText(ch.description) : '<span class="no-bio">No bio</span>',
@@ -1433,10 +1436,16 @@ function initChannelApp(cfg) {
     }
   }
 
+  // Rebuilding the grid replaces a hovered card mid-hover and restarts its
+  // float transition (a visible flicker on every SSE tick while a loop is
+  // downloading), so rebuilds are deferred until the pointer leaves the grid.
+  let renderDeferred = false;
+
   function renderCreators() {
-    if (gridObs) { gridObs.disconnect(); gridObs = null; }
     const grid = _el('Grid');
     if (!grid) return;
+    if (grid.querySelector('.user-card:hover')) { renderDeferred = true; return; }
+    if (gridObs) { gridObs.disconnect(); gridObs = null; }
     const filtered   = _filteredCreators();
     const isFiltered = filter.stat.size > 0 || filter.star.size > 0 || filter.book.size > 0 || !!search
       || EXTRA_FILTER_GROUPS.some(g => filter[g.key].size > 0);
@@ -2728,6 +2737,11 @@ function initChannelApp(cfg) {
   });
 
   // ── Keyboard handlers ─────────────────────────────────────────────────────
+
+  // Run the rebuild a hover deferred once the pointer leaves the grid
+  _el('Grid')?.addEventListener('mouseleave', () => {
+    if (renderDeferred) { renderDeferred = false; renderCreators(); }
+  });
 
   // Cards are focusable (role=button tabindex=0), so Enter and Space open them
   _el('Grid')?.addEventListener('keydown', e => {
