@@ -736,23 +736,25 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   justify-content: space-between;
   gap: 8px;
 }
-/* One hairline-topped ledger line (Added X · Checked Y · Saved Z · Storage W);
-   wraps to a second line on narrow cards instead of truncating */
+/* Hairline-topped 2x2 ledger grid, mirroring the modal header's hg rows:
+   label left, value right. Four mono items never fit one 320px line, so the
+   two lines are deliberate and aligned instead of a ragged wrap. */
 .user-card-meta-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 18px;
   padding-top: 8px;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 .user-card-meta-item {
-  display: inline-flex;
+  display: flex;
+  justify-content: space-between;
   align-items: baseline;
-  gap: 5px;
+  gap: 8px;
   min-width: 0;
 }
 .user-card-meta-item .meta-label { font-size: 11px; color: var(--muted); }
-.user-card-meta-item .meta-value { font-family: var(--mono); font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.user-card-meta-item .meta-value { font-family: var(--mono); font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .user-card-current { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
 
 .empty-state {
