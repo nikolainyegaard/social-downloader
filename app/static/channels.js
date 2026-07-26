@@ -268,24 +268,32 @@ function initChannelApp(cfg) {
     <div class="stats-panel"      id="${P}StatsPanel" style="display:none"></div>`,
       scrollTopFn: `${P}ScrollModalTop`,
       afterHtml: `
-  <div class="about-modal" id="${P}AboutModal" style="display:none" onclick="if(event.target===this)${P}CloseAbout()">
+  <dialog class="about-modal" id="${P}AboutModal" onclick="if(event.target===this)${P}CloseAbout()">
     <div class="about-card">
       <button class="about-close" onclick="${P}CloseAbout()" aria-label="Close">${_xIcon}</button>
       <h3 class="about-title">About</h3>
       <div id="${P}AboutBody"></div>
     </div>
-  </div>`,
+  </dialog>`,
     });
   }
 
   document.getElementById(`platform-${cfg.id}`).innerHTML = _sectionHtml();
   document.body.insertAdjacentHTML('beforeend', _modalHtml());
+  // Creator-modal close cleanup runs on every close path (button, backdrop
+  // click, native Escape)
+  _dlgWire(`${P}ModalBackdrop`, () => {
+    if (_creatorState.obs) { _creatorState.obs.disconnect(); _creatorState.obs = null; }
+    modalCreatorId = null;
+    modalCreator   = null;
+    _creatorState.videos = [];
+  });
 
   // Compact list modal behind the connections panel's more/manage button:
   // every connected creator with avatar and names, click opens their modal,
   // the x detaches the connection (both directions, it is one link).
   document.body.insertAdjacentHTML('beforeend', `
-    <div class="conn-backdrop" id="${P}ConnListModal" style="display:none" onclick="if(event.target===this)${P}CloseConnList()">
+    <dialog class="conn-backdrop" id="${P}ConnListModal" onclick="if(event.target===this)${P}CloseConnList()">
       <div class="conn-list">
         <div class="conn-list-head">
           <span>Connected ${CREATORS}</span>
@@ -296,12 +304,12 @@ function initChannelApp(cfg) {
           <button class="btn-sm" onclick="${P}ConnectAdd()">Connect a ${CREATOR}…</button>
         </div>
       </div>
-    </div>`);
+    </dialog>`);
 
   // Same list modal shape for managing Quick Access pins (opened from the
   // panel title); rows open the creator's modal, the x unpins.
   document.body.insertAdjacentHTML('beforeend', `
-    <div class="conn-backdrop" id="${P}QaListModal" style="display:none" onclick="if(event.target===this)${P}CloseQaList()">
+    <dialog class="conn-backdrop" id="${P}QaListModal" onclick="if(event.target===this)${P}CloseQaList()">
       <div class="conn-list">
         <div class="conn-list-head">
           <span>Quick Access</span>
@@ -312,7 +320,7 @@ function initChannelApp(cfg) {
           <button class="btn-sm" onclick="${P}QuickAccessAdd()">Add a ${CREATOR}…</button>
         </div>
       </div>
-    </div>`);
+    </dialog>`);
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -1252,7 +1260,7 @@ function initChannelApp(cfg) {
     return `<div class="dd dd-multi" id="${P}Fd_${g.key}">
       <button type="button" class="dd-btn" onclick="_ddToggle(this)">
         <span class="dd-label">${esc(_fdLabel(g, sel))}</span><span class="dd-caret">▾</span></button>
-      <div class="dd-menu" role="listbox">
+      <div class="dd-menu" role="listbox" popover>
         ${g.options.map(o => `<button type="button" class="dd-opt${sel.has(o.key) ? ' active' : ''}" id="${P}f_${g.key}_${o.key}" onclick="${P}SetFilter('${g.key}','${o.key}')">${esc(o.label)}</button>`).join('')}
       </div></div>`;
   }
@@ -1625,9 +1633,8 @@ function initChannelApp(cfg) {
     _destroyStatsPanel();
     _el('ModalVideoList').style.display = '';
 
-    _el('ModalBackdrop').style.display = 'flex';
+    _dlgOpen(`${P}ModalBackdrop`);
     { const mb = _el('ModalBase'), top = _el('ModalTop'); if (mb) mb.scrollTop = 0; if (top) top.style.display = 'none'; }
-    _lockScroll();
 
     _el('ModalHeader').className = 'modal-header';  // reset custom header classes
     (renderHeaderFn || _renderModalHeader)(ch);
@@ -1709,12 +1716,12 @@ function initChannelApp(cfg) {
 
   X('OpenConnList', () => {
     _renderConnListRows();
-    _el('ConnListModal').style.display = 'flex';
+    _dlgOpen(`${P}ConnListModal`);
     _lockScroll();
   });
 
   X('CloseConnList', () => {
-    _el('ConnListModal').style.display = 'none';
+    _dlgClose(`${P}ConnListModal`);
     _unlockScroll();
   });
 
@@ -1815,12 +1822,12 @@ function initChannelApp(cfg) {
 
   X('OpenQaList', () => {
     _renderQaListRows();
-    _el('QaListModal').style.display = 'flex';
+    _dlgOpen(`${P}QaListModal`);
     _lockScroll();
   });
 
   X('CloseQaList', () => {
-    _el('QaListModal').style.display = 'none';
+    _dlgClose(`${P}QaListModal`);
     _unlockScroll();
   });
 
@@ -1996,19 +2003,12 @@ function initChannelApp(cfg) {
       <div class="about-grid">${statTiles.map(tile).join('')}</div>
       <div class="about-sub">Activity</div>
       <div class="about-grid about-dates">${dateTiles.map(tile).join('')}</div>`;
-    _el('AboutModal').style.display = 'flex';
+    _dlgOpen(`${P}AboutModal`);
     _fillStorage(ch.channel_id);
   });
-  X('CloseAbout', () => { const a = _el('AboutModal'); if (a) a.style.display = 'none'; });
+  X('CloseAbout', () => _dlgClose(`${P}AboutModal`));
 
-  X('CloseModal', () => {
-    _el('ModalBackdrop').style.display = 'none';
-    _unlockScroll();
-    if (_creatorState.obs) { _creatorState.obs.disconnect(); _creatorState.obs = null; }
-    modalCreatorId = null;
-    modalCreator   = null;
-    _creatorState.videos = [];
-  });
+  X('CloseModal', () => _dlgClose(`${P}ModalBackdrop`));
 
   let _modalVidsSig = null;
 
@@ -2385,7 +2385,9 @@ function initChannelApp(cfg) {
     if (!_calTip) {
       _calTip = document.createElement('div');
       _calTip.className = 'cal-tip';
-      document.body.appendChild(_calTip);
+      // Child of the modal dialog, not body: a body child would paint under
+      // the dialog's top layer
+      (_el('ModalBackdrop') || document.body).appendChild(_calTip);
     }
     _calTip.textContent = text;
     _calTip.style.display = 'block';
@@ -2770,7 +2772,7 @@ function initChannelApp(cfg) {
     if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
     const t = document.activeElement;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    if ([...document.querySelectorAll('.modal-backdrop')].some(el => el.style.display !== 'none')) return;
+    if (document.querySelector('dialog[open]')) return;
     const searchEl = _el('Search');
     // offsetParent is null while this platform's tab is hidden, and the box
     // itself is visibility-hidden on the Log view
@@ -2779,34 +2781,9 @@ function initChannelApp(cfg) {
     searchEl.focus();
   });
 
-  document.addEventListener('keydown', e => {
-    if (e.key !== 'Escape') return;
-    // Overlay modals (confirm/error dialogs, media viewer, image, settings,
-    // plus platform-registered overlays like the sound modal) sit on top of
-    // the creator modal and close themselves via their own handler; don't
-    // close both at once.
-    const overlayIds = ['confirmModal', 'errorModal', 'mvModal', 'imgModal', 'settingsBackdrop', ..._escOverlays.map(o => o.id)];
-    for (const id of overlayIds) {
-      if (document.getElementById(id) && document.getElementById(id).style.display !== 'none') return;
-    }
-    // The About sheet floats over the creator modal; close it first.
-    if (_el('AboutModal')?.style.display !== 'none') {
-      window[`${P}CloseAbout`]();
-      return;
-    }
-    // The connections list sits over the creator modal; close it first.
-    if (_el('ConnListModal')?.style.display !== 'none') {
-      window[`${P}CloseConnList`]();
-      return;
-    }
-    if (_el('QaListModal')?.style.display !== 'none') {
-      window[`${P}CloseQaList`]();
-      return;
-    }
-    if (_el('ModalBackdrop')?.style.display !== 'none') {
-      window[`${P}CloseModal`]();
-    }
-  }, true);
+  // Escape on every overlay is the native <dialog> cancel; the top layer
+  // orders stacked overlays (About over the creator modal, confirm over
+  // everything), so the old per-platform Escape handler is gone.
 
   // ── Live events (SSE) ─────────────────────────────────────────────────────
   //

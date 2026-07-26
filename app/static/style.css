@@ -72,17 +72,27 @@ body {
 
 /* ── Toast notifications ─────────────────────────────────────────────────── */
 
+/* A manual popover so toasts live in the top layer, above any open <dialog>
+   (showToast re-promotes it whenever a dialog opens). The inset/margin/border
+   lines neutralize the UA popover box. */
 #toast-container {
   position: fixed;
   /* Clears the back-to-top button (36px tall at bottom 24px, same corner) */
-  bottom: 72px;
-  right: 24px;
+  inset: auto 24px 72px auto;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  overflow: visible;
+  width: auto;
+  height: auto;
+  pointer-events: none;
+  max-width: 380px;
+}
+#toast-container:popover-open {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 9999;
-  pointer-events: none;
-  max-width: 380px;
 }
 
 .toast {
@@ -311,18 +321,25 @@ svg.ic { width: 13px; height: 13px; display: block; flex-shrink: 0; }
 .btn-menu { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; line-height: 1; border-radius: var(--radius); cursor: pointer; display: inline-flex; align-items: center; }
 .btn-menu:hover { color: var(--text); border-color: var(--muted); }
 
+/* Popover menu: top layer (never clipped, never under a dialog); JS sets the
+   fixed coordinates, so the UA popover inset/margin are neutralized */
 .card-menu {
   position: fixed;
+  inset: auto;
+  margin: 0;
+  color: var(--text);
   background: linear-gradient(180deg, color-mix(in srgb, var(--raised) 30%, var(--surface)), var(--surface));
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-modal);
   padding: 4px;
   min-width: 148px;
+  overflow: visible;
+}
+.card-menu:popover-open {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  z-index: 500;
 }
 
 .card-menu-item {
@@ -741,17 +758,30 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* ── Modal ───────────────────────────────────────────────────────────────── */
 
+/* Native <dialog> overlays: the dialog element itself is the full-viewport
+   backdrop (its class paints the tint), so the UA dialog box model and
+   ::backdrop are neutralized. Stacking comes from the top layer's open
+   order, not z-index. */
+dialog.modal-backdrop, dialog.media-modal, dialog.about-modal, dialog.conn-backdrop {
+  width: 100%; height: 100%;
+  max-width: none; max-height: none;
+  margin: 0; padding: 0;
+  border: none;
+  color: inherit;
+}
+dialog::backdrop { background: transparent; }
+dialog:not([open]) { display: none !important; }
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
   background: color-mix(in srgb, var(--bg) 72%, transparent);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Replays each time the backdrop flips from display none */
+  /* Replays each time the dialog opens */
   animation: overlay-in .15s ease;
 }
 @keyframes overlay-in { from { opacity: 0; } }
@@ -1179,10 +1209,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .m-dd-btn { display: inline-flex; align-items: center; gap: 4px; height: 28px; background: var(--raised); border: 1px solid var(--border); color: var(--text); font-size: 11.5px; font-weight: 600; padding: 0 12px; border-radius: var(--radius-pill); white-space: nowrap; cursor: pointer; }
 .m-dd-btn:hover { background: var(--border); }
 .m-dd-caret { color: var(--muted); font-size: 9px; }
-.m-dd-menu { display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 170px; background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-2); padding: 5px; }
-.m-dd.open .m-dd-menu { display: block; }
-/* Desktop modal: the filter group hugs the right edge, so open menus leftward. */
-.modal-toolbar-controls .m-dd-menu { left: auto; right: 0; }
+/* Popover menu, positioned by JS like .dd-menu (viewport-clamped, so menus
+   near the right edge open leftward on their own) */
+.m-dd-menu { position: fixed; inset: auto; margin: 0; color: var(--text); min-width: 170px; max-height: 320px; overflow-y: auto; background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-2); padding: 5px; }
 .m-dd-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; background: none; border: none; color: var(--text-dim); font-size: 13px; padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer; }
 .m-dd-opt:hover { background: var(--border); color: var(--text); }
 .m-dd-opt.active { color: var(--accent); }
@@ -1379,10 +1408,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .dd-btn:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .dd.open .dd-btn { border-color: var(--accent); }
 .dd-caret { color: var(--muted); font-size: 9px; }
-/* Fixed, not absolute: anchored to the button in JS so the menu escapes any
-   overflow-clipping ancestor (e.g. the .edge-fade filter bar) that would hide it. */
+/* Popover menu: the top layer escapes any overflow-clipping or masked
+   ancestor (e.g. the .edge-fade filter bar) and open dialogs; JS anchors it
+   to the button with fixed coordinates. */
 .dd-menu {
-  display: none; position: fixed; z-index: 500;
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  color: var(--text);
   width: max-content; max-width: 320px; max-height: 320px; overflow-y: auto;
   background: var(--raised);
   border: 1px solid var(--border);
@@ -1390,10 +1423,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   box-shadow: var(--shadow-2);
   padding: 5px;
 }
-.dd.open .dd-menu { display: block; }
-/* Portaled to <body> on open (escapes masked/transformed ancestors); visibility
-   then rides on the menu's own class since it is no longer inside .dd.open. */
-.dd-menu.show { display: block; }
 .dd-opt {
   display: block; width: 100%; text-align: left;
   background: none; border: none;
@@ -1528,7 +1557,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .conn-more:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 
 .conn-backdrop {
-  position: fixed; inset: 0; z-index: 260;
+  position: fixed; inset: 0;
   background: color-mix(in srgb, var(--bg) 55%, transparent);
   display: flex; align-items: center; justify-content: center;
   animation: overlay-in .15s ease;
@@ -1658,7 +1687,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,.88);
-  z-index: 300;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2689,7 +2717,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .mh-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
   /* About modal: floats over the creator modal (opened from ...more) */
-  .about-modal { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px; background: color-mix(in srgb, var(--bg) 55%, transparent); }
+  dialog.about-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: color-mix(in srgb, var(--bg) 55%, transparent); }
   .about-card { position: relative; width: min(440px, 92%); max-height: 82%; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); padding: 18px; }
   .about-close { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-dim); font-size: 13px; cursor: pointer; }
   .about-close:hover { background: var(--border); color: var(--text); }

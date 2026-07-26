@@ -205,16 +205,16 @@ function openSettings(target, section) {
   _settingsRenderNav();
   // Nav starts as the icon rail on mobile, expanded on desktop
   document.querySelector('.settings-modal').classList.toggle('nav-collapsed', _settingsNavMobile());
-  document.getElementById('settingsBackdrop').style.display = 'flex';
-  _lockScroll();
+  _dlgWire('settingsBackdrop', () => {
+    const t = _settingsRegistry.find(x => x.id === _settingsTarget);
+    t?.sections.find(s => s.id === _settingsSectionByTarget[t.id])?.onHide?.();
+  });
+  _dlgOpen('settingsBackdrop');
   switchSettingsTarget(id);
 }
 
 function closeSettings() {
-  const target = _settingsRegistry.find(t => t.id === _settingsTarget);
-  target?.sections.find(s => s.id === _settingsSectionByTarget[target.id])?.onHide?.();
-  document.getElementById('settingsBackdrop').style.display = 'none';
-  _unlockScroll();
+  _dlgClose('settingsBackdrop');
 }
 
 // ── Settings > General ────────────────────────────────────────────────────────
@@ -604,8 +604,12 @@ function showToast(message, { type = 'info', duration = type === 'error' ? 0 : 5
   if (!container) {
     container = document.createElement('div');
     container.id = 'toast-container';
+    // Manual popover: toasts live in the top layer so they paint above open
+    // <dialog> overlays (z-index cannot reach the top layer)
+    container.popover = 'manual';
     document.body.appendChild(container);
   }
+  _topToasts();
 
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
@@ -674,18 +678,66 @@ function showToast(message, { type = 'info', duration = type === 'error' ? 0 : 5
   return { dismiss, update };
 }
 
+// ── Native <dialog> plumbing ────────────────────────────────────────────────────
+// Every overlay is a <dialog> styled as its own full-viewport backdrop (the
+// element itself paints the tint; ::backdrop is unused). showModal() gives
+// top-layer stacking, focus containment and restore, and native Escape.
+// Cleanup that must also run on Escape lives in a 'close' listener registered
+// via _dlgWire; the scroll lock pairs with it automatically.
+
+function _dlg(id) { return /** @type {HTMLDialogElement|null} */ (document.getElementById(id)); }
+
+function _dlgOpen(id) {
+  const el = _dlg(id);
+  if (!el || el.open) return el;
+  _dlgWire(id);
+  el.showModal();
+  _lockScroll();
+  _topToasts();  // keep toasts above the newly topmost dialog
+  return el;
+}
+
+function _dlgClose(id) {
+  const el = _dlg(id);
+  if (el && el.open) el.close();
+}
+
+function _dlgIsOpen(id) {
+  const el = _dlg(id);
+  return !!(el && el.open);
+}
+
+// Register per-dialog close cleanup once. The scroll unlock is automatic;
+// onClose runs after it on every close path (button, backdrop click, Escape).
+// Dialogs with cleanup must be wired before their first open.
+function _dlgWire(id, onClose) {
+  const el = _dlg(id);
+  if (!el || el.dataset.dlgWired) return;
+  el.dataset.dlgWired = '1';
+  el.addEventListener('close', () => { _unlockScroll(); onClose?.(); });
+}
+
+// Re-promote the toast container to the top of the top layer so toasts stay
+// above every open dialog.
+function _topToasts() {
+  const c = document.getElementById('toast-container');
+  if (!c) return;
+  try {
+    if (c.matches(':popover-open')) c.hidePopover();
+    c.showPopover();
+  } catch (_) { /* popover API missing: toasts fall back to normal stacking */ }
+}
+
 // ── Error dialog ────────────────────────────────────────────────────────────────
 // Full text behind a truncated error toast: selectable, with a Copy button.
 
 function openErrorModal(text) {
   document.getElementById('errorModalText').textContent = text;
-  document.getElementById('errorModal').style.display = 'flex';
-  _lockScroll();
+  _dlgOpen('errorModal');
 }
 
 function closeErrorModal() {
-  document.getElementById('errorModal').style.display = 'none';
-  _unlockScroll();
+  _dlgClose('errorModal');
 }
 
 async function copyErrorModal() {
@@ -718,7 +770,7 @@ let _confirmState = null;
 function _openDialog(o) {
   return new Promise(resolve => {
     _confirmState = { resolve, isPrompt: !!o.isPrompt, multiline: !!o.multiline, hasCheckbox: !!o.checkbox,
-                      suggest: null, suggestItems: [] };
+                      suggest: null, suggestItems: [], result: undefined };
     document.getElementById('confirmTitle').textContent = o.title || '';
     const msgEl = document.getElementById('confirmMessage');
     msgEl.textContent   = o.message || '';
@@ -763,8 +815,18 @@ function _openDialog(o) {
     const ok = document.getElementById('confirmOk');
     ok.textContent = o.confirmLabel || 'Confirm';
     ok.classList.toggle('danger', !!o.danger);
-    document.getElementById('confirmModal').style.display = 'flex';
-    _lockScroll();
+    // Resolution lives in the close listener so a native Escape (dialog
+    // cancel) and the backdrop click resolve as a dismissal too
+    _dlgWire('confirmModal', () => {
+      const s = _confirmState;
+      if (!s) return;
+      _confirmState = null;
+      document.getElementById('confirmSuggest').style.display = 'none';
+      document.getElementById('confirmInput').oninput = null;
+      if (s.result !== undefined) s.resolve(s.result);
+      else s.resolve(s.hasCheckbox ? { confirmed: false, checked: false } : (s.isPrompt ? null : false));
+    });
+    _dlgOpen('confirmModal');
     (o.isPrompt ? field : ok).focus();
   });
 }
@@ -786,28 +848,14 @@ function openConfirmOption({ title = 'Are you sure?', message = '', confirmLabel
 function _confirmAccept() {
   const s = _confirmState;
   if (!s) return;
-  let result;
-  if (s.hasCheckbox)    result = { confirmed: true, checked: document.getElementById('confirmCheck').checked };
-  else if (s.isPrompt)  result = document.getElementById(s.multiline ? 'confirmTextarea' : 'confirmInput').value;
-  else                  result = true;
-  _confirmClose();
-  s.resolve(result);
+  if (s.hasCheckbox)    s.result = { confirmed: true, checked: document.getElementById('confirmCheck').checked };
+  else if (s.isPrompt)  s.result = document.getElementById(s.multiline ? 'confirmTextarea' : 'confirmInput').value;
+  else                  s.result = true;
+  _dlgClose('confirmModal');
 }
 
 function _confirmDismiss() {
-  const s = _confirmState;
-  if (!s) return;
-  _confirmClose();
-  if (s.hasCheckbox)   s.resolve({ confirmed: false, checked: false });
-  else                 s.resolve(s.isPrompt ? null : false);
-}
-
-function _confirmClose() {
-  document.getElementById('confirmModal').style.display = 'none';
-  document.getElementById('confirmSuggest').style.display = 'none';
-  document.getElementById('confirmInput').oninput = null;
-  _unlockScroll();
-  _confirmState = null;
+  _dlgClose('confirmModal');
 }
 
 // Typeahead rows for a prompt with a suggest hook. Re-rendered on every
@@ -858,35 +906,36 @@ function _ddOptsHtml(opts, onchange) {
 function _ddHtml(id, opts, { value, onchange, className = '' } = {}) {
   const cur = opts.find(o => o.value === value) || opts[0] || { value: '', label: '' };
   return `<div class="dd${className ? ' ' + className : ''}" id="${id}" data-value="${esc(cur.value)}">` +
-    `<button type="button" class="dd-btn" onclick="_ddToggle(this)">` +
+    `<button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_ddToggle(this)">` +
     `<span class="dd-label">${esc(cur.label)}</span><span class="dd-caret">▾</span></button>` +
-    `<div class="dd-menu" role="listbox">${_ddOptsHtml(opts, onchange)}</div></div>`;
+    `<div class="dd-menu" role="listbox" popover>${_ddOptsHtml(opts, onchange)}</div></div>`;
 }
 
 function _ddCloseAll() {
-  document.querySelectorAll('.dd.open').forEach(dd => {
-    dd.classList.remove('open');
-    const menu = dd._menu;
-    if (menu) {
-      menu.classList.remove('show');
-      if (menu.parentNode === document.body) dd.appendChild(menu);  // return the portaled menu
-    }
+  document.querySelectorAll('.dd-menu, .m-dd-menu').forEach(m => {
+    if (m.matches(':popover-open')) /** @type {HTMLElement} */ (m).hidePopover();
   });
 }
 
-function _ddToggle(btn) {
-  const dd = btn.parentNode, willOpen = !dd.classList.contains('open');
-  _ddCloseAll();
-  if (!willOpen) return;
-  dd.classList.add('open');
-  // Portal the menu to <body> so it escapes any masked/transformed ancestor: the
-  // edge-fade filter bar's mask (and a modal's open-transform) makes that element
-  // the containing block for position:fixed, which clipped the menu off-screen on
-  // mobile. Visibility then lives on the menu's own .show class, not .dd.open.
-  const menu = dd.querySelector('.dd-menu');
-  dd._menu = menu;
-  document.body.appendChild(menu);
-  menu.classList.add('show');
+// Open a popover menu as a fixed box under (or above) its trigger, clamped to
+// the viewport. The top layer escapes masked/transformed ancestors (the old
+// portal-to-body) and open dialogs; light dismiss and Escape are native.
+function _menuOpenAt(btn, menu) {
+  // Safety net for hand-written menu markup missing the popover attribute
+  if (!menu.hasAttribute('popover')) menu.setAttribute('popover', '');
+  if (menu.matches(':popover-open')) { menu.hidePopover(); return false; }
+  // Clicking the trigger while its menu is open: light dismiss already closed
+  // the menu on pointerdown, so this click must not instantly reopen it
+  if (Date.now() - (+menu.dataset.closedAt || 0) < 250) return false;
+  if (!menu.dataset.menuWired) {
+    menu.dataset.menuWired = '1';
+    menu.addEventListener('toggle', () => {
+      const open = menu.matches(':popover-open');
+      btn.setAttribute('aria-expanded', String(open));
+      if (!open) menu.dataset.closedAt = String(Date.now());
+    });
+  }
+  menu.showPopover();
   const M = 8;  // min gap from any window edge
   const r = btn.getBoundingClientRect();
   // Cap width to the window so the menu can never exceed both edges, then clamp
@@ -899,16 +948,30 @@ function _ddToggle(btn) {
   const h = menu.offsetHeight;
   if (r.bottom + 5 + h > window.innerHeight && r.top - 5 - h > 0)
     menu.style.top = (r.top - 5 - h) + 'px';
+  _menuFocus(menu);
+  return true;
+}
+
+function _ddToggle(btn) {
+  const dd = btn.parentNode;
+  if (!(dd instanceof Element)) return;
+  const menu = /** @type {HTMLElement|null} */ (dd.querySelector('.dd-menu'));
+  if (!menu) return;
+  if (!menu.dataset.ddWired) {
+    menu.dataset.ddWired = '1';
+    menu.addEventListener('toggle', () => dd.classList.toggle('open', menu.matches(':popover-open')));
+  }
+  _menuOpenAt(btn, menu);
 }
 
 function _ddPick(opt) {
   const menu = opt.closest('.dd-menu');
-  const dd = [...document.querySelectorAll('.dd')].find(d => d._menu === menu) || opt.closest('.dd');
-  if (!dd) return;
+  const dd = opt.closest('.dd');
+  if (!dd || !menu) return;
   dd.dataset.value = opt.dataset.value;
   dd.querySelector('.dd-label').textContent = opt.textContent;
   menu.querySelectorAll('.dd-opt').forEach(o => o.classList.toggle('active', o === opt));
-  _ddCloseAll();
+  if (menu.matches(':popover-open')) menu.hidePopover();
 }
 
 function _ddValue(id) {
@@ -995,24 +1058,35 @@ function esc(s) {
 // _openCardMenu(triggerEl, items)
 //   triggerEl: the ••• button element
 //   items: [{ label, onclick, danger? }]
-// Opens a small dropdown anchored above the trigger button. Closes on outside
-// click, ESC, or when any item is chosen.
+// A popover menu anchored above the trigger button: light dismiss (outside
+// click) and Escape are native, and the top layer keeps it above any open
+// dialog. Closes when any item is chosen.
 
 let _cardMenuEl = null;
 
 function _closeCardMenu() {
-  if (_cardMenuEl) { _cardMenuEl.remove(); _cardMenuEl = null; }
+  if (!_cardMenuEl) return;
+  const menu = _cardMenuEl;
+  _cardMenuEl = null;
+  if (menu.matches(':popover-open')) menu.hidePopover();
+  menu.remove();
 }
 
 function _openCardMenu(triggerEl, items) {
   _closeCardMenu();
+  // Clicking the trigger while its menu is open: light dismiss already closed
+  // it on pointerdown, so this click must not instantly reopen it
+  if (Date.now() - (+triggerEl.dataset.menuClosedAt || 0) < 250) return;
 
   const menu = document.createElement('div');
   menu.className = 'card-menu';
+  menu.popover = 'auto';
+  menu.setAttribute('role', 'menu');
 
   for (const item of items) {
     const btn = document.createElement('button');
     btn.className = 'card-menu-item' + (item.danger ? ' card-menu-item-danger' : '');
+    btn.setAttribute('role', 'menuitem');
     btn.textContent = item.label;
     if (item.disabled) btn.disabled = true;
     else btn.onclick = () => { _closeCardMenu(); item.onclick(); };
@@ -1021,6 +1095,17 @@ function _openCardMenu(triggerEl, items) {
 
   document.body.appendChild(menu);
   _cardMenuEl = menu;
+  // Light dismiss fires toggle -> closed: drop the detached element
+  menu.addEventListener('toggle', () => {
+    if (!menu.matches(':popover-open')) {
+      triggerEl.setAttribute('aria-expanded', 'false');
+      triggerEl.dataset.menuClosedAt = String(Date.now());
+      if (_cardMenuEl === menu) _cardMenuEl = null;
+      menu.remove();
+    }
+  });
+  menu.showPopover();
+  triggerEl.setAttribute('aria-expanded', 'true');
 
   // Position above the trigger, right-aligned to its right edge; flip below
   // when there's no room above (e.g. the header user menu)
@@ -1030,10 +1115,29 @@ function _openCardMenu(triggerEl, items) {
   const top = rect.top - menuH - 4;
   menu.style.top = `${top < 4 ? rect.bottom + 4 : top}px`;
 
-  setTimeout(() => document.addEventListener('click', _closeCardMenu, { once: true }), 0);
+  _menuFocus(menu);
 }
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') _closeCardMenu(); });
+// Arrow-key navigation shared by every popover menu (card menu, .dd, .m-dd);
+// options are plain buttons, so Enter/Space activate natively and the popover
+// restores focus to the trigger on close.
+function _menuFocus(menu) {
+  if (!menu.dataset.menuKeys) {
+    menu.dataset.menuKeys = '1';
+    menu.addEventListener('keydown', e => {
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+      const opts = [...menu.querySelectorAll('button:not(:disabled)')];
+      if (!opts.length) return;
+      e.preventDefault();
+      const i = opts.indexOf(document.activeElement);
+      (e.key === 'ArrowDown' ? opts[Math.min(i + 1, opts.length - 1)]
+        : e.key === 'ArrowUp' ? opts[Math.max(i - 1, 0)]
+        : e.key === 'Home' ? opts[0] : opts[opts.length - 1]).focus();
+    });
+  }
+  const first = menu.querySelector('button.active:not(:disabled)') || menu.querySelector('button:not(:disabled)');
+  if (first instanceof HTMLElement) first.focus();
+}
 
 // ── Report widget ──────────────────────────────────────────────────────────────
 // Elements are looked up lazily so this can be called before the DOM is ready.
@@ -1073,16 +1177,14 @@ async function openReportView(filename, title, apiBase) {
   document.getElementById('reportViewTitle').textContent = title;
   document.getElementById('reportViewSub').textContent   = filename;
   document.getElementById('reportViewBody').textContent  = 'Loading...';
-  document.getElementById('reportViewBackdrop').style.display = 'flex';
-  _lockScroll();
+  _dlgOpen('reportViewBackdrop');
   const resp = await fetch(`${base}/${encodeURIComponent(filename)}`);
   document.getElementById('reportViewBody').textContent =
     resp.ok ? await resp.text() : 'Failed to load report.';
 }
 
 function closeReportView() {
-  document.getElementById('reportViewBackdrop').style.display = 'none';
-  _unlockScroll();
+  _dlgClose('reportViewBackdrop');
 }
 
 // ── DB query pane (one shared widget, rendered per platform) ───────────────────
@@ -1775,14 +1877,12 @@ async function _triggerLoop(btnId, apiPath, errMsg, onSuccess) {
 
 function openImgModalUrl(url) {
   document.getElementById('imgModalImg').src = url;
-  document.getElementById('imgModal').style.display = 'flex';
-  _lockScroll();
+  _dlgWire('imgModal', () => { document.getElementById('imgModalImg').src = ''; });
+  _dlgOpen('imgModal');
 }
 
 function closeImgModal() {
-  document.getElementById('imgModal').style.display = 'none';
-  document.getElementById('imgModalImg').src = '';
-  _unlockScroll();
+  _dlgClose('imgModal');
 }
 
 // ── Media viewer modal ────────────────────────────────────────────────────────
@@ -1813,16 +1913,19 @@ let _storySlideCtx = null;  // {isVid, vid, fill} of the running slide
 // caller swaps in slides when the data lands, or closes the viewer on
 // failure. _mvIsOpen lets the caller detect a close during the fetch.
 function openMediaViewerPending() {
-  const modal = document.getElementById('mvModal');
-  if (modal.style.display !== 'flex') {
-    modal.style.display = 'flex';
-    _lockScroll();
-  }
+  _mvOpen();
   document.getElementById('mvSpinner').style.display = '';
 }
 
 function _mvIsOpen() {
-  return document.getElementById('mvModal').style.display === 'flex';
+  return _dlgIsOpen('mvModal');
+}
+
+// Open the viewer dialog; teardown runs from the close listener so a native
+// Escape tears the viewer (and story mode) down exactly like the close button
+function _mvOpen() {
+  _dlgWire('mvModal', _mvTeardown);
+  _dlgOpen('mvModal');
 }
 
 function openMediaViewer(slides) {
@@ -1832,11 +1935,7 @@ function openMediaViewer(slides) {
   // arrows and let the media use the released width
   document.getElementById('mvModal').classList.toggle('mv-single', slides.length === 1);
   _mvShowSlide(0);
-  const modal = document.getElementById('mvModal');
-  if (modal.style.display !== 'flex') {
-    modal.style.display = 'flex';
-    _lockScroll();  // skipped when a pending shell already holds the lock
-  }
+  _mvOpen();
   document.getElementById('mvSpinner').style.display = 'none';
 }
 
@@ -2126,6 +2225,12 @@ function mvStep(dir) {
 }
 
 function closeMediaViewer() {
+  _dlgClose('mvModal');
+}
+
+// Full viewer teardown, run from the mvModal close listener (every close
+// path: close button, backdrop click, native Escape)
+function _mvTeardown() {
   _storyClearTimer();
   const vid = document.getElementById('mvVid');
   vid.onended = vid.onerror = vid.onloadedmetadata = null;
@@ -2149,48 +2254,20 @@ function closeMediaViewer() {
   flash.classList.remove('on');
   flash.innerHTML = '';
   document.getElementById('mvModal').classList.remove('mv-single');
-  document.getElementById('mvModal').style.display = 'none';
   document.getElementById('mvImg').src = '';
   _mvSlides = [];
   _mvIdx    = 0;
-  _unlockScroll();
 }
 
 // ── Global overlay keyboard handling ──────────────────────────────────────────
-// Media viewer arrow keys plus Escape for the shared overlay modals. Platform
-// detail modals handle their own Escape in channels.js.
-
-// Overlays registered by platform extras (tiktok.js: the sound modal). The
-// handler below closes them after the image modal and before settings, and
-// the per-platform detail-modal Escape handlers in channels.js yield to them.
-const _escOverlays = [];
-function _registerEscOverlay(id, close) { _escOverlays.push({ id, close }); }
+// Media viewer arrow keys only. Escape is the native <dialog> cancel on every
+// overlay, and the top layer orders stacked overlays, so the old Escape
+// priority chain is gone.
 
 document.addEventListener('keydown', e => {
-  const _open = id => { const el = document.getElementById(id); return el && el.style.display !== 'none'; };
-  // The confirm/prompt dialog blocks a decision, so it outranks everything
-  if (_open('confirmModal')) {
-    if (e.key === 'Escape') _confirmDismiss();
-    return;
-  }
-  // The error dialog can open over anything (its toast floats above all
-  // overlays), so it outranks even the media viewer
-  if (_open('errorModal')) {
-    if (e.key === 'Escape') closeErrorModal();
-    return;
-  }
-  if (_open('mvModal')) {
-    if (e.key === 'ArrowLeft')  { mvStep(-1); return; }
-    if (e.key === 'ArrowRight') { mvStep(1);  return; }
-    if (e.key === 'Escape')     { closeMediaViewer(); return; }
-    return;
-  }
-  if (e.key !== 'Escape') return;
-  if (_open('imgModal'))           { closeImgModal(); return; }
-  for (const o of _escOverlays) {
-    if (_open(o.id)) { o.close(); return; }
-  }
-  if (_open('settingsBackdrop'))   { window.closeSettings?.(); }
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  if (!_dlgIsOpen('mvModal') || _dlgIsOpen('confirmModal') || _dlgIsOpen('errorModal')) return;
+  mvStep(e.key === 'ArrowLeft' ? -1 : 1);
 });
 
 // ── Shared icons and badges ───────────────────────────────────────────────────
@@ -2255,7 +2332,7 @@ function _mFiltered(cfg, skipSearch = false) {
 // ttModalHeader, ...); opts slot in the platform extras.
 function _modalShellHtml(base, closeFn, { bannerHtml = '', panelsHtml = '', afterHtml = '', scrollTopFn = null } = {}) {
   return `
-<div id="${base}Backdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)${closeFn}()">
+<dialog id="${base}Backdrop" class="modal-backdrop" onclick="if(event.target===this)${closeFn}()">
   <div class="modal modal-base creator-modal" id="${base}Base">
     <button class="modal-close" onclick="${closeFn}()"></button>
     ${bannerHtml}
@@ -2267,7 +2344,7 @@ function _modalShellHtml(base, closeFn, { bannerHtml = '', panelsHtml = '', afte
     ${scrollTopFn ? `<button class="back-to-top modal-top" id="${base}Top" style="display:none" onclick="${scrollTopFn}()" title="Back to top">↑</button>` : ''}
   </div>
   ${afterHtml}
-</div>`;
+</dialog>`;
 }
 
 // Back-to-top visibility plus the mobile filter row's quick-return behavior
@@ -2480,22 +2557,19 @@ function _mRenderToolbar(cfg, vids) {
 // Single-select Status/Type/Sort dropdowns drive the same st.filter/typeFilter/
 // sort the desktop toolbar uses; History delegates to cfg.mobileFilters.
 function _mDd(label, menu) {
-  return `<div class="m-dd"><button class="m-dd-btn" onclick="_mDdToggle(this)">${label} <span class="m-dd-caret">▾</span></button><div class="m-dd-menu">${menu}</div></div>`;
+  return `<div class="m-dd"><button class="m-dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_mDdToggle(this)">${label} <span class="m-dd-caret">▾</span></button><div class="m-dd-menu" popover>${menu}</div></div>`;
 }
 function _mDdToggle(btn) {
-  const dd = btn.parentNode, open = dd.classList.contains('open');
-  document.querySelectorAll('.m-dd.open').forEach(d => d.classList.remove('open'));
-  if (!open) dd.classList.add('open');
+  const dd = btn.parentNode;
+  const menu = dd instanceof Element && dd.querySelector('.m-dd-menu');
+  if (menu) _menuOpenAt(btn, menu);
 }
-document.addEventListener('click', e => {
-  if (!e.target.closest('.m-dd')) document.querySelectorAll('.m-dd.open').forEach(d => d.classList.remove('open'));
-  if (!e.target.closest('.dd') && !e.target.closest('.dd-menu')) _ddCloseAll();
-});
 // A fixed menu does not track its button, so close on any scroll (capture, to
 // catch nested scroll containers like the settings modal body). Ignore scrolls
 // originating inside the menu itself so a long menu stays scrollable.
+// Outside clicks and Escape are the popover's native light dismiss.
 window.addEventListener('scroll', e => {
-  if (e.target && e.target.closest && e.target.closest('.dd-menu')) return;
+  if (e.target instanceof Element && e.target.closest('.dd-menu, .m-dd-menu')) return;
   _ddCloseAll();
 }, true);
 function _mMobSort(cfg, field)  { cfg.st.sort = _doSort(cfg.st.sort, field); _mRenderToolbar(cfg, cfg.st.videos); _mRenderList(cfg); }

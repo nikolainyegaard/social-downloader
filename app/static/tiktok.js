@@ -93,18 +93,15 @@ let _viewerFlushTimer = null;
 let _viewerDown = false;
 
 function ttViewerOpen() {
-  const modal = document.getElementById('ttViewer');
-  modal.style.display = 'flex';
-  _lockScroll();
+  // The frame stream must stop on every close path, including native Escape
+  _dlgWire('ttViewer', () => { _viewerOn = false; _viewerDown = false; });
+  _dlgOpen('ttViewer');
   _viewerOn = true;
   _viewerNextFrame();
 }
 
 function ttViewerClose() {
-  _viewerOn = false;
-  _viewerDown = false;
-  document.getElementById('ttViewer').style.display = 'none';
-  _unlockScroll();
+  _dlgClose('ttViewer');
 }
 
 function _viewerNextFrame() {
@@ -156,15 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
   img.addEventListener('pointerdown', (ev) => { ev.preventDefault(); _viewerDown = true; _viewerSend('down', ev, true); });
   img.addEventListener('pointermove', (ev) => { if (_viewerDown) _viewerSend('move', ev, false); });
   window.addEventListener('pointerup', (ev) => { if (_viewerDown) { _viewerDown = false; _viewerSend('up', ev, true); } });
-  // Escape closes the topmost TikTok overlay first (capture, before the
-  // shared overlay handlers): the WireGuard parse modal sits above all, then
-  // the browser viewer
-  document.addEventListener('keydown', (ev) => {
-    if (ev.key !== 'Escape') return;
-    const parse = document.getElementById('ttWgParse');
-    if (parse && parse.style.display !== 'none') { ev.stopPropagation(); ttWgParseClose(); return; }
-    if (_viewerOn) { ev.stopPropagation(); ttViewerClose(); }
-  }, true);
+  // Escape ordering (WG parse over viewer over the rest) is the native
+  // <dialog> top-layer stacking; no handler needed.
 });
 
 // ── VPN proxy ─────────────────────────────────────────────────────────────────
@@ -324,16 +314,14 @@ async function ttWgDelete() {
 // Parse modal: extract the four fields from a pasted WireGuard config
 
 function ttWgParseOpen() {
-  document.getElementById('ttWgParse').style.display = 'flex';
+  _dlgWire('ttWgParse', () => { document.getElementById('ttWgParseText').value = ''; });
   document.getElementById('ttWgParseStatus').style.display = 'none';
-  _lockScroll();
+  _dlgOpen('ttWgParse');
   document.getElementById('ttWgParseText').focus();
 }
 
 function ttWgParseClose() {
-  document.getElementById('ttWgParse').style.display = 'none';
-  document.getElementById('ttWgParseText').value = '';
-  _unlockScroll();
+  _dlgClose('ttWgParse');
 }
 
 function ttWgParseApply() {
@@ -1020,7 +1008,7 @@ const _TT_SETTINGS_DIAG_HTML = `
     <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <div class="dd" id="diagSource" data-value="get_video_details" style="flex:1;min-width:160px">
         <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">get_video_details</span><span class="dd-caret">▾</span></button>
-        <div class="dd-menu" role="listbox">
+        <div class="dd-menu" role="listbox" popover>
           <button type="button" class="dd-opt active" data-value="get_video_details" role="option" onclick="_ddPick(this);diagSourceChanged()">get_video_details</button>
           <button type="button" class="dd-opt" data-value="ytdlp" role="option" onclick="_ddPick(this);diagSourceChanged()">yt-dlp</button>
           <button type="button" class="dd-opt" data-value="tiktokapi" role="option" onclick="_ddPick(this);diagSourceChanged()">TikTokApi</button>
@@ -1028,7 +1016,7 @@ const _TT_SETTINGS_DIAG_HTML = `
       </div>
       <div class="dd" id="diagAction" data-value="" style="flex:1;min-width:160px">
         <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">(paste a URL below)</span><span class="dd-caret">▾</span></button>
-        <div class="dd-menu" role="listbox"></div>
+        <div class="dd-menu" role="listbox" popover></div>
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-bottom:12px">
@@ -1423,9 +1411,14 @@ function _soundThumbCell(v) {
 document.body.insertAdjacentHTML('beforeend',
   _modalShellHtml('soundModal', 'closeSoundModal', { scrollTopFn: 'soundModalScrollTop' }));
 _modalShellScrollWiring('soundModal');
-// Escape closes the sound modal before settings, and the creator-modal
-// Escape handlers yield to it while it is open
-_registerEscOverlay('soundModalBackdrop', () => closeSoundModal());
+// Sound-modal close cleanup runs on every close path (button, backdrop
+// click, native Escape)
+_dlgWire('soundModalBackdrop', () => {
+  if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
+  _soundModalId      = null;
+  _soundModal        = null;
+  _soundState.videos = [];
+});
 
 function soundModalScrollTop() {
   const m = document.getElementById('soundModalBase');
@@ -1529,8 +1522,7 @@ function openSoundModal(soundId) {
   });
   if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
 
-  document.getElementById('soundModalBackdrop').style.display = 'flex';
-  _lockScroll();
+  _dlgOpen('soundModalBackdrop');
 
   _renderSoundModalHeader(s);
   _mRenderToolbar(_SOUND_MODAL_CFG, []);
@@ -1546,12 +1538,7 @@ function openSoundModalAndHighlight(soundId, videoId, filter) {
 }
 
 function closeSoundModal() {
-  document.getElementById('soundModalBackdrop').style.display = 'none';
-  _unlockScroll();
-  if (_soundState.obs) { _soundState.obs.disconnect(); _soundState.obs = null; }
-  _soundModalId      = null;
-  _soundModal        = null;
-  _soundState.videos = [];
+  _dlgClose('soundModalBackdrop');
 }
 
 // Mirrors the engine's creator modal header: modal-header-left (avatar + name
