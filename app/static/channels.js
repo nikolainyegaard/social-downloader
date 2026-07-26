@@ -82,6 +82,10 @@ function initChannelApp(cfg) {
 
   const _triggerIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12C21 16.9706 16.9706 21 12 21C9.69494 21 7.59227 20.1334 6 18.7083L3 16M3 12C3 7.02944 7.02944 3 12 3C14.3051 3 16.4077 3.86656 18 5.29168L21 8M3 21V16M3 16H8M21 3V8M21 8H16"/></svg>`;
   const _bmOutline = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21V3z"/></svg>`;
+  const _lockIcon   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+  const _unlockIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
+  const _LOCK_TIP   = 'List scrolls with the page. Tap to scroll the list itself.';
+  const _UNLOCK_TIP = 'List scrolls independently. Tap to lock it to the page.';
   const _bmFilled  = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 0 1 1 1v19l-7-5.5L5 22V3a1 1 0 0 1 1-1z"/></svg>`;
 
   const _bookmarkBtn = ch => `<button class="btn-bookmark${ch.bookmarked ? ' bookmarked' : ''}"
@@ -93,7 +97,8 @@ function initChannelApp(cfg) {
   <div class="add-bar">
     <div class="add-bar-input-row">
       <div class="add-bar-input" id="${P}HandleInput" contenteditable="true" role="textbox"
-           aria-label="${cfg.addAriaLabel}" data-placeholder="${cfg.addPlaceholder}" spellcheck="false"></div>
+           aria-label="${cfg.addAriaLabel}" data-placeholder="${cfg.addPlaceholder}"
+           data-placeholder-short="@username or link" spellcheck="false"></div>
       <button class="add-bar-paste-btn" onclick="${P}AddPaste()" aria-label="Paste">Paste</button>
     </div>
     <button class="btn-primary" onclick="${P}AddCreator()">Add</button>
@@ -134,8 +139,9 @@ function initChannelApp(cfg) {
           <button class="btn-reset-filter" onclick="${P}ResetRecentFilters()" title="Reset filters">${_xCircleIcon}</button>
         </span>
       </div>
+      <button class="btn-reset-filter panel-scroll-lock" id="${P}RfLock" onclick="${P}ToggleScrollLock('${P}RecentFeed', this)" aria-pressed="false" title="${_LOCK_TIP}">${_lockIcon}</button>
     </div>
-    <div class="recent-feed" id="${P}RecentFeed"><div class="rf-empty">Loading…</div></div>
+    <div class="recent-feed scroll-locked" id="${P}RecentFeed"><div class="rf-empty">Loading…</div></div>
   </div>
   <div class="dash-col">
   <div class="panel-card loops-card">
@@ -171,8 +177,10 @@ function initChannelApp(cfg) {
     </div>
   </div>
   <div class="panel-card ah-card">
-    <div class="panel-header"><span class="section-title">Add history</span></div>
-    <div class="add-history" id="${P}AddHistory"></div>
+    <div class="panel-header"><span class="section-title">Add history</span>
+      <button class="btn-reset-filter panel-scroll-lock" style="margin-left:auto" id="${P}AhLock" onclick="${P}ToggleScrollLock('${P}AddHistory', this)" aria-pressed="false" title="${_LOCK_TIP}">${_lockIcon}</button>
+    </div>
+    <div class="add-history scroll-locked" id="${P}AddHistory"></div>
   </div>
   </div>
   </div>
@@ -1329,6 +1337,18 @@ function initChannelApp(cfg) {
     const btn = _el('SortDirBtn');
     if (btn) btn.textContent = SORT_DIR_LABELS[sort.field]?.[sort.dir] ?? sort.dir;
   }
+
+  // Mobile scroll lock for the dashboard lists: locked lists scroll with the
+  // page (their own overflow is hidden under 800px); the corner toggle frees
+  // them. Desktop ignores the class and hides the button.
+  X('ToggleScrollLock', (listId, btn) => {
+    const list = document.getElementById(String(listId));
+    if (!list || !(btn instanceof HTMLElement)) return;
+    const locked = list.classList.toggle('scroll-locked');
+    btn.innerHTML = locked ? _lockIcon : _unlockIcon;
+    btn.title = locked ? _LOCK_TIP : _UNLOCK_TIP;
+    btn.setAttribute('aria-pressed', String(!locked));
+  });
 
   // The empty-grid CTA: bring the add bar into view and put the caret in it
   X('FocusAdd', () => {

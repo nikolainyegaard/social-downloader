@@ -123,6 +123,15 @@ body {
   gap: 8px;
 }
 
+/* Popover API fallback (iOS/Safari 16): without the UA popover rules, menus
+   would render permanently visible. Hide them here; _popShow/_popHide in
+   common.js toggle inline display and emulate light dismiss. The toast
+   container keeps its layout, it just cannot reach the top layer. */
+@supports not selector(:popover-open) {
+  [popover] { display: none; }
+  #toast-container { display: flex; flex-direction: column; gap: 8px; }
+}
+
 .toast {
   display: flex;
   align-items: flex-start;
@@ -2034,6 +2043,11 @@ dialog:not([open]) { display: none !important; }
   /* Stacked cards have no fixed height, so cap the add history list */
   .add-history { max-height: 260px; }
   .now-strip { display: none !important; }
+  /* Scroll-locked lists scroll with the page instead of capturing the touch;
+     the corner padlock (channels.js ToggleScrollLock) frees them. Lists start
+     locked; desktop ignores the class entirely. */
+  .panel-scroll-lock { display: inline-flex; }
+  .recent-feed.scroll-locked, .add-history.scroll-locked { overflow-y: hidden; }
 }
 
 /* Recent activity feed */
@@ -2130,6 +2144,8 @@ dialog:not([open]) { display: none !important; }
 
 /* Compact pill group and text button variants for panel headers */
 .panel-header .hdr-pills { margin-left: auto; }
+/* Mobile-only scroll lock toggle in the dashboard list panel corners */
+.panel-scroll-lock { display: none; flex-shrink: 0; }
 .hdr-pills .filter-pill { height: 20px; padding: 0 9px; font-size: 11px; }
 .panel-body {
   flex: 1;
@@ -2600,6 +2616,10 @@ dialog:not([open]) { display: none !important; }
 @media (max-width: 640px) {
   body { width: 100vw; }
   .app { padding: 16px 16px 40px; gap: 16px; margin: 0; max-width: 100%; overflow: hidden; }
+
+  /* The full add-bar placeholder overflows a phone-width input in the mono
+     face; swap in the short generic variant */
+  .add-bar-input:empty::before { content: attr(data-placeholder-short); }
 
   /* iOS focus-zoom prevention: Safari zooms when a focused element has font-size < 16px. */
   input[type="text"],

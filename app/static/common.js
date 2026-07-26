@@ -931,9 +931,53 @@ function _ddHtml(id, opts, { value, onchange, className = '' } = {}) {
     `<div class="dd-menu" role="listbox" popover>${_ddOptsHtml(opts, onchange)}</div></div>`;
 }
 
+// ── Popover API fallback (iOS/Safari 16) ─────────────────────────────────────
+// Without the Popover API the UA rules that hide [popover] elements do not
+// exist, so menus rendered permanently visible. style.css hides them behind
+// @supports; these wrappers toggle inline display and emulate light dismiss
+// (outside pointerdown, scroll, Escape) and the beforetoggle/toggle events the
+// menu wiring listens for. Modern browsers go straight to the native API.
+const _POPOVER_OK = typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype;
+/** @type {Set<HTMLElement>} */
+const _fbOpenMenus = new Set();
+
+function _popIsOpen(el) {
+  return _POPOVER_OK ? el.matches(':popover-open') : el.style.display === 'block';
+}
+/** @param {HTMLElement} el */
+function _popShow(el) {
+  if (_POPOVER_OK) { el.showPopover(); return; }
+  if (_popIsOpen(el)) return;
+  el.dispatchEvent(Object.assign(new Event('beforetoggle'), { newState: 'open', oldState: 'closed' }));
+  el.style.display = 'block';
+  _fbOpenMenus.add(el);
+  el.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'open', oldState: 'closed' }));
+}
+/** @param {HTMLElement} el */
+function _popHide(el) {
+  if (_POPOVER_OK) { if (el.matches(':popover-open')) el.hidePopover(); return; }
+  if (!_popIsOpen(el)) return;
+  el.dispatchEvent(Object.assign(new Event('beforetoggle'), { newState: 'closed', oldState: 'open' }));
+  el.style.display = 'none';
+  _fbOpenMenus.delete(el);
+  el.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed', oldState: 'open' }));
+}
+if (!_POPOVER_OK) {
+  document.addEventListener('pointerdown', e => {
+    for (const m of [..._fbOpenMenus]) {
+      if (e.target instanceof Node && !m.contains(e.target)) _popHide(m);
+    }
+  }, true);
+  // Fallback menus are fixed boxes that cannot follow the page; close on scroll
+  window.addEventListener('scroll', () => { for (const m of [..._fbOpenMenus]) _popHide(m); }, true);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') for (const m of [..._fbOpenMenus]) _popHide(m);
+  });
+}
+
 function _ddCloseAll() {
   document.querySelectorAll('.dd-menu, .m-dd-menu').forEach(m => {
-    if (m.matches(':popover-open')) /** @type {HTMLElement} */ (m).hidePopover();
+    _popHide(/** @type {HTMLElement} */ (m));
   });
 }
 
@@ -943,7 +987,7 @@ function _ddCloseAll() {
 function _menuOpenAt(btn, menu) {
   // Safety net for hand-written menu markup missing the popover attribute
   if (!menu.hasAttribute('popover')) menu.setAttribute('popover', '');
-  if (menu.matches(':popover-open')) { menu.hidePopover(); return false; }
+  if (_popIsOpen(menu)) { _popHide(menu); return false; }
   // Clicking the trigger while its menu is open: light dismiss already closed
   // the menu on pointerdown, so this click must not instantly reopen it
   if (Date.now() - (+menu.dataset.closedAt || 0) < 250) return false;
@@ -957,7 +1001,7 @@ function _menuOpenAt(btn, menu) {
       if (!open) menu.dataset.closedAt = String(Date.now());
     });
   }
-  menu.showPopover();
+  _popShow(menu);
   const M = 8;  // min gap from any window edge
   const r = btn.getBoundingClientRect();
   // Cap width to the window so the menu can never exceed both edges, then clamp
@@ -981,7 +1025,7 @@ function _ddToggle(btn) {
   if (!menu) return;
   if (!menu.dataset.ddWired) {
     menu.dataset.ddWired = '1';
-    menu.addEventListener('toggle', () => dd.classList.toggle('open', menu.matches(':popover-open')));
+    menu.addEventListener('toggle', () => dd.classList.toggle('open', _popIsOpen(menu)));
   }
   _menuOpenAt(btn, menu);
 }
@@ -993,7 +1037,7 @@ function _ddPick(opt) {
   dd.dataset.value = opt.dataset.value;
   dd.querySelector('.dd-label').textContent = opt.textContent;
   menu.querySelectorAll('.dd-opt').forEach(o => o.classList.toggle('active', o === opt));
-  if (menu.matches(':popover-open')) menu.hidePopover();
+  _popHide(/** @type {HTMLElement} */ (menu));
 }
 
 function _ddValue(id) {
@@ -1106,7 +1150,7 @@ function _closeCardMenu() {
   if (!_cardMenuEl) return;
   const menu = _cardMenuEl;
   _cardMenuEl = null;
-  if (menu.matches(':popover-open')) menu.hidePopover();
+  _popHide(menu);
   menu.remove();
 }
 
@@ -1144,7 +1188,7 @@ function _openCardMenu(triggerEl, items) {
       setTimeout(() => menu.remove(), 0);
     }
   });
-  menu.showPopover();
+  _popShow(menu);
   triggerEl.setAttribute('aria-expanded', 'true');
 
   // Position above the trigger, right-aligned to its right edge; flip below
