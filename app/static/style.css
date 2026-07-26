@@ -740,6 +740,12 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-radius: var(--radius-lg);
 }
 
+/* Icon + message + one CTA, inside .empty-state and .vlist-empty wrappers */
+.empty-inner { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.empty-inner svg { color: var(--muted); opacity: .8; }
+.empty-inner .empty-msg { color: var(--muted); font-size: 13px; max-width: 420px; }
+.empty-inner button { margin-top: 2px; }
+
 /* ── User card: clickable ───────────────────────────────────────────────── */
 
 .user-card {

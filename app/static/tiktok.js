@@ -1265,11 +1265,16 @@ function renderSounds() {
     return _cmp(av, bv, dir);
   });
   if (!sounds.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds tracked yet.</div>';
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">${_emptyInner('inbox',
+      'No sounds tracked yet. Paste a TikTok sound link in the add bar to track one.',
+      '<button class="btn-primary btn-sm" onclick="ttFocusAdd()">Add a sound</button>')}</div>`;
     return;
   }
   if (!filtered.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No sounds match this search.</div>' + _ghostCards(9);
+    const cause = _soundSearch ? 'search' : 'filter';
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">${_emptyInner('search',
+      `No sounds match this ${cause}.`,
+      `<button class="btn-ghost btn-sm" onclick="resetSoundFilters()">Clear ${cause === 'search' ? 'search' : 'filters'}</button>`)}</div>` + _ghostCards(9);
     return;
   }
   grid.innerHTML = filtered.map(s => {

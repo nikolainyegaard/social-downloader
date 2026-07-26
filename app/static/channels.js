@@ -1327,6 +1327,14 @@ function initChannelApp(cfg) {
     if (btn) btn.textContent = SORT_DIR_LABELS[sort.field]?.[sort.dir] ?? sort.dir;
   }
 
+  // The empty-grid CTA: bring the add bar into view and put the caret in it
+  X('FocusAdd', () => {
+    const el = _el('HandleInput');
+    if (!(el instanceof HTMLElement)) return;
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
   X('ResetFilters', () => {
     sort   = { field: 'random', dir: 'asc' };
     filter = _defaultFilter();
@@ -1550,12 +1558,17 @@ function initChannelApp(cfg) {
     if (countEl) countEl.textContent = isFiltered ? `${filtered.length} of ${creators.length}` : `${creators.length}`;
 
     if (!creators.length) {
-      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">No ${CREATORS} tracked yet.</div>`;
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">${_emptyInner('inbox',
+        `No ${CREATORS} tracked yet.`,
+        `<button class="btn-primary btn-sm" onclick="${P}FocusAdd()">Add your first ${CREATOR}</button>`)}</div>`;
       renderedCount = 0;
       return;
     }
     if (!filtered.length) {
-      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">No ${CREATORS} match this filter.</div>`
+      const cause = search ? 'search' : 'filter';
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">${_emptyInner('search',
+        `No ${CREATORS} match this ${cause}.`,
+        `<button class="btn-ghost btn-sm" onclick="${P}ResetFilters()">Clear ${cause === 'search' ? 'search' : 'filters'}</button>`)}</div>`
         + _ghostCards(Math.min(creators.length, CARD_BATCH));
       renderedCount = 0;
       return;

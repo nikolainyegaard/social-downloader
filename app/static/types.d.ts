@@ -32,7 +32,7 @@ interface Element {
   isContentEditable: boolean;
   disabled: boolean;
   selectionEnd: number | null;
-  focus(): void;
+  focus(options?: FocusOptions): void;
   setSelectionRange(start: number | null, end: number | null): void;
   readonly offsetWidth: number;
   // Expando: an open dropdown remembers its body-portaled menu element

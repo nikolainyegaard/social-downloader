@@ -1488,6 +1488,39 @@ function _videoStatus(v) {
 const _GHOST_CARD = '<div class="user-card" aria-hidden="true" style="visibility:hidden;pointer-events:none;min-height:220px"></div>';
 function _ghostCards(n) { return n > 0 ? Array(n).fill(_GHOST_CARD).join('') : ''; }
 
+// Empty states carry a next action: icon ('inbox' for nothing-here, 'search'
+// for filtered-to-zero), message, and at most one CTA button. Renders inside
+// the .empty-state (grids) and .vlist-empty (modal lists) wrappers.
+const _emptyInboxIcon  = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>';
+const _emptySearchIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+function _emptyInner(icon, msg, btnHtml = '') {
+  return `<div class="empty-inner">${icon === 'search' ? _emptySearchIcon : _emptyInboxIcon}<div class="empty-msg">${msg}</div>${btnHtml}</div>`;
+}
+
+// Modal list/grid empty block: distinguishes "nothing saved" from "filters
+// hide everything"; the Clear button is bound by _mWireEmptyClear (a real
+// listener with the cfg closure, so no global function name is needed).
+function _mEmptyInner(cfg) {
+  const noun = cfg.itemNounPlural || 'posts';
+  if (!cfg.st.videos.length) return _emptyInner('inbox', `No ${noun} saved yet.`);
+  const cause = cfg.st.search ? 'search' : 'filter';
+  return _emptyInner('search', `No ${noun} match this ${cause}.`,
+    `<button class="btn-ghost btn-sm vlist-clear">Clear ${cause === 'search' ? 'search' : 'filters'}</button>`);
+}
+function _mWireEmptyClear(cfg, root) {
+  const btn = root.querySelector('.vlist-clear');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    cfg.st.search = '';
+    cfg.st.filter.clear();
+    cfg.st.typeFilter.clear();
+    const s = document.getElementById('modalVideoSearch');
+    if (s instanceof HTMLInputElement) s.value = '';
+    _mRenderToolbar(cfg, cfg.st.videos);
+    _mRenderList(cfg);
+  });
+}
+
 // Shared catalog card skeleton. Both the channel card (channels.js) and the
 // TikTok sound card (tiktok.js) fill these slots so the card structure lives in
 // one place. All slot values are raw HTML except `name`, which is escaped here.
@@ -2794,8 +2827,8 @@ function _mRenderList(cfg, { preserve = false } = {}) {
   _mRenderColHdrs(cfg);
   const vids = _mFiltered(cfg);
   if (!vids.length) {
-    const msg = `No ${cfg.itemNounPlural || 'posts'} match this ${cfg.st.search ? 'search' : 'filter'}.`;
-    list.insertAdjacentHTML('beforeend', `<div class="vlist-empty">${msg}</div>`);
+    list.insertAdjacentHTML('beforeend', `<div class="vlist-empty">${_mEmptyInner(cfg)}</div>`);
+    _mWireEmptyClear(cfg, list);
     return;
   }
   _mAppendVideos(cfg, vids, target);
@@ -2889,7 +2922,8 @@ function _renderModalVideoGrid(cfg, { preserve = false } = {}) {
   let vids = _mFiltered(cfg);
   if (cfg.viewVideoFilter) vids = cfg.viewVideoFilter(cfg.st.view, vids);
   if (!vids.length) {
-    list.innerHTML = `<div class="vlist-empty">No ${cfg.itemNounPlural || 'posts'} match this ${cfg.st.search ? 'search' : 'filter'}.</div>`;
+    list.innerHTML = `<div class="vlist-empty">${_mEmptyInner(cfg)}</div>`;
+    _mWireEmptyClear(cfg, list);
     return;
   }
   const grid = document.createElement('div');
