@@ -1423,6 +1423,9 @@ function _soundThumbCell(v) {
 document.body.insertAdjacentHTML('beforeend',
   _modalShellHtml('soundModal', 'closeSoundModal', { scrollTopFn: 'soundModalScrollTop' }));
 _modalShellScrollWiring('soundModal');
+// Escape closes the sound modal before settings, and the creator-modal
+// Escape handlers yield to it while it is open
+_registerEscOverlay('soundModalBackdrop', () => closeSoundModal());
 
 function soundModalScrollTop() {
   const m = document.getElementById('soundModalBase');
@@ -1985,6 +1988,11 @@ function _stopJobsPoll() {
 // Audio cleanup
 
 async function triggerAudioCleanup() {
+  if (!await openConfirm({
+    title: 'Remove audio-only files?',
+    message: 'Every audio-only file found in the videos folder is deleted from disk and its database entry removed. This cannot be undone.',
+    confirmLabel: 'Delete',
+  })) return;
   const btn = document.getElementById('job-audio-btn');
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/jobs/audio-cleanup/start', { method: 'POST' });
@@ -2027,8 +2035,15 @@ async function _runDeleteJob(btnId, statusId, textId, apiPath, bodyFn, resultFn)
   text.textContent = resultFn(data);
 }
 
-function triggerClearAvatars() {
+async function triggerClearAvatars() {
   const includeBanned = document.getElementById('util-clear-avatars-include-banned').checked;
+  if (!await openConfirm({
+    title: 'Delete all avatars?',
+    message: includeBanned
+      ? 'Cached profile pictures for all tracked users, including banned users, are deleted from disk. Banned users\' avatars cannot be re-fetched from TikTok.'
+      : 'Cached profile pictures for tracked users are deleted from disk and re-downloaded on the next loop run.',
+    confirmLabel: 'Delete',
+  })) return;
   return _runDeleteJob(
     'util-clear-avatars-btn', 'util-clear-avatars-status', 'util-clear-avatars-text',
     '/api/tiktok/utils/clear-avatars',
@@ -2037,7 +2052,12 @@ function triggerClearAvatars() {
   );
 }
 
-function triggerClearThumbnails() {
+async function triggerClearThumbnails() {
+  if (!await openConfirm({
+    title: 'Delete all thumbnails?',
+    message: 'All generated thumbnails are deleted from disk. They are regenerated automatically on the next startup backfill.',
+    confirmLabel: 'Delete',
+  })) return;
   return _runDeleteJob(
     'util-clear-thumbs-btn', 'util-clear-thumbs-status', 'util-clear-thumbs-text',
     '/api/tiktok/utils/clear-thumbnails',

@@ -1848,15 +1848,8 @@ function openStoryViewer(slides) {
   bar.innerHTML = slides.map(() =>
     '<span class="story-progress-seg"><span class="story-progress-fill"></span></span>').join('');
   bar.style.display = '';
-  // Story-only topbar extras: two reserved slots for future actions (Download
-  // is a permanent topbar button). Shown/hidden by the story-mode class alone.
-  document.getElementById('storyActions').innerHTML = `
-    <button class="mv-btn" title="Coming soon" disabled>${_storyDotsIcon}</button>
-    <button class="mv-btn" title="Coming soon" disabled>${_storyDotsIcon}</button>`;
   openMediaViewer(slides);
 }
-
-const _storyDotsIcon = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
 const _mvPlayIcon  = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.5 5.2v13.6c0 .8.9 1.3 1.6.9l10.4-6.8c.6-.4.6-1.4 0-1.8L10.1 4.3c-.7-.4-1.6.1-1.6.9z"/></svg>`;
 const _mvPauseIcon = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="6.4" y="5" width="3.8" height="14" rx="1.2"/><rect x="13.8" y="5" width="3.8" height="14" rx="1.2"/></svg>`;
 const _soundIcon = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M4 9.5v5a1 1 0 0 0 1 1h2.8l4.6 3.7c.65.52 1.6.06 1.6-.78V5.58c0-.84-.95-1.3-1.6-.78L7.8 8.5H5a1 1 0 0 0-1 1z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M16.5 9a4.4 4.4 0 0 1 0 6M18.8 6.8a7.6 7.6 0 0 1 0 10.4"/></svg>`;
@@ -2167,6 +2160,12 @@ function closeMediaViewer() {
 // Media viewer arrow keys plus Escape for the shared overlay modals. Platform
 // detail modals handle their own Escape in channels.js.
 
+// Overlays registered by platform extras (tiktok.js: the sound modal). The
+// handler below closes them after the image modal and before settings, and
+// the per-platform detail-modal Escape handlers in channels.js yield to them.
+const _escOverlays = [];
+function _registerEscOverlay(id, close) { _escOverlays.push({ id, close }); }
+
 document.addEventListener('keydown', e => {
   const _open = id => { const el = document.getElementById(id); return el && el.style.display !== 'none'; };
   // The confirm/prompt dialog blocks a decision, so it outranks everything
@@ -2188,7 +2187,9 @@ document.addEventListener('keydown', e => {
   }
   if (e.key !== 'Escape') return;
   if (_open('imgModal'))           { closeImgModal(); return; }
-  if (_open('soundModalBackdrop')) { window.closeSoundModal?.(); return; }
+  for (const o of _escOverlays) {
+    if (_open(o.id)) { o.close(); return; }
+  }
   if (_open('settingsBackdrop'))   { window.closeSettings?.(); }
 });
 

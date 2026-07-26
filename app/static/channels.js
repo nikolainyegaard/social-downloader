@@ -1027,17 +1027,28 @@ function initChannelApp(cfg) {
 
   const handleInput = _el('HandleInput');
 
+  const HANDLE_CLEAN_RE = /[^a-zA-Z0-9_.@:/?=&%-]/g;
   handleInput.addEventListener('input', function() {
-    const clean = this.textContent.replace(/[^a-zA-Z0-9_.@:/?=&%-]/g, '');
-    if (this.textContent !== clean) {
-      this.textContent = clean;
-      const range = document.createRange();
-      const sel   = window.getSelection();
-      range.selectNodeContents(this);
-      range.collapse(false);
-      sel.removeAllRanges();
-      sel.addRange(range);
+    const clean = this.textContent.replace(HANDLE_CLEAN_RE, '');
+    if (this.textContent === clean) return;
+    // Strip invalid chars but keep the caret where it was (minus what was
+    // removed before it) instead of yanking it to the end
+    const sel = window.getSelection();
+    let caret = clean.length;
+    if (sel && sel.rangeCount && this.contains(sel.anchorNode)) {
+      const r = sel.getRangeAt(0).cloneRange();
+      r.selectNodeContents(this);
+      r.setEnd(sel.getRangeAt(0).endContainer, sel.getRangeAt(0).endOffset);
+      const before = r.toString();
+      caret = before.replace(HANDLE_CLEAN_RE, '').length;
     }
+    this.textContent = clean;
+    const range = document.createRange();
+    if (this.firstChild) range.setStart(this.firstChild, Math.min(caret, clean.length));
+    else range.selectNodeContents(this);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
   });
 
   handleInput.addEventListener('keydown', function(e) {
@@ -2770,10 +2781,12 @@ function initChannelApp(cfg) {
 
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    // Overlay modals (media viewer, image, sound, recent log, settings) sit
-    // on top of the creator modal and close themselves via their own handler;
-    // don't close both at once.
-    for (const id of ['mvModal', 'imgModal', 'soundModalBackdrop', 'settingsBackdrop']) {
+    // Overlay modals (confirm/error dialogs, media viewer, image, settings,
+    // plus platform-registered overlays like the sound modal) sit on top of
+    // the creator modal and close themselves via their own handler; don't
+    // close both at once.
+    const overlayIds = ['confirmModal', 'errorModal', 'mvModal', 'imgModal', 'settingsBackdrop', ..._escOverlays.map(o => o.id)];
+    for (const id of overlayIds) {
       if (document.getElementById(id) && document.getElementById(id).style.display !== 'none') return;
     }
     // The About sheet floats over the creator modal; close it first.

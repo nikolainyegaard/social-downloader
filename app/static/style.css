@@ -74,7 +74,8 @@ body {
 
 #toast-container {
   position: fixed;
-  bottom: 24px;
+  /* Clears the back-to-top button (36px tall at bottom 24px, same corner) */
+  bottom: 72px;
   right: 24px;
   display: flex;
   flex-direction: column;
@@ -1884,9 +1885,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .story-mode .story-tap-next  { right: 0;  width: 20%; }
 .story-mode .mv-nav { display: none; }
 
-/* Story actions on the topbar row (Download plus reserved slots) */
-.story-actions { display: none; }
-.story-mode .story-actions { display: flex; gap: 8px; }
 /* Stories have no permanent URL; the link-out button is post-only chrome */
 .story-mode #mvLinkBtn { display: none; }
 
@@ -2842,3 +2840,16 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   cursor: pointer;
 }
 .hdr-link:hover { background: var(--border); color: var(--text); }
+
+/* ── Reduced motion ──────────────────────────────────────────────────────── */
+
+/* Collapse every animation and transition to a single instant frame. Spinners
+   and the indeterminate job bar freeze; their status text still carries the
+   loading state. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
