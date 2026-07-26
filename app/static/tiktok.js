@@ -1326,16 +1326,22 @@ async function removeSound(soundId) {
   loadSounds();
 }
 
+// Optimistic toggle, reverted with an error toast if the PATCH fails
 async function toggleSoundStar(soundId) {
   const sound = sounds.find(s => s.sound_id === soundId);
   if (!sound) return;
   const newVal = !sound.starred;
   sound.starred = newVal ? 1 : 0;
   renderSounds();
-  await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/star`, {
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/star`, {
     method: 'PATCH',
     body: JSON.stringify({ starred: newVal }),
   });
+  if (!ok) {
+    sound.starred = newVal ? 0 : 1;
+    renderSounds();
+    showToast(data.error || 'Could not update star', { type: 'error' });
+  }
 }
 
 async function runSound(soundId) {

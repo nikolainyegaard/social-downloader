@@ -2834,17 +2834,24 @@ async function _creatorRemove(apiPath, id, label, load) {
     if (!sure) return;
   }
 
-  await apiJSON(`${apiPath}/${id}${res.checked ? '?delete_media=1' : ''}`, { method: 'DELETE' });
+  const { ok, data } = await apiJSON(`${apiPath}/${id}${res.checked ? '?delete_media=1' : ''}`, { method: 'DELETE' });
+  if (!ok) { showToast(data.error || `Could not delete ${label}`, { type: 'error' }); return; }
   load();
 }
 
+// Optimistic toggle, reverted with an error toast if the PATCH fails
 async function _creatorToggleStar(apiPath, id, items, idField, render) {
   const item = items.find(x => x[idField] === id);
   if (!item) return;
   const newVal = !item.starred;
   item.starred = newVal ? 1 : 0;
   render();
-  await apiJSON(`${apiPath}/${id}/star`, { method: 'PATCH', body: JSON.stringify({ starred: newVal }) });
+  const { ok, data } = await apiJSON(`${apiPath}/${id}/star`, { method: 'PATCH', body: JSON.stringify({ starred: newVal }) });
+  if (!ok) {
+    item.starred = newVal ? 0 : 1;
+    render();
+    showToast(data.error || 'Could not update star', { type: 'error' });
+  }
 }
 
 async function _saveCreatorComment(apiPath, id, value, items, idField) {
