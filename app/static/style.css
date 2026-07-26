@@ -1607,6 +1607,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    _attachEdgeFade(el) once; it toggles the fade-l/fade-r classes on scroll. */
 .edge-fade {
   overflow-x: auto;
+  /* Lock to horizontal: overflow-x alone computes overflow-y to auto, and a
+     pixel of layout rounding then makes the row scrollable vertically too. */
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 .edge-fade::-webkit-scrollbar { display: none; }
