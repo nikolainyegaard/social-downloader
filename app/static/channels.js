@@ -650,9 +650,10 @@ function initChannelApp(cfg) {
 
   // ── Recent panel ──────────────────────────────────────────────────────────
 
-  const _nameStyle = r => r.enabled === 0 ? 'style="color:var(--text-dim)"'
-    : r.starred ? 'style="color:var(--yellow)"'
-    : r.account_status === 'banned' ? 'style="color:var(--red)"' : '';
+  // Usernames stay neutral (state lives in the row tint); a starred creator
+  // gets a gold star prefix, a soft-disabled one dims.
+  const _nameStyle = r => r.enabled === 0 ? 'style="color:var(--text-dim)"' : '';
+  const _namePrefix = r => r.starred ? '<span style="color:var(--gold)">★</span> ' : '';
 
   // Onclick string for a saved/deleted group: single-item groups jump straight
   // to the item; soft-disabled creators route through the platform fallback
@@ -704,10 +705,10 @@ function initChannelApp(cfg) {
       : ev.kind === 'changed'
         ? `${P}OpenModalWithHistory('${esc(it.channel_id)}','${esc(it.field)}')`
         : `${P}OpenModal('${esc(it.channel_id)}')`;
-    return `<div class="rf-row" onclick="${onclick}" role="button" tabindex="0" title="Open @${esc(it.handle)}">
+    return `<div class="rf-row rf-k-${ev.kind}" onclick="${onclick}" role="button" tabindex="0" title="Open @${esc(it.handle)}">
       <span class="rf-icon rf-${ev.kind}">${_RF_ICONS[ev.kind]}</span>
       <span class="rf-avatar-wrap"><img class="rf-avatar" src="${API}/channels/${esc(it.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>
-      <span class="rf-name" ${_nameStyle(it)}>@${esc(it.handle)}</span>
+      <span class="rf-name" ${_nameStyle(it)}>${_namePrefix(it)}@${esc(it.handle)}</span>
       <span class="rf-detail rf-${ev.kind}">${detail}</span>
       <span class="rf-time">${_recentDate(ev.ts, now)}</span>
     </div>`;

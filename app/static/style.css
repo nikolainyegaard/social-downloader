@@ -15,11 +15,14 @@
   --yellow:       #e0a83a;
   --gold:         #f5a623;
   --purple:       #c084fc;
+  /* Fixed blue for cross-platform semantics (the activity feed's changed
+     kind): --accent varies per theme, this never does */
+  --blue:         #4f8ef7;
   --muted:        #7a8190;
   /* Platform identity colors: single source for the theme --accent overrides
      and the platform tab dots (which show every platform's color at once,
      so they cannot come from the active theme) */
-  --p-tiktok:     #69c9d0;
+  --p-tiktok:     #ee1d52;
   --p-youtube:    #ff3c3c;
   --p-instagram:  #c13584;
   --p-twitter:    #1da1f2;
@@ -2038,6 +2041,18 @@ dialog:not([open]) { display: none !important; }
   cursor: pointer;
 }
 .rf-row:hover { background: var(--raised); }
+/* Event kind reads from a tinted row background, identical on every platform
+   (usernames stay neutral); hover deepens the tint */
+.rf-row.rf-k-saved   { background: color-mix(in srgb, var(--green)  8%, transparent); }
+.rf-row.rf-k-story   { background: color-mix(in srgb, var(--purple) 8%, transparent); }
+.rf-row.rf-k-deleted { background: color-mix(in srgb, var(--red)    8%, transparent); }
+.rf-row.rf-k-changed { background: color-mix(in srgb, var(--blue)   8%, transparent); }
+.rf-row.rf-k-banned  { background: color-mix(in srgb, var(--orange) 8%, transparent); }
+.rf-row.rf-k-saved:hover   { background: color-mix(in srgb, var(--green)  16%, transparent); }
+.rf-row.rf-k-story:hover   { background: color-mix(in srgb, var(--purple) 16%, transparent); }
+.rf-row.rf-k-deleted:hover { background: color-mix(in srgb, var(--red)    16%, transparent); }
+.rf-row.rf-k-changed:hover { background: color-mix(in srgb, var(--blue)   16%, transparent); }
+.rf-row.rf-k-banned:hover  { background: color-mix(in srgb, var(--orange) 16%, transparent); }
 /* The detail/status column sizes to its content (auto) rather than a fixed
    track, so the name/handle (1fr) expands into the space a short detail leaves
    free and only truncates when a longer one needs the room. Detail keeps
@@ -2058,7 +2073,7 @@ dialog:not([open]) { display: none !important; }
 .rf-saved   { color: var(--green); }
 .rf-story   { color: var(--purple); }
 .rf-deleted { color: var(--red); }
-.rf-changed { color: var(--accent); }
+.rf-changed { color: var(--blue); }
 .rf-banned  { color: var(--orange); }
 .rf-avatar-wrap {
   width: 20px; height: 20px;
@@ -2068,7 +2083,7 @@ dialog:not([open]) { display: none !important; }
   flex-shrink: 0;
 }
 .rf-avatar { width: 100%; height: 100%; object-fit: cover; display: block; }
-.rf-name { font-weight: 600; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rf-name { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rf-detail, .ah-status { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .rf-time, .ah-time { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; text-align: right; }
 .rf-empty, .ah-empty { color: var(--muted); font-size: 12px; padding: 24px 16px; text-align: center; }
@@ -2870,15 +2885,13 @@ dialog:not([open]) { display: none !important; }
 /* ── Per-platform theme overrides ─────────────────────────────────────────── */
 
 /* The :root blue is the neutral chrome accent; every platform overrides it,
-   TikTok included. Cyan is bright, so white text fails on a cyan fill: the
-   TikTok theme also overrides --on-accent with a dark ink. Only styles for
-   solid accent fills may use --on-accent (tints keep --text). */
+   TikTok included. Rule of thumb: --on-accent is only for text/glyphs on
+   SOLID accent fills; translucent accent tints keep --text. */
 .app.theme-tiktok {
-  --accent:      var(--p-tiktok);   /* TikTok's official splash cyan */
-  --accent-h:    #52b4bc;
-  --accent-bg:   rgba(105,201,208,.15);
-  --accent-bg-h: rgba(105,201,208,.28);
-  --on-accent:   #072e31;
+  --accent:      var(--p-tiktok);   /* TikTok's official fuchsia */
+  --accent-h:    #d31448;
+  --accent-bg:   rgba(238,29,82,.15);
+  --accent-bg-h: rgba(238,29,82,.28);
 }
 
 .app.theme-youtube {
