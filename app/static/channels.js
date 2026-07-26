@@ -1423,10 +1423,10 @@ function initChannelApp(cfg) {
   };
 
   const _cardMetaItems = ch => [
-    { label: 'Added',        value: fmtDateOnly(ch.added_at) },
-    { label: 'Last checked', value: ch.last_checked ? fmt.rel(new Date(ch.last_checked * 1000).toISOString()) : 'never' },
-    { label: 'Last saved',   value: ch.last_saved   ? fmt.rel(new Date(ch.last_saved   * 1000).toISOString()) : 'never' },
-    { label: 'Storage',      value: _fmtBytes(ch.media_size_bytes || 0) },
+    { label: 'Added',   value: fmtDateOnly(ch.added_at) },
+    { label: 'Checked', value: ch.last_checked ? fmt.rel(new Date(ch.last_checked * 1000).toISOString()) : 'never' },
+    { label: 'Saved',   value: ch.last_saved   ? fmt.rel(new Date(ch.last_saved   * 1000).toISOString()) : 'never' },
+    { label: 'Storage', value: _fmtBytes(ch.media_size_bytes || 0) },
   ];
 
   // Keyed card elements: one persistent node per creator, rebuilt only when
@@ -1518,7 +1518,6 @@ function initChannelApp(cfg) {
       namePrefix: _isPrivateAccount(ch) ? LOCK_SVG : '',
       name:       ch.display_name || ch.handle,
       sub:        `@${esc(ch.handle)}${_oldNamesTag(ch, true)}`,
-      idLine:     ch.channel_id,
       badges:     `<span class="account-status ${trackingCls}">${trackingLabel}</span>${_relationPill(ch)}`,
       bio:        ch.description ? _expandableText(ch.description) : '<span class="no-bio">No bio</span>',
       stats,

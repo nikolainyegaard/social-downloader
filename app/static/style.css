@@ -712,21 +712,23 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   gap: 8px;
 }
 .user-checked { font-size: 11px; color: var(--muted); }
+/* One hairline-topped ledger line (Added X · Checked Y · Saved Z · Storage W);
+   wraps to a second line on narrow cards instead of truncating */
 .user-card-meta-footer {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 2px 14px;
   padding-top: 8px;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 .user-card-meta-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
   min-width: 0;
 }
-.user-card-meta-item .meta-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.user-card-meta-item .meta-value { font-family: var(--mono); font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-card-meta-item .meta-label { font-size: 11px; color: var(--muted); }
+.user-card-meta-item .meta-value { font-family: var(--mono); font-size: 11px; color: var(--text-dim); white-space: nowrap; }
 .user-card-current { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
 
 .empty-state {
@@ -932,26 +934,33 @@ dialog:not([open]) { display: none !important; }
 .modal-bio        { font-size: 13px; color: var(--text-dim); margin-top: 8px; line-height: 1.5; max-width: 100%; }
 
 /* Expandable text: one clamped line that pops the full text over itself on click.
-   Reused by the modal bio and the catalog card bios. The pop offsets cancel its
-   own border+padding so the text lands exactly over the original line. */
+   Read-only surfaces (bios, video descriptions) render PLAIN; the .xtext-boxed
+   variant adds the input-style field chrome and is reserved for the editable
+   note field. Boxed = editable, plain + expand glyph = readable/copyable. */
 .xtext            { position: relative; max-width: 100%; }
-/* Clickable field: filled + outlined so it always reads as tappable; hover lifts
-   the border/fill to the accent. The expand icon appears only when the line is
-   actually truncated (.is-clipped, set by _markXtextClipped). Pop overlays the box. */
-.xtext-line       { display: flex; align-items: center; gap: 6px; min-width: 0; cursor: pointer;
-                    padding: 5px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+.xtext-line       { display: flex; align-items: center; gap: 6px; min-width: 0; cursor: pointer; }
+.xtext-text       { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Clickability must read without hover (mobile has none): while the line is
+   clipped (.is-clipped, set by _markXtextClipped) the expand glyph is always
+   rendered, accent-tinted. Hover only adds feedback on top. */
+.xtext-exp        { flex-shrink: 0; color: var(--accent); opacity: .75; display: none; }
+.xtext.is-clipped .xtext-exp { display: inline-flex; }
+.xtext-line:hover .xtext-exp { opacity: 1; }
+.xtext:not(.xtext-static) .xtext-line:hover .xtext-text { color: var(--text); }
+/* Editable-field chrome (the note): filled + outlined, hover lifts to accent */
+.xtext-boxed .xtext-line { padding: 5px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
                     background: color-mix(in srgb, var(--raised) 65%, transparent);
                     transition: border-color .12s, background .12s; }
-.xtext-line:hover { background: var(--raised); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
-.xtext-line:hover .xtext-exp { color: var(--accent); }
-.xtext-text       { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.xtext-exp        { flex-shrink: 0; color: var(--muted); display: none; }
-.xtext.is-clipped .xtext-exp { display: inline-flex; }
+.xtext-boxed .xtext-line:hover { background: var(--raised); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+/* The pop offsets cancel its own border+padding against the boxed line's, so
+   the text lands exactly over the original line; the plain variant has no box
+   to cancel, so it pulls the full 10px/7px inset instead. */
 .xtext-pop        { display: none; position: absolute; top: -1px; left: -1px; z-index: 30;
                     min-width: calc(100% + 2px); max-width: min(460px, 58vw);
                     background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius);
                     box-shadow: var(--shadow-2); padding: 6px 26px 7px 9px; white-space: normal; line-height: 1.5;
                     color: var(--text); user-select: text; cursor: default; }
+.xtext:not(.xtext-boxed) .xtext-pop { top: -7px; left: -10px; min-width: calc(100% + 20px); }
 .xtext.open .xtext-pop { display: block; animation: bio-fade .1s ease; }
 @keyframes bio-fade { from { opacity: 0; } }
 .xtext-close      { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; padding: 0; border: 0;
@@ -1510,9 +1519,8 @@ dialog:not([open]) { display: none !important; }
 .modal-actions-group { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 .note-empty { color: var(--muted); opacity: .55; font-style: italic; cursor: pointer; }
 .note-empty:hover { opacity: .85; }
-/* Static placeholder box (No bio): same chrome, nothing to click */
+/* Static placeholder (No bio): plain like other read-only text, nothing to click */
 .xtext-static .xtext-line { cursor: default; }
-.xtext-static .xtext-line:hover { background: color-mix(in srgb, var(--raised) 65%, transparent); border-color: var(--border); }
 .xtext-static .note-empty { cursor: default; }
 .xtext-static .note-empty:hover { opacity: .55; }
 

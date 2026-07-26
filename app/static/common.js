@@ -1534,10 +1534,13 @@ const _xCloseIcon = `<svg width="9" height="9" viewBox="0 0 10 10" fill="none" s
 // X inside a circle: reset-filters buttons
 const _xCircleIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>`;
 const _xExpandIcon = `<svg class="xtext-exp" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
-function _expandableText(text) {
+// Read-only text (bios, video descriptions) renders plain; boxed adds the
+// input-style field chrome and is reserved for the editable note field, so
+// boxed = editable, plain + expand glyph = readable/copyable.
+function _expandableText(text, boxed = false) {
   if (!text) return '';
   const t = esc(text);
-  return `<div class="xtext" onclick="event.stopPropagation();_xtextToggle(this)" role="button" tabindex="0">` +
+  return `<div class="xtext${boxed ? ' xtext-boxed' : ''}" onclick="event.stopPropagation();_xtextToggle(this)" role="button" tabindex="0">` +
     `<div class="xtext-line"><span class="xtext-text">${t}</span>${_xExpandIcon}</div>` +
     `<div class="xtext-pop" onclick="event.stopPropagation()">` +
     `<button class="xtext-close" onclick="_xtextClose(this)" aria-label="Close">${_xCloseIcon}</button>${t}</div></div>`;
@@ -1554,19 +1557,18 @@ function _hgRow(label, value, cls = '', click = '') {
     `<span class="hg-v${cls}"${click ? ` onclick="${click}" role="button" tabindex="0" title="Open profile change history"` : ''}>${value}</span></div>`;
 }
 
-// Static xtext-styled placeholder (same box chrome, not clickable): keeps
-// empty fields like a missing bio visually consistent with the note field.
+// Static plain placeholder (not clickable): keeps empty read-only fields like
+// a missing bio in the same plain language as populated ones.
 function _xtextPlaceholderHtml(label) {
   return `<div class="xtext xtext-static"><div class="xtext-line"><span class="xtext-text note-empty">${esc(label)}</span></div></div>`;
 }
 
 function _noteFieldHtml(note, editFn, marginTop) {
-  // The empty state reuses the xtext box chrome (same outline, fill, hover)
-  // so the field reads identically either way; it just opens the editor
-  // instead of a popover.
+  // Both states carry the boxed field chrome (outline, fill, hover): the note
+  // is the one editable field, and the box is what signals editable.
   const inner = note
-    ? _expandableText(note)
-    : `<div class="xtext" onclick="event.stopPropagation();${editFn}()" role="button" tabindex="0">` +
+    ? _expandableText(note, true)
+    : `<div class="xtext xtext-boxed" onclick="event.stopPropagation();${editFn}()" role="button" tabindex="0">` +
       `<div class="xtext-line"><span class="xtext-text note-empty">Click to add a note</span></div></div>`;
   return `<div class="modal-note" style="margin-top:${marginTop}px">${inner}</div>`;
 }

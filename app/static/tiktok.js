@@ -1294,9 +1294,9 @@ function renderSounds() {
       + `</div>`;
 
     const meta = _cardMeta([
-      { label: 'Added',        value: fmtDateOnly(s.added_at) },
-      { label: 'Last checked', value: s.last_checked ? fmt.rel(new Date(s.last_checked * 1000).toISOString()) : 'never' },
-      { label: 'Last saved',   value: s.last_saved   ? fmt.rel(new Date(s.last_saved   * 1000).toISOString()) : 'never' },
+      { label: 'Added',   value: fmtDateOnly(s.added_at) },
+      { label: 'Checked', value: s.last_checked ? fmt.rel(new Date(s.last_checked * 1000).toISOString()) : 'never' },
+      { label: 'Saved',   value: s.last_saved   ? fmt.rel(new Date(s.last_saved   * 1000).toISOString()) : 'never' },
     ]);
 
     return _cardShell({
