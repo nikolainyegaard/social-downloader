@@ -72,18 +72,17 @@ async function ofUploadCookies(/** @type {any} */ input) { return _cookiesUpload
 async function ofDeleteCookies()      { return _cookiesDelete('onlyfans', 'ofCookie'); }
 
 // Jobs
+const _ofCleanWidget = _makeJobWidget('of-cleanhtml');
 async function ofCleanHtml() {
-  const btn    = document.getElementById('job-of-cleanhtml-btn');
-  const status = document.getElementById('job-of-cleanhtml-status');
-  const text   = document.getElementById('job-of-cleanhtml-text');
+  const btn = document.getElementById('job-of-cleanhtml-btn');
   btn.disabled = true;
+  _ofCleanWidget.update({ label: 'Rewriting…' });
   const { ok, data } = await apiJSON('/api/onlyfans/jobs/clean-html', { method: 'POST' });
   btn.disabled = false;
-  status.style.display = '';
-  if (!ok) { text.textContent = data.error || 'Job failed'; return; }
-  text.textContent = data.rewrote
+  if (!ok) { _ofCleanWidget.update({ label: data.error || 'Job failed' }); return; }
+  _ofCleanWidget.update({ label: data.rewrote
     ? `Rewrote ${data.rewrote} row${data.rewrote === 1 ? '' : 's'} (${data.results.filter(r => r.dirty).map(r => `${r.column}: ${r.dirty}`).join(', ')})`
-    : 'Nothing to rewrite: all stored rows are clean';
+    : 'Nothing to rewrite: all stored rows are clean' });
 }
 
 // Diagnostics

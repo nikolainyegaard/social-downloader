@@ -808,9 +808,12 @@ const _TT_SETTINGS_JOBS_HTML = `
       <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
       <span id="statsFailedCount"  role="button" tabindex="0" style="font-size:12px;color:var(--red);display:none;cursor:pointer;text-decoration:underline dotted" onclick="toggleFailedList()" title="Click to see which videos"></span>
       <button id="retryFailedBtn" onclick="retryFailed()" style="display:none;font-size:12px;padding:3px 10px;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-dim);cursor:pointer" title="Clear error counts so these videos are retried on the next backfill run">Retry failed</button>
-      <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
     </div>
     <div id="failedList" style="display:none;font-size:11px;color:var(--muted);line-height:1.7"></div>
+    <div class="job-status" id="job-backfill-status" style="display:none">
+      <div id="job-backfill-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-backfill-bar"></div></div></div>
+      <div class="job-status-text" id="job-backfill-text"></div>
+    </div>
     <div class="report-widget">
       <div class="job-card-desc" style="margin-bottom:8px">
         Reset marks every video as needing a stats backfill. Use it after adding new
@@ -818,7 +821,6 @@ const _TT_SETTINGS_JOBS_HTML = `
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <button class="btn-danger" id="resetBackfillBtn" onclick="resetBackfillStep()">Reset all backfill status</button>
-        <span id="resetBackfillStatus" style="font-size:12px;color:var(--muted)"></span>
       </div>
     </div>
   </div>
@@ -891,6 +893,10 @@ const _TT_SETTINGS_JOBS_HTML = `
         <button class="btn-primary" id="job-storyfix-redl-btn" onclick="triggerStoryRedownload()">Re-download</button>
       </div>
     </div>
+    <div class="job-status" id="job-storyfix-status" style="display:none">
+      <div id="job-storyfix-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-storyfix-bar"></div></div></div>
+      <div class="job-status-text" id="job-storyfix-text"></div>
+    </div>
   </div>
 
   <div class="job-card">
@@ -908,6 +914,10 @@ const _TT_SETTINGS_JOBS_HTML = `
       <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
         <button class="btn-primary" id="job-thumbfix-btn" onclick="triggerThumbnailRepair()">Fix</button>
       </div>
+    </div>
+    <div class="job-status" id="job-thumbfix-status" style="display:none">
+      <div id="job-thumbfix-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-thumbfix-bar"></div></div></div>
+      <div class="job-status-text" id="job-thumbfix-text"></div>
     </div>
   </div>
 
@@ -947,8 +957,8 @@ const _TT_SETTINGS_JOBS_HTML = `
       </div>
       <button class="btn-danger" id="util-clear-avatars-btn" onclick="triggerClearAvatars()" style="flex-shrink:0;align-self:flex-start">Delete</button>
     </div>
-    <div class="job-status" id="util-clear-avatars-status" style="display:none">
-      <div class="job-status-text" id="util-clear-avatars-text"></div>
+    <div class="job-status" id="job-clear-avatars-status" style="display:none">
+      <div class="job-status-text" id="job-clear-avatars-text"></div>
     </div>
   </div>
 
@@ -963,8 +973,8 @@ const _TT_SETTINGS_JOBS_HTML = `
       </div>
       <button class="btn-danger" id="util-clear-thumbs-btn" onclick="triggerClearThumbnails()" style="flex-shrink:0;align-self:flex-start">Delete</button>
     </div>
-    <div class="job-status" id="util-clear-thumbs-status" style="display:none">
-      <div class="job-status-text" id="util-clear-thumbs-text"></div>
+    <div class="job-status" id="job-clear-thumbs-status" style="display:none">
+      <div class="job-status-text" id="job-clear-thumbs-text"></div>
     </div>
   </div>
 
@@ -1033,20 +1043,31 @@ const _TT_SETTINGS_DIAG_HTML = `
   </div>`;
 
 function _ttJobsShow() {
-  _avifLoadStatus();
-  _startJobsPoll();
-  _resumeBackfillPoll();
+  // The AVIF tick renders its idle state correctly, so it always runs once
+  // (and keeps polling only while the converter is live); the others resume
+  // their poll only when their job is still running server-side.
+  _jobPollStart('avif', _avifLoadStatus, 1500);
+  _jobResume('audio',     '/api/tiktok/jobs/audio-cleanup/status',    _audioTick,     1000);
+  _jobResume('filecheck', '/api/tiktok/jobs/file-check/status',       _filecheckTick, 1000);
+  _jobResume('storyfix',  '/api/tiktok/jobs/story-recovery/status',   _storyfixTick,  1500);
+  _jobResume('thumbfix',  '/api/tiktok/jobs/thumbnail-repair/status', _thumbfixTick,  1500);
+  _jobResume('backfill',  '/api/tiktok/backfill',                     _backfillTick,  2000);
 }
 
 function _ttJobsHide() {
-  // Capture running state before _stopJobsPoll() nulls out _jobsPoll
-  const avifRunning = _jobsPoll !== null;
-  _stopJobsPoll();
-  // Clear finished job widgets so the pane shows a clean state next time
-  if (!avifRunning)    { _avifWidget.hide(); const b = document.getElementById('job-avif-btn'); if (b) b.disabled = false; }
-  if (!_audioPoll)     { _audioWidget.hide(); const b = document.getElementById('job-audio-btn'); if (b) b.disabled = false; }
-  if (!_filecheckPoll) { _filecheckWidget.hide(); _filecheckReport.hide(); _setFilecheckBtns(false); }
-  if (!_backfillPoll)  { const s = document.getElementById('backfillStatus'); if (s) s.textContent = ''; }
+  // Finished jobs: clear their widgets so the pane opens clean next time.
+  // Running jobs: keep the widget state; _ttJobsShow resumes their poll.
+  const byId = id => document.getElementById(id);
+  if (!_jobPolls['avif'])      { _avifWidget.hide();      const b = byId('job-avif-btn');     if (b) b.disabled = false; }
+  if (!_jobPolls['audio'])     { _audioWidget.hide();     const b = byId('job-audio-btn');    if (b) b.disabled = false; }
+  if (!_jobPolls['filecheck']) { _filecheckWidget.hide(); _filecheckReport.hide(); _setFilecheckBtns(false); }
+  if (!_jobPolls['storyfix'])  { _storyfixWidget.hide();  _setStoryfixBtns(false); }
+  if (!_jobPolls['thumbfix'])  { _thumbfixWidget.hide();  const b = byId('job-thumbfix-btn'); if (b) b.disabled = false; }
+  if (!_jobPolls['backfill'])  { _backfillWidget.hide();  const b = byId('backfillBtn');      if (b) b.disabled = false; }
+  _clearAvatarsWidget.hide();
+  _clearThumbsWidget.hide();
+  // No interval outlives the pane
+  _jobPollStopAll();
 }
 
 // ── App init ──────────────────────────────────────────────────────────────────
@@ -1941,13 +1962,35 @@ async function runMigration() {
 }
 
 // ── Jobs ──────────────────────────────────────────────────────────────────────
+// One contract for every Jobs-pane job: progress and results render through
+// _makeJobWidget, and every polling loop registers in _jobPolls so the pane's
+// onHide stops them all. Jobs keep running server-side; reopening the pane
+// resumes the poll of any job still live (_jobResume).
 
-let _jobsPoll    = null;
-let _audioPoll   = null;
+const _jobPolls = {};
+function _jobPollStart(name, fn, ms) {
+  if (_jobPolls[name]) return;
+  _jobPolls[name] = setInterval(fn, ms);
+  fn();
+}
+function _jobPollStop(name) {
+  if (_jobPolls[name]) { clearInterval(_jobPolls[name]); _jobPolls[name] = null; }
+}
+function _jobPollStopAll() { Object.keys(_jobPolls).forEach(_jobPollStop); }
+async function _jobResume(name, statusUrl, tick, ms) {
+  if (_jobPolls[name]) return;
+  const { ok, data } = await apiJSON(statusUrl);
+  if (ok && data.running) _jobPollStart(name, tick, ms);
+}
 
-const _avifWidget      = _makeJobWidget('avif');
-const _audioWidget     = _makeJobWidget('audio');
-const _filecheckWidget = _makeJobWidget('filecheck');
+const _avifWidget         = _makeJobWidget('avif');
+const _audioWidget        = _makeJobWidget('audio');
+const _filecheckWidget    = _makeJobWidget('filecheck');
+const _storyfixWidget     = _makeJobWidget('storyfix');
+const _thumbfixWidget     = _makeJobWidget('thumbfix');
+const _backfillWidget     = _makeJobWidget('backfill');
+const _clearAvatarsWidget = _makeJobWidget('clear-avatars');
+const _clearThumbsWidget  = _makeJobWidget('clear-thumbs');
 
 // AVIF converter
 
@@ -1973,7 +2016,7 @@ async function _avifLoadStatus() {
   } else {
     _avifWidget.update({ barPct: 100, label: total === 0 ? 'All images already in AVIF.' : '' });
   }
-  if (!data.running && !isPending) _stopJobsPoll();
+  if (!data.running && !isPending) _jobPollStop('avif');
 }
 
 async function triggerAvifJob() {
@@ -1981,16 +2024,7 @@ async function triggerAvifJob() {
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/jobs/photo-converter/start', { method: 'POST' });
   if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); btn.disabled = false; return; }
-  _avifLoadStatus();
-  _startJobsPoll();
-}
-
-function _startJobsPoll() {
-  if (_jobsPoll) return;
-  _jobsPoll = setInterval(_avifLoadStatus, 1500);
-}
-function _stopJobsPoll() {
-  if (_jobsPoll) { clearInterval(_jobsPoll); _jobsPoll = null; }
+  _jobPollStart('avif', _avifLoadStatus, 1500);
 }
 
 // Database cleanup runs through the engine's ttTriggerCleanup export
@@ -2009,41 +2043,41 @@ async function triggerAudioCleanup() {
   const { ok, data } = await apiJSON('/api/tiktok/jobs/audio-cleanup/start', { method: 'POST' });
   if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); btn.disabled = false; return; }
   _audioWidget.update({ barPct: null, label: 'Running…' });
-  if (_audioPoll) return;
-  _audioPoll = setInterval(async () => {
-    const { ok, data } = await apiJSON('/api/tiktok/jobs/audio-cleanup/status');
-    if (!ok) return;
-    if (data.running) {
-      _audioWidget.update({ barPct: null, label: `Running… ${data.deleted} deleted, ${data.db_removed} removed from DB` });
-    } else if (data.last_run) {
-      clearInterval(_audioPoll); _audioPoll = null;
-      document.getElementById('job-audio-btn').disabled = false;
-      if (data.found === 0) {
-        _audioWidget.update({ label: 'No audio files found.' });
-      } else {
-        const parts = [`Found ${data.found}`, `deleted ${data.deleted}`, `removed ${data.db_removed} from DB`];
-        if (data.errors) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
-        _audioWidget.update({ label: parts.join(' · ') + ` (${data.last_run})` });
-      }
-    }
-  }, 1000);
+  _jobPollStart('audio', _audioTick, 1000);
+}
+
+async function _audioTick() {
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/audio-cleanup/status');
+  if (!ok) return;
+  const btn = document.getElementById('job-audio-btn');
+  if (data.running) {
+    if (btn) btn.disabled = true;
+    _audioWidget.update({ barPct: null, label: `Running… ${data.deleted} deleted, ${data.db_removed} removed from DB` });
+    return;
+  }
+  _jobPollStop('audio');
+  if (btn) btn.disabled = false;
+  if (!data.last_run) return;
+  if (data.found === 0) {
+    _audioWidget.update({ label: 'No audio files found.' });
+  } else {
+    const parts = [`Found ${data.found}`, `deleted ${data.deleted}`, `removed ${data.db_removed} from DB`];
+    if (data.errors) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
+    _audioWidget.update({ label: parts.join(' · ') + ` (${data.last_run})` });
+  }
 }
 
 // Utilities: clear avatars and thumbnails
 
-async function _runDeleteJob(btnId, statusId, textId, apiPath, bodyFn, resultFn) {
-  const btn    = document.getElementById(btnId);
-  const status = document.getElementById(statusId);
-  const text   = document.getElementById(textId);
+async function _runDeleteJob(widget, btnId, apiPath, bodyFn, resultFn) {
+  const btn = document.getElementById(btnId);
   btn.disabled = true;
-  status.style.display = '';
-  text.textContent = 'Deleting…';
+  widget.update({ label: 'Deleting…' });
   const opts = { method: 'POST' };
   if (bodyFn) opts.body = JSON.stringify(bodyFn());
   const { ok, data } = await apiJSON(apiPath, opts);
   btn.disabled = false;
-  if (!ok) { text.textContent = data.error || 'Request failed.'; return; }
-  text.textContent = resultFn(data);
+  widget.update({ label: ok ? resultFn(data) : (data.error || 'Request failed.') });
 }
 
 async function triggerClearAvatars() {
@@ -2056,7 +2090,7 @@ async function triggerClearAvatars() {
     confirmLabel: 'Delete',
   })) return;
   return _runDeleteJob(
-    'util-clear-avatars-btn', 'util-clear-avatars-status', 'util-clear-avatars-text',
+    _clearAvatarsWidget, 'util-clear-avatars-btn',
     '/api/tiktok/utils/clear-avatars',
     () => ({ include_banned: includeBanned }),
     d => `Deleted ${d.deleted} avatar file${d.deleted !== 1 ? 's' : ''}.`
@@ -2070,7 +2104,7 @@ async function triggerClearThumbnails() {
     confirmLabel: 'Delete',
   })) return;
   return _runDeleteJob(
-    'util-clear-thumbs-btn', 'util-clear-thumbs-status', 'util-clear-thumbs-text',
+    _clearThumbsWidget, 'util-clear-thumbs-btn',
     '/api/tiktok/utils/clear-thumbnails',
     null,
     d => `Deleted ${d.deleted} thumbnail file${d.deleted !== 1 ? 's' : ''}.`
@@ -2079,7 +2113,6 @@ async function triggerClearThumbnails() {
 
 // Missing file check
 
-let _filecheckPoll       = null;
 let _filecheckReportFile = null;
 const _filecheckReport   = _makeReportWidget('filecheck', '/api/tiktok/reports');
 
@@ -2088,38 +2121,35 @@ function _setFilecheckBtns(disabled) {
   document.getElementById('job-filecheck-purge-btn').disabled = disabled;
 }
 
-function _startFilecheckPoll() {
-  if (_filecheckPoll) return;
-  _filecheckPoll = setInterval(async () => {
-    const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/status');
-    if (!ok) return;
-    if (data.running) {
-      const label = data.mode === 'purge' ? 'Purging...' : 'Scanning...';
-      _filecheckWidget.update({ barPct: null, label });
-      return;
-    }
-    clearInterval(_filecheckPoll); _filecheckPoll = null;
-    _setFilecheckBtns(false);
-    _filecheckReportFile = data.report_file || null;
+async function _filecheckTick() {
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/status');
+  if (!ok) return;
+  if (data.running) {
+    _setFilecheckBtns(true);
+    _filecheckWidget.update({ barPct: null, label: data.mode === 'purge' ? 'Purging...' : 'Scanning...' });
+    return;
+  }
+  _jobPollStop('filecheck');
+  _setFilecheckBtns(false);
+  _filecheckReportFile = data.report_file || null;
 
-    if (data.mode === 'scan') {
-      if (data.found === 0) {
-        _filecheckWidget.update({ label: `All files present. ${data.last_run}` });
-        _filecheckReport.hide();
-      } else {
-        _filecheckWidget.update({ label: `${data.found} missing file${data.found !== 1 ? 's' : ''} found. ${data.last_run}` });
-        _filecheckReport.show(data.report_file, data.preview, data.found);
-      }
-    } else if (data.mode === 'purge') {
-      if (data.removed === 0) {
-        _filecheckWidget.update({ label: `No missing files. Nothing removed. ${data.last_run}` });
-        _filecheckReport.hide();
-      } else {
-        _filecheckWidget.update({ label: `${data.removed} record${data.removed !== 1 ? 's' : ''} removed from DB. ${data.last_run}` });
-        _filecheckReport.show(data.report_file, data.preview, data.removed);
-      }
+  if (data.mode === 'scan') {
+    if (data.found === 0) {
+      _filecheckWidget.update({ label: `All files present. ${data.last_run}` });
+      _filecheckReport.hide();
+    } else {
+      _filecheckWidget.update({ label: `${data.found} missing file${data.found !== 1 ? 's' : ''} found. ${data.last_run}` });
+      _filecheckReport.show(data.report_file, data.preview, data.found);
     }
-  }, 1000);
+  } else if (data.mode === 'purge') {
+    if (data.removed === 0) {
+      _filecheckWidget.update({ label: `No missing files. Nothing removed. ${data.last_run}` });
+      _filecheckReport.hide();
+    } else {
+      _filecheckWidget.update({ label: `${data.removed} record${data.removed !== 1 ? 's' : ''} removed from DB. ${data.last_run}` });
+      _filecheckReport.show(data.report_file, data.preview, data.removed);
+    }
+  }
 }
 
 async function triggerFileScan() {
@@ -2128,7 +2158,7 @@ async function triggerFileScan() {
   if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setFilecheckBtns(false); return; }
   _filecheckWidget.update({ barPct: null, label: 'Scanning...' });
   _filecheckReport.hide();
-  _startFilecheckPoll();
+  _jobPollStart('filecheck', _filecheckTick, 1000);
 }
 
 async function triggerFilePurge() {
@@ -2138,109 +2168,109 @@ async function triggerFilePurge() {
   if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setFilecheckBtns(false); return; }
   _filecheckWidget.update({ barPct: null, label: 'Purging...' });
   _filecheckReport.hide();
-  _startFilecheckPoll();
+  _jobPollStart('filecheck', _filecheckTick, 1000);
 }
 
-// ── Corrupted story recovery (toast-only; no inline status on the card) ─────
-let _storyfixPoll = null;
+// ── Corrupted story recovery ─────────────────────────────────────────────────
 
 function _setStoryfixBtns(disabled) {
-  document.getElementById('job-storyfix-scan-btn').disabled = disabled;
-  document.getElementById('job-storyfix-redl-btn').disabled = disabled;
+  const scan = document.getElementById('job-storyfix-scan-btn');
+  const redl = document.getElementById('job-storyfix-redl-btn');
+  if (scan) scan.disabled = disabled;
+  if (redl) redl.disabled = disabled;
 }
 
 const _nStory = n => `${n} ${n === 1 ? 'story' : 'stories'}`;
 
-function _storyfixPollUntilDone(mode, toast) {
-  if (_storyfixPoll) clearInterval(_storyfixPoll);
-  _storyfixPoll = setInterval(async () => {
-    const { ok, data } = await apiJSON('/api/tiktok/jobs/story-recovery/status');
-    if (!ok) return;
-    if (data.running) {
-      if (mode === 'redownload' && (data.recovered || data.still_failing)) {
-        toast.update(`Re-downloading stories… ${data.recovered} done`,
-                     { type: 'info', duration: 0, spinner: true });
-      }
-      return;
-    }
-    clearInterval(_storyfixPoll); _storyfixPoll = null;
-    _setStoryfixBtns(false);
+// Which action the current or last run was; the status payload has no mode
+// field, so a poll resumed after a pane reopen assumes scan
+let _storyfixMode = 'scan';
 
-    if (mode === 'scan') {
-      const afflicted = (data.corrupt || 0) + (data.missing || 0);
-      if (!afflicted) {
-        toast.update('No corrupted or missing stories found.', { type: 'success' });
-        return;
-      }
-      const parts = [];
-      if (data.live_video) parts.push(`${data.live_video} live video re-downloadable`);
-      if (data.live_photo) parts.push(`${data.live_photo} live photo (recovered on next check)`);
-      if (data.expired)    parts.push(`${data.expired} expired`);
-      toast.update(`${_nStory(afflicted)} corrupted or missing: ${parts.join(', ')}.`,
-                   { type: 'warning', duration: 0 });
-      return;
-    }
+async function _storyfixTick() {
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/story-recovery/status');
+  if (!ok) return;
+  if (data.running) {
+    _setStoryfixBtns(true);
+    _storyfixWidget.update({ barPct: null, label: _storyfixMode === 'redownload'
+      ? `Re-downloading stories… ${data.recovered || 0} done`
+      : 'Scanning saved stories…' });
+    return;
+  }
+  _jobPollStop('storyfix');
+  _setStoryfixBtns(false);
 
-    // redownload
-    if (data.recovered) {
-      toast.update(`${_nStory(data.recovered)} re-downloaded.`, { type: 'success' });
-    } else {
-      toast.dismiss();
-    }
-    if (data.purged) showToast(`${_nStory(data.purged)} expired and unrecoverable, removed from the library.`, { type: 'info' });
-    if (data.still_failing) showToast(`${_nStory(data.still_failing)} failed to re-download.`, { type: 'error', duration: 0 });
-    else if (!data.recovered && !data.purged) {
-      const note = data.live_photo
-        ? `No video stories to re-download; ${data.live_photo} live photo left for the next check.`
-        : 'No corrupted stories to re-download.';
-      showToast(note, { type: 'info' });
-    }
-  }, 1500);
+  if (_storyfixMode === 'scan') {
+    const afflicted = (data.corrupt || 0) + (data.missing || 0);
+    if (!afflicted) { _storyfixWidget.update({ label: 'No corrupted or missing stories found.' }); return; }
+    const parts = [];
+    if (data.live_video) parts.push(`${data.live_video} live video re-downloadable`);
+    if (data.live_photo) parts.push(`${data.live_photo} live photo (recovered on next check)`);
+    if (data.expired)    parts.push(`${data.expired} expired`);
+    _storyfixWidget.update({ label: `${_nStory(afflicted)} corrupted or missing: ${parts.join(', ')}.` });
+    return;
+  }
+  const parts = [];
+  if (data.recovered)     parts.push(`${_nStory(data.recovered)} re-downloaded`);
+  if (data.purged)        parts.push(`${_nStory(data.purged)} expired and unrecoverable, removed from the library`);
+  if (data.still_failing) parts.push(`${_nStory(data.still_failing)} failed to re-download`);
+  if (!parts.length) {
+    parts.push(data.live_photo
+      ? `No video stories to re-download; ${data.live_photo} live photo left for the next check`
+      : 'No corrupted stories to re-download');
+  }
+  _storyfixWidget.update({ label: parts.join(' · ') + '.' });
 }
 
 async function triggerStoryScan() {
   _setStoryfixBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/story-recovery/scan', { method: 'POST' });
   if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setStoryfixBtns(false); return; }
-  const toast = showToast('Scanning saved stories…', { spinner: true, duration: 0 });
-  _storyfixPollUntilDone('scan', toast);
+  _storyfixMode = 'scan';
+  _storyfixWidget.update({ barPct: null, label: 'Scanning saved stories…' });
+  _jobPollStart('storyfix', _storyfixTick, 1500);
 }
 
 async function triggerStoryRedownload() {
   _setStoryfixBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/story-recovery/redownload', { method: 'POST' });
   if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setStoryfixBtns(false); return; }
-  const toast = showToast('Re-downloading corrupted stories…', { spinner: true, duration: 0 });
-  _storyfixPollUntilDone('redownload', toast);
+  _storyfixMode = 'redownload';
+  _storyfixWidget.update({ barPct: null, label: 'Re-downloading corrupted stories…' });
+  _jobPollStart('storyfix', _storyfixTick, 1500);
 }
 
-// ── Fix blank thumbnails (toast-only; no inline status on the card) ─────────
-let _thumbfixPoll = null;
+// ── Fix blank thumbnails ─────────────────────────────────────────────────────
 const _nThumb = n => `${n} ${n === 1 ? 'thumbnail' : 'thumbnails'}`;
+
+async function _thumbfixTick() {
+  const { ok, data } = await apiJSON('/api/tiktok/jobs/thumbnail-repair/status');
+  if (!ok) return;
+  const btn = document.getElementById('job-thumbfix-btn');
+  if (data.running) {
+    if (btn) btn.disabled = true;
+    const total = data.total || 0;
+    _thumbfixWidget.update({
+      barPct: total ? Math.round((data.scanned || 0) / total * 100) : null,
+      label:  `Fixing thumbnails… ${data.scanned}/${data.total} scanned, ${data.repaired} fixed`,
+    });
+    return;
+  }
+  _jobPollStop('thumbfix');
+  if (btn) btn.disabled = false;
+  const parts = [];
+  if (data.repaired) parts.push(`${_nThumb(data.repaired)} fixed`);
+  else if (!data.broken) parts.push('No blank thumbnails found');
+  if (data.failed) parts.push(`${_nThumb(data.failed)} could not be rebuilt (source file missing)`);
+  if (parts.length) _thumbfixWidget.update({ label: parts.join(' · ') + '.' });
+}
 
 async function triggerThumbnailRepair() {
   const btn = document.getElementById('job-thumbfix-btn');
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/jobs/thumbnail-repair/start', { method: 'POST' });
   if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); btn.disabled = false; return; }
-  const toast = showToast('Scanning thumbnails…', { spinner: true, duration: 0 });
-  if (_thumbfixPoll) clearInterval(_thumbfixPoll);
-  _thumbfixPoll = setInterval(async () => {
-    const { ok, data } = await apiJSON('/api/tiktok/jobs/thumbnail-repair/status');
-    if (!ok) return;
-    if (data.running) {
-      toast.update(`Fixing thumbnails… ${data.scanned}/${data.total} scanned, ${data.repaired} fixed`,
-                   { type: 'info', duration: 0 });
-      return;
-    }
-    clearInterval(_thumbfixPoll); _thumbfixPoll = null;
-    btn.disabled = false;
-    if (data.repaired) toast.update(`${_nThumb(data.repaired)} fixed.`, { type: 'success' });
-    else if (!data.broken) toast.update('No blank thumbnails found.', { type: 'success' });
-    else toast.dismiss();
-    if (data.failed) showToast(`${_nThumb(data.failed)} could not be rebuilt (source file missing).`,
-                               { type: 'error', duration: 0 });
-  }, 1500);
+  _thumbfixWidget.update({ barPct: null, label: 'Scanning thumbnails…' });
+  _jobPollStart('thumbfix', _thumbfixTick, 1500);
 }
 
 // ── Diagnostics ────────────────────────────────────────────────────────────────
@@ -2348,7 +2378,28 @@ function diagCopy() {
 
 // ── Stats backfill ────────────────────────────────────────────────────────────
 
-let _backfillPoll = null;
+async function _backfillTick() {
+  const { ok, data } = await apiJSON('/api/tiktok/backfill');
+  if (!ok) return;
+  const btn = document.getElementById('backfillBtn');
+  if (data.running) {
+    if (btn) btn.disabled = true;
+    const total = data.total || 0;
+    _backfillWidget.update({
+      barPct: total ? Math.round((data.done || 0) / total * 100) : null,
+      label:  `Backfilling… ${data.done}/${data.total}`,
+    });
+    return;
+  }
+  _jobPollStop('backfill');
+  if (btn) btn.disabled = false;
+  if (data.total === 0) {
+    _backfillWidget.update({ label: 'Nothing to backfill.' });
+  } else {
+    const okCount = (data.done || 0) - (data.errors || 0);
+    _backfillWidget.update({ barPct: 100, label: `Done: ${okCount} updated, ${data.errors || 0} failed` });
+  }
+}
 
 async function triggerBackfill() {
   const btn = document.getElementById('backfillBtn');
@@ -2359,7 +2410,8 @@ async function triggerBackfill() {
     btn.disabled = false;
     return;
   }
-  _startBackfillPoll();
+  _backfillWidget.update({ barPct: null, label: 'Starting…' });
+  _jobPollStart('backfill', _backfillTick, 2000);
 }
 
 async function retryFailed() {
@@ -2392,68 +2444,19 @@ async function toggleFailedList() {
   ).join('');
 }
 
-function _startBackfillPoll() {
-  if (_backfillPoll) return;
-  _backfillPoll = setInterval(async () => {
-    const { ok, data } = await apiJSON('/api/tiktok/backfill');
-    if (!ok) return;
-    const btn      = document.getElementById('backfillBtn');
-    const statusEl = document.getElementById('backfillStatus');
-    if (data.running) {
-      btn.disabled = true;
-      statusEl.textContent = `Backfilling… ${data.done}/${data.total}`;
-    } else {
-      clearInterval(_backfillPoll);
-      _backfillPoll = null;
-      btn.disabled = false;
-      statusEl.textContent = '';
-      const ok2 = data.done - data.errors;
-      if (data.total === 0) showToast('Nothing to backfill', { type: 'info' });
-      else showToast(`Stats backfill done: ${ok2} updated, ${data.errors} failed`,
-                     { type: data.errors ? 'warning' : 'success' });
-    }
-  }, 2000);
-}
-
-// Reset backfill: two-step confirmation
-
-let _resetBackfillConfirming = false;
-let _resetBackfillTimer = null;
-
-function resetBackfillStep() {
+async function resetBackfillStep() {
+  if (!await openConfirm({
+    title: 'Reset all backfill status?',
+    message: 'Every video is marked as needing a stats backfill; the next run re-fetches all of them.',
+    confirmLabel: 'Reset',
+  })) return;
   const btn = document.getElementById('resetBackfillBtn');
-  const statusEl = document.getElementById('resetBackfillStatus');
-
-  if (!_resetBackfillConfirming) {
-    // First click enters the confirm state
-    _resetBackfillConfirming = true;
-    btn.textContent = 'Click again to confirm';
-    btn.style.background = 'var(--red-bg)';
-    statusEl.textContent = 'This will queue all videos for re-backfill.';
-    statusEl.style.color = 'var(--red)';
-    // Auto-cancel after 5 s
-    _resetBackfillTimer = setTimeout(() => {
-      _resetBackfillConfirming = false;
-      btn.textContent = 'Reset all backfill status';
-      btn.style.background = '';
-      statusEl.textContent = '';
-    }, 5000);
-  } else {
-    // Second click executes
-    clearTimeout(_resetBackfillTimer);
-    _resetBackfillConfirming = false;
-    btn.disabled = true;
-    btn.textContent = 'Reset all backfill status';
-    btn.style.background = '';
-    statusEl.textContent = '';
-    const t = showToast('Resetting…', { spinner: true, duration: 0 });
-
-    apiJSON('/api/tiktok/backfill/reset', { method: 'POST' }).then(({ ok, data }) => {
-      btn.disabled = false;
-      if (!ok) t.update(data.error || 'Could not reset the backfill status', { type: 'error' });
-      else t.update(`Done. ${data.reset.toLocaleString()} videos marked for re-backfill.`, { type: 'success' });
-    });
-  }
+  btn.disabled = true;
+  const t = showToast('Resetting…', { spinner: true, duration: 0 });
+  const { ok, data } = await apiJSON('/api/tiktok/backfill/reset', { method: 'POST' });
+  btn.disabled = false;
+  if (!ok) t.update(data.error || 'Could not reset the backfill status', { type: 'error' });
+  else t.update(`Done. ${data.reset.toLocaleString()} videos marked for re-backfill.`, { type: 'success' });
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -2469,19 +2472,6 @@ setInterval(() => { if (_ttTabActive()) loadCookies(); }, 30000);
 setInterval(() => { if (_ttTabActive() && !tt.isLive()) loadSounds(); }, 60000);
 window.addEventListener('hashchange', () => { if (_ttTabActive()) { loadCookies(); loadSounds(); } });
 _initAllGliders();
-
-// Resume the backfill poll when the jobs pane opens while a run is live
-// (also covers a run started before this page load).
-async function _resumeBackfillPoll() {
-  const { ok, data } = await apiJSON('/api/tiktok/backfill');
-  if (ok && data.running) {
-    const btn = document.getElementById('backfillBtn');
-    if (btn) btn.disabled = true;
-    const status = document.getElementById('backfillStatus');
-    if (status) status.textContent = `Backfilling… ${data.done}/${data.total}`;
-    _startBackfillPoll();
-  }
-}
 
 // Migration warning
 
