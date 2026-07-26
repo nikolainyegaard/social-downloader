@@ -30,6 +30,7 @@
  * @property {string} [subLabelSort]     Follower-count label in the sort dropdown
  * @property {string} [titleColLabel]    Video table title column (default 'Title')
  * @property {string} [uploadDateLabel]  Video table date column
+ * @property {string} [viewsLabel]       Video table views column (default 'Views'; Instagram/OnlyFans use 'Likes')
  * @property {boolean} [uploadDateOnly]  Render dates without time (YouTube)
  * @property {boolean} [hasBanner]       Show the banner slot in the detail modal
  * @property {Object<string, string>} [fieldLabels]     profile_history field -> label
@@ -2772,6 +2773,11 @@ function initChannelApp(cfg) {
     // don't close both at once.
     for (const id of ['mvModal', 'imgModal', 'soundModalBackdrop', 'settingsBackdrop']) {
       if (document.getElementById(id) && document.getElementById(id).style.display !== 'none') return;
+    }
+    // The About sheet floats over the creator modal; close it first.
+    if (_el('AboutModal')?.style.display !== 'none') {
+      window[`${P}CloseAbout`]();
+      return;
     }
     // The connections list sits over the creator modal; close it first.
     if (_el('ConnListModal')?.style.display !== 'none') {
