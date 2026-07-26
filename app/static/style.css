@@ -1969,6 +1969,7 @@ dialog:not([open]) { display: none !important; }
   .recent-card { height: 320px; }
   /* Stacked cards have no fixed height, so cap the add history list */
   .add-history { max-height: 260px; }
+  .now-strip { display: none !important; }
 }
 
 /* Recent activity feed */
