@@ -679,7 +679,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .tracking-toggle input { display: none; }
 .toggle-track { width: 30px; height: 17px; background: var(--border); border-radius: var(--radius-pill); position: relative; transition: background 0.2s; flex-shrink: 0; }
 .tracking-toggle input:checked + .toggle-track { background: var(--accent); }
-.toggle-thumb { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; background: var(--on-accent); border-radius: 50%; transition: left 0.2s; }
+/* Thumb is always light: it sits on the grey track when off, so it cannot
+   follow --on-accent (dark ink in the TikTok theme) */
+.toggle-thumb { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; background: var(--text); border-radius: 50%; transition: left 0.2s; }
 .tracking-toggle input:checked + .toggle-track .toggle-thumb { left: 15px; }
 .toggle-label { font-size: 12px; color: var(--muted); }
 /* Large master-switch variant (the Network panel's Enable VPN toggle) */
@@ -1184,7 +1186,9 @@ dialog:not([open]) { display: none !important; }
 .filter-pills.multi { gap: 0; padding: 0; border-radius: var(--radius); overflow: hidden; box-shadow: none; }
 .filter-pills.multi .filter-pill { border-radius: 0; height: 26px; padding: 0 12px; border-right: 1px solid var(--border); }
 .filter-pills.multi .filter-pill:last-child { border-right: 1px solid transparent; }
-.filter-pills.multi .filter-pill.active { background: var(--accent-bg-h); color: var(--on-accent); box-shadow: inset 0 -2px 0 var(--accent); }
+/* Active text is --text, not --on-accent: the fill is a translucent tint over
+   the dark surface, not a solid accent fill */
+.filter-pills.multi .filter-pill.active { background: var(--accent-bg-h); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
 .glider { position: absolute; z-index: 1; background: var(--accent); border-radius: var(--radius-pill); transition: left .2s ease, width .2s ease; pointer-events: none; }
 
 .modal-vid-count { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
@@ -1613,7 +1617,8 @@ dialog:not([open]) { display: none !important; }
 .confirm-warn { margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--red); line-height: 1.45; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 .confirm-ok { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.confirm-ok.danger { background: var(--red); border-color: var(--red); }
+/* Red fill wants white regardless of the theme's --on-accent */
+.confirm-ok.danger { background: var(--red); border-color: var(--red); color: #fff; }
 
 .sort-dir-btn {
   background: var(--raised);
@@ -2778,6 +2783,18 @@ dialog:not([open]) { display: none !important; }
 @keyframes section-in { from { opacity: 0; transform: translateY(6px); } }
 
 /* ── Per-platform theme overrides ─────────────────────────────────────────── */
+
+/* The :root blue is the neutral chrome accent; every platform overrides it,
+   TikTok included. Cyan is bright, so white text fails on a cyan fill: the
+   TikTok theme also overrides --on-accent with a dark ink. Only styles for
+   solid accent fills may use --on-accent (tints keep --text). */
+.app.theme-tiktok {
+  --accent:      #69c9d0;   /* TikTok's official splash cyan */
+  --accent-h:    #52b4bc;
+  --accent-bg:   rgba(105,201,208,.15);
+  --accent-bg-h: rgba(105,201,208,.28);
+  --on-accent:   #072e31;
+}
 
 .app.theme-youtube {
   --accent:      #ff3c3c;
