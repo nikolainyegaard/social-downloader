@@ -16,6 +16,13 @@
   --gold:         #f5a623;
   --purple:       #c084fc;
   --muted:        #7a8190;
+  /* Platform identity colors: single source for the theme --accent overrides
+     and the platform tab dots (which show every platform's color at once,
+     so they cannot come from the active theme) */
+  --p-tiktok:     #69c9d0;
+  --p-youtube:    #ff3c3c;
+  --p-instagram:  #c13584;
+  --p-twitter:    #1da1f2;
   --text:         #e3e7ef;
   --text-dim:     #9aa0ae;
   --on-accent:    #fff;      /* text and glyphs sitting on an accent fill */
@@ -1376,7 +1383,6 @@ dialog:not([open]) { display: none !important; }
 .tab.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
-  text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 .view-tabs-row .search-row { display: flex; align-items: center; gap: 6px; margin-left: auto; margin-bottom: 5px; }
 /* The Reset next to the search box exists for mobile; desktop keeps the one in
@@ -2761,7 +2767,37 @@ dialog:not([open]) { display: none !important; }
    larger hit area. */
 /* flex-shrink/nowrap so narrow screens overflow into the edge-fade scroll
    instead of squashing the buttons. */
-.platform-tabs .tab { padding: 9px 18px; flex-shrink: 0; white-space: nowrap; }
+.platform-tabs .tab { padding: 9px 18px; flex-shrink: 0; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
+
+/* Identity dot: every tab carries its platform's color, dim when inactive.
+   A platform without a --p-* token falls back to the muted grey. */
+.platform-tabs .tab::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--tab-accent, var(--muted));
+  opacity: .45;
+  transition: opacity .15s;
+}
+.platform-tabs .tab:hover::before  { opacity: .8; }
+.platform-tabs .tab.active::before { opacity: 1; }
+/* setHdrStatus toggles loop-active on any platform whose loop is running, so
+   background activity is visible from every tab */
+.platform-tabs .tab.loop-active::before { opacity: 1; animation: pulse 1.2s infinite; }
+
+.platform-tabs .tab[data-platform="tiktok"]    { --tab-accent: var(--p-tiktok); }
+.platform-tabs .tab[data-platform="youtube"]   { --tab-accent: var(--p-youtube); }
+.platform-tabs .tab[data-platform="instagram"] { --tab-accent: var(--p-instagram); }
+.platform-tabs .tab[data-platform="twitter"]   { --tab-accent: var(--p-twitter); }
+
+/* The active tab colors from its own identity token rather than the theme
+   accent; identical today (the theme follows the active tab) but keeps the
+   bar correct on its own */
+.platform-tabs .tab.active {
+  color: var(--tab-accent, var(--accent));
+  border-bottom-color: var(--tab-accent, var(--accent));
+}
 
 /* ── Platform sections ────────────────────────────────────────────────────── */
 
@@ -2781,7 +2817,7 @@ dialog:not([open]) { display: none !important; }
    TikTok theme also overrides --on-accent with a dark ink. Only styles for
    solid accent fills may use --on-accent (tints keep --text). */
 .app.theme-tiktok {
-  --accent:      #69c9d0;   /* TikTok's official splash cyan */
+  --accent:      var(--p-tiktok);   /* TikTok's official splash cyan */
   --accent-h:    #52b4bc;
   --accent-bg:   rgba(105,201,208,.15);
   --accent-bg-h: rgba(105,201,208,.28);
@@ -2789,21 +2825,21 @@ dialog:not([open]) { display: none !important; }
 }
 
 .app.theme-youtube {
-  --accent:      #ff3c3c;
+  --accent:      var(--p-youtube);
   --accent-h:    #e82020;
   --accent-bg:   rgba(255,60,60,.15);
   --accent-bg-h: rgba(255,60,60,.28);
 }
 
 .app.theme-instagram {
-  --accent:      #c13584;
+  --accent:      var(--p-instagram);
   --accent-h:    #a62d6f;
   --accent-bg:   rgba(193,53,132,.15);
   --accent-bg-h: rgba(193,53,132,.28);
 }
 
 .app.theme-twitter {
-  --accent:      #1da1f2;
+  --accent:      var(--p-twitter);
   --accent-h:    #1591d8;
   --accent-bg:   rgba(29,161,242,.15);
   --accent-bg-h: rgba(29,161,242,.28);

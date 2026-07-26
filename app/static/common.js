@@ -30,6 +30,10 @@ const _hdrStatus = {};  // platform -> latest status label
 
 function setHdrStatus(platform, label) {
   _hdrStatus[platform] = label;
+  // Pulse the platform's tab dot while its loop is doing anything. Hidden
+  // tabs report through their 15 s status polls, the active tab over SSE.
+  const tab = document.querySelector(`.platform-tabs .tab[data-platform="${platform}"]`);
+  if (tab) tab.classList.toggle('loop-active', label !== 'Idle');
 }
 
 function _updateHdrAuthPill() {
