@@ -224,21 +224,6 @@ header {
 header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
 header h1 .logo { width: 20px; height: 20px; vertical-align: -3px; }
 
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--raised);
-  color: var(--muted);
-}
-.status-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-.status-badge.running { background: var(--green-bg); color: var(--green); }
-.status-badge.running .dot { background: var(--green); animation: pulse 1.2s infinite; }
-
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 .header-meta {
@@ -2552,12 +2537,8 @@ dialog:not([open]) { display: none !important; }
   [contenteditable="true"] { font-size: 16px !important; }
 
   /* Header: name, Log out, and the gear collapse into the user menu button,
-     so header-meta fits on the title row (margin-left:auto from the base rule).
-     No version tag; the status badge condenses to its dot. */
+     so header-meta fits on the title row (margin-left:auto from the base rule). */
   header { gap: 6px 12px; }
-  h1 .version-tag { display: none; }
-  .status-badge { gap: 0; padding: 4px 6px; }
-  .status-badge #statusText { display: none; }
   .header-meta .hdr-user-name,
   .header-meta .hdr-link,
   .header-meta .btn-gear:not(.btn-user-menu) { display: none; }
