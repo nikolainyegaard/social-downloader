@@ -66,10 +66,10 @@
 <!-- Image preview modal -->
 <!-- Error dialog: full text behind a truncated error toast, with copy -->
 <dialog id="errorModal" class="media-modal" onclick="if(event.target===this)closeErrorModal()">
-  <div class="media-modal-inner" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;width:min(620px,92vw)">
-    <div class="settings-label" style="display:block;margin-bottom:6px;color:var(--red)">Error</div>
+  <div class="media-modal-inner confirm-card wide">
+    <div class="confirm-title" style="color:var(--red)">Error</div>
     <div id="errorModalText" class="error-modal-text"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+    <div class="confirm-actions">
       <button class="btn-sm" id="errorModalCopy" onclick="copyErrorModal()">Copy</button>
       <button class="btn-sm" onclick="closeErrorModal()">Close</button>
     </div>
@@ -116,15 +116,15 @@
 
 <!-- WireGuard parse modal: paste a full config, the needed fields are extracted -->
 <dialog id="ttWgParse" class="media-modal" onclick="if(event.target===this)ttWgParseClose()">
-  <div class="media-modal-inner" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;width:min(620px,92vw)">
-    <div class="settings-label" style="display:block;margin-bottom:6px">Paste a WireGuard config</div>
+  <div class="media-modal-inner confirm-card wide">
+    <div class="confirm-title">Paste a WireGuard config</div>
     <div class="settings-note">
       The private key, address, server public key, and endpoint are picked out
       automatically; comments and IPv6 entries are discarded.
     </div>
     <textarea id="ttWgParseText" class="db-query-input" style="height:220px" placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = ...&#10;&#10;[Peer]&#10;PublicKey = ...&#10;AllowedIPs = ...&#10;Endpoint = ..." spellcheck="false"></textarea>
     <div class="settings-note" id="ttWgParseStatus" style="display:none;color:var(--red)"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end">
+    <div class="confirm-actions">
       <button class="btn-sm" onclick="ttWgParseClose()">Cancel</button>
       <button class="btn-sm" onclick="ttWgParseApply()">Parse</button>
     </div>

@@ -269,7 +269,7 @@ function initChannelApp(cfg) {
       afterHtml: `
   <dialog class="about-modal" id="${P}AboutModal" onclick="if(event.target===this)${P}CloseAbout()">
     <div class="about-card">
-      <button class="about-close" onclick="${P}CloseAbout()" aria-label="Close">${_xIcon}</button>
+      <button class="modal-close" onclick="${P}CloseAbout()" aria-label="Close"></button>
       <h3 class="about-title">About</h3>
       <div id="${P}AboutBody"></div>
     </div>

@@ -266,8 +266,10 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
 .tracking-search:focus, .modal-video-search:focus { outline: none; border-color: var(--accent); }
 .tracking-search {
   width: 200px;
+  height: 28px;
+  box-sizing: border-box;
   font-size: 12px;
-  padding: 5px 12px;
+  padding: 0 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
@@ -1165,7 +1167,9 @@ dialog:not([open]) { display: none !important; }
   background: var(--nav);
 }
 
-.filter-pills { display: flex; gap: 4px; position: relative; background: var(--raised); border: 1px solid var(--border); padding: 4px; border-radius: var(--radius-pill); }
+/* Both segmented variants come out at a 30px outer height: glider group
+   2px padding + 24px pills, multi 28px pills edge-to-edge */
+.filter-pills { display: flex; gap: 4px; position: relative; background: var(--raised); border: 1px solid var(--border); padding: 2px; border-radius: var(--radius-pill); }
 
 /* Low-profile loop view toggle: absolutely positioned inside the panel
    header so it can never influence the header height */
@@ -1194,8 +1198,8 @@ dialog:not([open]) { display: none !important; }
 .filter-pills .filter-pill.active { background: transparent; border-color: transparent; color: var(--on-accent); }
 .filter-pills .filter-pill:hover:not(.active) { background: rgba(255,255,255,.06); border-color: transparent; color: var(--text); }
 /* Multi-toggle pill groups: segmented bar; active pills tint with an accent underline */
-.filter-pills.multi { gap: 0; padding: 0; border-radius: var(--radius); overflow: hidden; box-shadow: none; }
-.filter-pills.multi .filter-pill { border-radius: 0; height: 26px; padding: 0 12px; border-right: 1px solid var(--border); }
+.filter-pills.multi { gap: 0; padding: 0; border-radius: var(--radius); overflow: hidden; }
+.filter-pills.multi .filter-pill { border-radius: 0; height: 28px; padding: 0 12px; border-right: 1px solid var(--border); }
 .filter-pills.multi .filter-pill:last-child { border-right: 1px solid transparent; }
 /* Active text is --text, not --on-accent: the fill is a translucent tint over
    the dark surface, not a solid accent fill */
@@ -1216,22 +1220,15 @@ dialog:not([open]) { display: none !important; }
 .modal-toolbar-controls { display: flex; align-items: center; gap: 10px; padding: 8px 16px; min-height: 44px; }
 .toolbar-toggle { display: none; }
 
-/* Sort/Status/Type filter dropdowns, shared by the mobile filter row and the
-   desktop modal toolbar (built by _mFilterDds). */
+/* Sort/Status/Type filter dropdowns (mobile filter row + desktop modal
+   toolbar, built by _mFilterDds). All styling comes from the shared dropdown
+   spec (see the Dropdowns section); only the count badge is m-dd-only. */
 .m-dd { position: relative; }
-.m-dd-btn { display: inline-flex; align-items: center; gap: 4px; height: 28px; background: var(--raised); border: 1px solid var(--border); color: var(--text); font-size: 11.5px; font-weight: 600; padding: 0 12px; border-radius: var(--radius-pill); white-space: nowrap; cursor: pointer; }
-.m-dd-btn:hover { background: var(--border); }
-.m-dd-caret { color: var(--muted); font-size: 9px; }
-/* Popover menu, positioned by JS like .dd-menu (viewport-clamped, so menus
-   near the right edge open leftward on their own) */
-.m-dd-menu { position: fixed; inset: auto; margin: 0; color: var(--text); min-width: 170px; max-height: 320px; overflow-y: auto; background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-2); padding: 5px; }
-.m-dd-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; background: none; border: none; color: var(--text-dim); font-size: 13px; padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer; }
-.m-dd-opt:hover { background: var(--border); color: var(--text); }
-.m-dd-opt.active { color: var(--accent); }
 .m-dd-opt span { color: var(--accent); font-size: 12px; }
 .modal-video-search {
-  width: 140px; font-size: 12px; padding: 3px 8px;
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  width: 140px; height: 28px; box-sizing: border-box;
+  font-size: 12px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
   background: var(--raised); color: var(--text);
   flex-shrink: 0;
 }
@@ -1404,54 +1401,56 @@ dialog:not([open]) { display: none !important; }
    the filter bar (hidden there under 640px, swapped for this one) */
 .search-reset { display: none; }
 
-/* ── Custom dropdown (themed <select> replacement) ──────────────────────── */
-
+/* ── Dropdowns: ONE spec for both families ────────────────────────────────
+   .dd (catalog filter bar, settings panes) and .m-dd (modal toolbar, mobile
+   filter row) share trigger metrics, menu style, and option style. Both menus
+   are popovers anchored by JS with viewport-clamped fixed coordinates; the
+   top layer escapes clipping ancestors (.edge-fade bars) and open dialogs. */
 .dd { position: relative; display: inline-block; }
-/* One typography for every dd (sort, filter, diagnostics): the pill look,
-   11px/600/dim at 26px, so dropdowns and pill groups read as one control set */
-.dd-btn {
-  display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
-  width: 100%; box-sizing: border-box;
-  height: 26px;
+.dd-btn, .m-dd-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px;
   background: var(--raised);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   color: var(--text-dim);
-  font-size: 11px; font-weight: 600;
+  font-size: 11.5px; font-weight: 600;
   font-family: inherit;
-  padding: 0 10px;
+  padding: 0 12px;
   cursor: pointer;
   outline: none;
   white-space: nowrap;
 }
-.dd-btn:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+/* .dd triggers fill their wrapper (settings panes size them); justify keeps
+   the caret pinned right */
+.dd-btn { width: 100%; box-sizing: border-box; justify-content: space-between; gap: 8px; }
+.dd-btn:hover, .m-dd-btn:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .dd.open .dd-btn { border-color: var(--accent); }
-.dd-caret { color: var(--muted); font-size: 9px; }
-/* Popover menu: the top layer escapes any overflow-clipping or masked
-   ancestor (e.g. the .edge-fade filter bar) and open dialogs; JS anchors it
-   to the button with fixed coordinates. */
-.dd-menu {
+.dd-caret, .m-dd-caret { color: var(--muted); font-size: 9px; }
+.dd-menu, .m-dd-menu {
   position: fixed;
   inset: auto;
   margin: 0;
   color: var(--text);
-  width: max-content; max-width: 320px; max-height: 320px; overflow-y: auto;
+  width: max-content; min-width: 170px; max-width: 320px; max-height: 320px; overflow-y: auto;
   background: var(--raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-2);
   padding: 5px;
 }
-.dd-opt {
-  display: block; width: 100%; text-align: left;
+.dd-opt, .m-dd-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; text-align: left;
   background: none; border: none;
   color: var(--text-dim);
-  font-size: 11px; font-weight: 600; font-family: inherit;
-  padding: 7px 10px; border-radius: var(--radius-sm);
-  cursor: pointer; white-space: nowrap;
+  font-size: 12.5px; font-weight: 500; font-family: inherit;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  cursor: pointer;
 }
-.dd-opt:hover { background: var(--border); color: var(--text); }
-.dd-opt.active { color: var(--accent); }
+.dd-opt { white-space: nowrap; }
+.dd-opt:hover, .m-dd-opt:hover { background: var(--border); color: var(--text); }
+.dd-opt.active, .m-dd-opt.active { color: var(--accent); }
 /* Multi-select dropdown (filter groups): checkmark on selected options */
 .dd-multi .dd-opt { position: relative; padding-right: 28px; }
 .dd-multi .dd-opt.active::after {
@@ -1471,6 +1470,8 @@ dialog:not([open]) { display: none !important; }
   width: min(440px, 92vw);
   box-shadow: var(--shadow-modal);
 }
+/* Wide variant for text-heavy dialogs (error text, WireGuard paste) */
+.confirm-card.wide { width: min(620px, 92vw); }
 .confirm-title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
 .confirm-message { font-size: 13px; color: var(--text-dim); line-height: 1.5; white-space: pre-wrap; }
 .confirm-input {
@@ -1637,12 +1638,14 @@ dialog:not([open]) { display: none !important; }
 .confirm-ok.danger { background: var(--red); border-color: var(--red); color: #fff; }
 
 .sort-dir-btn {
+  display: inline-flex; align-items: center;
+  height: 28px;
   background: var(--raised);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   color: var(--text-dim);
-  font-size: 12px; font-weight: 600;
-  padding: 4px 10px;
+  font-size: 11.5px; font-weight: 600;
+  padding: 0 12px;
   cursor: pointer;
   white-space: nowrap;
   transition: background .15s, color .15s;
@@ -2741,9 +2744,7 @@ dialog:not([open]) { display: none !important; }
 
   /* About modal: floats over the creator modal (opened from ...more) */
   dialog.about-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: color-mix(in srgb, var(--bg) 55%, transparent); }
-  .about-card { position: relative; width: min(440px, 92%); max-height: 82%; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); padding: 18px; }
-  .about-close { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-dim); font-size: 13px; cursor: pointer; }
-  .about-close:hover { background: var(--border); color: var(--text); }
+  .about-card { position: relative; width: min(440px, 92%); max-height: 82%; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); padding: 20px; }
   .about-title { margin: 0 0 12px; font-size: 15px; font-weight: 700; }
   .about-bio { font-size: 13px; color: var(--text-dim); line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
   .about-link { display: inline-block; margin-top: 10px; font-size: 13px; color: var(--accent); text-decoration: none; word-break: break-all; }
