@@ -183,7 +183,7 @@ function _ttProxyApplyMode(mode) {
 
 async function ttProxyLoad() {
   const { ok, data } = await apiJSON('/api/tiktok/proxy');
-  if (!ok) return;
+  if (!ok) { showToast('Could not load the proxy settings.', { type: 'error' }); return; }
   _ttProxyCustomUrl  = data.url || '';
   _ttProxyGluetunUrl = data.gluetun_url || _ttProxyGluetunUrl;
   _ttProxyApplyMode(data.mode);
@@ -280,7 +280,7 @@ async function ttWgLoad() {
   const eye = document.getElementById('ttWgKeyEye');
   if (eye && !eye.innerHTML) eye.innerHTML = _eyeIcon;
   const { ok, data } = await apiJSON('/api/tiktok/proxy/wireguard');
-  if (!ok) return;
+  if (!ok) { showToast('Could not load the WireGuard config.', { type: 'error' }); return; }
   _ttWgCanRestart = !!data.restart_available;
   const meta = document.getElementById('ttWgMeta');
   document.getElementById('ttWgDeleteBtn').style.display = data.present ? '' : 'none';
@@ -1103,7 +1103,7 @@ const tt = initChannelApp({
     { label: 'Videos',        value: (s.video_count   || 0).toLocaleString() },
     { label: 'Photos',        value: (s.photo_count   || 0).toLocaleString() },
     { label: 'Deleted',       value: (s.deleted_count || 0).toLocaleString() },
-    { label: 'Latest saved',  value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
+    { label: 'Latest saved',  value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '–' },
     { label: 'Storage',       value: _fmtBytes(s.media_size_bytes || 0) },
   ],
   extraFilterGroups: [{
@@ -1316,7 +1316,13 @@ function renderSounds() {
 let _soundsSig = null;
 async function loadSounds() {
   const { ok, data } = await apiJSON('/api/tiktok/sounds');
-  if (!ok) return;
+  if (!ok) {
+    if (!sounds.length) {
+      const grid = document.getElementById('ttGrid_sounds');
+      if (grid) grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">Could not load sounds. Retrying automatically.</div>';
+    }
+    return;
+  }
   const sig = JSON.stringify(data);
   if (sig === _soundsSig) return;
   _soundsSig = sig;
@@ -1329,7 +1335,7 @@ async function removeSound(soundId) {
   const label = s ? (s.label || s.sound_id) : soundId;
   if (!await openConfirm({ title: `Remove sound "${label}"?`, message: `${soundId}\n\nVideos already downloaded will not be deleted.`, confirmLabel: 'Remove' })) return;
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
-  if (!ok) { showToast(data.error || 'Failed to remove sound.', { type: 'error' }); return; }
+  if (!ok) { showToast(data.error || 'Could not remove sound.', { type: 'error' }); return; }
   if (_soundModalId === soundId) closeSoundModal();
   loadSounds();
 }
@@ -1524,7 +1530,8 @@ async function _soundOpenCarousel(vid) {
 }
 
 const _SOUND_MODAL_CFG = {
-  st: _soundState, listElId: 'soundModalVideoList', toolbarElId: 'soundModalToolbar',
+  st: _soundState, itemNoun: 'video', itemNounPlural: 'videos',
+  listElId: 'soundModalVideoList', toolbarElId: 'soundModalToolbar',
   cols: SOUND_VCOLS, colsCls: 'sound-vcols', pageSize: 50,
   filterFn: 'setSoundModalFilter', typeFilterFn: 'setSoundModalTypeFilter',
   sortFn: 'setSoundModalSort', toggleFn: 'toggleSoundModalToolbar', searchFn: 'onSoundModalSearch',
@@ -1746,7 +1753,12 @@ async function _refreshOpenSoundModal() {
 
 async function _loadSoundModalVideos(soundId) {
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/videos`);
-  if (!ok || _soundModalId !== soundId) return;
+  if (_soundModalId !== soundId) return;
+  if (!ok) {
+    document.getElementById('soundModalVideoList').innerHTML =
+      '<div class="vlist-empty">Could not load videos. Close and reopen to retry.</div>';
+    return;
+  }
   _soundVidsSig = JSON.stringify(data);
   // Engine vocabulary: expose content_type/title under the names the renderers use
   data.forEach(v => { v.type = v.content_type; v.description = v.title; });
@@ -1871,7 +1883,7 @@ async function _trackUser(tiktokId, username) {
 
 async function loadSettings() {
   const { ok, data } = await apiJSON('/api/tiktok/settings');
-  if (!ok) return;
+  if (!ok) { showToast('Could not load the schedule settings.', { type: 'error' }); return; }
   const _sv = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
   _sv('settingsSessionsPerDay',    data.sessions_per_day);
   _sv('settingsHighPriorityHours', data.high_priority_check_hours);
@@ -1921,7 +1933,7 @@ async function loadMigratePreview() {
     }
     let html = `<div style="margin-bottom:8px;">Found <strong>${total}</strong> record${total !== 1 ? 's' : ''} with paths outside <code>${esc(mediaDir)}</code>:</div>`;
     for (const [prefix, count] of Object.entries(prefixes)) {
-      html += `<div style="font-size:12px;color:var(--muted);margin-bottom:3px"><code>${esc(prefix)}</code> &mdash; ${count} record${count !== 1 ? 's' : ''}</div>`;
+      html += `<div style="font-size:12px;color:var(--muted);margin-bottom:3px"><code>${esc(prefix)}</code> · ${_n(count, 'record')}</div>`;
     }
     previewEl.innerHTML = html;
     const oldInput = document.getElementById('migrateOldPrefix');
@@ -2023,7 +2035,7 @@ async function triggerAvifJob() {
   const btn = document.getElementById('job-avif-btn');
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/jobs/photo-converter/start', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); btn.disabled = false; return; }
+  if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); btn.disabled = false; return; }
   _jobPollStart('avif', _avifLoadStatus, 1500);
 }
 
@@ -2041,7 +2053,7 @@ async function triggerAudioCleanup() {
   const btn = document.getElementById('job-audio-btn');
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/jobs/audio-cleanup/start', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); btn.disabled = false; return; }
+  if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); btn.disabled = false; return; }
   _audioWidget.update({ barPct: null, label: 'Running…' });
   _jobPollStart('audio', _audioTick, 1000);
 }
@@ -2077,7 +2089,7 @@ async function _runDeleteJob(widget, btnId, apiPath, bodyFn, resultFn) {
   if (bodyFn) opts.body = JSON.stringify(bodyFn());
   const { ok, data } = await apiJSON(apiPath, opts);
   btn.disabled = false;
-  widget.update({ label: ok ? resultFn(data) : (data.error || 'Request failed.') });
+  widget.update({ label: ok ? resultFn(data) : (data.error || 'Could not complete the request.') });
 }
 
 async function triggerClearAvatars() {
@@ -2126,7 +2138,7 @@ async function _filecheckTick() {
   if (!ok) return;
   if (data.running) {
     _setFilecheckBtns(true);
-    _filecheckWidget.update({ barPct: null, label: data.mode === 'purge' ? 'Purging...' : 'Scanning...' });
+    _filecheckWidget.update({ barPct: null, label: data.mode === 'purge' ? 'Purging…' : 'Scanning…' });
     return;
   }
   _jobPollStop('filecheck');
@@ -2155,8 +2167,8 @@ async function _filecheckTick() {
 async function triggerFileScan() {
   _setFilecheckBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/scan', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setFilecheckBtns(false); return; }
-  _filecheckWidget.update({ barPct: null, label: 'Scanning...' });
+  if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); _setFilecheckBtns(false); return; }
+  _filecheckWidget.update({ barPct: null, label: 'Scanning…' });
   _filecheckReport.hide();
   _jobPollStart('filecheck', _filecheckTick, 1000);
 }
@@ -2165,8 +2177,8 @@ async function triggerFilePurge() {
   if (!await openConfirm({ title: 'Remove missing-file records?', message: 'Remove all DB records for files that are missing on disk?\nThis cannot be undone.', confirmLabel: 'Remove records' })) return;
   _setFilecheckBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/purge', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setFilecheckBtns(false); return; }
-  _filecheckWidget.update({ barPct: null, label: 'Purging...' });
+  if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); _setFilecheckBtns(false); return; }
+  _filecheckWidget.update({ barPct: null, label: 'Purging…' });
   _filecheckReport.hide();
   _jobPollStart('filecheck', _filecheckTick, 1000);
 }
@@ -2180,7 +2192,7 @@ function _setStoryfixBtns(disabled) {
   if (redl) redl.disabled = disabled;
 }
 
-const _nStory = n => `${n} ${n === 1 ? 'story' : 'stories'}`;
+const _nStory = n => _n(n, 'story', 'stories');
 
 // Which action the current or last run was; the status payload has no mode
 // field, so a poll resumed after a pane reopen assumes scan
@@ -2224,7 +2236,7 @@ async function _storyfixTick() {
 async function triggerStoryScan() {
   _setStoryfixBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/story-recovery/scan', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setStoryfixBtns(false); return; }
+  if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); _setStoryfixBtns(false); return; }
   _storyfixMode = 'scan';
   _storyfixWidget.update({ barPct: null, label: 'Scanning saved stories…' });
   _jobPollStart('storyfix', _storyfixTick, 1500);
@@ -2233,14 +2245,14 @@ async function triggerStoryScan() {
 async function triggerStoryRedownload() {
   _setStoryfixBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/story-recovery/redownload', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); _setStoryfixBtns(false); return; }
+  if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); _setStoryfixBtns(false); return; }
   _storyfixMode = 'redownload';
   _storyfixWidget.update({ barPct: null, label: 'Re-downloading corrupted stories…' });
   _jobPollStart('storyfix', _storyfixTick, 1500);
 }
 
 // ── Fix blank thumbnails ─────────────────────────────────────────────────────
-const _nThumb = n => `${n} ${n === 1 ? 'thumbnail' : 'thumbnails'}`;
+const _nThumb = n => _n(n, 'thumbnail');
 
 async function _thumbfixTick() {
   const { ok, data } = await apiJSON('/api/tiktok/jobs/thumbnail-repair/status');
@@ -2268,7 +2280,7 @@ async function triggerThumbnailRepair() {
   const btn = document.getElementById('job-thumbfix-btn');
   btn.disabled = true;
   const { ok, data } = await apiJSON('/api/tiktok/jobs/thumbnail-repair/start', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Failed to start', { type: 'error' }); btn.disabled = false; return; }
+  if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); btn.disabled = false; return; }
   _thumbfixWidget.update({ barPct: null, label: 'Scanning thumbnails…' });
   _jobPollStart('thumbfix', _thumbfixTick, 1500);
 }
@@ -2284,7 +2296,7 @@ const _DIAG_ACTIONS = {
                      { value: "user_info_by_id",     label: "User profile by ID (paste channel_id:sec_uid)" },
                      { value: "item_list_username",  label: "item_list by username (library resolves sec_uid)" },
                      { value: "item_list_by_id",     label: "item_list by channel_id:sec_uid" },
-                     { value: "item_list_from_db",   label: "item_list from DB (mirrors loop -- paste @username)" },
+                     { value: "item_list_from_db",   label: "item_list from DB (mirrors the loop; paste @username)" },
                      { value: "user_stories",        label: "Live stories for a tracked user (paste @username)" },
                      { value: "sound_raw",           label: "Sound raw API output (paste sound_id or URL)" }],
 };
@@ -2329,8 +2341,8 @@ async function diagRun() {
   btn.disabled  = true;
   const isSlowAction = action.startsWith('item_list') || action === 'sound_raw';
   outEl.textContent = isSlowAction
-    ? 'Running... paginates with delays -- allow several minutes for large sounds/accounts'
-    : 'Running... (this may take up to 30 s for TikTokApi calls)';
+    ? 'Running… paginates with delays; allow several minutes for large sounds/accounts'
+    : 'Running… (this may take up to 30 s for TikTokApi calls)';
 
   const { ok, data } = await apiJSON('/api/tiktok/debug/fetch', {
     method: 'POST',
@@ -2339,7 +2351,7 @@ async function diagRun() {
 
   btn.disabled = false;
   outEl.textContent = ok ? (data.output ?? JSON.stringify(data, null, 2))
-                         : (data?.output || data?.error || 'Request failed');
+                         : (data?.output || data?.error || 'Could not complete the request.');
 
   if (ok && action === 'resolve_username') {
     try {
@@ -2365,15 +2377,7 @@ function diagSendToProfileById(tiktokId, secUid) {
 }
 
 function diagCopy() {
-  const text = document.getElementById('diagOutput').textContent;
-  navigator.clipboard.writeText(text).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-  });
+  copyText(document.getElementById('diagOutput').textContent || '');
 }
 
 // ── Stats backfill ────────────────────────────────────────────────────────────
@@ -2420,7 +2424,7 @@ async function retryFailed() {
   const { ok, data } = await apiJSON('/api/tiktok/backfill/reset-errors', { method: 'POST' });
   btn.disabled = false;
   if (!ok) { showToast(data.error || 'Could not clear failed videos', { type: 'error' }); return; }
-  showToast(`${data.reset} video(s) cleared, ready to retry.`, { type: 'success' });
+  showToast(`${_n(data.reset, 'video')} cleared, ready to retry.`, { type: 'success' });
   // Reload status so the counts update
   ttLoadStatus();
 }
@@ -2434,7 +2438,7 @@ async function toggleFailedList() {
   el.style.display = '';
   el.textContent = 'Loading…';
   const { ok, data } = await apiJSON('/api/tiktok/backfill/failed');
-  if (!ok) { el.textContent = 'Failed to load.'; return; }
+  if (!ok) { el.textContent = 'Could not load.'; return; }
   if (!data.length) { el.textContent = 'None.'; return; }
   el.innerHTML = data.map(v =>
     `<div><code style="user-select:all">${esc(v.video_id)}</code>`

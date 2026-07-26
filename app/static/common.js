@@ -359,12 +359,11 @@ async function _cookiesUpload(platform, idPrefix, input) {
   form.append('file', input.files[0]);
   input.value = '';
 
-  const r    = await fetch(`/api/${platform}/cookies`, { method: 'POST', body: form });
-  const data = await r.json().catch(() => ({}));
-  if (r.ok) {
+  const { ok, data } = await apiJSON(`/api/${platform}/cookies`, { method: 'POST', body: form });
+  if (ok) {
     _cookiesRender(platform, idPrefix, data);
   } else {
-    showToast(data.error || 'Upload failed', { type: 'error' });
+    showToast(data.error || 'Could not upload the file.', { type: 'error' });
   }
 }
 
@@ -424,7 +423,7 @@ const _SCHEDULE_FIELDS = [
 
 async function _scheduleSettingsLoad(platform, idPrefix) {
   const { ok, data } = await apiJSON(`/api/${platform}/settings`);
-  if (!ok) return;
+  if (!ok) { showToast('Could not load the schedule settings.', { type: 'error' }); return; }
   for (const [key, suffix] of _SCHEDULE_FIELDS) {
     const el = document.getElementById(idPrefix + suffix);
     if (el && data[key] !== undefined) el.value = data[key];
@@ -521,39 +520,59 @@ function _platformDiagRun(platform, idPrefix) {
   const out    = document.getElementById(idPrefix + 'Output');
   if (!handle) { out.textContent = 'Enter a handle first.'; return; }
   btn.disabled    = true;
-  btn.textContent = 'Running...';
-  out.textContent = 'Fetching...';
-  fetch(`/api/${platform}/diagnostics`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ handle, action }),
+  btn.textContent = 'Running…';
+  out.textContent = 'Fetching…';
+  apiJSON(`/api/${platform}/diagnostics`, {
+    method: 'POST',
+    body:   JSON.stringify({ handle, action }),
   })
-    .then(r    => r.json())
-    .then(data => { out.textContent = JSON.stringify(data, null, 2); })
-    .catch(e   => { out.textContent = 'Error: ' + e; })
-    .finally(() => { btn.disabled = false; btn.textContent = 'Run'; });
+    .then(({ data }) => { out.textContent = JSON.stringify(data, null, 2); })
+    .catch(e         => { out.textContent = 'Error: ' + e; })
+    .finally(()      => { btn.disabled = false; btn.textContent = 'Run'; });
 }
 
 function _platformDiagCopy(idPrefix) {
-  const text = document.getElementById(idPrefix + 'Output').textContent;
-  navigator.clipboard.writeText(text).catch(() => {});
+  copyText(document.getElementById(idPrefix + 'Output').textContent || '');
+}
+
+// One clipboard write with the select-and-copy fallback for insecure
+// contexts; briefly morphs btn's label to Copied when given.
+async function copyText(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+  if (btn) {
+    const old = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = old; }, 1500);
+  }
 }
 
 // Settings diagnostics pane driven by _platformDiagRun/_platformDiagCopy
 // (Twitter, Instagram). opts: { note, placeholder, runFn, copyFn,
 // actions: [{value, label}] }; element ids follow the {idPrefix}Diag* shape.
 function _diagPaneHtml(idPrefix, opts) {
-  return `
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">${opts.note}</div>
+  const dd = opts.actions && opts.actions.length ? `
     <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <div class="dd" id="${idPrefix}Action" data-value="${opts.actions[0].value}" style="flex:1;min-width:160px">
         <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">${opts.actions[0].label}</span><span class="dd-caret">▾</span></button>
-        <div class="dd-menu" role="listbox">
+        <div class="dd-menu" role="listbox" popover>
           ${opts.actions.map((a, i) =>
             `<button type="button" class="dd-opt${i === 0 ? ' active' : ''}" data-value="${a.value}" role="option" onclick="_ddPick(this)">${a.label}</button>`).join('')}
         </div>
       </div>
-    </div>
+    </div>` : '';
+  return `
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">${opts.note}</div>
+    ${dd}
     <div style="display:flex;gap:10px;margin-bottom:12px">
       <input id="${idPrefix}Input" class="text-input" type="text" placeholder="${opts.placeholder}" style="flex:1">
       <button class="btn-primary" id="${idPrefix}RunBtn" onclick="${opts.runFn}()" style="flex-shrink:0">Run</button>
@@ -577,7 +596,7 @@ _attachEdgeFade(document.querySelector('.platform-tabs'));
 
 async function checkHealth() {
   try {
-    const data = await fetch('/api/health').then(r => r.json());
+    const { data } = await apiJSON('/api/health');
     if (!data.ok && data.issues && data.issues.length) {
       for (const iss of data.issues) {
         showToast(iss.message, { type: 'error', duration: 0 });
@@ -745,24 +764,9 @@ function closeErrorModal() {
   _dlgClose('errorModal');
 }
 
-async function copyErrorModal() {
-  const textEl = document.getElementById('errorModalText');
-  const btn    = document.getElementById('errorModalCopy');
-  try {
-    await navigator.clipboard.writeText(textEl.textContent || '');
-  } catch {
-    // The clipboard API needs a secure context; select-and-copy as fallback
-    const range = document.createRange();
-    range.selectNodeContents(textEl);
-    const sel = window.getSelection();
-    if (!sel) return;
-    sel.removeAllRanges();
-    sel.addRange(range);
-    document.execCommand('copy');
-    sel.removeAllRanges();
-  }
-  btn.textContent = 'Copied';
-  setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+function copyErrorModal() {
+  copyText(document.getElementById('errorModalText').textContent || '',
+           document.getElementById('errorModalCopy'));
 }
 
 // ── Confirm / prompt dialog ─────────────────────────────────────────────────────
@@ -1201,11 +1205,11 @@ async function openReportView(filename, title, apiBase) {
   const base = apiBase || '/api/tiktok/reports';
   document.getElementById('reportViewTitle').textContent = title;
   document.getElementById('reportViewSub').textContent   = filename;
-  document.getElementById('reportViewBody').textContent  = 'Loading...';
+  document.getElementById('reportViewBody').textContent  = 'Loading…';
   _dlgOpen('reportViewBackdrop');
-  const resp = await fetch(`${base}/${encodeURIComponent(filename)}`);
+  const { ok, text } = await apiText(`${base}/${encodeURIComponent(filename)}`);
   document.getElementById('reportViewBody').textContent =
-    resp.ok ? await resp.text() : 'Failed to load report.';
+    ok ? text : 'Could not load the report.';
 }
 
 function closeReportView() {
@@ -1253,7 +1257,7 @@ async function _dbqRun(platform) {
   const summary = document.getElementById(id + '-summary');
   const error   = document.getElementById(id + '-error');
   if (!sql) return;
-  summary.textContent = 'Running...';
+  summary.textContent = 'Running…';
   error.style.display = 'none';
   _dbqWidgets[platform]?.hide();
   const { ok, data } = await apiJSON(`/api/${platform}/db/query`, {
@@ -1261,7 +1265,7 @@ async function _dbqRun(platform) {
   });
   if (!ok || !data.ok) {
     summary.textContent = '';
-    error.textContent   = data.error || 'Query failed.';
+    error.textContent   = data.error || 'Could not run the query.';
     error.style.display = '';
     return;
   }
@@ -1278,17 +1282,30 @@ function _dbqView(platform) {
 
 let _loginRedirectPending = false;
 
-async function apiJSON(path, opts = {}) {
-  const headers = opts.body ? { 'Content-Type': 'application/json', ...opts.headers } : { ...opts.headers };
-  const r = await fetch(path, { ...opts, headers });
-  if (r.status === 401) {
-    if (!_loginRedirectPending) {
-      _loginRedirectPending = true;
-      window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.search);
-    }
-    return { ok: false, status: 401, data: {} };
+// Expired session: send the browser to log in (once; concurrent polls must
+// not each overwrite the OAuth state)
+function _auth401(r) {
+  if (r.status !== 401) return false;
+  if (!_loginRedirectPending) {
+    _loginRedirectPending = true;
+    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.search);
   }
+  return true;
+}
+
+async function apiJSON(path, opts = {}) {
+  const isForm  = opts.body instanceof FormData;
+  const headers = opts.body && !isForm ? { 'Content-Type': 'application/json', ...opts.headers } : { ...opts.headers };
+  const r = await fetch(path, { ...opts, headers });
+  if (_auth401(r)) return { ok: false, status: 401, data: {} };
   return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
+}
+
+// Text-response variant with the same 401-to-login behavior (report files)
+async function apiText(path) {
+  const r = await fetch(path);
+  if (_auth401(r)) return { ok: false, text: '' };
+  return { ok: r.ok, text: await r.text().catch(() => '') };
 }
 
 // ── Authentication settings ───────────────────────────────────────────────────
@@ -1352,7 +1369,7 @@ async function saveAuthSettings() {
     // Show restart banner any time settings are saved, since all changes require a restart
     document.getElementById('authRestartBanner').style.display = '';
   } else {
-    showToast((data && data.error) || 'Save failed.', { type: 'error' });
+    showToast((data && data.error) || 'Could not save.', { type: 'error' });
   }
 }
 
@@ -1360,7 +1377,7 @@ async function saveAuthSettings() {
 
 const fmt = {
   rel: ts => {
-    if (!ts) return '—';
+    if (!ts) return '–';
     const diff = Math.round((Date.now() - new Date(ts).getTime()) / 1000);
     if (diff < 60)       return `${diff}s ago`;
     if (diff < 3600)     return `${Math.floor(diff / 60)}m ago`;
@@ -1370,7 +1387,7 @@ const fmt = {
     return d > 0 ? `${mo}mo ${d}d ago` : `${mo}mo ago`;
   },
   relFuture: ts => {
-    if (!ts) return '—';
+    if (!ts) return '–';
     const diff = Math.round((new Date(ts).getTime() - Date.now()) / 1000);
     if (diff <= 0)       return 'soon';
     if (diff < 60)       return `in ${diff}s`;
@@ -1381,7 +1398,7 @@ const fmt = {
     return d > 0 ? `in ${mo}mo ${d}d` : `in ${mo}mo`;
   },
   date: unix => {
-    if (!unix) return '—';
+    if (!unix) return '–';
     return new Date(unix * 1000).toLocaleString();
   },
   dur: secs => {
@@ -1429,8 +1446,11 @@ function _renderPauseState(btn, nextEl, paused) {
   if (nextEl) nextEl.classList.toggle('loop-next-paused', paused);
 }
 
+// Pluralize: _n(3, 'story', 'stories') -> "3 stories"
+const _n = (n, noun, plural) => `${n} ${n === 1 ? noun : (plural || noun + 's')}`;
+
 function fmtCount(n) {
-  if (n == null) return '—';
+  if (n == null) return '–';
   if (n >= 1_000_000) return _fmtSuffix(n, 1_000_000, 'M');
   if (n >= 1_000)     return _fmtSuffix(n, 1_000, 'K');
   return String(n);
@@ -1447,12 +1467,12 @@ const _dtFmtMonthYear = new Intl.DateTimeFormat('en-GB', { month: 'short', year:
 const _dtFmtDateOnly  = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
 function fmtDateShort(unix) {
-  if (!unix) return '—';
+  if (!unix) return '–';
   return _dtFmt.format(new Date(unix * 1000));
 }
 
 function fmtDateOnly(unix) {
-  if (!unix) return '—';
+  if (!unix) return '–';
   return _dtFmtDateOnly.format(new Date(unix * 1000));
 }
 
@@ -2532,9 +2552,7 @@ function _mRenderToolbar(cfg, vids) {
   const shown = _mFiltered(cfg).length;
   const total = _mFiltered(cfg, true).length;
   const countLabel = isMedia
-    ? (cfg.st.search
-        ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
-        : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`))
+    ? _mCountLabel(cfg)
     : (cfg.viewCount ? cfg.viewCount(cfg.st.view) || '' : '');
   const toolbar = document.getElementById(cfg.toolbarElId);
   const searchWasFocused = cfg.hasSearch && searchable &&
@@ -2567,7 +2585,7 @@ function _mRenderToolbar(cfg, vids) {
   }
   if (countLabel) html += `<span class="modal-vid-count">${countLabel}</span>`;
   if (cfg.hasSearch && searchable) {
-    html += `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${esc(cfg.st.search)}" placeholder="Search ${isMedia ? 'videos' : 'history'}…" oninput="${cfg.searchFn}(this.value)">`;
+    html += `<input id="modalVideoSearch" class="modal-video-search" type="search" value="${esc(cfg.st.search)}" placeholder="Search ${isMedia ? (cfg.itemNounPlural || 'posts') : 'history'}…" oninput="${cfg.searchFn}(this.value)">`;
   }
   html += `</div>`
     + `<div class="toolbar-filter-wrap">`;
@@ -2692,15 +2710,24 @@ function _mSetFilter(cfg, key) {
   const shown = _mFiltered(cfg).length;
   const total = _mFiltered(cfg, true).length;
   const countEl = toolbar.querySelector('.modal-vid-count');
-  if (countEl) countEl.textContent = cfg.st.search
-    ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
-    : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
+  if (countEl) countEl.textContent = _mCountLabel(cfg);
   const toggleBtn = toolbar.querySelector('.toolbar-toggle');
   if (toggleBtn) {
     const hasActive = cfg.st.filter.size > 0 || cfg.st.typeFilter.size > 0;
     toggleBtn.textContent = (cfg.st.toolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
   }
   _mRenderList(cfg);
+}
+
+// Item-count line for the modal toolbar, in the platform's own noun
+function _mCountLabel(cfg) {
+  const noun   = cfg.itemNoun || 'post';
+  const plural = cfg.itemNounPlural || noun + 's';
+  const shown  = _mFiltered(cfg).length;
+  const total  = _mFiltered(cfg, true).length;
+  return cfg.st.search
+    ? `${shown.toLocaleString()} of ${total.toLocaleString()} ${plural}`
+    : (shown === 1 ? `1 ${noun}` : `${shown.toLocaleString()} ${plural}`);
 }
 
 function _mSetTypeFilter(cfg, key) {
@@ -2713,9 +2740,7 @@ function _mSetTypeFilter(cfg, key) {
   const shown = _mFiltered(cfg).length;
   const total = _mFiltered(cfg, true).length;
   const countEl = toolbar.querySelector('.modal-vid-count');
-  if (countEl) countEl.textContent = cfg.st.search
-    ? `${shown.toLocaleString()} of ${total.toLocaleString()} posts`
-    : (shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`);
+  if (countEl) countEl.textContent = _mCountLabel(cfg);
   const toggleBtn = toolbar.querySelector('.toolbar-toggle');
   if (toggleBtn) {
     const hasActive = cfg.st.filter.size > 0 || cfg.st.typeFilter.size > 0;
@@ -2773,7 +2798,7 @@ function _mRenderList(cfg, { preserve = false } = {}) {
   _mRenderColHdrs(cfg);
   const vids = _mFiltered(cfg);
   if (!vids.length) {
-    const msg = cfg.st.search ? 'No posts match this search.' : 'No posts match this filter.';
+    const msg = `No ${cfg.itemNounPlural || 'posts'} match this ${cfg.st.search ? 'search' : 'filter'}.`;
     list.insertAdjacentHTML('beforeend', `<div class="vlist-empty">${msg}</div>`);
     return;
   }
@@ -2868,7 +2893,7 @@ function _renderModalVideoGrid(cfg, { preserve = false } = {}) {
   let vids = _mFiltered(cfg);
   if (cfg.viewVideoFilter) vids = cfg.viewVideoFilter(cfg.st.view, vids);
   if (!vids.length) {
-    list.innerHTML = `<div class="vlist-empty">${cfg.st.search ? 'No posts match this search.' : 'No posts match this filter.'}</div>`;
+    list.innerHTML = `<div class="vlist-empty">No ${cfg.itemNounPlural || 'posts'} match this ${cfg.st.search ? 'search' : 'filter'}.</div>`;
     return;
   }
   const grid = document.createElement('div');

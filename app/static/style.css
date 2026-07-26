@@ -653,8 +653,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Padlock icon next to display name for private accounts */
 .lock-icon { width: 13px; height: 13px; vertical-align: -1px; margin-right: 4px; opacity: 0.6; flex-shrink: 0; }
 
-/* Relationship / status pill (grey; replaces the coloured privacy pill on cards) */
-.relation-pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; background: var(--raised); color: var(--muted); }
+/* Static relationship descriptor (Friends, Following, Private, ...): plain
+   muted text so the colored state pills (Banned, Deleted) stand out */
+.relation-text { display: inline-block; font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--muted); }
 
 /* YouTube channel card banner strip */
 .yt-channel-card-banner {
@@ -728,7 +729,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   gap: 2px;
   min-width: 0;
 }
-.user-card-meta-item .meta-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.user-card-meta-item .meta-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .user-card-meta-item .meta-value { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .user-card-current { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
 
@@ -887,10 +888,10 @@ dialog:not([open]) { display: none !important; }
    height never changes with the creator's data. */
 .hdr-data  { display: flex; gap: 24px; flex-shrink: 0; padding-top: 2px; }
 .hdr-group { display: flex; flex-direction: column; gap: 3px; min-width: 150px; padding-left: 24px; border-left: 1px solid var(--border); }
-.hg-title  { font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.hg-title  { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
 .hg-row    { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 11px; line-height: 1.55; }
 .hg-l      { color: var(--muted); }
-.hg-v      { color: var(--text-dim); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hg-v      { color: var(--text-dim); font-weight: 600; font-family: var(--mono); font-size: 10.5px; white-space: nowrap; }
 .hg-v.tred    { color: var(--red); }
 .hg-v.tyellow { color: var(--yellow); }
 .hg-v.tzero   { color: var(--muted); opacity: .45; }
@@ -1130,7 +1131,7 @@ dialog:not([open]) { display: none !important; }
   gap: 6px;
 }
 .phist-avatar-col .phist-side-label {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .07em;
 }
 .phist-avatar-lg {
@@ -1162,7 +1163,7 @@ dialog:not([open]) { display: none !important; }
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   padding: 2px; box-shadow: none;
 }
-.loop-view-toggle .filter-pill { height: 16px; padding: 0 8px; font-size: 10px; }
+.loop-view-toggle .filter-pill { height: 18px; padding: 0 8px; font-size: 11px; }
 .filter-pill {
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--raised);
@@ -1250,7 +1251,7 @@ dialog:not([open]) { display: none !important; }
 }
 
 .col-hdr {
-  font-size: 10px; letter-spacing: .07em;
+  font-size: 11px; letter-spacing: .07em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .col-hdr.sortable { cursor: pointer; user-select: none; }
@@ -1301,7 +1302,7 @@ dialog:not([open]) { display: none !important; }
 .video-grid--wide { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .video-grid--wide .vgrid-cell { aspect-ratio: 16/9; }
 .vgrid-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 16px 5px 4px; background: linear-gradient(transparent, rgba(0,0,0,.65)); display: flex; align-items: flex-end; justify-content: space-between; pointer-events: none; }
-.vgrid-views  { font-size: 10px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.8); line-height: 1; }
+.vgrid-views  { font-size: 11px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.8); line-height: 1; }
 
 .video-thumb {
   width: 90px; height: 51px;
@@ -1322,7 +1323,7 @@ dialog:not([open]) { display: none !important; }
 
 .vstatus {
   display: inline-flex; align-items: center;
-  font-size: 10px; font-weight: 700;
+  font-size: 11px; font-weight: 700;
   padding: 2px 7px; border-radius: var(--radius-pill); white-space: nowrap;
 }
 .vstatus.up        { background: var(--green-bg);  color: var(--green); }
@@ -2054,7 +2055,7 @@ dialog:not([open]) { display: none !important; }
 
 /* Compact pill group and text button variants for panel headers */
 .panel-header .hdr-pills { margin-left: auto; }
-.hdr-pills .filter-pill { height: 20px; padding: 0 9px; font-size: 10px; }
+.hdr-pills .filter-pill { height: 20px; padding: 0 9px; font-size: 11px; }
 .panel-body {
   flex: 1;
   padding: 14px 16px;
@@ -2113,7 +2114,7 @@ dialog:not([open]) { display: none !important; }
   align-items: baseline;
   justify-content: space-between;
 }
-.loop-section-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.loop-section-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .loop-next          { font-size: 11px; color: var(--accent); }
 .loop-next-paused   { color: var(--yellow); }
 
@@ -2147,7 +2148,7 @@ dialog:not([open]) { display: none !important; }
   margin-top: 4px;
 }
 .loop-session-pill {
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--mono);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
@@ -2178,15 +2179,15 @@ dialog:not([open]) { display: none !important; }
 }
 
 .stat-value {
+  font-family: var(--mono);
   font-size: 16px;
   font-weight: 700;
-  letter-spacing: -.02em;
   color: var(--text);
   line-height: 1.2;
 }
 
 .stat-label {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .06em;
 }
 
@@ -2300,7 +2301,7 @@ dialog:not([open]) { display: none !important; }
 .settings-nav-item svg { flex-shrink: 0; }
 .settings-nav-item:hover { background: var(--raised); color: var(--text); }
 .settings-nav-group {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: .09em;
   text-transform: uppercase;
@@ -2509,14 +2510,6 @@ dialog:not([open]) { display: none !important; }
 .log-body .log-dl      { color: var(--green); }
 .log-body .log-profile { color: var(--purple); }
 
-.log-activity-bar {
-  font-family: var(--mono);
-  font-size: 11px;
-  padding: 5px 12px 5px 10px;
-  border-bottom: 1px solid var(--border);
-  border-left: 2px solid var(--accent);
-  color: var(--text-dim);
-}
 .lab-next { color: var(--accent); }
 
 /* ── Back to top ─────────────────────────────────────────────────────────── */
@@ -2727,11 +2720,11 @@ dialog:not([open]) { display: none !important; }
   .about-bio { font-size: 13px; color: var(--text-dim); line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
   .about-link { display: inline-block; margin-top: 10px; font-size: 13px; color: var(--accent); text-decoration: none; word-break: break-all; }
   .about-link:hover { text-decoration: underline; }
-  .about-sub { margin: 18px 0 10px; font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .about-sub { margin: 18px 0 10px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
   .about-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 10px; }
   .about-grid .tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .about-grid .tv { font-size: 16px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
-  .about-grid .tl { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .about-grid .tl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
   .about-dates .tv { font-size: 12px; font-weight: 600; color: var(--text-dim); }
   .about-grid .tile.tred .tv { color: var(--red); }
   .about-grid .tile.tyellow .tv { color: var(--yellow); }
@@ -2741,18 +2734,36 @@ dialog:not([open]) { display: none !important; }
 
 /* ── Platform tabs ────────────────────────────────────────────────────────── */
 
-/* Sticky glass tab bar: stays pinned while scrolling with the page blurring
-   through behind it */
-.platform-tabs {
+/* Sticky glass chrome: the tab bar plus the now strip pin as one unit while
+   the page blurs through behind them */
+.top-chrome {
   position: sticky;
   top: 0;
   z-index: 100;
+}
+.platform-tabs {
   display: flex;
   gap: 2px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--nav) 78%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+}
+/* The live ledger line under the tabs: what the active platform is doing
+   right now (current stage or the countdown to the next session) */
+.now-strip {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 14px 5px 12px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--nav) 88%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Button styling from the shared .tab rule above; the top nav just wants a
@@ -2834,7 +2845,7 @@ dialog:not([open]) { display: none !important; }
 /* Small uppercase sub-heading inside settings sections, matching the
    panel and filter label language */
 .settings-subtitle {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;

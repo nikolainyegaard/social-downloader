@@ -17,7 +17,7 @@ initChannelApp({
   loopLabel:         'Account Loop',
   addPlaceholder:    '@username or profile URL',
   addAriaLabel:      'Twitter username',
-  profileUrl:        h => `https://twitter.com/${h}`,
+  profileUrl:        h => `https://x.com/${h}`,
   videoUrl:          (v, ch) => `https://x.com/${ch.handle}/status/${v.video_id}`,
   settings: {
     account: {

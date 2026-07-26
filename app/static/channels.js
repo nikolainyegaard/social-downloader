@@ -252,7 +252,6 @@ function initChannelApp(cfg) {
             <button class="btn-ghost" onclick="${P}ClearLog()" style="font-size:11px;padding:3px 8px;">Clear</button>
           </div>
         </div>
-        <div id="${P}LogActivityBar" class="log-activity-bar">&nbsp;</div>
         <div class="log-body" id="${P}LogBody"></div>
       </div>
     </div>
@@ -567,6 +566,8 @@ function initChannelApp(cfg) {
 
   const MODAL_CFG = {
     st:             _creatorState,
+    itemNoun:       ITEM,
+    itemNounPlural: ITEMS,
     listElId:       `${P}ModalVideoList`,
     toolbarElId:    `${P}ModalToolbar`,
     cols:           VCOLS,
@@ -626,7 +627,7 @@ function initChannelApp(cfg) {
     { label: 'Videos',              value: (s.media_video_files || 0).toLocaleString() },
     { label: 'Photos',              value: (s.media_photo_files || 0).toLocaleString() },
     { label: 'Deleted',             value: (s.deleted_count || 0).toLocaleString() },
-    { label: 'Latest saved',        value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '—' },
+    { label: 'Latest saved',        value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '–' },
     { label: 'Storage',             value: _fmtBytes(s.media_size_bytes || 0) },
   ]);
 
@@ -803,7 +804,13 @@ function initChannelApp(cfg) {
   const loadRecent = X('LoadRecent', async () => {
     const key = _rfKey();
     const { ok, data } = await apiJSON(_rfUrl());
-    if (!ok) return;
+    if (!ok) {
+      if (!_rf.items.length) {
+        const el = document.getElementById(`${P}RecentFeed`);
+        if (el) el.innerHTML = '<div class="rf-empty">Could not load activity. Retrying automatically.</div>';
+      }
+      return;
+    }
     const sig = JSON.stringify(data.items);
     _rf.cache[key] = { items: data.items, hasMore: data.has_more, sig };
     if (key !== _rfKey()) return;   // filter changed while the fetch was in flight
@@ -931,10 +938,11 @@ function initChannelApp(cfg) {
   });
 
   function _tickActivityBar() {
-    const bar = _el('LogActivityBar');
-    // offsetParent is null while the bar is hidden (platform tab not active,
-    // or the Log view not selected); skip the countdown render entirely then
-    if (!bar || bar.offsetParent === null) return;
+    // One global strip under the tab bar; only the active platform's tick
+    // writes it, so background platforms never fight over it
+    const bar = document.getElementById('nowStrip');
+    if (!bar || _activePlatform !== cfg.id) return;
+    bar.style.display = '';
     const dur = secs => {
       const m = Math.floor(secs / 60), s = secs % 60;
       return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
@@ -942,14 +950,14 @@ function initChannelApp(cfg) {
     if (sleepUntil) {
       const rem = Math.max(0, Math.round((sleepUntil - Date.now()) / 1000));
       bar.innerHTML = `sleeping ${dur(rem)}`
-        + (sleepNext ? ` <span class="lab-next">-- up next: ${esc(sleepNext)}</span>` : '');
+        + (sleepNext ? ` <span class="lab-next">· up next: ${esc(sleepNext)}</span>` : '');
       return;
     }
     // A check in progress (session or manual run) outranks any countdown: the
     // bar reports what is happening right now, stage from the server.
     if (currentCreator) {
       bar.innerHTML = `processing @${esc(currentCreator)}`
-        + (currentStage ? ` <span class="lab-next">-- ${esc(currentStage)}</span>` : '');
+        + (currentStage ? ` <span class="lab-next">· ${esc(currentStage)}</span>` : '');
       return;
     }
     const extraActivity = cfg.currentActivity && cfg.currentActivity();
@@ -968,7 +976,7 @@ function initChannelApp(cfg) {
       .sort((a, b) => a.ts - b.ts);
     if (candidates.length) {
       const rem = Math.max(0, Math.round((candidates[0].ts - now) / 1000));
-      bar.innerHTML = `waiting ${dur(rem)} <span class="lab-next">-- up next: ${esc(candidates[0].label)}</span>`;
+      bar.innerHTML = `waiting ${dur(rem)} <span class="lab-next">· up next: ${esc(candidates[0].label)}</span>`;
     } else {
       bar.innerHTML = 'idle';
     }
@@ -1206,7 +1214,13 @@ function initChannelApp(cfg) {
     const before = !reset && last ? `&before=${last.id}` : '';
     const { ok, data } = await apiJSON(`${API}/add-history?limit=30${before}`);
     _ah.loading = false;
-    if (!ok) return;
+    if (!ok) {
+      if (!_ah.items.length) {
+        const el = document.getElementById(`${P}AddHistory`);
+        if (el) el.innerHTML = '<div class="ah-empty">Could not load the add history.</div>';
+      }
+      return;
+    }
     if (reset) _ah.items = [];
     _ah.items.push(...data.items);
     _ah.hasMore = data.has_more;
@@ -1385,14 +1399,16 @@ function initChannelApp(cfg) {
   // Relation and privacy pill; only rendered when the platform's adapter
   // populates the fields (engine schema has them for every platform)
   function _relationPill(ch) {
+    // Colored pills mark state that changes (bans, blocks); static
+    // relationship descriptors are plain muted text
     if (ch.account_status === 'banned') return `<span class="privacy-status banned">Banned</span>`;
     if (ch.privacy_status === 'blocked') return `<span class="privacy-status banned">Blocked</span>`;
-    if (ch.privacy_status === 'private_blocked') return `<span class="relation-pill">Private</span>`;
+    if (ch.privacy_status === 'private_blocked') return `<span class="relation-text">Private</span>`;
     const rel = ch.relation;
-    if (rel === 2) return `<span class="relation-pill">Friends</span>`;
-    if (rel === 1) return `<span class="relation-pill">Following</span>`;
-    if (rel === 6) return `<span class="relation-pill">Follows you</span>`;
-    if (rel === 0) return `<span class="relation-pill">No relation</span>`;
+    if (rel === 2) return `<span class="relation-text">Friends</span>`;
+    if (rel === 1) return `<span class="relation-text">Following</span>`;
+    if (rel === 6) return `<span class="relation-text">Follows you</span>`;
+    if (rel === 0) return `<span class="relation-text">No relation</span>`;
     return '';
   }
 
@@ -1576,7 +1592,15 @@ function initChannelApp(cfg) {
   let _lastGridRender = 0;
   const loadCreators = X('LoadCreators', async () => {
     const { ok, data } = await apiJSON(`${API}/channels`);
-    if (!ok) return;
+    if (!ok) {
+      // First load: replace the skeletons so the failure is visible; later
+      // polls keep the stale grid (stale beats flicker) and retry themselves
+      if (!creators.length) {
+        const grid = _el('Grid');
+        if (grid) grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">Could not load ${CREATORS}. Retrying automatically.</div>`;
+      }
+      return;
+    }
     const sig = JSON.stringify(data);
     if (sig === _creatorsSig) {
       // Unchanged data: keep the relative timestamps current, touch nothing else
@@ -1643,7 +1667,7 @@ function initChannelApp(cfg) {
       method: 'PATCH',
       body: JSON.stringify({ enabled }),
     });
-    if (!ok) { showToast(data.error || 'Failed to update tracking', { type: 'error' }); return; }
+    if (!ok) { showToast(data.error || 'Could not update tracking', { type: 'error' }); return; }
     const ch = creators.find(c => c.channel_id === channelId);
     if (ch) ch.tracking_enabled = enabled ? 1 : 0;
     if (modalCreatorId === channelId && modalCreator) {
@@ -2043,7 +2067,7 @@ function initChannelApp(cfg) {
     const ch = modalCreator; if (!ch) return;
     const platformLabel = (PLATFORMS.find(p => p.id === cfg.id) || {}).label || cfg.id;
     const _iso = u => new Date(u * 1000).toISOString();
-    const nextCheckVal = (ch.enabled === 0 || ch.tracking_enabled === 0) ? '—'
+    const nextCheckVal = (ch.enabled === 0 || ch.tracking_enabled === 0) ? '–'
       : (!ch.next_check_at || ch.next_check_at * 1000 <= Date.now()) ? 'next session'
       : fmt.relFuture(_iso(ch.next_check_at));
     const dateTiles = [
@@ -2136,7 +2160,12 @@ function initChannelApp(cfg) {
 
   async function _loadModalVideos(channelId) {
     const { ok, data } = await apiJSON(`${API}/channels/${channelId}/videos`);
-    if (!ok || modalCreatorId !== channelId) return;
+    if (modalCreatorId !== channelId) return;
+    if (!ok) {
+      _el('ModalVideoList').innerHTML =
+        `<div class="vlist-empty">Could not load ${ITEMS}. Close and reopen to retry.</div>`;
+      return;
+    }
     _setModalVideos(data);
 
     if (modalPendingHighlight) {
@@ -2195,7 +2224,7 @@ function initChannelApp(cfg) {
     })();
 
     const _iso = u => new Date(u * 1000).toISOString();
-    const nextCheckVal = (ch.enabled === 0 || ch.tracking_enabled === 0) ? '—'
+    const nextCheckVal = (ch.enabled === 0 || ch.tracking_enabled === 0) ? '–'
       : (!ch.next_check_at || ch.next_check_at * 1000 <= Date.now()) ? 'next session'
       : fmt.relFuture(_iso(ch.next_check_at));
 
@@ -2203,7 +2232,7 @@ function initChannelApp(cfg) {
     // groups of label/value ledger rows. Every row is a fixed slot (zero or
     // missing values render dimmed instead of despawning), so the header
     // height is a constant per platform regardless of the creator's data.
-    const _num  = v => v != null ? _fmtLarge(v || 0) : '—';
+    const _num  = v => v != null ? _fmtLarge(v || 0) : '–';
     const _zero = v => v == null || !v ? ' tzero' : '';
     const activityRows =
         _hgRow('Added',   fmtDateOnly(ch.added_at))
@@ -2435,7 +2464,12 @@ function initChannelApp(cfg) {
       phistData = [];
       panel.innerHTML = '<div class="vlist-loading">Loading history…</div>';
       const { ok, data } = await apiJSON(`${API}/channels/${modalCreatorId}/profile-history`);
-      if (!ok || phistChId !== modalCreatorId || _creatorState.view !== 'history') return;
+      if (phistChId !== modalCreatorId || _creatorState.view !== 'history') return;
+      if (!ok) {
+        phistChId = null;  // retry on the next view switch
+        panel.innerHTML = '<div class="vlist-empty">Could not load the change history.</div>';
+        return;
+      }
       phistData = data;
       _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // field list now known
     }
