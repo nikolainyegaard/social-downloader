@@ -86,7 +86,7 @@ function initChannelApp(cfg) {
 
   const _bookmarkBtn = (ch, stop) => `<button class="btn-bookmark${ch.bookmarked ? ' bookmarked' : ''}"
       onclick="${stop ? 'event.stopPropagation();' : ''}${P}ToggleBookmark('${esc(ch.channel_id)}')"
-      title="${ch.bookmarked ? (ch.starred ? `Starred ${CREATORS} stay bookmarked` : 'Remove bookmark') : 'Bookmark'}">${ch.bookmarked ? _bmFilled : _bmOutline}</button>`;
+      aria-pressed="${ch.bookmarked ? 'true' : 'false'}" title="${ch.bookmarked ? (ch.starred ? `Starred ${CREATORS} stay bookmarked` : 'Remove bookmark') : 'Bookmark'}">${ch.bookmarked ? _bmFilled : _bmOutline}</button>`;
 
   function _sectionHtml() {
     return `
@@ -297,7 +297,7 @@ function initChannelApp(cfg) {
       <div class="conn-list">
         <div class="conn-list-head">
           <span>Connected ${CREATORS}</span>
-          <button class="modal-close" onclick="${P}CloseConnList()" title="Close"></button>
+          <button class="modal-close" onclick="${P}CloseConnList()" title="Close" aria-label="Close"></button>
         </div>
         <div class="conn-list-rows" id="${P}ConnListRows"></div>
         <div class="conn-list-foot">
@@ -313,7 +313,7 @@ function initChannelApp(cfg) {
       <div class="conn-list">
         <div class="conn-list-head">
           <span>Quick Access</span>
-          <button class="modal-close" onclick="${P}CloseQaList()" title="Close"></button>
+          <button class="modal-close" onclick="${P}CloseQaList()" title="Close" aria-label="Close"></button>
         </div>
         <div class="conn-list-rows" id="${P}QaListRows"></div>
         <div class="conn-list-foot">
@@ -679,7 +679,7 @@ function initChannelApp(cfg) {
       : ev.kind === 'changed'
         ? `${P}OpenModalWithHistory('${esc(it.channel_id)}','${esc(it.field)}')`
         : `${P}OpenModal('${esc(it.channel_id)}')`;
-    return `<div class="rf-row" onclick="${onclick}" title="Open @${esc(it.handle)}">
+    return `<div class="rf-row" onclick="${onclick}" role="button" tabindex="0" title="Open @${esc(it.handle)}">
       <span class="rf-icon rf-${ev.kind}">${_RF_ICONS[ev.kind]}</span>
       <span class="rf-avatar-wrap"><img class="rf-avatar" src="${API}/channels/${esc(it.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>
       <span class="rf-name" ${_nameStyle(it)}>@${esc(it.handle)}</span>
@@ -1149,7 +1149,7 @@ function initChannelApp(cfg) {
     return `<div class="ah-row${actions ? ' has-actions' : ''}">
       <div class="ah-row-content">
         <span class="ah-icon ah-${esc(e.status)}">${icon}</span>
-        <span class="ah-handle" onclick="${P}AhOpen('${esc(e.handle)}')" title="Open @${esc(e.handle)}">@${esc(e.handle)}</span>
+        <span class="ah-handle" onclick="${P}AhOpen('${esc(e.handle)}')" role="button" tabindex="0" title="Open @${esc(e.handle)}">@${esc(e.handle)}</span>
         ${status}
         <span class="ah-time">${_recentDate(e.updated_at)}</span>
       </div>
@@ -1261,7 +1261,7 @@ function initChannelApp(cfg) {
       <button type="button" class="dd-btn" onclick="_ddToggle(this)">
         <span class="dd-label">${esc(_fdLabel(g, sel))}</span><span class="dd-caret">▾</span></button>
       <div class="dd-menu" role="listbox" popover>
-        ${g.options.map(o => `<button type="button" class="dd-opt${sel.has(o.key) ? ' active' : ''}" id="${P}f_${g.key}_${o.key}" onclick="${P}SetFilter('${g.key}','${o.key}')">${esc(o.label)}</button>`).join('')}
+        ${g.options.map(o => `<button type="button" class="dd-opt${sel.has(o.key) ? ' active' : ''}" role="option" id="${P}f_${g.key}_${o.key}" onclick="${P}SetFilter('${g.key}','${o.key}')">${esc(o.label)}</button>`).join('')}
       </div></div>`;
   }
 
@@ -1669,7 +1669,7 @@ function initChannelApp(cfg) {
   const _connPlusIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14M5 12h14"/></svg>`;
 
   function _connAvatar(c) {
-    return `<span class="conn-avatar-wrap" title="${esc(c.display_name || c.handle)} (@${esc(c.handle)})"
+    return `<span class="conn-avatar-wrap" role="button" tabindex="0" title="${esc(c.display_name || c.handle)} (@${esc(c.handle)})"
       onclick="${P}OpenModal('${esc(c.channel_id)}')">
       <span class="conn-letter">${esc((c.handle || '?')[0])}</span>
       ${c.avatar_cached ? `<img class="conn-avatar" src="${API}/channels/${esc(c.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()">` : ''}
@@ -1703,7 +1703,7 @@ function initChannelApp(cfg) {
     if (!host) return;
     const conns = _modalConnections || [];
     host.innerHTML = conns.length ? conns.map(c => `
-      <div class="conn-row" onclick="if(!event.target.closest('button')){${P}CloseConnList();${P}OpenModal('${esc(c.channel_id)}')}">
+      <div class="conn-row" role="button" tabindex="0" onclick="if(!event.target.closest('button')){${P}CloseConnList();${P}OpenModal('${esc(c.channel_id)}')}">
         ${_connAvatar(c)}
         <span class="conn-row-names">
           <span class="conn-row-name">${esc(c.display_name || c.handle)}</span>
@@ -2759,13 +2759,7 @@ function initChannelApp(cfg) {
     if (renderDeferred) { renderDeferred = false; renderCreators(); }
   });
 
-  // Cards are focusable (role=button tabindex=0), so Enter and Space open them
-  _el('Grid')?.addEventListener('keydown', e => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('user-card')) {
-      e.preventDefault();
-      e.target.click();
-    }
-  });
+  // Cards open on Enter/Space via the global role="button" keydown in common.js
 
   // Slash focuses the search box on the active platform tab
   document.addEventListener('keydown', e => {

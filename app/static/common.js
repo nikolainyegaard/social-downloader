@@ -284,12 +284,12 @@ const _GENERAL_ACCESS_HTML = `
   <div style="display:flex;flex-direction:column;gap:14px;max-width:500px;margin-bottom:20px">
     <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
       <span>Discovery URL <span style="color:var(--red)">*</span></span>
-      <input type="text" id="authDiscoveryUrl" class="text-input" placeholder="https://auth.example.com/application/o/my-app/.well-known/openid-configuration" spellcheck="false">
+      <input type="text" id="authDiscoveryUrl" class="text-input" required aria-required="true" placeholder="https://auth.example.com/application/o/my-app/.well-known/openid-configuration" spellcheck="false">
       <span style="font-size:11px;color:var(--muted)">Authentik: application provider settings &gt; OpenID Configuration URL</span>
     </label>
     <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
       <span>Client ID <span style="color:var(--red)">*</span></span>
-      <input type="text" id="authClientId" class="text-input" placeholder="your-client-id" autocomplete="off" spellcheck="false">
+      <input type="text" id="authClientId" class="text-input" required aria-required="true" placeholder="your-client-id" autocomplete="off" spellcheck="false">
     </label>
     <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
       <span>Client secret <span style="color:var(--red)">*</span></span>
@@ -604,6 +604,10 @@ function showToast(message, { type = 'info', duration = type === 'error' ? 0 : 5
   if (!container) {
     container = document.createElement('div');
     container.id = 'toast-container';
+    // Live region: toasts are the app's primary feedback channel, so screen
+    // readers must hear them
+    container.setAttribute('role', 'status');
+    container.setAttribute('aria-live', 'polite');
     // Manual popover: toasts live in the top layer so they paint above open
     // <dialog> overlays (z-index cannot reach the top layer)
     container.popover = 'manual';
@@ -613,6 +617,7 @@ function showToast(message, { type = 'info', duration = type === 'error' ? 0 : 5
 
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
+  if (type === 'error') toast.setAttribute('role', 'alert');
 
   let spin = null;
   if (spinner) {
@@ -929,8 +934,10 @@ function _menuOpenAt(btn, menu) {
   if (Date.now() - (+menu.dataset.closedAt || 0) < 250) return false;
   if (!menu.dataset.menuWired) {
     menu.dataset.menuWired = '1';
-    menu.addEventListener('toggle', () => {
-      const open = menu.matches(':popover-open');
+    // beforetoggle, not toggle: toggle is dispatched async, which would stamp
+    // closedAt after the trigger's click handler already reopened the menu
+    menu.addEventListener('beforetoggle', e => {
+      const open = /** @type {ToggleEvent} */ (e).newState === 'open';
       btn.setAttribute('aria-expanded', String(open));
       if (!open) menu.dataset.closedAt = String(Date.now());
     });
@@ -1095,13 +1102,15 @@ function _openCardMenu(triggerEl, items) {
 
   document.body.appendChild(menu);
   _cardMenuEl = menu;
-  // Light dismiss fires toggle -> closed: drop the detached element
-  menu.addEventListener('toggle', () => {
-    if (!menu.matches(':popover-open')) {
+  // beforetoggle, not toggle: toggle is dispatched async, which would stamp
+  // menuClosedAt after the trigger's click handler already reopened the menu
+  menu.addEventListener('beforetoggle', e => {
+    if (/** @type {ToggleEvent} */ (e).newState === 'closed') {
       triggerEl.setAttribute('aria-expanded', 'false');
       triggerEl.dataset.menuClosedAt = String(Date.now());
       if (_cardMenuEl === menu) _cardMenuEl = null;
-      menu.remove();
+      // Removal waits a tick: removing mid-dismiss would cancel the event
+      setTimeout(() => menu.remove(), 0);
     }
   });
   menu.showPopover();
@@ -1397,6 +1406,8 @@ function _renderPauseState(btn, nextEl, paused) {
   if (btn) {
     btn.innerHTML = paused ? _resumeIcon : _pauseIcon;
     btn.title     = paused ? 'Resume scheduled sessions' : 'Pause scheduled sessions';
+    btn.setAttribute('aria-label', btn.title);
+    btn.setAttribute('aria-pressed', paused ? 'true' : 'false');
     btn.classList.toggle('paused', paused);
   }
   if (nextEl) nextEl.classList.toggle('loop-next-paused', paused);
@@ -1477,7 +1488,7 @@ function _statChip(label, value, color) {
 }
 function _starBtn(starred, onclickExpr) {
   return `<button class="btn-star${starred ? ' starred' : ''}" onclick="event.stopPropagation();${onclickExpr}" ` +
-    `title="${starred ? 'Unstar' : 'Star'}">${_starIcon(starred)}</button>`;
+    `aria-pressed="${starred ? 'true' : 'false'}" title="${starred ? 'Unstar' : 'Star'}">${_starIcon(starred)}</button>`;
 }
 // Meta footer row from [{label, value}] pairs (value is preformatted text).
 function _cardMeta(items) {
@@ -1496,7 +1507,7 @@ const _xExpandIcon = `<svg class="xtext-exp" width="12" height="12" viewBox="0 0
 function _expandableText(text) {
   if (!text) return '';
   const t = esc(text);
-  return `<div class="xtext" onclick="event.stopPropagation();_xtextToggle(this)">` +
+  return `<div class="xtext" onclick="event.stopPropagation();_xtextToggle(this)" role="button" tabindex="0">` +
     `<div class="xtext-line"><span class="xtext-text">${t}</span>${_xExpandIcon}</div>` +
     `<div class="xtext-pop" onclick="event.stopPropagation()">` +
     `<button class="xtext-close" onclick="_xtextClose(this)" aria-label="Close">${_xCloseIcon}</button>${t}</div></div>`;
@@ -1510,7 +1521,7 @@ function _expandableText(text) {
 // (' tred' / ' tyellow' / ' tlink' / ' tzero' dim), click an optional handler.
 function _hgRow(label, value, cls = '', click = '') {
   return `<div class="hg-row"><span class="hg-l">${label}</span>` +
-    `<span class="hg-v${cls}"${click ? ` onclick="${click}" role="button" title="Open profile change history"` : ''}>${value}</span></div>`;
+    `<span class="hg-v${cls}"${click ? ` onclick="${click}" role="button" tabindex="0" title="Open profile change history"` : ''}>${value}</span></div>`;
 }
 
 // Static xtext-styled placeholder (same box chrome, not clickable): keeps
@@ -1525,10 +1536,21 @@ function _noteFieldHtml(note, editFn, marginTop) {
   // instead of a popover.
   const inner = note
     ? _expandableText(note)
-    : `<div class="xtext" onclick="event.stopPropagation();${editFn}()">` +
+    : `<div class="xtext" onclick="event.stopPropagation();${editFn}()" role="button" tabindex="0">` +
       `<div class="xtext-line"><span class="xtext-text note-empty">Click to add a note</span></div></div>`;
   return `<div class="modal-note" style="margin-top:${marginTop}px">${inner}</div>`;
 }
+
+// Enter and Space activate any role="button" element that is not a real
+// button (cards, feed rows, ledger links, expandable text, grid cells)
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const t = e.target;
+  if (!(t instanceof HTMLElement) || t.getAttribute('role') !== 'button') return;
+  if (['BUTTON', 'A', 'INPUT', 'TEXTAREA'].includes(t.tagName) || t.isContentEditable) return;
+  e.preventDefault();
+  t.click();
+});
 
 function _xtextToggle(el) { el.classList.toggle('open'); }
 function _xtextClose(btn) { btn.closest('.xtext')?.classList.remove('open'); }
@@ -1843,12 +1865,20 @@ function _makeJobWidget(id) {
       const hasBar = barPct !== undefined;
       if (barWrap) barWrap.style.display = hasBar ? '' : 'none';
       if (barEl && hasBar) {
+        const track = barEl.parentElement;
+        if (track) {
+          track.setAttribute('role', 'progressbar');
+          track.setAttribute('aria-valuemin', '0');
+          track.setAttribute('aria-valuemax', '100');
+        }
         if (barPct === null) {
           barEl.className = 'job-bar-fill indeterminate';
           barEl.style.width = '';
+          track?.removeAttribute('aria-valuenow');
         } else {
           barEl.className = `job-bar-fill${barPct >= 100 ? ' done' : ''}`;
           barEl.style.width = Math.min(barPct, 100) + '%';
+          track?.setAttribute('aria-valuenow', String(Math.min(barPct, 100)));
         }
       }
       if (textEl) textEl.textContent = label ?? '';
@@ -1970,8 +2000,10 @@ function _mvSync() {
   const playing = !(vid.paused || vid.ended);
   playBtn.innerHTML = playing ? _mvPauseIcon : _mvPlayIcon;
   playBtn.title     = playing ? 'Pause' : 'Play';
+  playBtn.setAttribute('aria-label', playBtn.title);
   muteBtn.innerHTML = vid.muted ? _mutedIcon : _soundIcon;
   muteBtn.title     = vid.muted ? 'Unmute' : 'Mute';
+  muteBtn.setAttribute('aria-label', muteBtn.title);
 }
 
 // Momentary center overlay flashing what just happened. Only manual toggles
@@ -2334,7 +2366,7 @@ function _modalShellHtml(base, closeFn, { bannerHtml = '', panelsHtml = '', afte
   return `
 <dialog id="${base}Backdrop" class="modal-backdrop" onclick="if(event.target===this)${closeFn}()">
   <div class="modal modal-base creator-modal" id="${base}Base">
-    <button class="modal-close" onclick="${closeFn}()"></button>
+    <button class="modal-close" onclick="${closeFn}()" aria-label="Close"></button>
     ${bannerHtml}
     <div class="modal-header"     id="${base}Header"></div>
     <div class="modal-toolbar"    id="${base}Toolbar"></div>
@@ -2845,7 +2877,11 @@ function _appendModalGrid(cfg, vids) {
     const thumbSrc = cfg.gridThumbSrc ? cfg.gridThumbSrc(v) : '';
     cell.innerHTML = `<img src="${thumbSrc}" alt="" onerror="this.style.opacity='.15'">
       <div class="vgrid-overlay">${viewsHtml}${typeIcon}</div>`;
-    if (cfg.gridCellOnclick) cell.onclick = () => cfg.gridCellOnclick(v);
+    if (cfg.gridCellOnclick) {
+      cell.onclick = () => cfg.gridCellOnclick(v);
+      cell.setAttribute('role', 'button');
+      cell.tabIndex = 0;
+    }
     grid.appendChild(cell);
   });
   if (cfg.st.loaded < vids.length) {

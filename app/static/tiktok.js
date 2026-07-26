@@ -735,7 +735,7 @@ const _TT_SETTINGS_NETWORK_HTML = `
       <button class="btn-sm" id="ttProxySaveBtn" onclick="ttProxySave()">Save</button>
       <button class="btn-sm" id="ttProxyTestBtn" onclick="ttProxyTest()">Test connection</button>
     </div>
-    <span class="hdr-link" style="margin-top:8px;display:inline-block" onclick="_ttHelpToggle('ttProxyHelp')">How this works</span>
+    <button type="button" class="hdr-link" style="margin-top:8px" onclick="_ttHelpToggle('ttProxyHelp')">How this works</button>
     <div class="settings-note" id="ttProxyHelp" style="display:none;margin-top:8px">
       With Enable VPN on, all TikTok traffic (the browser, page fetches, and
       downloads) leaves through the proxy configured here instead of the
@@ -777,7 +777,7 @@ const _TT_SETTINGS_NETWORK_HTML = `
       <button class="btn-sm" onclick="ttWgSave()">Save config</button>
       <button class="btn-danger" id="ttWgDeleteBtn" onclick="ttWgDelete()" style="display:none">Remove</button>
     </div>
-    <span class="hdr-link" style="margin-top:8px;display:inline-block" onclick="_ttHelpToggle('ttWgHelp')">How this works</span>
+    <button type="button" class="hdr-link" style="margin-top:8px" onclick="_ttHelpToggle('ttWgHelp')">How this works</button>
     <div class="settings-note" id="ttWgHelp" style="display:none;margin-top:8px">
       These are the VPN credentials for the gluetun container behind the proxy
       above, from a WireGuard config file (ProtonVPN: account page &gt; Downloads
@@ -806,7 +806,7 @@ const _TT_SETTINGS_JOBS_HTML = `
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;min-height:16px">
       <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
-      <span id="statsFailedCount"  style="font-size:12px;color:var(--red);display:none;cursor:pointer;text-decoration:underline dotted" onclick="toggleFailedList()" title="Click to see which videos"></span>
+      <span id="statsFailedCount"  role="button" tabindex="0" style="font-size:12px;color:var(--red);display:none;cursor:pointer;text-decoration:underline dotted" onclick="toggleFailedList()" title="Click to see which videos"></span>
       <button id="retryFailedBtn" onclick="retryFailed()" style="display:none;font-size:12px;padding:3px 10px;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-dim);cursor:pointer" title="Clear error counts so these videos are retried on the next backfill run">Retry failed</button>
       <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
     </div>
@@ -1489,8 +1489,8 @@ const _SOUND_MODAL_CFG = {
   authorCol: v => {
     const name = v.author_handle || v.channel_id || '?';
     return v.author_enabled === 1
-      ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();ttOpenModal('${esc(v.channel_id)}')">@${esc(name)}</span>`
-      : `<span class="author-chip untracked" onclick="event.stopPropagation();closeSoundModal();openUntrackedUserModal('${esc(v.channel_id)}','${esc(name)}')">@${esc(name)}</span>`;
+      ? `<span class="author-chip" role="button" tabindex="0" onclick="event.stopPropagation();closeSoundModal();ttOpenModal('${esc(v.channel_id)}')">@${esc(name)}</span>`
+      : `<span class="author-chip untracked" role="button" tabindex="0" onclick="event.stopPropagation();closeSoundModal();openUntrackedUserModal('${esc(v.channel_id)}','${esc(name)}')">@${esc(name)}</span>`;
   },
   hasSearch: true, hasViewToggle: true, viewFn: 'setSoundModalView',
   desktopTabs: true,

@@ -1995,7 +1995,8 @@ dialog:not([open]) { display: none !important; }
 /* Error rows overlay their actions on the right on hover; the row content
    fades out behind them like .edge-fade (fully transparent under the buttons
    box, --ah-hide wide, with an --ah-ramp run-up). */
-.ah-row.has-actions:hover .ah-row-content {
+.ah-row.has-actions:hover .ah-row-content,
+.ah-row.has-actions:focus-within .ah-row-content {
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - var(--ah-hide) - var(--ah-ramp)), transparent calc(100% - var(--ah-hide)));
   mask-image: linear-gradient(90deg, #000 calc(100% - var(--ah-hide) - var(--ah-ramp)), transparent calc(100% - var(--ah-hide)));
 }
@@ -2084,7 +2085,8 @@ dialog:not([open]) { display: none !important; }
   display: flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 8px;
   opacity: 0; pointer-events: none; transition: opacity .12s ease;
 }
-.ah-row.has-actions:hover .ah-actions { opacity: 1; pointer-events: auto; }
+.ah-row.has-actions:hover .ah-actions,
+.ah-row.has-actions:focus-within .ah-actions { opacity: 1; pointer-events: auto; }
 .ah-btn {
   display: inline-flex;
   align-items: center;
