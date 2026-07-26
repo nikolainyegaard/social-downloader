@@ -108,7 +108,7 @@ function initChannelApp(cfg) {
 
   <!-- Desktop renders the strip directly (display:contents); on mobile the
        panel becomes a collapsible with the Statistics toggle, closed by default -->
-  <div class="stats-panel">
+  <div class="stats-area">
     <button class="stats-toggle" onclick="${P}ToggleStats(this)">Statistics <span class="stats-caret">▾</span></button>
     <div class="stat-strip-wrap" id="${P}StatsWrap">
       <div class="stat-strip" id="${P}StatsGrid"></div>

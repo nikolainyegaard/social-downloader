@@ -1940,13 +1940,31 @@ dialog:not([open]) { display: none !important; }
 
 /* Desktop: the wrapper dissolves (display:contents) so the strip sits in the
    section grid exactly as before; the toggle only exists on mobile, where the
-   panel collapses via the grid-rows transition on .stat-strip-wrap. */
-.stats-panel { display: contents; }
+   panel collapses via the grid-rows transition on .stat-strip-wrap.
+   (.stats-area, not .stats-panel: that class belongs to the modal Stats
+   charts grid.) */
+.stats-area { display: contents; }
 .stats-toggle { display: none; }
+/* One ledger strip: a single rounded panel, segments separated by hairlines.
+   The outer ring is an absolute pseudo instead of a real border so the mobile
+   0fr collapse can reach a true 0 height, and so the ring paints above the
+   segment hover fills. Segments carry left+top hairlines shifted -1px, and
+   the strip clips them at its edges; this survives auto-fit wrapping. */
 .stat-strip {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
-  gap: 8px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.stat-strip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  pointer-events: none;
 }
 
 /* The fixed row height is what lets the columns scroll internally: without a
@@ -2167,19 +2185,16 @@ dialog:not([open]) { display: none !important; }
 /* Stat strip tiles. Scoped to .stat-strip because .stat-item is also the
    class for the plain inline stats on creator cards. */
 .stat-strip .stat-item {
-  padding: 6px 12px;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  padding: 8px 14px;
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  margin: -1px 0 0 -1px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transition: border-color .15s, background .15s;
+  transition: background .15s;
 }
-.stat-strip .stat-item:hover {
-  background: var(--hdr);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-}
+.stat-strip .stat-item:hover { background: var(--hdr); }
 
 .stat-value {
   font-family: var(--mono);
@@ -2552,7 +2567,7 @@ dialog:not([open]) { display: none !important; }
 
   /* Statistics: collapsible panel, closed by default. The wrap slides via a
      0fr -> 1fr grid-rows transition; the caret rotates on open. */
-  .stats-panel { display: block; }
+  .stats-area { display: block; }
   .stats-toggle {
     display: flex; align-items: center; justify-content: space-between;
     width: 100%; padding: 10px 14px;
@@ -2563,12 +2578,14 @@ dialog:not([open]) { display: none !important; }
   }
   .stats-caret { color: var(--muted); font-size: 11px; transition: transform .25s ease; }
   .stats-toggle.open .stats-caret { transform: rotate(180deg); }
+  /* The toggle gap lives on the wrap's margin (animated alongside the rows):
+     inside the strip it would open a hole in the bordered ledger panel */
   .stat-strip-wrap {
     display: grid; grid-template-rows: 0fr;
-    transition: grid-template-rows .28s ease;
+    transition: grid-template-rows .28s ease, margin-top .28s ease;
   }
-  .stat-strip-wrap.open { grid-template-rows: 1fr; }
-  .stat-strip-wrap > .stat-strip { min-height: 0; overflow: hidden; padding-top: 10px; }
+  .stat-strip-wrap.open { grid-template-rows: 1fr; margin-top: 10px; }
+  .stat-strip-wrap > .stat-strip { min-height: 0; }
 
   /* View tabs + search: wrap so the search row drops to its own full-width row.
      Reset moves out of the sideways-scrolling filter bar to sit next to search. */
