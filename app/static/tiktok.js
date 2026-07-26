@@ -1267,9 +1267,9 @@ function renderSounds() {
     // Same footer shape as the channel card: star + run button(s) + overflow menu.
     // Tracking (a sound-only control) lives in the menu instead of an inline toggle.
     const footer = `<div style="display:flex;gap:6px;">`
-      + _starBtn(s.starred, `toggleSoundStar('${esc(s.sound_id)}')`)
-      + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${_refreshIcon} ${runLabel}</button>`
-      + `<button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'${isInactive ? 'Enable tracking' : 'Disable tracking'}',onclick:()=>setSoundTracking('${esc(s.sound_id)}',${isInactive})},{label:'Remove',danger:true,onclick:()=>removeSound('${esc(s.sound_id)}')}])">${_dotsIcon}</button>`
+      + _starBtn(s.starred, s.sound_id)
+      + `<button class="btn-run" ${runDis} data-action="run" data-id="${esc(s.sound_id)}">${_refreshIcon} ${runLabel}</button>`
+      + `<button class="btn-menu" data-action="menu" data-id="${esc(s.sound_id)}" title="More actions" aria-haspopup="menu">${_dotsIcon}</button>`
       + `</div>`;
 
     const meta = _cardMeta([
@@ -1281,7 +1281,6 @@ function renderSounds() {
     return _cardShell({
       classes:  isInactive ? 'user-card-inactive' : '',
       dataAttr: `data-soundid="${esc(s.sound_id)}"`,
-      onclick:  `if(!event.target.closest('button'))openSoundModal('${esc(s.sound_id)}')`,
       icon:     `<div class="sound-icon-wrap"><span class="sound-icon-letter">♫</span></div>`,
       name:     label,
       sub:      esc(s.sound_id),
@@ -1420,6 +1419,33 @@ _dlgWire('soundModalBackdrop', () => {
   _soundState.videos = [];
 });
 
+// Delegated clicks for the sounds grid and the sound modal's author chips
+// (menu items and tracking labels are built at click time, never serialized
+// into attributes)
+_delegate(document.getElementById('ttGrid_sounds'), {
+  open: (d, el, e) => {
+    if (e.target instanceof Element && e.target.closest('button')) return;
+    openSoundModal(el.getAttribute('data-soundid'));
+  },
+  star: d => toggleSoundStar(d.id),
+  run:  d => runSound(d.id),
+  menu: (d, el) => {
+    const snd = sounds.find(x => x.sound_id === d.id);
+    const off = snd ? snd.tracking_enabled === 0 : false;
+    _openCardMenu(el, [
+      { label: off ? 'Enable tracking' : 'Disable tracking', onclick: () => setSoundTracking(d.id, off) },
+      { label: 'Remove', danger: true, onclick: () => removeSound(d.id) },
+    ]);
+  },
+});
+_delegate(document.getElementById('soundModalVideoList'), {
+  author: d => {
+    closeSoundModal();
+    if (d.tracked === '1') tt.openModal(d.id);
+    else openUntrackedUserModal(d.id, d.name);
+  },
+});
+
 function soundModalScrollTop() {
   const m = document.getElementById('soundModalBase');
   if (m) m.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1488,9 +1514,7 @@ const _SOUND_MODAL_CFG = {
   videoUrlFn:  v => _soundVideoUrl(v),
   authorCol: v => {
     const name = v.author_handle || v.channel_id || '?';
-    return v.author_enabled === 1
-      ? `<span class="author-chip" role="button" tabindex="0" onclick="event.stopPropagation();closeSoundModal();ttOpenModal('${esc(v.channel_id)}')">@${esc(name)}</span>`
-      : `<span class="author-chip untracked" role="button" tabindex="0" onclick="event.stopPropagation();closeSoundModal();openUntrackedUserModal('${esc(v.channel_id)}','${esc(name)}')">@${esc(name)}</span>`;
+    return `<span class="author-chip${v.author_enabled === 1 ? '' : ' untracked'}" role="button" tabindex="0" data-action="author" data-id="${esc(v.channel_id)}" data-name="${esc(name)}" data-tracked="${v.author_enabled === 1 ? 1 : 0}">@${esc(name)}</span>`;
   },
   hasSearch: true, hasViewToggle: true, viewFn: 'setSoundModalView',
   desktopTabs: true,

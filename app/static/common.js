@@ -1061,6 +1061,22 @@ function esc(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ── Event delegation ──────────────────────────────────────────────────────────
+// One click listener per re-rendered container: interactive elements carry
+// data-action (+ data-* args) instead of interpolated onclick strings, so
+// re-renders never rebuild handlers and untrusted text (labels, display
+// names) never lands inside an attribute-embedded expression.
+// actions: { name: (dataset, el, event) => void }
+function _delegate(container, actions) {
+  if (!container) return;
+  container.addEventListener('click', e => {
+    const t = e.target instanceof Element && e.target.closest('[data-action]');
+    if (!t || !container.contains(t) || t.matches('button:disabled')) return;
+    const fn = actions[t.getAttribute('data-action') || ''];
+    if (fn) fn(/** @type {HTMLElement} */ (t).dataset, /** @type {HTMLElement} */ (t), e);
+  });
+}
+
 // ── Card action menu ──────────────────────────────────────────────────────────
 // _openCardMenu(triggerEl, items)
 //   triggerEl: the ••• button element
@@ -1463,7 +1479,7 @@ function _ghostCards(n) { return n > 0 ? Array(n).fill(_GHOST_CARD).join('') : '
 // one place. All slot values are raw HTML except `name`, which is escaped here.
 function _cardShell(o) {
   return `
-    <div class="user-card${o.classes ? ' ' + o.classes : ''}" ${o.dataAttr || ''} onclick="${o.onclick}" role="button" tabindex="0">
+    <div class="user-card${o.classes ? ' ' + o.classes : ''}" ${o.dataAttr || ''}${o.onclick ? ` onclick="${o.onclick}"` : ' data-action="open"'} role="button" tabindex="0">
       <div class="user-card-top">
         ${o.icon || ''}
         <div class="user-identity">
@@ -1486,8 +1502,8 @@ function _statChip(label, value, color) {
   return `<span class="stat-item"><span class="stat-item-label">${esc(label)}</span>` +
     `<span class="stat-item-value"${color ? ` style="color:var(--${color})"` : ''}>${esc(String(value))}</span></span>`;
 }
-function _starBtn(starred, onclickExpr) {
-  return `<button class="btn-star${starred ? ' starred' : ''}" onclick="event.stopPropagation();${onclickExpr}" ` +
+function _starBtn(starred, id) {
+  return `<button class="btn-star${starred ? ' starred' : ''}" data-action="star" data-id="${esc(id)}" ` +
     `aria-pressed="${starred ? 'true' : 'false'}" title="${starred ? 'Unstar' : 'Star'}">${_starIcon(starred)}</button>`;
 }
 // Meta footer row from [{label, value}] pairs (value is preformatted text).

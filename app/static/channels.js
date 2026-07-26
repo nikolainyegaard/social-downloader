@@ -84,8 +84,8 @@ function initChannelApp(cfg) {
   const _bmOutline = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21V3z"/></svg>`;
   const _bmFilled  = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 0 1 1 1v19l-7-5.5L5 22V3a1 1 0 0 1 1-1z"/></svg>`;
 
-  const _bookmarkBtn = (ch, stop) => `<button class="btn-bookmark${ch.bookmarked ? ' bookmarked' : ''}"
-      onclick="${stop ? 'event.stopPropagation();' : ''}${P}ToggleBookmark('${esc(ch.channel_id)}')"
+  const _bookmarkBtn = ch => `<button class="btn-bookmark${ch.bookmarked ? ' bookmarked' : ''}"
+      data-action="bookmark" data-id="${esc(ch.channel_id)}"
       aria-pressed="${ch.bookmarked ? 'true' : 'false'}" title="${ch.bookmarked ? (ch.starred ? `Starred ${CREATORS} stay bookmarked` : 'Remove bookmark') : 'Bookmark'}">${ch.bookmarked ? _bmFilled : _bmOutline}</button>`;
 
   function _sectionHtml() {
@@ -280,6 +280,30 @@ function initChannelApp(cfg) {
 
   document.getElementById(`platform-${cfg.id}`).innerHTML = _sectionHtml();
   document.body.insertAdjacentHTML('beforeend', _modalHtml());
+  // Delegated clicks for the creator grid and modal header: buttons carry
+  // data-action/data-id, so re-renders never rebuild handlers and no closure
+  // is serialized into an attribute. Handlers resolve through window at click
+  // time (the X() exports are defined later in this closure).
+  _delegate(document.getElementById(`${P}Grid`), {
+    open: (d, el, e) => {
+      if (e.target instanceof Element && e.target.closest('button')) return;
+      window[`${P}OpenModal`](el.getAttribute('data-channelid'));
+    },
+    stories:  d => window[`${P}OpenStories`](d.id),
+    avatar:   d => openImgModalUrl(`${API}/channels/${d.id}/avatar`),
+    star:     d => window[`${P}ToggleStar`](d.id),
+    bookmark: d => window[`${P}ToggleBookmark`](d.id),
+    quick:    d => window[`${P}RunCreatorQuick`](d.id),
+    full:     d => window[`${P}RunCreator`](d.id),
+    menu:     (d, el) => _openCardMenu(el, [
+      { label: 'Run Profile', onclick: () => window[`${P}RunCreatorProfile`](d.id) },
+      { label: 'Remove', danger: true, onclick: () => window[`${P}RemoveCreator`](d.id, `@${d.handle}`) },
+    ]),
+  });
+  _delegate(document.getElementById(`${P}ModalHeader`), {
+    bookmark: d => window[`${P}ToggleBookmark`](d.id),
+  });
+
   // Creator-modal close cleanup runs on every close path (button, backdrop
   // click, native Escape)
   _dlgWire(`${P}ModalBackdrop`, () => {
@@ -1402,9 +1426,9 @@ function initChannelApp(cfg) {
       + `${isInactive || isBanned || isBlocked || isPrivBlk ? ' user-card-inactive' : ''}`
       + `${isBanned || isBlocked ? ' user-card-banned' : ''}${isPrivBlk ? ' user-card-private' : ''}`;
 
-    const icon = `<div class="avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="event.stopPropagation();${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>`
+    const icon = `<div class="avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" data-action="stories" data-id="${esc(ch.channel_id)}"` : ''}>`
       + `<span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>`
-      + `${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" alt="" onerror="this.style.display='none'" ${ch.live_stories ? '' : `onclick="event.stopPropagation();openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}</div>`;
+      + `${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" alt="" onerror="this.style.display='none'" ${ch.live_stories ? '' : `data-action="avatar" data-id="${esc(ch.channel_id)}"`}>` : ''}</div>`;
 
     const stats = (ch.subscriber_count != null ? _statChip(cfg.subLabelCard, (ch.subscriber_count || 0).toLocaleString()) : '')
       + _statChip('saved', ch.video_total || 0)
@@ -1413,11 +1437,11 @@ function initChannelApp(cfg) {
       + (cfg.hasStories && ch.story_count ? _statChip('stories', ch.story_count, 'purple') : '');
 
     const footer = `<div style="display:flex;gap:6px;">`
-      + _starBtn(ch.starred, `${P}ToggleStar('${esc(ch.channel_id)}')`)
-      + _bookmarkBtn(ch, true)
-      + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>`
-      + `<button class="btn-run" ${runDis} onclick="event.stopPropagation();${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>`
-      + `<button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}])">${_dotsIcon}</button>`
+      + _starBtn(ch.starred, ch.channel_id)
+      + _bookmarkBtn(ch)
+      + `<button class="btn-run" ${runDis} data-action="quick" data-id="${esc(ch.channel_id)}">${_refreshIcon} Quick</button>`
+      + `<button class="btn-run" ${runDis} data-action="full" data-id="${esc(ch.channel_id)}">${_refreshIcon} Full</button>`
+      + `<button class="btn-menu" data-action="menu" data-id="${esc(ch.channel_id)}" data-handle="${esc(ch.handle)}" title="More actions" aria-haspopup="menu">${_dotsIcon}</button>`
       + `</div>`;
 
     const meta = _cardMeta([
@@ -1430,7 +1454,6 @@ function initChannelApp(cfg) {
     return _cardShell({
       classes,
       dataAttr:   `data-channelid="${esc(ch.channel_id)}"`,
-      onclick:    `if(!event.target.closest('button'))${P}OpenModal('${esc(ch.channel_id)}')`,
       icon,
       namePrefix: _isPrivateAccount(ch) ? LOCK_SVG : '',
       name:       ch.display_name || ch.handle,
@@ -2195,7 +2218,7 @@ function initChannelApp(cfg) {
           </div>
           <div class="modal-actions-group">
             <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${_starIcon(ch.starred)}</button>
-            ${_bookmarkBtn(ch, false)}
+            ${_bookmarkBtn(ch)}
             <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
             <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
             <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'${ch.pinned_at ? 'Remove from Quick Access' : 'Add to Quick Access'}',onclick:()=>${P}TogglePinModal('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
@@ -2267,7 +2290,7 @@ function initChannelApp(cfg) {
         </div>
         <div class="mh-actions">
           <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${_starIcon(ch.starred)}</button>
-          ${_bookmarkBtn(ch, false)}
+          ${_bookmarkBtn(ch)}
           <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
           <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
           <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'${ch.pinned_at ? 'Remove from Quick Access' : 'Add to Quick Access'}',onclick:()=>${P}TogglePinModal('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
