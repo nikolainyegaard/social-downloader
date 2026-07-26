@@ -44,6 +44,13 @@
   --radius-sm:    6px;
   --radius-pill:  99px;
 
+  /* Motion: one duration pair and one ease for the whole app.
+     --dur-fast for hovers and small state flips, --dur for enters
+     (dialogs, menus, toasts, section switches). */
+  --dur-fast:     .12s;
+  --dur:          .2s;
+  --ease:         cubic-bezier(.25,.6,.3,1);
+
   /* Elevation: shadows belong to floating layers only (menus, popovers,
      dialogs, toasts). In-page cards separate with borders and background
      steps, never shadows. */
@@ -123,10 +130,10 @@ body {
   border: 1px solid var(--border);
   border-left-width: 3px;
   color: var(--text);
-  animation: toast-in 0.18s ease;
+  animation: toast-in var(--dur) var(--ease);
 }
 
-.toast.leaving { animation: toast-out 0.18s ease forwards; }
+.toast.leaving { animation: toast-out var(--dur) var(--ease) forwards; }
 .toast > .spinner { margin-top: 4px; }
 
 .toast-success { border-left-color: var(--green); }
@@ -196,7 +203,7 @@ body {
 }
 
 .app {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 24px 20px 60px;
   display: grid;
@@ -252,7 +259,7 @@ button {
   font-size: 13px;
   font-weight: 600;
   padding: 7px 14px;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background var(--dur-fast), opacity var(--dur-fast);
 }
 button:disabled { opacity: 0.45; cursor: default; }
 button:not(:disabled):active { transform: translateY(1px); }
@@ -337,6 +344,12 @@ svg.ic { width: 13px; height: 13px; display: block; flex-shrink: 0; }
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* One enter animation for every popover menu */
+@keyframes menu-in { from { opacity: 0; transform: translateY(4px); } }
+.card-menu:popover-open, .dd-menu:popover-open, .m-dd-menu:popover-open {
+  animation: menu-in var(--dur-fast) var(--ease);
 }
 
 .card-menu-item {
@@ -533,7 +546,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 .users-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 12px;
 }
 
@@ -753,12 +766,12 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .user-card {
   cursor: pointer;
   /* 50ms delay on fade-out so a DOM rebuild that briefly drops hover is invisible */
-  transition: border-color .15s 50ms, background .15s 50ms;
+  transition: border-color var(--dur-fast) 50ms, background var(--dur-fast) 50ms;
 }
 .user-card:hover {
   border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
   background: var(--hdr);
-  transition: border-color .15s, background .15s; /* hover-in: no delay */
+  transition: border-color var(--dur-fast), background var(--dur-fast); /* hover-in: no delay */
 }
 .user-card-current:hover { box-shadow: 0 0 0 2px var(--green); }
 
@@ -788,11 +801,11 @@ dialog:not([open]) { display: none !important; }
   align-items: center;
   justify-content: center;
   /* Replays each time the dialog opens */
-  animation: overlay-in .15s ease;
+  animation: overlay-in var(--dur) var(--ease);
 }
 @keyframes overlay-in { from { opacity: 0; } }
 @keyframes modal-in   { from { opacity: 0; transform: scale(.975) translateY(8px); } }
-.modal-backdrop .modal-base { animation: modal-in .18s ease; }
+.modal-backdrop .modal-base { animation: modal-in var(--dur) var(--ease); }
 
 .modal-base {
   background: var(--surface);
@@ -1389,7 +1402,7 @@ dialog:not([open]) { display: none !important; }
   margin-bottom: -1px;
   padding: 7px 14px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color var(--dur-fast), border-color var(--dur-fast);
 }
 .tab:hover { color: var(--text); }
 .tab.active {
@@ -1579,13 +1592,13 @@ dialog:not([open]) { display: none !important; }
   position: fixed; inset: 0;
   background: color-mix(in srgb, var(--bg) 55%, transparent);
   display: flex; align-items: center; justify-content: center;
-  animation: overlay-in .15s ease;
+  animation: overlay-in var(--dur) var(--ease);
 }
 .conn-list {
   position: relative; width: min(340px, calc(100vw - 32px)); max-height: 60vh;
   display: flex; flex-direction: column;
   background: var(--nav); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-2); animation: modal-in .18s ease;
+  box-shadow: var(--shadow-2); animation: modal-in var(--dur) var(--ease);
 }
 .conn-list-head { display: flex; align-items: center; padding: 12px 44px 10px 14px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border); }
 .conn-list-rows { overflow-y: auto; padding: 6px; flex: 1; }
@@ -2828,7 +2841,20 @@ dialog:not([open]) { display: none !important; }
    bar correct on its own */
 .platform-tabs .tab.active {
   color: var(--tab-accent, var(--accent));
-  border-bottom-color: var(--tab-accent, var(--accent));
+  /* The glider below is the underline; the static per-tab border stays off */
+  border-bottom-color: transparent;
+}
+
+/* Sliding active underline (positioned by _placeTabGlider in common.js);
+   lives inside the scrolling nav so it follows the edge-fade scroll */
+.platform-tabs { position: relative; }
+.platform-tabs .tab-glider {
+  position: absolute;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  transition: left var(--dur) var(--ease), width var(--dur) var(--ease);
+  pointer-events: none;
 }
 
 /* ── Platform sections ────────────────────────────────────────────────────── */
@@ -2838,7 +2864,7 @@ dialog:not([open]) { display: none !important; }
   gap: 24px;
   /* Replays whenever the section flips from display none, so switching tabs
      gets a soft fade-and-rise */
-  animation: section-in .22s ease;
+  animation: section-in var(--dur) var(--ease);
 }
 @keyframes section-in { from { opacity: 0; transform: translateY(6px); } }
 

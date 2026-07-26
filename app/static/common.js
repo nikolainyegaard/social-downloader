@@ -65,8 +65,25 @@ function switchPlatform(name) {
   const app = document.querySelector('.app');
   PLATFORMS.forEach(p => app.classList.remove('theme-' + p.id));
   app.classList.add('theme-' + name);
+  _placeTabGlider();
   if (typeof _initAllGliders === 'function') _initAllGliders();
 }
+
+// Sliding underline for the platform tabs: an absolute element inside the
+// scrolling nav, moved to the active tab on every switch and on resize.
+function _placeTabGlider() {
+  const nav = document.querySelector('.platform-tabs');
+  if (!nav) return;
+  const active = nav.querySelector('.tab.active');
+  let g = nav.querySelector('.tab-glider');
+  if (!(active instanceof HTMLElement)) { if (g instanceof HTMLElement) g.style.width = '0'; return; }
+  if (!g) { g = document.createElement('span'); g.className = 'tab-glider'; nav.appendChild(g); }
+  if (g instanceof HTMLElement) {
+    g.style.left  = active.offsetLeft + 'px';
+    g.style.width = active.offsetWidth + 'px';
+  }
+}
+window.addEventListener('resize', () => _placeTabGlider());
 
 // ── Settings modal ────────────────────────────────────────────────────────────
 // The modal is fully generated: a nav rail with General plus one entry per
