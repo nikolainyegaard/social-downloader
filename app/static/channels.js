@@ -650,9 +650,11 @@ function initChannelApp(cfg) {
 
   // ── Recent panel ──────────────────────────────────────────────────────────
 
-  // Usernames stay neutral (state lives in the row tint); a starred creator
-  // gets a gold star prefix, a soft-disabled one dims.
-  const _nameStyle = r => r.enabled === 0 ? 'style="color:var(--text-dim)"' : '';
+  // Usernames stay neutral (state lives in the row tint), with two exceptions:
+  // a banned creator's name renders red, a soft-disabled one dims. Starred
+  // creators get a gold star prefix.
+  const _nameStyle = r => r.account_status === 'banned' ? 'style="color:var(--red)"'
+    : r.enabled === 0 ? 'style="color:var(--text-dim)"' : '';
   const _namePrefix = r => r.starred ? '<span style="color:var(--gold)">★</span> ' : '';
 
   // Onclick string for a saved/deleted group: single-item groups jump straight
