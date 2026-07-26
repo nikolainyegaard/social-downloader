@@ -34,8 +34,8 @@ initChannelApp({
   thumbBadge: v => v.content_type === 'short' ? _ytShortsBadge : _playBadge,
   viewKeys: [
     { key: 'list',   icon: _listViewIcon, title: 'List view' },
-    { key: 'videos', icon: _wideGridIcon, title: 'Videos grid' },
-    { key: 'shorts', icon: _gridViewIcon, title: 'Shorts grid' },
+    { key: 'videos', icon: _wideGridIcon, title: 'Videos grid', label: 'Videos' },
+    { key: 'shorts', icon: _gridViewIcon, title: 'Shorts grid', label: 'Shorts' },
   ],
   viewVideoFilter: (view, vids) => {
     if (view === 'videos') return vids.filter(v => v.content_type !== 'short');
