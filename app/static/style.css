@@ -2046,7 +2046,8 @@ dialog:not([open]) { display: none !important; }
   /* Scroll-locked lists scroll with the page instead of capturing the touch;
      the corner padlock (channels.js ToggleScrollLock) frees them. Lists start
      locked; desktop ignores the class entirely. */
-  .panel-scroll-lock { display: inline-flex; }
+  /* Outranks the base display:none, which appears later in the file */
+  .panel-header .panel-scroll-lock { display: inline-flex; }
   .recent-feed.scroll-locked, .add-history.scroll-locked { overflow-y: hidden; }
 }
 
