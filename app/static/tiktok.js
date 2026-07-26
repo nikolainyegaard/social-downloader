@@ -1843,7 +1843,7 @@ async function _trackUser(tiktokId, username) {
   // The /track POST feeds the engine add queue. Rather than poll, ride the live
   // queue snapshots (SSE-pushed on the active tab, poll fallback otherwise) and
   // finish when this handle resolves. A resolved add stays in the queue as
-  // status 'ok' -- that is the completion signal, not the entry disappearing
+  // status 'ok': that is the completion signal, not the entry disappearing
   // (the old poll waited for it to vanish, which never happened, so the spinner
   // hung forever).
   const handle = data.handle;

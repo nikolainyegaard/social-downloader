@@ -1922,7 +1922,7 @@ function _doToggleToolbar(expanded, toolbarId, hasActiveFn) {
 
 // ── Job progress widget ───────────────────────────────────────────────────────
 //
-// _makeJobWidget(id) -- returns { update({barPct, label, steps}), hide() }
+// _makeJobWidget(id): returns { update({barPct, label, steps}), hide() }
 //
 // barPct: null  = indeterminate animated bar
 //         0-100 = determinate bar (100 snaps to .done state)

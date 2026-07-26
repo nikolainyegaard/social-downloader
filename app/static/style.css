@@ -282,7 +282,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
   border-radius: var(--radius-pill);
   color: var(--text);
   outline: none;
-  transition: border-color .15s;
+  transition: border-color var(--dur-fast);
 }
 
 .btn-primary {
@@ -410,7 +410,7 @@ svg.ic { width: 13px; height: 13px; display: block; flex-shrink: 0; }
   padding: 3px 9px; border-radius: var(--radius-pill);
   cursor: pointer; white-space: nowrap;
   background: var(--yellow-bg); color: var(--yellow);
-  transition: background .1s;
+  transition: background var(--dur-fast);
 }
 .backfill-pill:hover { background: var(--yellow-bg-h); }
 
@@ -431,7 +431,7 @@ svg.ic { width: 13px; height: 13px; display: block; flex-shrink: 0; }
   font-size: 14px;
   padding: 8px 12px;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
   font-family: inherit;
 }
 .text-input:focus { border-color: var(--accent); }
@@ -453,7 +453,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--dur-fast);
 }
 .cookie-upload-label:hover { background: var(--accent-h); }
 
@@ -470,7 +470,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 12px; color: var(--text-dim); text-decoration: none;
   background: var(--raised); padding: 5px 11px 5px 8px;
-  border-radius: var(--radius-sm); transition: background .15s, color .15s;
+  border-radius: var(--radius-sm); transition: background var(--dur-fast), color var(--dur-fast);
   border: 1px solid var(--border);
 }
 .browser-ext-link:hover { background: var(--border); color: var(--text); }
@@ -495,7 +495,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   overflow: hidden;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
 .add-bar-input-row:focus-within {
   border-color: var(--accent);
@@ -531,7 +531,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   font-size: 13px;
   padding: 0 12px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--dur-fast);
 }
 .add-bar-paste-btn:hover { background: var(--surface); }
 
@@ -611,7 +611,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-radius: 50%;
   object-fit: cover;
   cursor: pointer;
-  transition: opacity .15s, transform .15s;
+  transition: opacity var(--dur-fast), transform var(--dur-fast);
 }
 .user-avatar:hover { opacity: .9; transform: scale(1.06); }
 
@@ -688,11 +688,11 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Tracking toggle switch */
 .tracking-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; vertical-align: middle; }
 .tracking-toggle input { display: none; }
-.toggle-track { width: 30px; height: 17px; background: var(--border); border-radius: var(--radius-pill); position: relative; transition: background 0.2s; flex-shrink: 0; }
+.toggle-track { width: 30px; height: 17px; background: var(--border); border-radius: var(--radius-pill); position: relative; transition: background var(--dur); flex-shrink: 0; }
 .tracking-toggle input:checked + .toggle-track { background: var(--accent); }
 /* Thumb is always light: it sits on the grey track when off, so it cannot
    follow --on-accent (dark ink in the TikTok theme) */
-.toggle-thumb { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; background: var(--text); border-radius: 50%; transition: left 0.2s; }
+.toggle-thumb { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; background: var(--text); border-radius: 50%; transition: left var(--dur); }
 .tracking-toggle input:checked + .toggle-track .toggle-thumb { left: 15px; }
 .toggle-label { font-size: 12px; color: var(--muted); }
 /* Large master-switch variant (the Network panel's Enable VPN toggle) */
@@ -726,7 +726,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   justify-content: space-between;
   gap: 8px;
 }
-.user-checked { font-size: 11px; color: var(--muted); }
 /* One hairline-topped ledger line (Added X · Checked Y · Saved Z · Storage W);
    wraps to a second line on narrow cards instead of truncating */
 .user-card-meta-footer {
@@ -833,7 +832,7 @@ dialog:not([open]) { display: none !important; }
   border-radius: var(--radius-sm);
   color: var(--text-dim);
   cursor: pointer;
-  transition: background .15s, color .15s;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 .modal-close::before, .modal-close::after,
 .media-modal-close::before, .media-modal-close::after {
@@ -892,7 +891,7 @@ dialog:not([open]) { display: none !important; }
   border-radius: 50%;
   object-fit: cover;
   cursor: pointer;
-  transition: opacity .15s;
+  transition: opacity var(--dur-fast);
 }
 .modal-avatar:hover { opacity: .75; }
 
@@ -971,7 +970,7 @@ dialog:not([open]) { display: none !important; }
 /* Editable-field chrome (the note): filled + outlined, hover lifts to accent */
 .xtext-boxed .xtext-line { padding: 5px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
                     background: color-mix(in srgb, var(--raised) 65%, transparent);
-                    transition: border-color .12s, background .12s; }
+                    transition: border-color var(--dur-fast), background var(--dur-fast); }
 .xtext-boxed .xtext-line:hover { background: var(--raised); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
 /* The pop offsets cancel its own border+padding against the boxed line's, so
    the text lands exactly over the original line; the plain variant has no box
@@ -1166,7 +1165,7 @@ dialog:not([open]) { display: none !important; }
   background: var(--raised);
   cursor: pointer;
   border: 2px solid var(--border);
-  transition: opacity .15s, border-color .15s;
+  transition: opacity var(--dur-fast), border-color var(--dur-fast);
 }
 .phist-avatar-lg:hover { opacity: .8; border-color: var(--accent); }
 
@@ -1201,7 +1200,7 @@ dialog:not([open]) { display: none !important; }
   border-radius: var(--radius-pill);
   cursor: pointer;
   white-space: nowrap;
-  transition: background .1s, color .1s, border-color .1s, box-shadow .15s;
+  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast), box-shadow var(--dur-fast);
   position: relative; z-index: 2;
 }
 .filter-pill.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
@@ -1217,7 +1216,7 @@ dialog:not([open]) { display: none !important; }
 /* Active text is --text, not --on-accent: the fill is a translucent tint over
    the dark surface, not a solid accent fill */
 .filter-pills.multi .filter-pill.active { background: var(--accent-bg-h); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
-.glider { position: absolute; z-index: 1; background: var(--accent); border-radius: var(--radius-pill); transition: left .2s ease, width .2s ease; pointer-events: none; }
+.glider { position: absolute; z-index: 1; background: var(--accent); border-radius: var(--radius-pill); transition: left var(--dur) var(--ease), width var(--dur) var(--ease); pointer-events: none; }
 
 .modal-vid-count { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
 .toolbar-main-row  { display: flex; align-items: center; gap: 10px; flex: 1 0 auto; min-width: 0; }
@@ -1299,7 +1298,7 @@ dialog:not([open]) { display: none !important; }
   background: var(--accent-bg); color: var(--accent);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   cursor: pointer; text-decoration: none;
-  transition: background .1s;
+  transition: background var(--dur-fast);
 }
 .author-chip:hover { background: var(--accent-bg-h); }
 .author-chip.untracked { background: var(--raised); color: var(--muted); cursor: pointer; }
@@ -1309,7 +1308,7 @@ dialog:not([open]) { display: none !important; }
 .video-row {
   padding: 7px 10px;
   border-bottom: 1px solid var(--border);
-  transition: background .1s;
+  transition: background var(--dur-fast);
 }
 .video-row:hover   { background: var(--raised); }
 .video-row:last-child { border-bottom: none; }
@@ -1318,7 +1317,7 @@ dialog:not([open]) { display: none !important; }
    specificity when the cursor already sits where the row appears) */
 .video-row-highlight:hover { background: color-mix(in srgb, var(--yellow) 30%, transparent); }
 /* Carries the highlight's slow fade-out while the class is being removed */
-.video-row-hl-fade { transition: background .5s ease; }
+.video-row-hl-fade { transition: background .5s var(--ease); }
 
 /* Grid view */
 .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 3px; padding: 8px; align-content: start; }
@@ -1340,7 +1339,7 @@ dialog:not([open]) { display: none !important; }
   background: var(--raised);
   display: block;
   cursor: pointer;
-  transition: opacity .15s;
+  transition: opacity var(--dur-fast);
 }
 .video-thumb:hover { opacity: .75; }
 
@@ -1369,7 +1368,7 @@ dialog:not([open]) { display: none !important; }
   color: var(--accent); font-size: 15px;
   cursor: pointer; padding: 3px 4px;
   border-radius: var(--radius-sm); opacity: .65;
-  transition: opacity .15s, background .15s;
+  transition: opacity var(--dur-fast), background var(--dur-fast);
   display: flex; align-items: center; justify-content: center;
   width: 26px; height: 26px;
 }
@@ -1562,7 +1561,7 @@ dialog:not([open]) { display: none !important; }
   position: relative; width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
   background: var(--raised); border: 1px solid var(--border); overflow: hidden;
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
-  transition: border-color .15s;
+  transition: border-color var(--dur-fast);
 }
 .conn-avatar-wrap:hover { border-color: var(--accent); }
 .conn-letter { font-size: 12px; color: var(--muted); text-transform: uppercase; }
@@ -1573,7 +1572,7 @@ dialog:not([open]) { display: none !important; }
   border: 1px dashed var(--muted); background: var(--raised); color: var(--text-dim);
   padding: 0; cursor: pointer; opacity: .55;
   display: inline-flex; align-items: center; justify-content: center;
-  transition: opacity .15s, color .15s, border-color .15s;
+  transition: opacity var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
 }
 .conn-slot-add svg { display: block; }
 .conn-slot-add:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
@@ -1583,7 +1582,7 @@ dialog:not([open]) { display: none !important; }
   background: var(--raised); border: 1px solid var(--border); color: var(--muted);
   font-size: 11px; font-weight: 600; line-height: 1; padding: 0; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
-  transition: color .15s, border-color .15s, background .15s;
+  transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast);
 }
 .conn-more .ic { width: 14px; height: 14px; }
 .conn-more:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
@@ -1613,7 +1612,7 @@ dialog:not([open]) { display: none !important; }
 .conn-row-remove {
   position: relative; width: 22px; height: 22px; flex-shrink: 0; padding: 0;
   background: none; border: none; border-radius: var(--radius-sm);
-  color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .15s;
+  color: var(--muted); cursor: pointer; opacity: 0; transition: opacity var(--dur-fast);
 }
 .conn-row:hover .conn-row-remove { opacity: .7; }
 .conn-row-remove:hover { opacity: 1 !important; background: var(--red-bg); color: var(--red); }
@@ -1637,7 +1636,7 @@ dialog:not([open]) { display: none !important; }
   font-size: 11px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--muted); user-select: none;
   background: none; border: none; padding: 0; font-family: inherit;
-  cursor: pointer; transition: color .15s;
+  cursor: pointer; transition: color var(--dur-fast);
 }
 .qa-title:hover { color: var(--accent); }
 .qa-row { display: flex; flex-wrap: wrap; gap: 10px; align-self: stretch; }
@@ -1661,7 +1660,7 @@ dialog:not([open]) { display: none !important; }
   padding: 0 12px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background .15s, color .15s;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 .sort-dir-btn:hover { background: var(--border); color: var(--text); }
 
@@ -1785,7 +1784,7 @@ dialog:not([open]) { display: none !important; }
   color: #fff;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  transition: background .15s;
+  transition: background var(--dur-fast);
 }
 .mv-btn svg { width: 18px; height: 18px; display: block; }
 .mv-btn:hover:not(:disabled) { background: rgba(255,255,255,.2); }
@@ -1825,7 +1824,7 @@ dialog:not([open]) { display: none !important; }
   font-size: 22px; line-height: 1;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: background .15s;
+  transition: background var(--dur-fast);
   user-select: none;
 }
 .mv-nav:hover { background: rgba(255,255,255,.2); }
@@ -2136,7 +2135,7 @@ dialog:not([open]) { display: none !important; }
 .ah-actions {
   position: absolute; top: 0; right: 0; bottom: 0; width: var(--ah-hide);
   display: flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 8px;
-  opacity: 0; pointer-events: none; transition: opacity .12s ease;
+  opacity: 0; pointer-events: none; transition: opacity var(--dur-fast) var(--ease);
 }
 .ah-row.has-actions:hover .ah-actions,
 .ah-row.has-actions:focus-within .ah-actions { opacity: 1; pointer-events: auto; }
@@ -2178,7 +2177,7 @@ dialog:not([open]) { display: none !important; }
   border-radius: var(--radius-sm);
   color: var(--text-dim);
   cursor: pointer;
-  transition: color .12s, border-color .12s;
+  transition: color var(--dur-fast), border-color var(--dur-fast);
 }
 .loop-pause-btn:hover  { color: var(--text); border-color: var(--muted); }
 .loop-pause-btn.paused { color: var(--yellow); border-color: var(--yellow); }
@@ -2222,7 +2221,7 @@ dialog:not([open]) { display: none !important; }
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transition: background .15s;
+  transition: background var(--dur-fast);
 }
 .stat-strip .stat-item:hover { background: var(--hdr); }
 
@@ -2299,7 +2298,7 @@ dialog:not([open]) { display: none !important; }
   font-size: 11px;
   color: var(--muted);
   cursor: pointer;
-  transition: background .1s, color .1s;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 .btn-report:hover { background: var(--raised); color: var(--text); }
 
@@ -2321,7 +2320,7 @@ dialog:not([open]) { display: none !important; }
   padding: 10px 8px 16px;
   display: flex; flex-direction: column; gap: 2px;
   overflow: hidden;
-  transition: width .18s ease;
+  transition: width var(--dur) var(--ease);
 }
 .settings-modal.nav-collapsed .settings-nav { width: 52px; }
 
@@ -2332,7 +2331,7 @@ dialog:not([open]) { display: none !important; }
   color: var(--text-dim);
   cursor: pointer;
   margin-bottom: 4px;
-  transition: background .1s, color .1s;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 .settings-nav-burger:hover { background: var(--raised); color: var(--text); }
 
@@ -2344,7 +2343,7 @@ dialog:not([open]) { display: none !important; }
   color: var(--text-dim);
   cursor: pointer; user-select: none;
   white-space: nowrap;
-  transition: background .1s, color .1s;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 .settings-nav-item svg { flex-shrink: 0; }
 .settings-nav-item:hover { background: var(--raised); color: var(--text); }
@@ -2371,7 +2370,7 @@ dialog:not([open]) { display: none !important; }
 }
 /* Collapsed rail: fade the text out but keep its layout space so the icons
    never shift and the group gaps still read as separators */
-.snav-label, .settings-nav-group { transition: opacity .12s ease; }
+.snav-label, .settings-nav-group { transition: opacity var(--dur-fast) var(--ease); }
 .settings-modal.nav-collapsed .snav-label,
 .settings-modal.nav-collapsed .settings-nav-group { opacity: 0; }
 
@@ -2442,7 +2441,7 @@ dialog:not([open]) { display: none !important; }
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 7px 10px; font-size: 11px; line-height: 1.55; font-weight: 400;
   width: 230px; white-space: normal;
-  pointer-events: none; opacity: 0; transition: opacity .15s;
+  pointer-events: none; opacity: 0; transition: opacity var(--dur-fast);
   z-index: 300;
 }
 .tc-info:hover::before { opacity: 1; }
@@ -2514,7 +2513,7 @@ dialog:not([open]) { display: none !important; }
   color: var(--text-dim);
   padding: 5px 9px;
   display: flex; align-items: center; justify-content: center;
-  transition: background .15s, color .15s;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 .btn-gear:hover { background: var(--border); color: var(--text); }
 /* Mobile-only header user menu; the mobile media query swaps it in for the
@@ -2568,7 +2567,7 @@ dialog:not([open]) { display: none !important; }
   background: var(--surface); color: var(--text-dim);
   font-size: 16px; cursor: pointer;
   align-items: center; justify-content: center;
-  transition: background .15s, color .15s;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 .back-to-top:hover { background: var(--raised); color: var(--text); }
 
@@ -2606,13 +2605,13 @@ dialog:not([open]) { display: none !important; }
     color: var(--text); font-size: 13px; font-weight: 600;
     cursor: pointer;
   }
-  .stats-caret { color: var(--muted); font-size: 11px; transition: transform .25s ease; }
+  .stats-caret { color: var(--muted); font-size: 11px; transition: transform .25s var(--ease); }
   .stats-toggle.open .stats-caret { transform: rotate(180deg); }
   /* The toggle gap lives on the wrap's margin (animated alongside the rows):
      inside the strip it would open a hole in the bordered ledger panel */
   .stat-strip-wrap {
     display: grid; grid-template-rows: 0fr;
-    transition: grid-template-rows .28s ease, margin-top .28s ease;
+    transition: grid-template-rows .28s var(--ease), margin-top .28s var(--ease);
   }
   .stat-strip-wrap.open { grid-template-rows: 1fr; margin-top: 10px; }
   .stat-strip-wrap > .stat-strip { min-height: 0; }
@@ -2721,7 +2720,7 @@ dialog:not([open]) { display: none !important; }
      is no shift and no blank gap. It pins just below the tab bar (top = tab
      height), and quick-return hides it upward behind the tabs (higher z-index).
      JS only adds filters-hidden once the tab bar is actually pinned. */
-  .m-filters { display: flex; align-items: center; gap: 7px; padding: 9px 12px; background: var(--nav); position: sticky; top: 38px; z-index: 6; border-bottom: 1px solid var(--border); transition: transform .22s ease, opacity .18s ease; }
+  .m-filters { display: flex; align-items: center; gap: 7px; padding: 9px 12px; background: var(--nav); position: sticky; top: 38px; z-index: 6; border-bottom: 1px solid var(--border); transition: transform .22s var(--ease), opacity var(--dur) var(--ease); }
   .m-filters.filters-hidden { transform: translateY(-100%); opacity: 0; pointer-events: none; }
 
   /* YouTube-style mobile video rows (creator modal list view) */
@@ -2823,7 +2822,7 @@ dialog:not([open]) { display: none !important; }
   flex-shrink: 0;
   background: var(--tab-accent, var(--muted));
   opacity: .45;
-  transition: opacity .15s;
+  transition: opacity var(--dur-fast);
 }
 .platform-tabs .tab:hover::before  { opacity: .8; }
 .platform-tabs .tab.active::before { opacity: 1; }
@@ -2853,7 +2852,7 @@ dialog:not([open]) { display: none !important; }
   bottom: -1px;
   height: 2px;
   background: var(--accent);
-  transition: left var(--dur) var(--ease), width var(--dur) var(--ease);
+  transition: left var(--dur) var(--var(--ease)), width var(--dur) var(--var(--ease));
   pointer-events: none;
 }
 
