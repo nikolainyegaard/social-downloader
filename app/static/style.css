@@ -1,3 +1,10 @@
+/* JetBrains Mono, self-hosted (vendor/fonts, OFL). The whole app is
+   monospace: one face, with weight and color carrying hierarchy. */
+@font-face { font-family: 'JetBrains Mono'; src: url('/static/vendor/fonts/JetBrainsMono-Regular.woff2') format('woff2');  font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'JetBrains Mono'; src: url('/static/vendor/fonts/JetBrainsMono-Medium.woff2') format('woff2');   font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'JetBrains Mono'; src: url('/static/vendor/fonts/JetBrainsMono-SemiBold.woff2') format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'JetBrains Mono'; src: url('/static/vendor/fonts/JetBrainsMono-Bold.woff2') format('woff2');     font-weight: 700; font-style: normal; font-display: swap; }
+
 :root {
   /* Neutral ladder: one value per function, darkest to lightest.
      Every background in the app is one of these five. */
@@ -41,10 +48,10 @@
   --yellow-bg:    rgba(224,168,58,.15);
   --yellow-bg-h:  rgba(224,168,58,.28);
 
-  /* Geometry */
-  --radius:       10px;
-  --radius-lg:    14px;
-  --radius-sm:    6px;
+  /* Geometry: sharp instrument corners */
+  --radius:       6px;
+  --radius-lg:    8px;
+  --radius-sm:    4px;
   --radius-pill:  99px;
 
   /* Motion: one duration pair and one ease for the whole app.
@@ -62,10 +69,9 @@
 
   /* Typography. Scale: 11 micro labels and data cells, 12 secondary text,
      13 body and controls, 14 base, 16 stat values and section titles,
-     20 page title. Data discipline: every numeric or timestamp VALUE
-     (counts, dates, countdowns, ids) renders in --mono; labels and prose
-     stay in the sans stack. */
-  --mono:         "SF Mono", "Fira Code", "Cascadia Code", monospace;
+     20 page title. The whole app renders in the vendored JetBrains Mono;
+     weight and color carry hierarchy, not typeface changes. */
+  --mono:         "JetBrains Mono", "SF Mono", "Cascadia Code", monospace;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -82,7 +88,7 @@ html.modal-open { overflow: hidden; }
 body {
   background: transparent;
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--mono);
   font-size: 14px;
   line-height: 1.5;
   /* Fixed-width digits keep countdowns, stats, and timestamps from jittering */
@@ -190,7 +196,7 @@ body {
 /* ── Error dialog ────────────────────────────────────────────────────────── */
 
 .error-modal-text {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
   line-height: 1.6;
   color: var(--text);
@@ -238,7 +244,7 @@ header {
   flex-wrap: wrap;
 }
 
-header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+header h1 { font-size: 20px; font-weight: 700; }
 header h1 .logo { width: 20px; height: 20px; vertical-align: -3px; }
 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
@@ -598,7 +604,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--raised);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
   display: flex; align-items: center; justify-content: center;
 }
 .avatar-wrap .avatar-letter {
@@ -634,7 +640,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .stat-item-value { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text); }
 
 .account-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
-.account-status.active   { background: var(--green-bg); color: var(--green); }
+/* Tracked is the normal state: quiet text, no pill */
+.account-status.active   { background: none; color: var(--muted); padding: 2px 0; }
 .account-status.inactive { background: var(--raised);      color: var(--muted); }
 .account-status.unknown  { background: var(--raised);      color: var(--muted); }
 
@@ -911,7 +918,7 @@ dialog:not([open]) { display: none !important; }
 .hg-title  { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
 .hg-row    { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 11px; line-height: 1.55; }
 .hg-l      { color: var(--muted); }
-.hg-v      { color: var(--text-dim); font-weight: 600; font-family: var(--mono); font-size: 10.5px; white-space: nowrap; }
+.hg-v      { color: var(--text-dim); font-weight: 600; font-family: var(--mono); font-size: 11px; white-space: nowrap; }
 .hg-v.tred    { color: var(--red); }
 .hg-v.tyellow { color: var(--yellow); }
 .hg-v.tzero   { color: var(--muted); opacity: .45; }
@@ -1357,7 +1364,8 @@ dialog:not([open]) { display: none !important; }
   font-size: 11px; font-weight: 700;
   padding: 2px 7px; border-radius: var(--radius-pill); white-space: nowrap;
 }
-.vstatus.up        { background: var(--green-bg);  color: var(--green); }
+/* The normal state is quiet text: colored pills are reserved for exceptions */
+.vstatus.up        { background: none; color: var(--muted); padding: 2px 0; }
 .vstatus.deleted   { background: var(--red-bg);   color: var(--red); }
 .vstatus.undeleted { background: var(--yellow-bg);  color: var(--yellow); }
 .vstatus.missing   { background: var(--orange-bg);   color: var(--orange); }
@@ -2105,7 +2113,6 @@ dialog:not([open]) { display: none !important; }
   width: 6px; height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
 .panel-header {
@@ -2558,7 +2565,7 @@ dialog:not([open]) { display: none !important; }
   color: var(--text-dim);
   line-height: 1.6;
   padding: 12px 14px;
-  height: 280px;
+  height: clamp(280px, 45vh, 520px);
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-all;
@@ -2743,7 +2750,7 @@ dialog:not([open]) { display: none !important; }
   .yt-row:active { background: var(--raised); }
   /* ••• overflow menu button in the row's lower-right corner */
   .yt-row-menu { position: absolute; right: 10px; bottom: 8px; }
-  .yt-thumb { position: relative; flex: 0 0 42%; max-width: 190px; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: var(--raised); }
+  .yt-thumb { position: relative; flex: 0 0 42%; max-width: 190px; aspect-ratio: 16 / 9; border-radius: var(--radius); overflow: hidden; background: var(--raised); }
   .yt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .yt-thumb.deleted { outline: 2px solid var(--red); outline-offset: -2px; }
   .yt-thumb.undeleted { outline: 2px solid var(--yellow); outline-offset: -2px; }

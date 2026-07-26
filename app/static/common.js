@@ -2455,7 +2455,7 @@ function _modalShellHtml(base, closeFn, { bannerHtml = '', panelsHtml = '', afte
     <div class="m-filters"        id="${base}Filters" style="display:none"></div>
     ${panelsHtml}
     <div class="modal-video-list" id="${base}VideoList"></div>
-    ${scrollTopFn ? `<button class="back-to-top modal-top" id="${base}Top" style="display:none" onclick="${scrollTopFn}()" title="Back to top">↑</button>` : ''}
+    ${scrollTopFn ? `<button class="back-to-top modal-top" id="${base}Top" style="display:none" onclick="${scrollTopFn}()" title="Back to top" aria-label="Back to top"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>` : ''}
   </div>
   ${afterHtml}
 </dialog>`;

@@ -128,6 +128,11 @@ def create_app() -> Flask:
         if oauth_enabled:
             # Preload-safe: 2 years. Only sent when running behind TLS (OAuth requires it).
             response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        # Vendored fonts are referenced from style.css by plain /static path
+        # (the hashed-asset map cannot rewrite urls inside CSS), so they get
+        # their cache header here instead of the /assets route.
+        if request.path.startswith("/static/vendor/fonts/"):
+            response.headers["Cache-Control"] = "public, max-age=2592000"
         # Don't cache HTML or API responses. Hashed static assets set their own long TTL.
         if "Cache-Control" not in response.headers:
             response.headers["Cache-Control"] = "no-store"
