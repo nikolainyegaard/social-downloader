@@ -2759,13 +2759,17 @@ function _mRenderColHdrs(cfg) {
     + '</div></div>');
 }
 
-function _mRenderList(cfg) {
-  if (cfg.hasViewToggle && cfg.st.view !== 'list') { _renderModalVideoGrid(cfg); return; }
+// preserve: re-render for a live data refresh, keeping the pages the user
+// already scrolled in and the scroll position (a plain render resets both;
+// that stays the right behavior for filter and sort changes).
+function _mRenderList(cfg, { preserve = false } = {}) {
+  if (cfg.hasViewToggle && cfg.st.view !== 'list') { _renderModalVideoGrid(cfg, { preserve }); return; }
+  const target  = preserve ? Math.max(cfg.st.loaded, cfg.pageSize) : cfg.pageSize;
   cfg.st.loaded = 0;
   if (cfg.st.obs) { cfg.st.obs.disconnect(); cfg.st.obs = null; }
   const list = document.getElementById(cfg.listElId);
   list.innerHTML = '';
-  list.scrollTop = 0;
+  if (!preserve) list.scrollTop = 0;
   _mRenderColHdrs(cfg);
   const vids = _mFiltered(cfg);
   if (!vids.length) {
@@ -2773,13 +2777,13 @@ function _mRenderList(cfg) {
     list.insertAdjacentHTML('beforeend', `<div class="vlist-empty">${msg}</div>`);
     return;
   }
-  _mAppendVideos(cfg, vids);
+  _mAppendVideos(cfg, vids, target);
 }
 
-function _mAppendVideos(cfg, vids) {
-  if (cfg.mobileRows && _mIsMobile()) { _mAppendVideosMobile(cfg, vids); return; }
+function _mAppendVideos(cfg, vids, count) {
+  if (cfg.mobileRows && _mIsMobile()) { _mAppendVideosMobile(cfg, vids, count); return; }
   const list     = document.getElementById(cfg.listElId);
-  const batch    = vids.slice(cfg.st.loaded, cfg.st.loaded + cfg.pageSize);
+  const batch    = vids.slice(cfg.st.loaded, cfg.st.loaded + (count || cfg.pageSize));
   cfg.st.loaded += batch.length;
   const thumbFn   = cfg.thumbCellFn;
   const actionFn  = cfg.actionBtnsFn;
@@ -2823,9 +2827,9 @@ function _mAppendVideos(cfg, vids) {
 // Trimmed vs the desktop table; status shows only when not Active. Reuses the
 // grid's cfg hooks (gridThumbSrc / typeIconFn / gridCellOnclick) so it stays
 // platform-driven.
-function _mAppendVideosMobile(cfg, vids) {
+function _mAppendVideosMobile(cfg, vids, count) {
   const list  = document.getElementById(cfg.listElId);
-  const batch = vids.slice(cfg.st.loaded, cfg.st.loaded + cfg.pageSize);
+  const batch = vids.slice(cfg.st.loaded, cfg.st.loaded + (count || cfg.pageSize));
   cfg.st.loaded += batch.length;
   const fmtUpload = cfg.uploadDateFmt || fmtDateShort;
   batch.forEach(v => {
@@ -2854,12 +2858,13 @@ function _mAppendVideosMobile(cfg, vids) {
 
 // ── Video grid ────────────────────────────────────────────────────────────────
 
-function _renderModalVideoGrid(cfg) {
+function _renderModalVideoGrid(cfg, { preserve = false } = {}) {
+  const target  = preserve ? Math.max(cfg.st.loaded, cfg.pageSize) : cfg.pageSize;
   cfg.st.loaded = 0;
   if (cfg.st.obs) { cfg.st.obs.disconnect(); cfg.st.obs = null; }
   const list = document.getElementById(cfg.listElId);
   list.innerHTML = '';
-  list.scrollTop = 0;
+  if (!preserve) list.scrollTop = 0;
   let vids = _mFiltered(cfg);
   if (cfg.viewVideoFilter) vids = cfg.viewVideoFilter(cfg.st.view, vids);
   if (!vids.length) {
@@ -2871,14 +2876,14 @@ function _renderModalVideoGrid(cfg) {
   grid.className = 'video-grid' + (extraClass ? ' ' + extraClass : '');
   grid.id = cfg.gridId;
   list.appendChild(grid);
-  _appendModalGrid(cfg, vids);
+  _appendModalGrid(cfg, vids, target);
 }
 
-function _appendModalGrid(cfg, vids) {
+function _appendModalGrid(cfg, vids, count) {
   const list  = document.getElementById(cfg.listElId);
   const grid  = document.getElementById(cfg.gridId);
   if (!grid) return;
-  const batch = vids.slice(cfg.st.loaded, cfg.st.loaded + cfg.pageSize);
+  const batch = vids.slice(cfg.st.loaded, cfg.st.loaded + (count || cfg.pageSize));
   cfg.st.loaded += batch.length;
   batch.forEach(v => {
     const cell = document.createElement('div');

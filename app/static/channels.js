@@ -1406,6 +1406,55 @@ function initChannelApp(cfg) {
     return oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
   };
 
+  const _cardMetaItems = ch => [
+    { label: 'Added',        value: fmtDateOnly(ch.added_at) },
+    { label: 'Last checked', value: ch.last_checked ? fmt.rel(new Date(ch.last_checked * 1000).toISOString()) : 'never' },
+    { label: 'Last saved',   value: ch.last_saved   ? fmt.rel(new Date(ch.last_saved   * 1000).toISOString()) : 'never' },
+    { label: 'Storage',      value: _fmtBytes(ch.media_size_bytes || 0) },
+  ];
+
+  // Keyed card elements: one persistent node per creator, rebuilt only when
+  // its data or run state changes, so polls never destroy hover or keyboard
+  // focus on an unchanged card. Relative times are excluded from the
+  // signature; _patchCardTimes keeps them current in place.
+  const _cardEls = new Map();
+
+  function _cardSig(ch) {
+    return JSON.stringify(ch)
+      + `|${runQueue.includes(ch.channel_id) || runCurrent === ch.channel_id ? 1 : 0}`
+      + `|${!!currentCreator && ch.handle === currentCreator ? 1 : 0}`
+      + `|${pendingRescans[ch.channel_id] || 0}`;
+  }
+
+  function _cardEl(ch) {
+    const sig = _cardSig(ch);
+    const got = _cardEls.get(ch.channel_id);
+    if (got && got.sig === sig) return got.el;
+    const holder = document.createElement('div');
+    holder.innerHTML = _renderCreatorCard(ch);
+    const el = /** @type {HTMLElement} */ (holder.firstElementChild);
+    // A changed card that is on screen swaps in place so the reconcile walk
+    // never sees a detached cursor
+    if (got && got.el.isConnected) got.el.replaceWith(el);
+    _cardEls.set(ch.channel_id, { el, sig });
+    _markXtextClipped(el);
+    return el;
+  }
+
+  // Minute clock tick: refresh the relative times on connected cards without
+  // rebuilding them
+  function _patchCardTimes() {
+    for (const ch of creators) {
+      const got = _cardEls.get(ch.channel_id);
+      if (!got || !got.el.isConnected) continue;
+      const meta = got.el.querySelector('.user-card-meta-footer');
+      if (meta) meta.outerHTML = _cardMeta(_cardMetaItems(ch));
+      const rescanAt = pendingRescans[ch.channel_id];
+      const notice   = got.el.querySelector('.user-rescan-notice');
+      if (notice && rescanAt) notice.textContent = `Re-scan ${fmt.rel(new Date(rescanAt * 1000).toISOString())}`;
+    }
+  }
+
   function _renderCreatorCard(ch) {
     const isCurrent  = !!currentCreator && ch.handle === currentCreator;
     const isInactive = ch.tracking_enabled === 0;
@@ -1444,12 +1493,7 @@ function initChannelApp(cfg) {
       + `<button class="btn-menu" data-action="menu" data-id="${esc(ch.channel_id)}" data-handle="${esc(ch.handle)}" title="More actions" aria-haspopup="menu">${_dotsIcon}</button>`
       + `</div>`;
 
-    const meta = _cardMeta([
-      { label: 'Added',        value: fmtDateOnly(ch.added_at) },
-      { label: 'Last checked', value: ch.last_checked ? fmt.rel(new Date(ch.last_checked * 1000).toISOString()) : 'never' },
-      { label: 'Last saved',   value: ch.last_saved   ? fmt.rel(new Date(ch.last_saved   * 1000).toISOString()) : 'never' },
-      { label: 'Storage',      value: _fmtBytes(ch.media_size_bytes || 0) },
-    ]);
+    const meta = _cardMeta(_cardMetaItems(ch));
 
     return _cardShell({
       classes,
@@ -1473,23 +1517,16 @@ function initChannelApp(cfg) {
     gridObs = null;
     const next = sortedCache.slice(renderedCount, renderedCount + CARD_BATCH);
     if (!next.length) return;
-    grid.insertAdjacentHTML('beforeend', next.map(_renderCreatorCard).join(''));
+    for (const ch of next) grid.appendChild(_cardEl(ch));
     renderedCount += next.length;
-    _markXtextClipped(grid);
     if (sortedCache.length > renderedCount) {
       gridObs = _attachGridSentinel(grid, _appendCreatorCards);
     }
   }
 
-  // Rebuilding the grid replaces a hovered card mid-hover and restarts its
-  // float transition (a visible flicker on every SSE tick while a loop is
-  // downloading), so rebuilds are deferred until the pointer leaves the grid.
-  let renderDeferred = false;
-
   function renderCreators() {
     const grid = _el('Grid');
     if (!grid) return;
-    if (grid.querySelector('.user-card:hover')) { renderDeferred = true; return; }
     if (gridObs) { gridObs.disconnect(); gridObs = null; }
     const filtered   = _filteredCreators();
     const isFiltered = filter.stat.size > 0 || filter.star.size > 0 || filter.book.size > 0 || !!search
@@ -1511,11 +1548,19 @@ function initChannelApp(cfg) {
 
     sortedCache   = _sortedCreators();
     const toShow  = Math.min(Math.max(CARD_BATCH, renderedCount), sortedCache.length);
-    const slice   = sortedCache.slice(0, toShow);
-    grid.innerHTML = slice.map(_renderCreatorCard).join('')
-      + (toShow < CARD_BATCH ? _ghostCards(CARD_BATCH - toShow) : '');
-    renderedCount = slice.length;
-    _markXtextClipped(grid);
+    // Minimal-move reconcile: walk the desired order against the live
+    // children, inserting only out-of-place nodes; leftovers (stale cards,
+    // ghosts, sentinels, empty states) are removed. An unchanged grid is
+    // zero DOM operations.
+    const els  = sortedCache.slice(0, toShow).map(_cardEl);
+    let cursor = grid.firstElementChild;
+    for (const el of els) {
+      if (el === cursor) { cursor = cursor.nextElementSibling; continue; }
+      grid.insertBefore(el, cursor);
+    }
+    while (cursor) { const next = cursor.nextElementSibling; cursor.remove(); cursor = next; }
+    if (toShow < CARD_BATCH) grid.insertAdjacentHTML('beforeend', _ghostCards(CARD_BATCH - toShow));
+    renderedCount = toShow;
     if (!gridAnimated) {
       gridAnimated = true;
       grid.classList.add('grid-anim');
@@ -1532,11 +1577,12 @@ function initChannelApp(cfg) {
   const loadCreators = X('LoadCreators', async () => {
     const { ok, data } = await apiJSON(`${API}/channels`);
     if (!ok) return;
-    // Skip the full grid rebuild when nothing changed, to avoid avatar reflow
-    // and hover flicker on the 15 s poll. Rebuild once a minute regardless so
-    // the relative timestamps on cards stay current.
     const sig = JSON.stringify(data);
-    if (sig === _creatorsSig && Date.now() - _lastGridRender < 60000) return;
+    if (sig === _creatorsSig) {
+      // Unchanged data: keep the relative timestamps current, touch nothing else
+      if (Date.now() - _lastGridRender >= 60000) { _lastGridRender = Date.now(); _patchCardTimes(); }
+      return;
+    }
     _creatorsSig    = sig;
     _lastGridRender = Date.now();
     creators = data;
@@ -2063,7 +2109,7 @@ function initChannelApp(cfg) {
       _setModalVideos(data);
       _mRenderToolbar(MODAL_CFG, _creatorState.videos);
       if (_mIsMediaView(_creatorState.view))
-        _mRenderList(MODAL_CFG);
+        _mRenderList(MODAL_CFG, { preserve: true });
     }
     if (modalCreatorId !== id) return;
     if (_creatorState.view === 'history')      await _refreshPhist(id);
@@ -2777,11 +2823,6 @@ function initChannelApp(cfg) {
 
   // ── Keyboard handlers ─────────────────────────────────────────────────────
 
-  // Run the rebuild a hover deferred once the pointer leaves the grid
-  _el('Grid')?.addEventListener('mouseleave', () => {
-    if (renderDeferred) { renderDeferred = false; renderCreators(); }
-  });
-
   // Cards open on Enter/Space via the global role="button" keydown in common.js
 
   // Slash focuses the search box on the active platform tab
@@ -2897,8 +2938,14 @@ function initChannelApp(cfg) {
   setInterval(() => { if (!_es) { loadCreators(); loadStats(); loadRecent(); } }, 60000);
   setInterval(_tickActivityBar, 1000);
   // Relative timestamps ("3m ago" on cards and feed rows) still need a
-  // clock: re-render from memory once a minute, no fetch.
-  setInterval(() => { if (_es) { renderCreators(); _renderFeed(); } }, 60000);
+  // clock: patch cards in place once a minute, no fetch; the feed re-render
+  // is skipped while focus is inside it.
+  setInterval(() => {
+    if (!_es) return;
+    _patchCardTimes();
+    const feed = document.getElementById(`${P}RecentFeed`);
+    if (!feed || !feed.contains(document.activeElement)) _renderFeed();
+  }, 60000);
 
   // ── Settings pane registration ────────────────────────────────────────────
   // Every platform gets Account, Schedule, Jobs, and Database sections by

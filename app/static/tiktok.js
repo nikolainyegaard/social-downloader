@@ -1720,7 +1720,7 @@ async function _refreshOpenSoundModal() {
   data.forEach(v => { v.type = v.content_type; v.description = v.title; });
   _soundState.videos = data;
   _mRenderToolbar(_SOUND_MODAL_CFG, data);
-  _mRenderList(_SOUND_MODAL_CFG);
+  _mRenderList(_SOUND_MODAL_CFG, { preserve: true });
 }
 
 async function _loadSoundModalVideos(soundId) {
