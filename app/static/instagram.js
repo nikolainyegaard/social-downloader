@@ -16,7 +16,7 @@ initChannelApp({
   subLabelSort:      'Followers',
   uploadDateLabel:   'Uploaded',
   viewsLabel:        'Likes',   // the feed API has no view counts (reels-only play_count); likes fill the column
-  loopLabel:         'Profile Loop',
+  loopLabel:         'Profile loop',
   addPlaceholder:    '@username or profile URL',
   addAriaLabel:      'Instagram username',
   profileUrl:        h => `https://www.instagram.com/${h}`,

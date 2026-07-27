@@ -71,16 +71,18 @@ function initChannelApp(cfg) {
   const ItemsCap  = ITEMS[0].toUpperCase() + ITEMS.slice(1);
   const CreatorsCap = CREATORS[0].toUpperCase() + CREATORS.slice(1);
 
-  const FIELD_LABELS = cfg.fieldLabels || {
+  /* The engine records these fields on every platform, so the defaults must
+     cover them all; a platform map only overrides the wording */
+  const FIELD_LABELS = Object.assign({
     handle: 'Handle', display_name: 'Display name', description: 'Bio', avatar: 'Avatar',
-  };
+    bio_link: 'Bio link', account_status: 'Account status', privacy_status: 'Privacy', banner: 'Banner',
+  }, cfg.fieldLabels || {});
 
   const EXTRA_FILTER_GROUPS = cfg.extraFilterGroups || [];
   const EXTRA_VIEWS         = cfg.extraViews || [];
 
   // ── Section HTML ──────────────────────────────────────────────────────────
 
-  const _triggerIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12C21 16.9706 16.9706 21 12 21C9.69494 21 7.59227 20.1334 6 18.7083L3 16M3 12C3 7.02944 7.02944 3 12 3C14.3051 3 16.4077 3.86656 18 5.29168L21 8M3 21V16M3 16H8M21 3V8M21 8H16"/></svg>`;
   const _bmOutline = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21V3z"/></svg>`;
   const _lockIcon   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
   const _unlockIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
@@ -88,6 +90,13 @@ function initChannelApp(cfg) {
   const _UNLOCK_TIP = 'List scrolls independently. Tap to lock it to the page.';
   const _bmFilled  = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 0 1 1 1v19l-7-5.5L5 22V3a1 1 0 0 1 1-1z"/></svg>`;
 
+  // The modal header's action row, shared verbatim by the desktop and mobile
+  // headers: star, bookmark, Quick, Full, and the overflow menu
+  const _modalActionBtns = (ch, runDisabled) => `<button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${_starIcon(ch.starred)}</button>
+          ${_bookmarkBtn(ch)}
+          <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} title="Quick check: the newest posts only, no deletion detection" onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
+          <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} title="Full check: the whole catalog, detects deletions" onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'${ch.pinned_at ? 'Remove from Quick access' : 'Add to Quick access'}',onclick:()=>${P}TogglePinModal('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>`;
   const _bookmarkBtn = ch => `<button class="btn-bookmark${ch.bookmarked ? ' bookmarked' : ''}"
       data-action="bookmark" data-id="${esc(ch.channel_id)}"
       aria-pressed="${ch.bookmarked ? 'true' : 'false'}" title="${ch.bookmarked ? (ch.starred ? `Starred ${CREATORS} stay bookmarked` : 'Remove bookmark') : 'Bookmark'}">${ch.bookmarked ? _bmFilled : _bmOutline}</button>`;
@@ -105,7 +114,7 @@ function initChannelApp(cfg) {
   </div>
 
   <div class="qa-panel">
-    <button class="qa-title" onclick="${P}OpenQaList()" title="Manage Quick Access">Quick Access</button>
+    <button class="qa-title" onclick="${P}OpenQaList()" title="Manage Quick access">Quick access</button>
     <!-- Placeholder slots reserve the row height until the creators load,
          so the avatars swap in without shifting the page (5 = _QA_MIN_SLOTS) -->
     <div class="qa-row" id="${P}QuickAccess">${'<span class="conn-slot conn-slot-empty"></span>'.repeat(5)}</div>
@@ -114,7 +123,7 @@ function initChannelApp(cfg) {
   <!-- Desktop renders the strip directly (display:contents); on mobile the
        panel becomes a collapsible with the Statistics toggle, closed by default -->
   <div class="stats-area">
-    <button class="stats-toggle" onclick="${P}ToggleStats(this)">Statistics <span class="stats-caret">▾</span></button>
+    <button class="stats-toggle" onclick="${P}ToggleStats(this)">Stats <span class="stats-caret">${_caretIcon}</span></button>
     <div class="stat-strip-wrap" id="${P}StatsWrap">
       <div class="stat-strip" id="${P}StatsGrid"></div>
     </div>
@@ -139,7 +148,7 @@ function initChannelApp(cfg) {
           <button class="btn-reset-filter" onclick="${P}ResetRecentFilters()" title="Reset filters">${_xCircleIcon}</button>
         </span>
       </div>
-      <button class="btn-reset-filter panel-scroll-lock" id="${P}RfLock" onclick="${P}ToggleScrollLock('${P}RecentFeed', this)" aria-pressed="false" title="${_LOCK_TIP}">${_lockIcon}</button>
+      <button class="btn-reset-filter panel-scroll-lock" id="${P}RfLock" onclick="${P}ToggleScrollLock('${P}RecentFeed', this)" aria-pressed="true" title="${_LOCK_TIP}">${_lockIcon}</button>
     </div>
     <div class="recent-feed scroll-locked" id="${P}RecentFeed"><div class="rf-empty">Loading…</div></div>
   </div>
@@ -165,10 +174,10 @@ function initChannelApp(cfg) {
         <div id="${P}LoopSessions" class="loop-sessions"></div>
         <div class="loop-actions">
           <div style="display:flex;gap:5px">
-            <button class="btn-run btn-trigger" id="${P}TriggerNextBtn"    onclick="${P}TriggerNext()">${_triggerIcon} Next</button>
-            <button class="btn-run btn-trigger" id="${P}TriggerStarredBtn" onclick="${P}TriggerStarred()">${_triggerIcon} Starred</button>
-            <button class="btn-run btn-trigger" id="${P}TriggerHalfBtn"    onclick="${P}TriggerHalf()">${_triggerIcon} Half</button>
-            <button class="btn-run btn-trigger" id="${P}TriggerAllBtn"     onclick="${P}TriggerAll()">${_triggerIcon} All</button>
+            <button class="btn-run btn-trigger" id="${P}TriggerNextBtn"    onclick="${P}TriggerNext()">${_refreshIcon} Next</button>
+            <button class="btn-run btn-trigger" id="${P}TriggerStarredBtn" onclick="${P}TriggerStarred()">${_refreshIcon} Starred</button>
+            <button class="btn-run btn-trigger" id="${P}TriggerHalfBtn"    onclick="${P}TriggerHalf()">${_refreshIcon} Half</button>
+            <button class="btn-run btn-trigger" id="${P}TriggerAllBtn"     onclick="${P}TriggerAll()">${_refreshIcon} All</button>
           </div>
           <button class="btn-danger btn-trigger" id="${P}StopBtn" onclick="${P}StopLoop()" disabled>Stop</button>
         </div>
@@ -247,7 +256,7 @@ function initChannelApp(cfg) {
     <div class="users-grid" id="${P}Grid">
       ${Array(6).fill('<div class="user-card skeleton-card" aria-hidden="true"></div>').join('')}
     </div>
-    ${EXTRA_VIEWS.map(v => `<div class="users-grid" id="${P}Grid_${v.key}" style="display:none"><div class="empty-state">${v.emptyLabel || ''}</div></div>`).join('')}
+    ${EXTRA_VIEWS.map(v => `<div class="users-grid" id="${P}Grid_${v.key}" style="display:none">${Array(6).fill('<div class="user-card skeleton-card" aria-hidden="true"></div>').join('')}</div>`).join('')}
     <div id="${P}LogPanel" style="display:none">
       <div class="log-panel">
         <div class="log-header">
@@ -277,7 +286,7 @@ function initChannelApp(cfg) {
       afterHtml: `
   <dialog class="about-modal" id="${P}AboutModal" onclick="if(event.target===this)${P}CloseAbout()">
     <div class="about-card">
-      <button class="modal-close" onclick="${P}CloseAbout()" aria-label="Close"></button>
+      <button class="modal-close" onclick="${P}CloseAbout()" aria-label="Close">${_xIcon}</button>
       <h3 class="about-title">About</h3>
       <div id="${P}AboutBody"></div>
     </div>
@@ -303,7 +312,7 @@ function initChannelApp(cfg) {
     quick:    d => window[`${P}RunCreatorQuick`](d.id),
     full:     d => window[`${P}RunCreator`](d.id),
     menu:     (d, el) => _openCardMenu(el, [
-      { label: 'Run Profile', onclick: () => window[`${P}RunCreatorProfile`](d.id) },
+      { label: 'Run profile', onclick: () => window[`${P}RunCreatorProfile`](d.id) },
       { label: 'Remove', danger: true, onclick: () => window[`${P}RemoveCreator`](d.id, `@${d.handle}`) },
     ]),
   });
@@ -328,7 +337,7 @@ function initChannelApp(cfg) {
       <div class="conn-list">
         <div class="conn-list-head">
           <span>Connected ${CREATORS}</span>
-          <button class="modal-close" onclick="${P}CloseConnList()" title="Close" aria-label="Close"></button>
+          <button class="modal-close" onclick="${P}CloseConnList()" title="Close" aria-label="Close">${_xIcon}</button>
         </div>
         <div class="conn-list-rows" id="${P}ConnListRows"></div>
         <div class="conn-list-foot">
@@ -343,8 +352,8 @@ function initChannelApp(cfg) {
     <dialog class="conn-backdrop" id="${P}QaListModal" onclick="if(event.target===this)${P}CloseQaList()">
       <div class="conn-list">
         <div class="conn-list-head">
-          <span>Quick Access</span>
-          <button class="modal-close" onclick="${P}CloseQaList()" title="Close" aria-label="Close"></button>
+          <span>Quick access</span>
+          <button class="modal-close" onclick="${P}CloseQaList()" title="Close" aria-label="Close">${_xIcon}</button>
         </div>
         <div class="conn-list-rows" id="${P}QaListRows"></div>
         <div class="conn-list-foot">
@@ -556,9 +565,12 @@ function initChannelApp(cfg) {
   const _historyIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3.5 2"/></svg>`;
   const _storiesTabIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke-dasharray="3.2 2.6"/><polygon points="10,8.5 16.5,12 10,15.5" fill="currentColor" stroke="none"/></svg>`;
   const _statsTabIcon   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,17 9,11 13,14 21,6"/><polyline points="15,6 21,6 21,12"/></svg>`;
+  /* The list tab is labeled with the platform's own item noun (Tweets, Posts,
+     Videos); the grid key is 'grid' so it cannot collide with YouTube's
+     'videos' view key */
   const _baseViewKeys = cfg.viewKeys || [
-    { key: 'list',   icon: _listViewIcon, title: 'List view', label: 'Videos' },
-    { key: 'videos', icon: _gridViewIcon, title: 'Grid view', label: 'Grid' },
+    { key: 'list', icon: _listViewIcon, title: 'List view', label: ItemsCap },
+    { key: 'grid', icon: _gridViewIcon, title: 'Grid view', label: 'Grid' },
   ];
   // History is always offered; Stories on any stories-capable platform (even
   // with no saved stories yet). label is the mobile tab text.
@@ -632,8 +644,8 @@ function initChannelApp(cfg) {
   const _statsRows = cfg.statsRows || (s => [
     { label: `Tracked ${CREATORS}`, value: (s.channel_count || 0).toLocaleString() },
     { label: `Saved ${ITEMS}`,      value: (s.saved_count   || 0).toLocaleString() },
-    { label: 'Videos',              value: (s.media_video_files || 0).toLocaleString() },
-    { label: 'Photos',              value: (s.media_photo_files || 0).toLocaleString() },
+    { label: 'Video files',         value: (s.media_video_files || 0).toLocaleString() },
+    { label: 'Photo files',         value: (s.media_photo_files || 0).toLocaleString() },
     { label: 'Deleted',             value: (s.deleted_count || 0).toLocaleString() },
     { label: 'Latest saved',        value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '–' },
     { label: 'Storage',             value: _fmtBytes(s.media_size_bytes || 0) },
@@ -1014,7 +1026,7 @@ function initChannelApp(cfg) {
       method: 'POST',
       body: JSON.stringify({ paused }),
     });
-    if (!ok) { showToast('Could not update pause state.', { type: 'error' }); return; }
+    if (!ok) { showToast('Could not update pause state', { type: 'error' }); return; }
     loopPaused = paused;
     _renderPauseState(_el('PauseBtn'), _el('LoopNext'), paused);
     showToast(paused ? `${cfg.loopLabel} paused: scheduled sessions will be skipped.` : `${cfg.loopLabel} resumed.`);
@@ -1027,7 +1039,7 @@ function initChannelApp(cfg) {
     const { ok } = await apiJSON(`${API}/stop`, { method: 'POST' });
     if (!ok) {
       if (btn) btn.disabled = false;
-      showToast('Could not stop loop.', { type: 'error' });
+      showToast('Could not stop loop', { type: 'error' });
     }
   });
 
@@ -1067,7 +1079,7 @@ function initChannelApp(cfg) {
         if (btn) btn.disabled = false;
         _cleanupWidget.update({
           barPct: 100,
-          label: `Done - ${data.removed} item${data.removed !== 1 ? 's' : ''} removed`,
+          label: `Done: ${data.removed} item${data.removed !== 1 ? 's' : ''} removed`,
           steps: data.steps,
         });
       }
@@ -1181,12 +1193,12 @@ function initChannelApp(cfg) {
       ? '<span class="spinner"></span>'
       : _AH_ICONS[e.status === 'error' ? 'error' : 'ok'];
     const status = e.status === 'pending'
-      ? '<span class="ah-status ah-pending">looking up…</span>'
+      ? '<span class="ah-status ah-pending">Looking up…</span>'
       : e.status === 'error'
         ? `<span class="ah-status ah-error" title="${esc(e.error_detail || '')}">${esc(e.error_kind || 'error')}</span>`
         : '<span class="ah-status ah-ok">added</span>';
     const actions = e.status === 'error'
-      ? `<button class="ah-btn" title="Try again" onclick="${P}AhRetry(${e.id})">${_triggerIcon}</button>
+      ? `<button class="ah-btn" title="Try again" onclick="${P}AhRetry(${e.id})">${_refreshIcon}</button>
          <button class="ah-btn ah-btn-danger" title="Discard" onclick="${P}AhDiscard(${e.id})">${_xIcon}</button>`
       : '';
     return `<div class="ah-row${actions ? ' has-actions' : ''}">
@@ -1251,7 +1263,7 @@ function initChannelApp(cfg) {
 
   X('AhDiscard', async (id) => {
     const { ok, data } = await apiJSON(`${API}/add-history/${id}`, { method: 'DELETE' });
-    if (!ok) { showToast(data.error || 'Could not discard entry.', { type: 'error' }); return; }
+    if (!ok) { showToast(data.error || 'Could not discard entry', { type: 'error' }); return; }
     _ah.items = _ah.items.filter(i => i.id !== id);
     _renderAddHistory();
   });
@@ -1307,8 +1319,8 @@ function initChannelApp(cfg) {
   function _fdHtml(g) {
     const sel = new Set(g.defaults || []);
     return `<div class="dd dd-multi" id="${P}Fd_${g.key}">
-      <button type="button" class="dd-btn" onclick="_ddToggle(this)">
-        <span class="dd-label">${esc(_fdLabel(g, sel))}</span><span class="dd-caret">▾</span></button>
+      <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_ddToggle(this)">
+        <span class="dd-label">${esc(_fdLabel(g, sel))}</span><span class="dd-caret">${_caretIcon}</span></button>
       <div class="dd-menu" role="listbox" popover>
         ${g.options.map(o => `<button type="button" class="dd-opt${sel.has(o.key) ? ' active' : ''}" role="option" id="${P}f_${g.key}_${o.key}" onclick="${P}SetFilter('${g.key}','${o.key}')">${esc(o.label)}</button>`).join('')}
       </div></div>`;
@@ -1347,7 +1359,7 @@ function initChannelApp(cfg) {
     const locked = list.classList.toggle('scroll-locked');
     btn.innerHTML = locked ? _lockIcon : _unlockIcon;
     btn.title = locked ? _LOCK_TIP : _UNLOCK_TIP;
-    btn.setAttribute('aria-pressed', String(!locked));
+    btn.setAttribute('aria-pressed', String(locked));
   });
 
   // The empty-grid CTA: bring the add bar into view and put the caret in it
@@ -1535,8 +1547,8 @@ function initChannelApp(cfg) {
     const footer = `<div style="display:flex;gap:6px;">`
       + _starBtn(ch.starred, ch.channel_id)
       + _bookmarkBtn(ch)
-      + `<button class="btn-run" ${runDis} data-action="quick" data-id="${esc(ch.channel_id)}">${_refreshIcon} Quick</button>`
-      + `<button class="btn-run" ${runDis} data-action="full" data-id="${esc(ch.channel_id)}">${_refreshIcon} Full</button>`
+      + `<button class="btn-run" ${runDis} data-action="quick" data-id="${esc(ch.channel_id)}" title="Quick check: the newest posts only, no deletion detection">${_refreshIcon} Quick</button>`
+      + `<button class="btn-run" ${runDis} data-action="full" data-id="${esc(ch.channel_id)}" title="Full check: the whole catalog, detects deletions">${_refreshIcon} Full</button>`
       + `<button class="btn-menu" data-action="menu" data-id="${esc(ch.channel_id)}" data-handle="${esc(ch.handle)}" title="More actions" aria-haspopup="menu">${_dotsIcon}</button>`
       + `</div>`;
 
@@ -1582,7 +1594,7 @@ function initChannelApp(cfg) {
 
     if (!creators.length) {
       grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">${_emptyInner('inbox',
-        `No ${CREATORS} tracked yet.`,
+        `No ${CREATORS} tracked yet`,
         `<button class="btn-primary btn-sm" onclick="${P}FocusAdd()">Add your first ${CREATOR}</button>`)}</div>`;
       renderedCount = 0;
       return;
@@ -1837,7 +1849,7 @@ function initChannelApp(cfg) {
           <span class="conn-row-name">${esc(c.display_name || c.handle)}</span>
           <span class="conn-row-handle">@${esc(c.handle)}</span>
         </span>
-        <button class="conn-row-remove" onclick="${P}RemoveConnection('${esc(c.channel_id)}')" title="Remove connection"></button>
+        <button class="conn-row-remove" onclick="${P}RemoveConnection('${esc(c.channel_id)}')" title="Remove connection">${_xIcon}</button>
       </div>`).join('')
     : `<div class="conn-empty">No connected ${CREATORS} yet</div>`;
   }
@@ -1892,7 +1904,7 @@ function initChannelApp(cfg) {
       method: 'POST',
       body: JSON.stringify({ handle: raw.trim() }),
     });
-    if (!ok) { showToast(data.error || 'Could not connect.', { type: 'error' }); return; }
+    if (!ok) { showToast(data.error || 'Could not connect', { type: 'error' }); return; }
     if (modalCreatorId === id) _applyConnections(data.connections);
   });
 
@@ -1902,7 +1914,7 @@ function initChannelApp(cfg) {
     const { ok, data } = await apiJSON(
       `${API}/channels/${encodeURIComponent(id)}/connections/${encodeURIComponent(otherId)}`,
       { method: 'DELETE' });
-    if (!ok) { showToast(data.error || 'Could not remove the connection.', { type: 'error' }); return; }
+    if (!ok) { showToast(data.error || 'Could not remove the connection', { type: 'error' }); return; }
     if (modalCreatorId === id) _applyConnections(data.connections);
   });
 
@@ -1926,7 +1938,7 @@ function initChannelApp(cfg) {
     if (sig === _qaSig) return;
     _qaSig = sig;
     const slots = pinned.map(c => _connAvatar(c));
-    slots.push(`<button class="conn-slot conn-slot-add" onclick="${P}QuickAccessAdd()" title="Add a ${CREATOR} to Quick Access">${_connPlusIcon}</button>`);
+    slots.push(`<button class="conn-slot conn-slot-add" onclick="${P}QuickAccessAdd()" title="Add a ${CREATOR} to Quick access">${_connPlusIcon}</button>`);
     while (slots.length < _QA_MIN_SLOTS) slots.push(`<span class="conn-slot conn-slot-empty"></span>`);
     host.innerHTML = slots.join('');
     _renderQaListRows();
@@ -1937,13 +1949,13 @@ function initChannelApp(cfg) {
     if (!host) return;
     const pinned = _qaPinned();
     host.innerHTML = pinned.length ? pinned.map(c => `
-      <div class="conn-row" onclick="if(!event.target.closest('button')){${P}CloseQaList();${P}OpenModal('${esc(c.channel_id)}')}">
+      <div class="conn-row" role="button" tabindex="0" onclick="if(!event.target.closest('button')){${P}CloseQaList();${P}OpenModal('${esc(c.channel_id)}')}">
         ${_connAvatar(c)}
         <span class="conn-row-names">
           <span class="conn-row-name">${esc(c.display_name || c.handle)}</span>
           <span class="conn-row-handle">@${esc(c.handle)}</span>
         </span>
-        <button class="conn-row-remove" onclick="${P}QuickAccessRemove('${esc(c.channel_id)}')" title="Remove from Quick Access"></button>
+        <button class="conn-row-remove" onclick="${P}QuickAccessRemove('${esc(c.channel_id)}')" title="Remove from Quick access">${_xIcon}</button>
       </div>`).join('')
     : `<div class="conn-empty">No pinned ${CREATORS} yet</div>`;
   }
@@ -1963,7 +1975,7 @@ function initChannelApp(cfg) {
     const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(id)}/pin`, {
       method: 'PATCH', body: JSON.stringify({ pinned }),
     });
-    if (!ok) { showToast(data.error || 'Could not update Quick Access.', { type: 'error' }); return; }
+    if (!ok) { showToast(data.error || 'Could not update Quick access', { type: 'error' }); return; }
     const ch = creators.find(c => c.channel_id === id);
     if (ch) ch.pinned_at = pinned ? Math.floor(Date.now() / 1000) : null;
     _renderQuickAccess();
@@ -1983,7 +1995,7 @@ function initChannelApp(cfg) {
 
   X('QuickAccessAdd', async () => {
     const raw = await openPrompt({
-      title: 'Add to Quick Access', placeholder: `@handle of a tracked ${CREATOR}`,
+      title: 'Add to Quick access', placeholder: `@handle of a tracked ${CREATOR}`,
       confirmLabel: 'Add', suggest: _creatorSuggest(new Set(_qaPinned().map(c => c.channel_id))),
     });
     if (raw === null || !raw.trim()) return;
@@ -2038,7 +2050,7 @@ function initChannelApp(cfg) {
     const fields = [...new Set(phistData.map(e => e.field))];
     if (!fields.length) return '';
     const menu = fields.map(f =>
-      `<button class="m-dd-opt${phistField.has(f) ? ' active' : ''}" onclick="${P}MToggleField('${esc(f)}',this)">${FIELD_LABELS[f] || f}<span>${phistField.has(f) ? '✓' : ''}</span></button>`).join('');
+      `<button class="m-dd-opt${phistField.has(f) ? ' active' : ''}" onclick="${P}MToggleField('${esc(f)}',this)">${FIELD_LABELS[f] || f}<span>${phistField.has(f) ? _checkIcon : ''}</span></button>`).join('');
     return _mDd('Fields', menu);
   }
 
@@ -2327,11 +2339,7 @@ function initChannelApp(cfg) {
               : '<span class="no-bio-link">No link</span>'}</div>
           </div>
           <div class="modal-actions-group">
-            <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${_starIcon(ch.starred)}</button>
-            ${_bookmarkBtn(ch)}
-            <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
-            <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-            <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'${ch.pinned_at ? 'Remove from Quick Access' : 'Add to Quick Access'}',onclick:()=>${P}TogglePinModal('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
+            ${_modalActionBtns(ch, runDisabled)}
           </div>
         </div>
       </div>
@@ -2399,11 +2407,7 @@ function initChannelApp(cfg) {
           ${ch.bio_link ? `<div class="mh-link"><a href="${esc(ch.bio_link)}" target="_blank" rel="noopener noreferrer">${esc(ch.bio_link.replace(/^https?:\/\//, ''))}</a></div>` : ''}
         </div>
         <div class="mh-actions">
-          <button class="btn-star${ch.starred ? ' starred' : ''}" onclick="${P}ToggleStarModal('${esc(ch.channel_id)}')" title="${ch.starred ? 'Unstar' : 'Star'}">${_starIcon(ch.starred)}</button>
-          ${_bookmarkBtn(ch)}
-          <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
-          <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run Profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'${ch.pinned_at ? 'Remove from Quick Access' : 'Add to Quick Access'}',onclick:()=>${P}TogglePinModal('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>
+          ${_modalActionBtns(ch, runDisabled)}
           <label class="tracking-toggle" title="${isInactive ? `${ItemsCap} tracking off (profile changes still tracked)` : `${ItemsCap} tracking on`}" style="margin-left:auto">
             <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="${P}SetTracking('${esc(ch.channel_id)}', this.checked)">
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -2554,7 +2558,8 @@ function initChannelApp(cfg) {
     panel.innerHTML     = '<div class="vlist-loading">Loading stories…</div>';
     const chId = modalCreatorId;
     const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(chId)}/stories/calendar`);
-    if (!ok || chId !== modalCreatorId || _creatorState.view !== 'stories') return;
+    if (chId !== modalCreatorId || _creatorState.view !== 'stories') return;
+    if (!ok) { panel.innerHTML = '<div class="vlist-empty">Could not load stories. Close and reopen to retry.</div>'; return; }
     _renderStoriesPanel(data || {});
   }
 
@@ -2606,8 +2611,8 @@ function initChannelApp(cfg) {
         <div class="stories-cal" id="${P}StoriesCal"></div>
         <div class="stories-cal-foot">
           <div class="stories-cal-nav">
-            <button class="filter-pill" onclick="${P}StoriesCalStep(-1)" title="Earlier months">←</button>
-            <button class="filter-pill" id="${P}StoriesCalFwd" disabled onclick="${P}StoriesCalStep(1)" title="Later months">→</button>
+            <button class="filter-pill" onclick="${P}StoriesCalStep(-1)" title="Earlier months"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <button class="filter-pill" id="${P}StoriesCalFwd" disabled onclick="${P}StoriesCalStep(1)" title="Later months"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
           </div>
           <div class="stories-cal-legend">
             <span>Less</span>
@@ -2692,7 +2697,8 @@ function initChannelApp(cfg) {
     panel.innerHTML = '<div class="vlist-loading">Loading stats…</div>';
     const chId = modalCreatorId;
     const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(chId)}/stats-history`);
-    if (!ok || chId !== modalCreatorId || _creatorState.view !== 'stats') return;
+    if (chId !== modalCreatorId || _creatorState.view !== 'stats') return;
+    if (!ok) { panel.innerHTML = '<div class="vlist-empty">Could not load stats. Close and reopen to retry.</div>'; return; }
     _statHistRows = data || [];
     _statHistSig  = JSON.stringify(data);
     _statHistCharts = _renderStatsCharts(panel, _statHistRows);
@@ -2784,7 +2790,7 @@ function initChannelApp(cfg) {
 
     panel.innerHTML = entries.length
       ? entries.map(e => _phistEntryHtml(e, newValMap.get(e))).join('')
-      : `<div style="color:var(--muted);font-size:13px;padding:12px 0">No profile changes recorded${phistField.size || _creatorState.search ? ' matching the current filters' : ''}.</div>`;
+      : `<div class="phist-empty">No profile changes recorded${phistField.size || _creatorState.search ? ' matching the current filters' : ''}</div>`;
   }
 
   function _phistEntryHtml(e, newVal) {

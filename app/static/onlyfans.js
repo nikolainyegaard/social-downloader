@@ -14,7 +14,7 @@ initChannelApp({
   subLabelSort:      'Subscribers',
   uploadDateLabel:   'Posted',
   viewsLabel:        'Likes',   // OnlyFans has no view counts; likes fill the column
-  loopLabel:         'Creator Loop',
+  loopLabel:         'Creator loop',
   addPlaceholder:    '@username or profile URL',
   addAriaLabel:      'OnlyFans username',
   profileUrl:        h => `https://onlyfans.com/${h}`,
@@ -44,14 +44,16 @@ initChannelApp({
               <div class="job-card-desc">
                 Rewrites creator bios and post titles saved before the HTML
                 cleanup existed: br and p tags become line breaks, entities
-                like &amp;lt;3 are decoded. Already-clean rows are left
+                like &lt;3 are decoded. Already-clean rows are left
                 untouched, so this is safe to run repeatedly.
               </div>
             </div>
             <button class="btn-primary" id="job-of-cleanhtml-btn" onclick="ofCleanHtml()" style="flex-shrink:0;align-self:flex-start">Run</button>
           </div>
           <div class="job-status" id="job-of-cleanhtml-status" style="display:none">
+            <div id="job-of-cleanhtml-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-of-cleanhtml-bar"></div></div></div>
             <div class="job-status-text" id="job-of-cleanhtml-text"></div>
+            <div class="job-steps" id="job-of-cleanhtml-steps"></div>
           </div>
         </div>`,
     },
@@ -76,10 +78,10 @@ const _ofCleanWidget = _makeJobWidget('of-cleanhtml');
 async function ofCleanHtml() {
   const btn = document.getElementById('job-of-cleanhtml-btn');
   btn.disabled = true;
-  _ofCleanWidget.update({ label: 'Rewriting…' });
+  _ofCleanWidget.update({ label: 'Running…' });
   const { ok, data } = await apiJSON('/api/onlyfans/jobs/clean-html', { method: 'POST' });
   btn.disabled = false;
-  if (!ok) { _ofCleanWidget.update({ label: data.error || 'Job failed' }); return; }
+  if (!ok) { _ofCleanWidget.update({ label: data.error || 'Could not run the job' }); return; }
   _ofCleanWidget.update({ label: data.rewrote
     ? `Rewrote ${data.rewrote} row${data.rewrote === 1 ? '' : 's'} (${data.results.filter(r => r.dirty).map(r => `${r.column}: ${r.dirty}`).join(', ')})`
     : 'Nothing to rewrite: all stored rows are clean' });

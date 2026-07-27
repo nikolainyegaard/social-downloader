@@ -242,7 +242,7 @@ function _generalPlatformsHtml() {
         <label class="tracking-toggle lg" style="margin-bottom:12px">
           <input type="checkbox" id="ptoggle-${p.id}" ${p.enabled ? 'checked' : ''} onchange="_platformToggle('${p.id}', this)">
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          <span class="toggle-label" style="font-size:13px;color:var(--text)">${esc(p.label)}</span>
+          <span class="toggle-label">${esc(p.label)}</span>
         </label>`).join('')}
     </div>
     <p class="settings-note">Changes apply immediately; the page reloads to update the tabs.</p>
@@ -274,41 +274,41 @@ async function _platformToggle(id, input) {
 }
 
 const _GENERAL_ACCESS_HTML = `
-  <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:4px">
+  <p class="settings-note">
     Require login before accessing the app via any OIDC provider (Authentik, Keycloak, etc.).
   </p>
-  <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:20px">
+  <p class="settings-note" style="margin-bottom:20px">
     <strong>Changes take effect after restarting the container.</strong>
     The secret key and session files are managed automatically.
   </p>
-  <div id="authForceDisabledBanner" style="display:none;background:var(--raised);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--red)">
+  <div id="authForceDisabledBanner" class="settings-banner danger" style="display:none">
     <strong>OAUTH_FORCE_DISABLE=true</strong> is set in your environment. Auth enforcement is bypassed regardless of the toggle below. Remove it to re-enable enforcement after fixing your configuration.
   </div>
-  <div id="authRestartBanner" style="display:none;background:var(--raised);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--accent)">
+  <div id="authRestartBanner" class="settings-banner" style="display:none">
     Saved settings differ from the running configuration. Restart the container to apply.
   </div>
   <label class="tracking-toggle lg" style="margin-bottom:20px">
     <input type="checkbox" id="authEnabled">
     <span class="toggle-track"><span class="toggle-thumb"></span></span>
-    <span class="toggle-label" style="font-size:13px;color:var(--text)">Enable OAuth login</span>
+    <span class="toggle-label">Enable OAuth login</span>
   </label>
-  <div style="display:flex;flex-direction:column;gap:14px;max-width:500px;margin-bottom:20px">
-    <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
-      <span>Discovery URL <span style="color:var(--red)">*</span></span>
+  <div class="settings-form">
+    <label class="settings-field">
+      <span>Discovery URL <span class="req">*</span></span>
       <input type="text" id="authDiscoveryUrl" class="text-input" required aria-required="true" placeholder="https://auth.example.com/application/o/my-app/.well-known/openid-configuration" spellcheck="false">
-      <span style="font-size:11px;color:var(--muted)">Authentik: application provider settings &gt; OpenID Configuration URL</span>
+      <span class="field-hint">Authentik: application provider settings &gt; OpenID Configuration URL</span>
     </label>
-    <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
-      <span>Client ID <span style="color:var(--red)">*</span></span>
+    <label class="settings-field">
+      <span>Client ID <span class="req">*</span></span>
       <input type="text" id="authClientId" class="text-input" required aria-required="true" placeholder="your-client-id" autocomplete="off" spellcheck="false">
     </label>
-    <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
-      <span>Client secret <span style="color:var(--red)">*</span></span>
+    <label class="settings-field">
+      <span>Client secret <span class="req">*</span></span>
       <div style="display:flex;gap:8px;align-items:center">
         <input type="password" id="authClientSecret" class="text-input" style="flex:1" placeholder="leave blank to keep existing" autocomplete="new-password" spellcheck="false">
-        <button id="authSecretToggle" onclick="toggleAuthSecretVisibility()" style="flex-shrink:0;font-size:12px;padding:5px 10px;background:var(--raised);border:1px solid var(--border);border-radius:6px;color:var(--text-dim);cursor:pointer">Show</button>
+        <button class="btn-sm" id="authSecretToggle" onclick="toggleAuthSecretVisibility()" style="flex-shrink:0">Show</button>
       </div>
-      <span id="authSecretStatus" style="font-size:11px;color:var(--muted)"></span>
+      <span id="authSecretStatus" class="field-hint"></span>
     </label>
     <label class="settings-label">
       <span>Session lifetime</span>
@@ -321,9 +321,9 @@ const _GENERAL_ACCESS_HTML = `
   <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:24px">
     <button class="btn-primary btn-sm" onclick="saveAuthSettings()">Save</button>
   </div>
-  <hr style="border:none;border-top:1px solid var(--border);margin-bottom:16px">
+  <hr class="hr-divider">
   <div class="settings-subtitle">Locked out?</div>
-  <p style="font-size:12px;color:var(--text-dim);line-height:1.6;margin:0">
+  <p class="settings-note" style="margin:0">
     If the OIDC provider is unreachable and you cannot log in, add
     <code>OAUTH_FORCE_DISABLE: "true"</code> to your docker-compose.yml environment
     block and restart. This bypasses auth enforcement so you can access Settings and
@@ -374,12 +374,12 @@ async function _cookiesUpload(platform, idPrefix, input) {
   if (ok) {
     _cookiesRender(platform, idPrefix, data);
   } else {
-    showToast(data.error || 'Could not upload the file.', { type: 'error' });
+    showToast(data.error || 'Could not upload the file', { type: 'error' });
   }
 }
 
 async function _cookiesDelete(platform, idPrefix) {
-  if (!await openConfirm({ title: 'Remove cookies?', message: 'Remove the stored cookies file?', confirmLabel: 'Remove' })) return;
+  if (!await openConfirm({ title: 'Remove cookies?', message: 'The stored cookies file is deleted; upload a new one to sign in again.', confirmLabel: 'Remove', danger: true })) return;
   const { ok } = await apiJSON(`/api/${platform}/cookies`, { method: 'DELETE' });
   if (ok) _cookiesLoad(platform, idPrefix);
 }
@@ -452,7 +452,7 @@ async function _scheduleSettingsSave(platform, idPrefix) {
   }
   const { ok, data } = await apiJSON(`/api/${platform}/settings`, { method: 'PATCH', body: JSON.stringify(body) });
   if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
-  showToast('Settings saved.', { type: 'success', duration: 2500 });
+  showToast('Settings saved', { type: 'success', duration: 2500 });
 }
 
 // Settings schedule pane for session-scheduled platforms; field ids match
@@ -574,7 +574,7 @@ function _diagPaneHtml(idPrefix, opts) {
   const dd = opts.actions && opts.actions.length ? `
     <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <div class="dd" id="${idPrefix}Action" data-value="${opts.actions[0].value}" style="flex:1;min-width:160px">
-        <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">${opts.actions[0].label}</span><span class="dd-caret">▾</span></button>
+        <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_ddToggle(this)"><span class="dd-label">${opts.actions[0].label}</span><span class="dd-caret">${_caretIcon}</span></button>
         <div class="dd-menu" role="listbox" popover>
           ${opts.actions.map((a, i) =>
             `<button type="button" class="dd-opt${i === 0 ? ' active' : ''}" data-value="${a.value}" role="option" onclick="_ddPick(this)">${a.label}</button>`).join('')}
@@ -684,7 +684,7 @@ function showToast(message, { type = 'info', duration = type === 'error' ? 0 : 5
 
   const x = document.createElement('button');
   x.className = 'toast-dismiss';
-  x.textContent = '×';
+  x.innerHTML = _xIcon;
   x.setAttribute('aria-label', 'Dismiss');
   x.onclick = dismiss;
   toast.appendChild(x);
@@ -851,7 +851,7 @@ function _openDialog(o) {
   });
 }
 
-function openConfirm({ title = 'Are you sure?', message = '', confirmLabel = 'Confirm', danger = true } = {}) {
+function openConfirm({ title = 'Are you sure?', message = '', confirmLabel = 'Confirm', danger = false } = {}) {
   return _openDialog({ title, message, confirmLabel, danger, isPrompt: false });
 }
 
@@ -861,7 +861,7 @@ function openPrompt({ title = '', message = '', value = '', placeholder = '', co
 
 // Confirm with an extra opt-in checkbox. Resolves { confirmed, checked }.
 // checkboxWarn is shown in red only while the box is ticked.
-function openConfirmOption({ title = 'Are you sure?', message = '', confirmLabel = 'Confirm', danger = true, checkboxLabel = '', checkboxWarn = '' } = {}) {
+function openConfirmOption({ title = 'Are you sure?', message = '', confirmLabel = 'Confirm', danger = false, checkboxLabel = '', checkboxWarn = '' } = {}) {
   return _openDialog({ title, message, confirmLabel, danger, checkbox: { label: checkboxLabel, warn: checkboxWarn } });
 }
 
@@ -927,7 +927,7 @@ function _ddHtml(id, opts, { value, onchange, className = '' } = {}) {
   const cur = opts.find(o => o.value === value) || opts[0] || { value: '', label: '' };
   return `<div class="dd${className ? ' ' + className : ''}" id="${id}" data-value="${esc(cur.value)}">` +
     `<button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_ddToggle(this)">` +
-    `<span class="dd-label">${esc(cur.label)}</span><span class="dd-caret">▾</span></button>` +
+    `<span class="dd-label">${esc(cur.label)}</span><span class="dd-caret">${_caretIcon}</span></button>` +
     `<div class="dd-menu" role="listbox" popover>${_ddOptsHtml(opts, onchange)}</div></div>`;
 }
 
@@ -1098,7 +1098,7 @@ function _makeAddToasts(onAdded) {
         // Already tracked is not a failure; show it as a friendly green toast
         t.update(`@${handle} is already tracked.`, { type: 'success' });
       } else if (info.status === 'error') {
-        t.update(`Failed to add @${handle}: ${info.message || info.kind || 'lookup failed'}`,
+        t.update(`Could not add @${handle}: ${info.message || info.kind || 'lookup failed'}`,
                  { type: 'error' });
       } else {
         t.update(`@${handle} added.`, { type: 'success' });
@@ -1297,9 +1297,7 @@ function initDbQueryPane(platform) {
       <div class="report-preview" id="job-${id}-preview"></div>
       <div class="report-actions">
         <button class="btn-report" onclick="_dbqView('${platform}')">View full report</button>
-        <a id="job-${id}-download-link" style="display:none">
-          <button class="btn-report">Download report</button>
-        </a>
+        <a id="job-${id}-download-link" class="btn-report" style="display:none">Download report</a>
       </div>
     </div>
   `;
@@ -1424,7 +1422,7 @@ async function saveAuthSettings() {
     // Show restart banner any time settings are saved, since all changes require a restart
     document.getElementById('authRestartBanner').style.display = '';
   } else {
-    showToast((data && data.error) || 'Could not save.', { type: 'error' });
+    showToast((data && data.error) || 'Could not save authentication settings', { type: 'error' });
   }
 }
 
@@ -1563,7 +1561,7 @@ function _emptyInner(icon, msg, btnHtml = '') {
 // listener with the cfg closure, so no global function name is needed).
 function _mEmptyInner(cfg) {
   const noun = cfg.itemNounPlural || 'posts';
-  if (!cfg.st.videos.length) return _emptyInner('inbox', `No ${noun} saved yet.`);
+  if (!cfg.st.videos.length) return _emptyInner('inbox', `No ${noun} saved yet`);
   const cause = cfg.st.search ? 'search' : 'filter';
   return _emptyInner('search', `No ${noun} match this ${cause}.`,
     `<button class="btn-ghost btn-sm vlist-clear">Clear ${cause === 'search' ? 'search' : 'filters'}</button>`);
@@ -1790,7 +1788,8 @@ function _logLineClass(line) {
   return '';
 }
 
-const LOCK_SVG = `<svg class="lock-icon" viewBox="0 0 48 48" fill="currentColor" aria-hidden="true"><path d="M24 8.5a5.5 5.5 0 0 1 5.5 5.5v4.5h-11V14A5.5 5.5 0 0 1 24 8.5Zm8.5 10V14a8.5 8.5 0 0 0-17 0v4.5H11A2.5 2.5 0 0 0 8.5 21v19a2.5 2.5 0 0 0 2.5 2.5h26a2.5 2.5 0 0 0 2.5-2.5V21a2.5 2.5 0 0 0-2.5-2.5h-4.5Zm-21 3h25v18h-25v-18Z"/></svg>`;
+/* Same stroked padlock family as the scroll-lock icons in channels.js */
+const LOCK_SVG = `<svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
 
 function _fmtLastChecked(ts) {
   return ts
@@ -2437,6 +2436,8 @@ function _starIcon(filled) {
   return `<svg class="ic" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M12 2.5l3.09 6.26L22 9.77l-5 4.87 1.18 6.88L12 18.27l-6.18 3.25L7 14.64 2 9.77l6.91-1.01z"/></svg>`;
 }
 const _xIcon    = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+const _caretIcon = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+const _checkIcon = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 7"/></svg>`;
 const _dotsIcon = `<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
 
 const _dlIcon         = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12L12 16M12 16L16 12M12 16V4M4 20H20"/></svg>`;
@@ -2492,7 +2493,7 @@ function _modalShellHtml(base, closeFn, { bannerHtml = '', panelsHtml = '', afte
   return `
 <dialog id="${base}Backdrop" class="modal-backdrop" onclick="if(event.target===this)${closeFn}()">
   <div class="modal modal-base creator-modal" id="${base}Base">
-    <button class="modal-close" onclick="${closeFn}()" aria-label="Close"></button>
+    <button class="modal-close" onclick="${closeFn}()" aria-label="Close">${_xIcon}</button>
     ${bannerHtml}
     <div class="modal-header"     id="${base}Header"></div>
     <div class="modal-toolbar"    id="${base}Toolbar"></div>
@@ -2603,7 +2604,7 @@ function _renderStatsCharts(host, rows) {
       axes: [
         { stroke: muted, font, grid: { show: false }, ticks: { show: false } },
         { stroke: muted, font, size: 52, ticks: { show: false },
-          grid: { stroke: _hexFade(border.startsWith('#') ? border : '#333a45', 0.5) || border, width: 1 },
+          grid: { stroke: _hexFade(border.startsWith('#') ? border : '#2a303b', 0.5) || border, width: 1 },
           values: (u, vals) => vals.map(v => _fmtLarge(v)) },
       ],
       cursor: { y: false, points: { size: 7 } },
@@ -2713,7 +2714,7 @@ function _mRenderToolbar(cfg, vids) {
 // Single-select Status/Type/Sort dropdowns drive the same st.filter/typeFilter/
 // sort the desktop toolbar uses; History delegates to cfg.mobileFilters.
 function _mDd(label, menu) {
-  return `<div class="m-dd"><button class="m-dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_mDdToggle(this)">${label} <span class="m-dd-caret">▾</span></button><div class="m-dd-menu" popover>${menu}</div></div>`;
+  return `<div class="m-dd"><button class="m-dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_mDdToggle(this)">${label} <span class="m-dd-caret">${_caretIcon}</span></button><div class="m-dd-menu" popover>${menu}</div></div>`;
 }
 function _mDdToggle(btn) {
   const dd = btn.parentNode;
@@ -2746,13 +2747,13 @@ function _mFilterDds(cfg, counts, typeCounts) {
   if (counts.restored) statusOpts.push({ k: 'restored', l: 'Restored' });
   const curS = statusOpts.find(o => o.k && cfg.st.filter.has(o.k)) || statusOpts[0];
   const statusMenu = statusOpts.map(o =>
-    `<button class="m-dd-opt${o === curS ? ' active' : ''}" onclick="${cfg.mStatusFn}('${o.k}')">${o.l}<span>${o === curS ? '✓' : ''}</span></button>`).join('');
+    `<button class="m-dd-opt${o === curS ? ' active' : ''}" onclick="${cfg.mStatusFn}('${o.k}')">${o.l}<span>${o === curS ? _checkIcon : ''}</span></button>`).join('');
   out += _mDd(curS.k ? curS.l : 'Status', statusMenu);
   if (typeCounts.video > 0 && typeCounts.photo > 0) {
     const typeOpts = [{ k: '', l: 'All' }, { k: 'video', l: 'Videos' }, { k: 'photo', l: 'Photos' }];
     const curT = typeOpts.find(o => o.k && cfg.st.typeFilter.has(o.k)) || typeOpts[0];
     const typeMenu = typeOpts.map(o =>
-      `<button class="m-dd-opt${o === curT ? ' active' : ''}" onclick="${cfg.mTypeFn}('${o.k}')">${o.l}<span>${o === curT ? '✓' : ''}</span></button>`).join('');
+      `<button class="m-dd-opt${o === curT ? ' active' : ''}" onclick="${cfg.mTypeFn}('${o.k}')">${o.l}<span>${o === curT ? _checkIcon : ''}</span></button>`).join('');
     out += _mDd(curT.k ? curT.l : 'Type', typeMenu);
   }
   return out;
@@ -3064,9 +3065,10 @@ async function _creatorRemove(apiPath, id, label, load) {
   const sizeStr = _fmtBytes(bytes);
 
   const res = await openConfirmOption({
-    title:        `Delete ${label}?`,
+    title:        `Remove ${label}?`,
     message:      `This stops tracking and removes ${label} from your list. Downloaded media is kept unless you choose otherwise.`,
-    confirmLabel: 'Delete',
+    confirmLabel: 'Remove',
+    danger:       true,
     checkboxLabel: 'Also delete downloaded media files',
     checkboxWarn:  `${sizeStr} of downloaded media will be permanently deleted from disk.`,
   });
@@ -3077,13 +3079,14 @@ async function _creatorRemove(apiPath, id, label, load) {
     const sure = await openConfirm({
       title:        `Permanently delete ${sizeStr}?`,
       message:      `${label} and its ${sizeStr} of downloaded files will be erased from disk. This cannot be undone.`,
-      confirmLabel: "Yes, delete everything",
+      confirmLabel: 'Delete everything',
+      danger:       true,
     });
     if (!sure) return;
   }
 
   const { ok, data } = await apiJSON(`${apiPath}/${id}${res.checked ? '?delete_media=1' : ''}`, { method: 'DELETE' });
-  if (!ok) { showToast(data.error || `Could not delete ${label}`, { type: 'error' }); return; }
+  if (!ok) { showToast(data.error || `Could not remove ${label}`, { type: 'error' }); return; }
   load();
 }
 
@@ -3110,7 +3113,7 @@ async function _saveCreatorComment(apiPath, id, value, items, idField) {
   if (!ok) return false;
   const item = items.find(x => x[idField] === id);
   if (item) item.comment = value.trim() || null;
-  showToast('Saved.', { type: 'success', duration: 2000 });
+  showToast('Saved', { type: 'success', duration: 2000 });
   return true;
 }
 

@@ -12,9 +12,9 @@ async function loadCookies()        { return _cookiesLoad('tiktok', 'cookie'); }
 // the next QR sign-in starts as a brand-new device. Also the recovery move
 // when the identity is deeply flagged.
 async function ttResetSession() {
-  if (!await openConfirm({ title: 'Reset the TikTok session?', message: 'This signs out, deletes the browser identity, and requires a new QR sign-in.', confirmLabel: 'Reset session' })) return;
+  if (!await openConfirm({ title: 'Reset the TikTok session?', message: 'This signs out, deletes the browser identity, and requires a new QR sign-in.', confirmLabel: 'Reset', danger: true })) return;
   const { ok, data } = await apiJSON('/api/tiktok/login/session', { method: 'DELETE' });
-  showToast((data && (data.message || data.error)) || (ok ? 'Session reset' : 'Reset failed'),
+  showToast((data && (data.message || data.error)) || (ok ? 'Session reset' : 'Could not reset the session'),
             { type: ok ? 'info' : 'error' });
   loadCookies();
 }
@@ -183,7 +183,7 @@ function _ttProxyApplyMode(mode) {
 
 async function ttProxyLoad() {
   const { ok, data } = await apiJSON('/api/tiktok/proxy');
-  if (!ok) { showToast('Could not load the proxy settings.', { type: 'error' }); return; }
+  if (!ok) { showToast('Could not load the proxy settings', { type: 'error' }); return; }
   _ttProxyCustomUrl  = data.url || '';
   _ttProxyGluetunUrl = data.gluetun_url || _ttProxyGluetunUrl;
   _ttProxyApplyMode(data.mode);
@@ -304,7 +304,7 @@ async function ttWgSave() {
 }
 
 async function ttWgDelete() {
-  if (!await openConfirm({ title: 'Remove WireGuard config?', message: 'Gluetun keeps using it until that container restarts.', confirmLabel: 'Remove' })) return;
+  if (!await openConfirm({ title: 'Remove WireGuard config?', message: 'Gluetun keeps using it until that container restarts.', confirmLabel: 'Remove', danger: true })) return;
   const { ok } = await apiJSON('/api/tiktok/proxy/wireguard', { method: 'DELETE' });
   if (!ok) { showToast('Could not remove the config', { type: 'error' }); return; }
   _ttWgSavedToast('WireGuard config removed.');
@@ -405,7 +405,7 @@ const _TT_SOUND_CONTROLS_HTML = `
 const _TT_SOUND_LOOP_HTML = `
   <div class="loop-block">
     <div class="loop-block-header">
-      <span class="loop-section-label">Sound Loop</span>
+      <span class="loop-section-label">Sound loop</span>
       <span style="display:flex;align-items:center;gap:6px">
         <span id="soundLoopNext" class="loop-next"></span>
         <button class="loop-pause-btn" id="soundPauseBtn" onclick="toggleSoundPause()" title="Pause scheduled sessions">${_pauseIcon}</button>
@@ -555,22 +555,11 @@ function _ttOnStatus(state) {
     const nextIso    = state.sound_loop_next;
     const intervalMs = (state.sound_loop_interval_minutes || 60) * 60 * 1000;
     if (nextIso && intervalMs) {
-      const nowMs  = Date.now();
-      const nextMs = new Date(nextIso).getTime();
-      const times  = [nextMs, nextMs + intervalMs, nextMs + 2 * intervalMs, nextMs + 3 * intervalMs];
-      let   foundNext = false;
-      sSessions.innerHTML = times.map(ts => {
-        const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        let cls = 'loop-session-pill';
-        if (state.sound_loop_running && !foundNext && ts >= nowMs) {
-          foundNext = true; cls += ' running';
-        } else if (ts < nowMs) {
-          cls += ' done';
-        } else if (!foundNext) {
-          foundNext = true; cls += ' next';
-        }
-        return `<span class="${cls}">${time}</span>`;
-      }).join('');
+      // Fabricate the fixed-interval schedule and hand it to the shared
+      // renderer the engine loop panels use
+      const nextMs   = new Date(nextIso).getTime();
+      const sessions = [0, 1, 2, 3].map(i => new Date(nextMs + i * intervalMs).toISOString());
+      _renderSessionPills(sSessions, sessions, !!state.sound_loop_running, false);
     } else {
       sSessions.innerHTML = '';
     }
@@ -660,7 +649,7 @@ const _TT_SETTINGS_SCHEDULE_HTML = `
     processes only the users whose check interval has come due.
     Changes take effect at the next scheduled session.
   </p>
-  <div class="settings-subtitle">User Loop</div>
+  <div class="settings-subtitle">User loop</div>
   <div class="settings-group">
     <label class="settings-label">
       <span>Sessions per day</span>
@@ -698,7 +687,7 @@ const _TT_SETTINGS_SCHEDULE_HTML = `
       </div>
     </label>
   </div>
-  <div class="settings-subtitle">Sound Loop</div>
+  <div class="settings-subtitle">Sound loop</div>
   <div class="settings-group">
     <label class="settings-label">
       <span>Sound loop interval</span>
@@ -717,7 +706,7 @@ const _TT_SETTINGS_NETWORK_HTML = `
     <label class="tracking-toggle lg">
       <input type="checkbox" id="ttProxyEnabled" onchange="ttProxyToggle()">
       <span class="toggle-track"><span class="toggle-thumb"></span></span>
-      <span style="font-size:15px;font-weight:600;color:var(--text)">Enable VPN</span>
+      <span class="toggle-label">Enable VPN</span>
     </label>
     <div class="settings-note" style="margin-top:6px;margin-bottom:0">
       Route all TikTok traffic through a VPN or proxy. The rest of the app is unaffected.
@@ -856,7 +845,7 @@ const _TT_SETTINGS_JOBS_HTML = `
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
         <button class="btn-primary" id="job-filecheck-scan-btn" onclick="triggerFileScan()">Scan</button>
-        <button class="btn-danger"  id="job-filecheck-purge-btn" onclick="triggerFilePurge()">Purge</button>
+        <button class="btn-danger"  id="job-filecheck-purge-btn" onclick="triggerFilePurge()">Remove</button>
       </div>
     </div>
     <div class="job-status" id="job-filecheck-status" style="display:none">
@@ -866,9 +855,7 @@ const _TT_SETTINGS_JOBS_HTML = `
         <div class="report-preview" id="job-filecheck-preview"></div>
         <div class="report-actions">
           <button class="btn-report" id="job-filecheck-view-btn" onclick="openReportView(_filecheckReportFile, 'Missing file check')">View full report</button>
-          <a id="job-filecheck-download-link" style="display:none">
-            <button class="btn-report">Download report</button>
-          </a>
+          <a id="job-filecheck-download-link" class="btn-report" style="display:none">Download report</a>
         </div>
       </div>
     </div>
@@ -912,7 +899,7 @@ const _TT_SETTINGS_JOBS_HTML = `
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
-        <button class="btn-primary" id="job-thumbfix-btn" onclick="triggerThumbnailRepair()">Fix</button>
+        <button class="btn-primary" id="job-thumbfix-btn" onclick="triggerThumbnailRepair()">Run</button>
       </div>
     </div>
     <div class="job-status" id="job-thumbfix-status" style="display:none">
@@ -1017,7 +1004,7 @@ const _TT_SETTINGS_DIAG_HTML = `
     </div>
     <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <div class="dd" id="diagSource" data-value="get_video_details" style="flex:1;min-width:160px">
-        <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">get_video_details</span><span class="dd-caret">▾</span></button>
+        <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_ddToggle(this)"><span class="dd-label">get_video_details</span><span class="dd-caret">${_caretIcon}</span></button>
         <div class="dd-menu" role="listbox" popover>
           <button type="button" class="dd-opt active" data-value="get_video_details" role="option" onclick="_ddPick(this);diagSourceChanged()">get_video_details</button>
           <button type="button" class="dd-opt" data-value="ytdlp" role="option" onclick="_ddPick(this);diagSourceChanged()">yt-dlp</button>
@@ -1025,7 +1012,7 @@ const _TT_SETTINGS_DIAG_HTML = `
         </div>
       </div>
       <div class="dd" id="diagAction" data-value="" style="flex:1;min-width:160px">
-        <button type="button" class="dd-btn" onclick="_ddToggle(this)"><span class="dd-label">(paste a URL below)</span><span class="dd-caret">▾</span></button>
+        <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_ddToggle(this)"><span class="dd-label">(paste a URL below)</span><span class="dd-caret">${_caretIcon}</span></button>
         <div class="dd-menu" role="listbox" popover></div>
       </div>
     </div>
@@ -1085,7 +1072,7 @@ const tt = initChannelApp({
   subLabelSort:      'Followers',
   uploadDateLabel:   'Uploaded',
   titleColLabel:     'Description',
-  loopLabel:         'User Loop',
+  loopLabel:         'User loop',
   loopsTitle:        'Loops',
   addPlaceholder:    '@username, sound ID, or URL',
   addAriaLabel:      'TikTok username, sound ID, or URL',
@@ -1136,7 +1123,7 @@ const tt = initChannelApp({
   }],
   extraViews: [{
     key: 'sounds', label: 'Sounds',
-    emptyLabel: 'No sounds tracked yet.',
+    emptyLabel: 'No sounds tracked yet',
     controlsHtml: _TT_SOUND_CONTROLS_HTML,
     show: q => { _soundSearch = q || ''; renderSounds(); },
   }],
@@ -1170,7 +1157,7 @@ const tt = initChannelApp({
 
 // ── Sound loop triggers ───────────────────────────────────────────────────────
 
-function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/tiktok/trigger/sounds', 'Could not trigger sound loop'); }
+function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/tiktok/trigger/sounds', 'Could not trigger sound loop', () => showToast('Sound check queued')); }
 
 let _soundLoopPaused = false;
 let _soundActivity   = null;  // sound loop stage line for the log activity bar
@@ -1185,7 +1172,7 @@ async function toggleSoundPause() {
   _soundLoopPaused = paused;
   _renderPauseState(document.getElementById('soundPauseBtn'),
                     document.getElementById('soundLoopNext'), paused);
-  showToast(paused ? 'Sound loop paused: scheduled runs will be skipped.' : 'Sound loop resumed.');
+  showToast(paused ? 'Sound loop paused: scheduled sessions will be skipped.' : 'Sound loop resumed.');
 }
 
 async function stopSoundLoop() {
@@ -1338,9 +1325,9 @@ async function loadSounds() {
 async function removeSound(soundId) {
   const s = sounds.find(x => x.sound_id === soundId);
   const label = s ? (s.label || s.sound_id) : soundId;
-  if (!await openConfirm({ title: `Remove sound "${label}"?`, message: `${soundId}\n\nVideos already downloaded will not be deleted.`, confirmLabel: 'Remove' })) return;
+  if (!await openConfirm({ title: `Remove sound "${label}"?`, message: `${soundId}\n\nVideos already downloaded will not be deleted.`, confirmLabel: 'Remove', danger: true })) return;
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
-  if (!ok) { showToast(data.error || 'Could not remove sound.', { type: 'error' }); return; }
+  if (!ok) { showToast(data.error || 'Could not remove sound', { type: 'error' }); return; }
   if (_soundModalId === soundId) closeSoundModal();
   loadSounds();
 }
@@ -1365,7 +1352,7 @@ async function toggleSoundStar(soundId) {
 
 async function runSound(soundId) {
   const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/run`, { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Could not start sound run.', { type: 'error' }); return; }
+  if (!ok) { showToast(data.error || 'Could not start sound run', { type: 'error' }); return; }
   soundRunQueue = [...soundRunQueue, soundId];
   renderSounds();
 }
@@ -1375,7 +1362,7 @@ async function setSoundTracking(soundId, enabled) {
     method: 'PATCH',
     body: JSON.stringify({ enabled }),
   });
-  if (!ok) { showToast(data.error || 'Failed to update tracking', { type: 'error' }); return; }
+  if (!ok) { showToast(data.error || 'Could not update tracking', { type: 'error' }); return; }
   const s = sounds.find(s => s.sound_id === soundId);
   if (s) s.tracking_enabled = enabled ? 1 : 0;
   if (_soundModal && _soundModal.sound_id === soundId) {
@@ -1398,7 +1385,7 @@ async function editSoundLabel(soundId) {
     method: 'PATCH',
     body: JSON.stringify({ label: newLabel.trim() || null }),
   });
-  if (!ok) { showToast(data.error || 'Failed to update label.', { type: 'error' }); return; }
+  if (!ok) { showToast(data.error || 'Could not update label', { type: 'error' }); return; }
   await loadSounds();
   if (_soundModalId === soundId) {
     _soundModal = sounds.find(s => s.sound_id === soundId);
@@ -1415,7 +1402,7 @@ const SOUND_VCOLS = [
   { field: 'status',         label: 'Status' },
   { field: 'view_count',     label: 'Views' },
   { field: 'upload_date',    label: 'Uploaded' },
-  { field: 'download_date',  label: 'Downloaded' },
+  { field: 'download_date',  label: 'Saved' },
   { field: 'deleted_at',     label: 'Deleted' },
   { field: null,             label: '' },
 ];
@@ -1667,7 +1654,7 @@ function _renderSoundModalHeader(s) {
         <div class="modal-handle">
           <a href="${ttUrl}" target="_blank" rel="noopener" class="tt-link">${esc(s.sound_id)}</a>
         </div>
-        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
+        <div class="modal-actions-group" style="margin-top:8px">
           ${_soundRunBtn(s)}
           ${_soundHeaderMenu(s)}
         </div>
@@ -1782,7 +1769,16 @@ async function _loadSoundModalVideos(soundId) {
     if (row) {
       row.scrollIntoView({ block: 'center' });
       row.classList.add('video-row-highlight');
-      row.addEventListener('mouseenter', () => row.classList.remove('video-row-highlight'), { once: true });
+      // Same grace-then-fade dismiss as the engine modal: scrolling under a
+      // stationary cursor synthesizes a mouseenter that would kill the
+      // highlight before it ever painted
+      setTimeout(() => {
+        row.addEventListener('mouseenter', () => {
+          row.classList.add('video-row-hl-fade');
+          row.classList.remove('video-row-highlight');
+          row.addEventListener('transitionend', () => row.classList.remove('video-row-hl-fade'), { once: true });
+        }, { once: true });
+      }, 100);
     }
   } else {
     _mRenderToolbar(_SOUND_MODAL_CFG, data);
@@ -1811,9 +1807,9 @@ function _renderUntrackedHeader(tiktokId, username) {
       <div class="modal-handle">@${esc(username)}</div>
       <div class="modal-id-line">id:${esc(tiktokId)}</div>
       <div class="modal-stats-row">
-        <span><strong>-</strong> followers</span>
-        <span><strong>-</strong> following</span>
-        <span><strong>-</strong> on TikTok</span>
+        <span><strong>–</strong> followers</span>
+        <span><strong>–</strong> following</span>
+        <span><strong>–</strong> on TikTok</span>
         <span><strong>0</strong> saved locally</span>
       </div>
     </div>
@@ -1836,7 +1832,7 @@ async function _trackUser(tiktokId, username) {
     { method: 'POST' }
   );
   if (!ok) {
-    overlay.innerHTML = `<div class="modal-untracked-error">${esc(data?.error || 'Failed to start tracking')}</div>`;
+    overlay.innerHTML = `<div class="modal-untracked-error">${esc(data?.error || 'Could not start tracking')}</div>`;
     return;
   }
 
@@ -1856,7 +1852,7 @@ async function _trackUser(tiktokId, username) {
     const ov = document.getElementById('untrackedOverlay');
     if (!ov) return;                                                 // modal was closed
     if (entry.status === 'error') {
-      ov.innerHTML = `<div class="modal-untracked-error">${esc(entry.message || 'Tracking failed')}</div>`;
+      ov.innerHTML = `<div class="modal-untracked-error">${esc(entry.message || 'Could not start tracking')}</div>`;
       return;
     }
     await tt.loadCreators();
@@ -1914,7 +1910,7 @@ async function saveLoopSettings() {
   }
   const { ok, data } = await apiJSON('/api/tiktok/settings', { method: 'PATCH', body: JSON.stringify(body) });
   if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
-  showToast('Settings saved.', { type: 'success', duration: 2500 });
+  showToast('Settings saved', { type: 'success', duration: 2500 });
 }
 
 // ── Migration helpers ─────────────────────────────────────────────────────────
@@ -1928,7 +1924,7 @@ async function loadMigratePreview() {
   runBtn.style.display  = 'none';
   try {
     const { ok, data } = await apiJSON('/api/migrate/preview');
-    if (!ok) { previewEl.textContent = data.error || 'Scan failed.'; return; }
+    if (!ok) { previewEl.textContent = data.error || 'Could not scan the database'; return; }
     const total    = data.total_legacy || 0;
     const prefixes = data.prefixes     || {};
     const mediaDir = data.media_dir    || '';
@@ -1947,7 +1943,7 @@ async function loadMigratePreview() {
     if (!newInput.value) newInput.value = mediaDir.replace(/\/$/, '') + '/tiktok';
     runBtn.style.display = '';
   } catch (e) {
-    previewEl.textContent = 'Scan failed: ' + e.message;
+    previewEl.textContent = 'Could not scan the database: ' + e.message;
   }
 }
 
@@ -1964,17 +1960,17 @@ async function runMigration() {
   runBtn.disabled = true;
   statusEl.textContent = 'Running migration…';
   try {
-    const { ok, data } = await apiJSON('/api/migrate/run', {
+    const { ok, data } = await apiJSON('/api/migrate', {
       method: 'POST',
       body: JSON.stringify({ old_prefix: oldPrefix, new_prefix: newPrefix }),
     });
     runBtn.disabled = false;
-    if (!ok) { statusEl.textContent = data.error || 'Migration failed.'; return; }
-    statusEl.textContent = `Done. ${data.updated} record${data.updated !== 1 ? 's' : ''} updated. Backup: ${data.backup}`;
+    if (!ok) { statusEl.textContent = data.error || 'Could not run the migration'; return; }
+    statusEl.textContent = `Done: ${data.updated} record${data.updated !== 1 ? 's' : ''} updated. Backup: ${data.backup}`;
     loadMigratePreview();
   } catch (e) {
     runBtn.disabled = false;
-    statusEl.textContent = 'Migration failed: ' + e.message;
+    statusEl.textContent = 'Could not run the migration: ' + e.message;
   }
 }
 
@@ -2053,7 +2049,7 @@ async function triggerAudioCleanup() {
   if (!await openConfirm({
     title: 'Remove audio-only files?',
     message: 'Every audio-only file found in the videos folder is deleted from disk and its database entry removed. This cannot be undone.',
-    confirmLabel: 'Delete',
+    confirmLabel: 'Remove', danger: true,
   })) return;
   const btn = document.getElementById('job-audio-btn');
   btn.disabled = true;
@@ -2104,7 +2100,7 @@ async function triggerClearAvatars() {
     message: includeBanned
       ? 'Cached profile pictures for all tracked users, including banned users, are deleted from disk. Banned users\' avatars cannot be re-fetched from TikTok.'
       : 'Cached profile pictures for tracked users are deleted from disk and re-downloaded on the next loop run.',
-    confirmLabel: 'Delete',
+    confirmLabel: 'Delete', danger: true,
   })) return;
   return _runDeleteJob(
     _clearAvatarsWidget, 'util-clear-avatars-btn',
@@ -2118,7 +2114,7 @@ async function triggerClearThumbnails() {
   if (!await openConfirm({
     title: 'Delete all thumbnails?',
     message: 'All generated thumbnails are deleted from disk. They are regenerated automatically on the next startup backfill.',
-    confirmLabel: 'Delete',
+    confirmLabel: 'Delete', danger: true,
   })) return;
   return _runDeleteJob(
     _clearThumbsWidget, 'util-clear-thumbs-btn',
@@ -2143,7 +2139,7 @@ async function _filecheckTick() {
   if (!ok) return;
   if (data.running) {
     _setFilecheckBtns(true);
-    _filecheckWidget.update({ barPct: null, label: data.mode === 'purge' ? 'Purging…' : 'Scanning…' });
+    _filecheckWidget.update({ barPct: null, label: data.mode === 'purge' ? 'Removing…' : 'Scanning…' });
     return;
   }
   _jobPollStop('filecheck');
@@ -2179,11 +2175,11 @@ async function triggerFileScan() {
 }
 
 async function triggerFilePurge() {
-  if (!await openConfirm({ title: 'Remove missing-file records?', message: 'Remove all DB records for files that are missing on disk?\nThis cannot be undone.', confirmLabel: 'Remove records' })) return;
+  if (!await openConfirm({ title: 'Remove missing-file records?', message: 'All DB records for files missing on disk are removed. This cannot be undone.', confirmLabel: 'Remove', danger: true })) return;
   _setFilecheckBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/file-check/purge', { method: 'POST' });
   if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); _setFilecheckBtns(false); return; }
-  _filecheckWidget.update({ barPct: null, label: 'Purging…' });
+  _filecheckWidget.update({ barPct: null, label: 'Removing…' });
   _filecheckReport.hide();
   _jobPollStart('filecheck', _filecheckTick, 1000);
 }
@@ -2248,6 +2244,11 @@ async function triggerStoryScan() {
 }
 
 async function triggerStoryRedownload() {
+  if (!await openConfirm({
+    title: 'Re-download corrupted stories?',
+    message: 'Live corrupted stories are re-fetched. Expired corrupted stories cannot be recovered; their files and records are removed. This cannot be undone.',
+    confirmLabel: 'Re-download', danger: true,
+  })) return;
   _setStoryfixBtns(true);
   const { ok, data } = await apiJSON('/api/tiktok/jobs/story-recovery/redownload', { method: 'POST' });
   if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); _setStoryfixBtns(false); return; }

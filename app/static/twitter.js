@@ -14,7 +14,7 @@ initChannelApp({
   subLabelModal:     'followers',
   subLabelSort:      'Followers',
   uploadDateLabel:   'Posted',
-  loopLabel:         'Account Loop',
+  loopLabel:         'Account loop',
   addPlaceholder:    '@username or profile URL',
   addAriaLabel:      'Twitter username',
   profileUrl:        h => `https://x.com/${h}`,

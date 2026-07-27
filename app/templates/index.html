@@ -20,9 +20,9 @@
     <h1><img src="/static/icons/favicon.svg" alt="" class="logo"> Social Downloader</h1>
     <div class="header-meta">
       <span class="cookie-pill absent" id="hdrCookiePill" style="cursor:pointer" onclick="openSettings(_activePlatform, 'account')" title="Manage authentication in Settings">
-        <span class="dot"></span><span id="hdrCookiePillText">No cookies</span>
+        <span class="dot"></span><span id="hdrCookiePillText">No cookies file</span>
       </span>
-      <span class="backfill-pill" id="hdrBackfillPill" style="display:none" onclick="openSettings('backfill')" title="Videos with missing stats">
+      <span class="backfill-pill" id="hdrBackfillPill" style="display:none" onclick="openSettings('backfill')" title="Posts with missing stats">
         <span id="hdrBackfillCount"></span> missing stats
       </span>
       {% if oauth_user %}
@@ -56,7 +56,7 @@
      entry per enabled platform; platforms register via initChannelApp). -->
 <dialog id="settingsBackdrop" class="modal-backdrop" onclick="if(event.target===this)closeSettings()">
   <div class="modal-base settings-modal">
-    <button class="modal-close" onclick="closeSettings()" aria-label="Close"></button>
+    <button class="modal-close" onclick="closeSettings()" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     <nav class="settings-nav" id="settingsNav"></nav>
     <div class="settings-nav-scrim" onclick="toggleSettingsNav()"></div>
     <div class="settings-content" id="settingsContent"></div>
@@ -65,7 +65,7 @@
 
 <!-- Image preview modal -->
 <!-- Error dialog: full text behind a truncated error toast, with copy -->
-<dialog id="errorModal" class="media-modal" onclick="if(event.target===this)closeErrorModal()">
+<dialog id="errorModal" class="media-modal dlg-dim" onclick="if(event.target===this)closeErrorModal()">
   <div class="media-modal-inner confirm-card wide">
     <div class="confirm-title" style="color:var(--red)">Error</div>
     <div id="errorModalText" class="error-modal-text"></div>
@@ -77,13 +77,12 @@
 </dialog>
 
 <!-- Confirm / prompt dialog: themed replacement for browser confirm()/prompt() -->
-<dialog id="confirmModal" class="media-modal" onclick="if(event.target===this)_confirmDismiss()">
+<dialog id="confirmModal" class="media-modal dlg-dim" onclick="if(event.target===this)_confirmDismiss()">
   <div class="media-modal-inner confirm-card">
     <div class="confirm-title" id="confirmTitle"></div>
     <div class="confirm-message" id="confirmMessage"></div>
-    <label class="tracking-toggle confirm-check" id="confirmCheckWrap" style="display:none">
+    <label class="confirm-check" id="confirmCheckWrap" style="display:none">
       <input type="checkbox" id="confirmCheck">
-      <span class="toggle-track"><span class="toggle-thumb"></span></span>
       <span class="toggle-label" id="confirmCheckLabel"></span>
     </label>
     <div class="confirm-warn" id="confirmWarn" style="display:none"></div>
@@ -99,7 +98,7 @@
 
 <dialog id="imgModal" class="media-modal" onclick="if(event.target===this)closeImgModal()">
   <div class="media-modal-inner">
-    <button class="media-modal-close" onclick="closeImgModal()" aria-label="Close"></button>
+    <button class="modal-close lg" onclick="closeImgModal()" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     <img id="imgModalImg" src="" alt="">
   </div>
 </dialog>
@@ -107,7 +106,7 @@
 <!-- TikTok live browser viewer: streams display frames, forwards mouse input -->
 <dialog id="ttViewer" class="media-modal" onclick="if(event.target===this)ttViewerClose()">
   <div class="media-modal-inner">
-    <button class="media-modal-close" onclick="ttViewerClose()" aria-label="Close"></button>
+    <button class="modal-close lg" onclick="ttViewerClose()" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     <div id="ttViewerStatus" class="settings-note" style="color:#fff;margin-bottom:6px"></div>
     <img id="ttViewerImg" src="" alt="TikTok browser" draggable="false"
          style="cursor:crosshair;touch-action:none;user-select:none">
@@ -115,7 +114,7 @@
 </dialog>
 
 <!-- WireGuard parse modal: paste a full config, the needed fields are extracted -->
-<dialog id="ttWgParse" class="media-modal" onclick="if(event.target===this)ttWgParseClose()">
+<dialog id="ttWgParse" class="media-modal dlg-dim" onclick="if(event.target===this)ttWgParseClose()">
   <div class="media-modal-inner confirm-card wide">
     <div class="confirm-title">Paste a WireGuard config</div>
     <div class="settings-note">
@@ -161,7 +160,7 @@
 <!-- User detail modal -->
 <dialog id="reportViewBackdrop" class="modal-backdrop" onclick="if(event.target===this)closeReportView()">
   <div class="modal-base report-view-modal">
-    <button class="modal-close" onclick="closeReportView()" aria-label="Close"></button>
+    <button class="modal-close" onclick="closeReportView()" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     <div class="report-view-hdr">
       <span id="reportViewTitle"></span>
       <span class="report-view-hdr-sub" id="reportViewSub"></span>

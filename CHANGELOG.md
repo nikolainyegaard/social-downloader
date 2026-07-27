@@ -7,10 +7,19 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Added
+- OnlyFans now has its own accent theme and tab identity dot instead of rendering in the neutral blue with a grey dot
 - Platforms can now be enabled and disabled from Settings > General. Disabling a platform takes effect immediately: its scheduled sessions, manual runs, and background loops stop (an in-flight session is stopped ASAP), its API routes are rejected, and its tab and settings disappear until it is enabled again. Saved media and tracked creators are kept, and re-enabling resumes the normal schedule
 - A new General settings page holds everything that belongs to no platform: the platform on/off toggles and the app's OIDC login (moved from the old Access section)
 
 ### Changed
+- One close button: every modal and overlay close is the same X icon in one of two sizes; toasts, connection rows, and note fields use the same icon instead of four hand-drawn variants
+- Dropdown carets, menu checkmarks, and the stories calendar arrows are drawn icons instead of text characters, and the private-account lock matches the scroll-lock padlock style
+- Confirm dialogs now animate in on the app's standard tinted backdrop instead of popping onto a black one, the red button is reserved for destructive actions, the remove dialog says Remove like the menu item that opened it, and the opt-in checkbox is a real checkbox instead of a switch
+- Re-downloading corrupted stories now asks for confirmation, since expired ones are purged in the process
+- Copy pass: errors consistently start with "Could not", single-line toasts drop stray trailing periods, menus and loop labels use sentence case, job buttons and their confirm dialogs agree on one verb, job results share one "Done:" format, and the Quick and Full buttons explain the difference in a tooltip
+- The detail modal's list tab is labeled with the platform's own content noun (Tweets, Posts, Videos) instead of always saying Videos
+- The stat strip's file-count tiles are labeled Video files and Photo files so they read distinctly from the saved-post counts
+- The sounds catalog shows the same loading shimmer as the creator grid, and triggering the sound loop now confirms with a toast
 - Buttons and inputs across the whole app now render in the app's mono font instead of the browser's default UI font
 - One button size system: small dialog and settings buttons get a proper dark surface instead of the browser's light grey default, red destructive buttons now match the size of the primary buttons they sit beside, and the mixed button rows on cards, panel headers, and loop panels align to one shared height
 - Icons inside buttons now scale with the button's own text size, so a glyph can no longer render undersized in a larger control
@@ -19,6 +28,11 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 
 ### Fixed
+- The path migration Run button always failed with "Migration failed": it posted to an API route that does not exist
+- Profile history and the activity feed no longer show raw database field names (account_status, bio_link) on platforms other than TikTok
+- The Stories and Stats panels in the creator modal show an error message instead of hanging on "Loading…" forever when their fetch fails
+- A video row opened from the sound modal no longer loses its yellow highlight to a hover the browser synthesizes while scrolling (the creator modal already had this fix)
+- The panel scroll-lock button announced the inverted state to screen readers, and the Quick access list rows were not keyboard accessible
 - The modal close button rendered as a 30x26 rectangle instead of a 26px square: the base button padding acted as a minimum width
 - The platform tab underline slides again when switching tabs (a typo in its transition rule made it snap instantly)
 - Buttons no longer show hover feedback while disabled
