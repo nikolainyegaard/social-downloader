@@ -2331,6 +2331,12 @@ function _mvShowSlide(idx) {
   const slide = _mvSlides[idx];
   const url   = typeof slide === 'string' ? slide : slide.url;
   const isVid = typeof slide !== 'string' && slide.type === 'video';
+  // Report the slide as viewed, once per open (stories use this to grey out
+  // the avatar ring); stepping back to a slide does not re-fire it
+  if (typeof slide !== 'string' && typeof slide.onView === 'function' && !slide._viewed) {
+    slide._viewed = true;
+    slide.onView();
+  }
   const img   = document.getElementById('mvImg');
   const vid   = document.getElementById('mvVid');
   // Detach the previous slide's handlers BEFORE touching src: unloading via

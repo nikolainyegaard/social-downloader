@@ -522,6 +522,9 @@ function initChannelApp(cfg) {
     url:  s.url,
     type: s.content_type === 'photo' ? 'image' : 'video',
     name: `${s.story_id}.${s.content_type === 'photo' ? 'avif' : 'mp4'}`,
+    // Fire-and-forget viewed stamp; the write bumps the creators SSE domain,
+    // so the avatar rings grey out on the next refetch without a reload
+    onView: () => { apiJSON(`${API}/stories/${encodeURIComponent(s.story_id)}/viewed`, { method: 'POST' }); },
   });
 
   // Open a creator's live stories in the story viewer, oldest first. Reached
@@ -1534,7 +1537,7 @@ function initChannelApp(cfg) {
       + `${isInactive || isBanned || isBlocked || isPrivBlk ? ' user-card-inactive' : ''}`
       + `${isBanned || isBlocked ? ' user-card-banned' : ''}${isPrivBlk ? ' user-card-private' : ''}`;
 
-    const icon = `<div class="avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" data-action="stories" data-id="${esc(ch.channel_id)}"` : ''}>`
+    const icon = `<div class="avatar-wrap${ch.live_stories ? ' story-ring' + (ch.unviewed_stories ? '' : ' story-seen') : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}${ch.unviewed_stories ? '' : ', viewed'}" data-action="stories" data-id="${esc(ch.channel_id)}"` : ''}>`
       + `<span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>`
       + `${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" alt="" onerror="this.style.display='none'" ${ch.live_stories ? '' : `data-action="avatar" data-id="${esc(ch.channel_id)}"`}>` : ''}</div>`;
 
@@ -2306,7 +2309,7 @@ function initChannelApp(cfg) {
     _el('ModalHeader').innerHTML = `
       <div class="modal-header-left">
         <div class="modal-avatar-col">
-          <div class="modal-avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
+          <div class="modal-avatar-wrap${ch.live_stories ? ' story-ring' + (ch.unviewed_stories ? '' : ' story-seen') : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}${ch.unviewed_stories ? '' : ', viewed'}" onclick="${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
             <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
             ${ch.avatar_cached ? `<img class="modal-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar" alt=""
                  onerror="this.style.display='none'"
@@ -2391,7 +2394,7 @@ function initChannelApp(cfg) {
     _el('ModalHeader').innerHTML = `
       <div class="mh">
         <div class="mh-top">
-          <div class="modal-avatar-wrap${ch.live_stories ? ' story-ring' : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}" onclick="${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
+          <div class="modal-avatar-wrap${ch.live_stories ? ' story-ring' + (ch.unviewed_stories ? '' : ' story-seen') : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}${ch.unviewed_stories ? '' : ', viewed'}" onclick="${P}OpenStories('${esc(ch.channel_id)}')"` : ''}>
             <span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>
             ${ch.avatar_cached ? `<img class="modal-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar" alt="" onerror="this.style.display='none'"${ch.live_stories ? '' : ` onclick="openImgModalUrl('${API}/channels/${esc(ch.channel_id)}/avatar')"`}>` : ''}
           </div>

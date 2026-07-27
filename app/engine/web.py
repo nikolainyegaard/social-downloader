@@ -301,14 +301,16 @@ def create_channel_blueprint(engine) -> Blueprint:
         all_stats     = db.get_all_video_stats()
         all_ph_counts = db.get_all_profile_history_counts()
         all_ph        = db.get_all_profile_history_for_search()
-        live_stories  = db.get_live_story_counts() if adapter.has_stories else {}
-        story_counts  = db.get_all_story_counts()  if adapter.has_stories else {}
+        live_stories  = db.get_live_story_counts()          if adapter.has_stories else {}
+        unviewed_st   = db.get_unviewed_live_story_counts() if adapter.has_stories else {}
+        story_counts  = db.get_all_story_counts()           if adapter.has_stories else {}
         media_sizes   = _media_sizes_by_handle()
         for ch in channels:
             cid   = ch["channel_id"]
             ch["media_size_bytes"]      = media_sizes.get(ch["handle"], 0)
             stats = all_stats.get(cid, {})
             ch["live_stories"]          = live_stories.get(cid, 0)
+            ch["unviewed_stories"]      = unviewed_st.get(cid, 0)
             ch["story_count"]           = story_counts.get(cid, 0)
             ch["video_total"]           = stats.get("video_total",      0)
             ch["video_downloaded"]      = stats.get("video_downloaded",  0)
@@ -676,6 +678,13 @@ def create_channel_blueprint(engine) -> Blueprint:
     @bp.route("/channels/<channel_id>/stories/calendar", methods=["GET"])
     def channel_stories_calendar(channel_id: str):
         return jsonify(db.get_story_day_counts(channel_id))
+
+    @bp.route("/stories/<story_id>/viewed", methods=["POST"])
+    def story_viewed(story_id: str):
+        """The story viewer reports each story as it is shown; the stamp drives
+        the grey (all viewed) vs colored (unviewed) avatar ring."""
+        db.mark_story_viewed(story_id)
+        return jsonify({"ok": True})
 
     @bp.route("/stories/<story_id>/file", methods=["GET"])
     def story_file(story_id: str):

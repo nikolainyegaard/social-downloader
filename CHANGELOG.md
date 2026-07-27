@@ -7,11 +7,13 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Added
+- Story rings on avatars now track what you have watched: a slowly sweeping colored ring means live stories not yet viewed in the app, and it turns quiet grey once every live story has been viewed. Viewed state is stored per story and updates live as you watch
 - OnlyFans now has its own accent theme and tab identity dot instead of rendering in the neutral blue with a grey dot
 - Platforms can now be enabled and disabled from Settings > General. Disabling a platform takes effect immediately: its scheduled sessions, manual runs, and background loops stop (an in-flight session is stopped ASAP), its API routes are rejected, and its tab and settings disappear until it is enabled again. Saved media and tracked creators are kept, and re-enabling resumes the normal schedule
 - A new General settings page holds everything that belongs to no platform: the platform on/off toggles and the app's OIDC login (moved from the old Access section)
 
 ### Changed
+- The story ring renders at a consistent weight on creator cards and in the creator modal, scaled to the avatar size instead of looking thick on cards and thin on the large modal avatar
 - One close button: every modal and overlay close is the same X icon in one of two sizes; toasts, connection rows, and note fields use the same icon instead of four hand-drawn variants
 - Dropdown carets, menu checkmarks, and the stories calendar arrows are drawn icons instead of text characters, and the private-account lock matches the scroll-lock padlock style
 - Confirm dialogs now animate in on the app's standard tinted backdrop instead of popping onto a black one, the red button is reserved for destructive actions, the remove dialog says Remove like the menu item that opened it, and the opt-in checkbox is a real checkbox instead of a switch

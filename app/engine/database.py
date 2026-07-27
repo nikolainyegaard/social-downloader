@@ -305,6 +305,9 @@ class ChannelDB:
             "ALTER TABLE channels ADD COLUMN last_quick_video_ids   TEXT",
             "ALTER TABLE channels ADD COLUMN full_refresh_pending   INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE channels ADD COLUMN refresh_batch          INTEGER",
+            # Story viewed state: set when the story viewer shows the story;
+            # drives the grey vs colored avatar ring in the frontend
+            "ALTER TABLE stories  ADD COLUMN viewed_at              INTEGER",
             "ALTER TABLE videos   ADD COLUMN share_count            INTEGER",
             "ALTER TABLE videos   ADD COLUMN save_count             INTEGER",
             "ALTER TABLE videos   ADD COLUMN repost_count           INTEGER",
@@ -1163,6 +1166,26 @@ class ChannelDB:
                 WHERE expires_at > ? GROUP BY channel_id
             """, (int(time.time()),)).fetchall()
         return {r[0]: r[1] for r in rows}
+
+
+    def get_unviewed_live_story_counts(self) -> dict:
+        """{channel_id: live stories not yet viewed in the app}. Drives the
+        colored (unviewed) vs grey (all viewed) avatar story ring."""
+        with self.get_db() as conn:
+            rows = conn.execute("""
+                SELECT channel_id, COUNT(*) FROM stories
+                WHERE expires_at > ? AND viewed_at IS NULL GROUP BY channel_id
+            """, (int(time.time()),)).fetchall()
+        return {r[0]: r[1] for r in rows}
+
+
+    def mark_story_viewed(self, story_id: str) -> bool:
+        """Stamp a story as viewed in the app; idempotent."""
+        with self.get_db() as conn:
+            cur = conn.execute(
+                "UPDATE stories SET viewed_at = ? WHERE story_id = ? AND viewed_at IS NULL",
+                (int(time.time()), story_id))
+        return cur.rowcount > 0
 
 
     def get_all_story_counts(self) -> dict:

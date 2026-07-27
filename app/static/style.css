@@ -2023,17 +2023,26 @@ dialog:not([open]) { display: none !important; }
 
 /* ── Live story ring around avatars ──────────────────────────────────────── */
 
-.story-ring { cursor: pointer; }
+/* Story ring: one implementation for cards and the modal, scaled by two
+   variables so the ring reads the same weight at any avatar size. Unviewed
+   live stories sweep the accent gradient slowly; once every live story has
+   been viewed in the app the ring goes quiet grey and stops moving. */
+.story-ring { cursor: pointer; --ring-gap: 4px; --ring-w: 2.5px; }
 .story-ring::before {
   content: '';
   position: absolute;
-  inset: -4px;
+  inset: calc(-1 * var(--ring-gap));
   border-radius: 50%;
   background: conic-gradient(from 30deg, var(--accent), var(--purple), var(--green), var(--accent));
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--ring-w) - 1px), #000 calc(100% - var(--ring-w)));
+  mask: radial-gradient(farthest-side, transparent calc(100% - var(--ring-w) - 1px), #000 calc(100% - var(--ring-w)));
+  animation: story-ring-spin 7s linear infinite;
   pointer-events: none;
 }
+@keyframes story-ring-spin { to { transform: rotate(360deg); } }
+.story-ring.story-seen::before { background: var(--muted); opacity: .45; animation: none; }
+/* The modal avatar is much larger; keep the ring proportionate */
+.modal-avatar-wrap.story-ring { --ring-gap: 6px; --ring-w: 3.5px; }
 .avatar-wrap.story-ring { box-shadow: none; }
 
 /* ── Dashboard: stat strip, then recent feed beside loop + add history ───── */
