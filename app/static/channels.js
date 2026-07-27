@@ -760,11 +760,18 @@ function initChannelApp(cfg) {
   function _renderFeed(loading) {
     const el = document.getElementById(`${P}RecentFeed`);
     if (!el) return;
-    if (_rf.obs) { _rf.obs.disconnect(); _rf.obs = null; }
     const now = new Date();
-    el.innerHTML = _rf.items.length
+    const html = _rf.items.length
       ? _rf.items.map(e => _rfRow(e, now)).join('')
       : loading ? _RF_SKEL : '<div class="rf-empty">No activity yet</div>';
+    // Skip identical rebuilds: the minute tick re-renders only to roll the
+    // relative day labels, which change once a day, and a no-op rebuild
+    // still recreates every row (and re-blurs under an open modal). The
+    // sentinel stays attached on a skip; it is only stale after a rewrite.
+    if (el.dataset.lastFeed === html) return;
+    el.dataset.lastFeed = html;
+    if (_rf.obs) { _rf.obs.disconnect(); _rf.obs = null; }
+    el.innerHTML = html;
     if (_rf.hasMore) _rf.obs = _attachSentinel(el, _loadFeedMore);
   }
 
@@ -851,7 +858,8 @@ function initChannelApp(cfg) {
     if (!ok) {
       if (!_rf.items.length) {
         const el = document.getElementById(`${P}RecentFeed`);
-        if (el) el.innerHTML = '<div class="rf-empty">Could not load activity. Retrying automatically.</div>';
+        // Keep _renderFeed's skip-if-unchanged stash in step with the direct write
+        if (el) el.dataset.lastFeed = el.innerHTML = '<div class="rf-empty">Could not load activity. Retrying automatically.</div>';
       }
       return;
     }
@@ -883,6 +891,10 @@ function initChannelApp(cfg) {
       : [state.loop_next ? { iso: state.loop_next, label: `${CREATOR} loop` } : null]
     ).filter(Boolean);
 
+    // Text writes below are change-guarded: this runs on every status event
+    // (each second or two during a session), an identical textContent write
+    // still replaces the text node and repaints, and any repaint under an
+    // open modal's backdrop blur forces a full re-blur.
     const meta = _el('LoopMeta');
     if (meta) {
       const parts = [];
@@ -892,15 +904,19 @@ function initChannelApp(cfg) {
       if (comp != null && total != null) parts.push(`${comp}/${total} ${CREATORS}`);
       if (state.loop_last_new_videos != null) parts.push(`${state.loop_last_new_videos} new`);
       if (state.loop_last_duration_secs != null) parts.push(fmt.dur(state.loop_last_duration_secs));
-      meta.textContent = parts.join(' · ');
+      const metaText = parts.join(' · ');
+      if (meta.textContent !== metaText) meta.textContent = metaText;
     }
     loopPaused = !!state.loop_paused;
     const next = _el('LoopNext');
-    if (next) next.textContent = loopRunning
-      ? 'Running…'
-      : loopPaused
-        ? 'Paused'
-        : (state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '');
+    if (next) {
+      const nextText = loopRunning
+        ? 'Running…'
+        : loopPaused
+          ? 'Paused'
+          : (state.loop_next ? `Next: ${fmt.relFuture(state.loop_next)}` : '');
+      if (next.textContent !== nextText) next.textContent = nextText;
+    }
     _renderPauseState(_el('PauseBtn'), next, loopPaused);
     _renderSessionPills(_el('LoopSessions'), state.loop_sessions_today || [], loopRunning, state.loop_manual_run);
     for (const id of ['TriggerNextBtn', 'TriggerStarredBtn', 'TriggerHalfBtn', 'TriggerAllBtn']) {

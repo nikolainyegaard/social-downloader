@@ -33,6 +33,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Fixed
 - Opening a modal no longer pins the GPU: page animations (spinning story rings, skeleton shimmer, spinners, progress bars) pause while a dialog is open, since a single animating pixel under the backdrop blur forced a full-screen re-blur every frame, and the status strip skips its once-a-second rewrite when the text has not changed
+- Status updates no longer repaint panels whose content did not change: the loop panels (last-session line, Next label, session pills, pause button) and TikTok's sound loop and backfill counters skip identical rewrites instead of replacing their DOM on every status event, and the Recent activity list no longer rebuilds all its rows once a minute just to roll the "Today"/"Yesterday" labels
 - The path migration Run button always failed with "Migration failed": it posted to an API route that does not exist
 - Profile history and the activity feed no longer show raw database field names (account_status, bio_link) on platforms other than TikTok
 - The Stories and Stats panels in the creator modal show an error message instead of hanging on "Loading…" forever when their fetch fails

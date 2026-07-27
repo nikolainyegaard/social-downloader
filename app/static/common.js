@@ -498,13 +498,20 @@ function _renderSessionPills(el, sessions, running, manualRun) {
   if (!el) return;
   const nowMs    = Date.now();
   const upcoming = (sessions || []).filter(s => new Date(s).getTime() >= nowMs).slice(0, 4);
-  if (!upcoming.length) { el.innerHTML = ''; return; }
-  el.innerHTML = upcoming.map((isoStr, i) => {
+  const html = upcoming.map((isoStr, i) => {
     const time = new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     let cls = 'loop-session-pill';
     if (i === 0) cls += running && !manualRun ? ' running' : ' next';
     return `<span class="${cls}">${time}</span>`;
   }).join('');
+  // Skip identical rewrites: this runs on every status event while the pills
+  // change a few times an hour, and an unchanged innerHTML write still
+  // recreates the nodes and repaints, forcing a full re-blur when the panel
+  // sits under an open modal's backdrop blur. Compared via dataset because
+  // the innerHTML serializer does not round-trip the markup exactly.
+  if (el.dataset.lastPills === html) return;
+  el.dataset.lastPills = html;
+  el.innerHTML = html;
 }
 
 // Toast factory for the Next/Starred/Half/All trigger buttons.
@@ -1487,9 +1494,13 @@ function _fmtBytes(n) {
 const _pauseIcon  = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>`;
 const _resumeIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l14 8-14 8z"/></svg>`;
 
-// Shared pause-button render: swaps icon and title, dims the Next label
+// Shared pause-button render: swaps icon and title, dims the Next label.
+// Rewrites only on an actual flip: this runs on every status event, and
+// identical innerHTML/attribute writes still repaint (and re-blur under an
+// open modal's backdrop).
 function _renderPauseState(btn, nextEl, paused) {
-  if (btn) {
+  if (btn && btn.dataset.paused !== String(paused)) {
+    btn.dataset.paused = String(paused);
     btn.innerHTML = paused ? _resumeIcon : _pauseIcon;
     btn.title     = paused ? 'Resume scheduled sessions' : 'Pause scheduled sessions';
     btn.setAttribute('aria-label', btn.title);

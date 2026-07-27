@@ -532,6 +532,11 @@ function _ttOnStatus(state) {
 
   const el = id => document.getElementById(id);
 
+  // Text writes are change-guarded like the engine's renderStatus: this runs
+  // on every status event, and an identical textContent write still repaints
+  // (and re-blurs under an open modal's backdrop)
+  const _setText = (node, text) => { if (node && node.textContent !== text) node.textContent = text; };
+
   const sMeta = el('soundLoopMeta');
   if (sMeta) {
     const parts = [];
@@ -539,30 +544,29 @@ function _ttOnStatus(state) {
     else parts.push('Never run');
     if (state.sound_loop_last_new_videos != null) parts.push(`${state.sound_loop_last_new_videos} new`);
     if (state.sound_loop_last_duration_secs != null) parts.push(fmt.dur(state.sound_loop_last_duration_secs));
-    sMeta.textContent = parts.join(' · ');
+    _setText(sMeta, parts.join(' · '));
   }
   _soundLoopPaused = !!state.sound_loop_paused;
   const sNext = el('soundLoopNext');
-  if (sNext) sNext.textContent = state.sound_loop_running
+  _setText(sNext, state.sound_loop_running
     ? 'Running…'
     : _soundLoopPaused
       ? 'Paused'
-      : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : '');
+      : (state.sound_loop_next ? `Next: ${fmt.relFuture(state.sound_loop_next)}` : ''));
   _renderPauseState(el('soundPauseBtn'), sNext, _soundLoopPaused);
 
   const sSessions = el('soundLoopSessions');
   if (sSessions) {
     const nextIso    = state.sound_loop_next;
     const intervalMs = (state.sound_loop_interval_minutes || 60) * 60 * 1000;
-    if (nextIso && intervalMs) {
-      // Fabricate the fixed-interval schedule and hand it to the shared
-      // renderer the engine loop panels use
-      const nextMs   = new Date(nextIso).getTime();
-      const sessions = [0, 1, 2, 3].map(i => new Date(nextMs + i * intervalMs).toISOString());
-      _renderSessionPills(sSessions, sessions, !!state.sound_loop_running, false);
-    } else {
-      sSessions.innerHTML = '';
-    }
+    // Fabricate the fixed-interval schedule and hand it to the shared
+    // renderer the engine loop panels use (an empty list clears the row);
+    // always going through it keeps its skip-if-unchanged stash coherent
+    const nextMs   = nextIso ? new Date(nextIso).getTime() : 0;
+    const sessions = nextIso && intervalMs
+      ? [0, 1, 2, 3].map(i => new Date(nextMs + i * intervalMs).toISOString())
+      : [];
+    _renderSessionPills(sSessions, sessions, !!state.sound_loop_running, false);
   }
   const sBtn     = el('triggerSoundBtn');
   const sStopBtn = el('stopSoundBtn');
@@ -572,12 +576,12 @@ function _ttOnStatus(state) {
   const missing = el('missingStatsCount');
   if (missing) {
     const n = state.missing_stats_count ?? 0;
-    missing.textContent = n > 0 ? `${n.toLocaleString()} missing` : '';
+    _setText(missing, n > 0 ? `${n.toLocaleString()} missing` : '');
   }
   const failed = el('statsFailedCount');
   if (failed) {
     const f = state.stats_failed_count ?? 0;
-    failed.textContent   = f > 0 ? `${f.toLocaleString()} unavailable` : '';
+    _setText(failed, f > 0 ? `${f.toLocaleString()} unavailable` : '');
     failed.style.display = f > 0 ? '' : 'none';
     const retryBtn = el('retryFailedBtn');
     if (retryBtn) retryBtn.style.display = f > 0 ? '' : 'none';
