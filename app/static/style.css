@@ -2170,6 +2170,23 @@ dialog:not([open]) { display: none !important; }
 .rf-detail, .ah-status { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .rf-time, .ah-time { font-size: 11px; color: var(--muted); white-space: nowrap; text-align: right; }
 .rf-empty, .ah-empty { color: var(--muted); font-size: 12px; padding: 24px 16px; text-align: center; }
+/* Shimmer placeholder rows: same grid anatomy as the live rows (.rf-row /
+   .ah-row-content carry the columns), shown until the first page of data
+   lands so the panels never fill in from nothing */
+.skel-row { pointer-events: none; }
+/* Real add-history rows are as tall as their 12px text line (18px + padding);
+   the skeleton's tallest element is only the 13px dot, so pin the height */
+.ah-row-content.skel-row { min-height: 26px; }
+.skel-dot, .skel-bar, .loop-session-pill.skel-pill {
+  background: linear-gradient(100deg, var(--hdr) 40%, var(--raised) 50%, var(--hdr) 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+}
+.skel-dot { border-radius: 50%; }
+.skel-bar { height: 10px; border-radius: 4px; }
+/* Boot placeholder pills in the loop card: real-size pills with hidden text,
+   swapped out (or cleared) by the first status render */
+.loop-session-pill.skel-pill { color: transparent; border-color: transparent; }
 
 .panel-card {
   background: var(--surface);

@@ -101,6 +101,24 @@ function initChannelApp(cfg) {
       data-action="bookmark" data-id="${esc(ch.channel_id)}"
       aria-pressed="${ch.bookmarked ? 'true' : 'false'}" title="${ch.bookmarked ? (ch.starred ? `Starred ${CREATORS} stay bookmarked` : 'Remove bookmark') : 'Bookmark'}">${ch.bookmarked ? _bmFilled : _bmOutline}</button>`;
 
+  // Shimmer placeholder rows reserve the dashboard lists' layout until the
+  // first page of feed/history data lands (same idea as the grid skeletons).
+  // Bar widths cycle through a fixed pattern so the rows read as organic.
+  const _SKEL_W = [62, 45, 71, 38, 55, 67, 43, 58];
+  const _RF_SKEL = _SKEL_W.map(w => `<div class="rf-row skel-row" aria-hidden="true">
+      <span class="skel-dot" style="width:13px;height:13px"></span>
+      <span class="skel-dot" style="width:20px;height:20px"></span>
+      <span class="skel-bar" style="width:${w}%"></span>
+      <span class="skel-bar" style="width:48px"></span>
+      <span class="skel-bar" style="width:76px;justify-self:end"></span>
+    </div>`).join('');
+  const _AH_SKEL = _SKEL_W.slice(0, 6).map(w => `<div class="ah-row" aria-hidden="true"><div class="ah-row-content skel-row">
+      <span class="skel-dot" style="width:13px;height:13px"></span>
+      <span class="skel-bar" style="width:${Math.min(w, 58)}%"></span>
+      <span class="skel-bar" style="width:44px"></span>
+      <span class="skel-bar" style="width:76px;justify-self:end"></span>
+    </div></div>`).join('');
+
   function _sectionHtml() {
     return `
   <div class="add-bar">
@@ -150,7 +168,7 @@ function initChannelApp(cfg) {
       </div>
       <button class="btn-reset-filter panel-scroll-lock" id="${P}RfLock" onclick="${P}ToggleScrollLock('${P}RecentFeed', this)" aria-pressed="true" title="${_LOCK_TIP}">${_lockIcon}</button>
     </div>
-    <div class="recent-feed scroll-locked" id="${P}RecentFeed"><div class="rf-empty">Loading…</div></div>
+    <div class="recent-feed scroll-locked" id="${P}RecentFeed">${_RF_SKEL}</div>
   </div>
   <div class="dash-col">
   <div class="panel-card loops-card">
@@ -171,7 +189,7 @@ function initChannelApp(cfg) {
           </span>
         </div>
         <div id="${P}LoopMeta" class="loop-meta">Never run</div>
-        <div id="${P}LoopSessions" class="loop-sessions"></div>
+        <div id="${P}LoopSessions" class="loop-sessions">${'<span class="loop-session-pill skel-pill">00:00</span>'.repeat(3)}</div>
         <div class="loop-actions">
           <div style="display:flex;gap:5px">
             <button class="btn-run btn-trigger" id="${P}TriggerNextBtn"    onclick="${P}TriggerNext()">${_refreshIcon} Next</button>
@@ -189,7 +207,7 @@ function initChannelApp(cfg) {
     <div class="panel-header"><span class="section-title">Add history</span>
       <button class="btn-reset-filter panel-scroll-lock" style="margin-left:auto" id="${P}AhLock" onclick="${P}ToggleScrollLock('${P}AddHistory', this)" aria-pressed="false" title="${_LOCK_TIP}">${_lockIcon}</button>
     </div>
-    <div class="add-history scroll-locked" id="${P}AddHistory"></div>
+    <div class="add-history scroll-locked" id="${P}AddHistory">${_AH_SKEL}</div>
   </div>
   </div>
   </div>
@@ -746,7 +764,7 @@ function initChannelApp(cfg) {
     const now = new Date();
     el.innerHTML = _rf.items.length
       ? _rf.items.map(e => _rfRow(e, now)).join('')
-      : `<div class="rf-empty">${loading ? 'Loading…' : 'No activity yet'}</div>`;
+      : loading ? _RF_SKEL : '<div class="rf-empty">No activity yet</div>';
     if (_rf.hasMore) _rf.obs = _attachSentinel(el, _loadFeedMore);
   }
 
@@ -968,7 +986,6 @@ function initChannelApp(cfg) {
     // writes it, so background platforms never fight over it
     const bar = document.getElementById('nowStrip');
     if (!bar || _activePlatform !== cfg.id) return;
-    bar.style.display = '';
     const dur = secs => {
       const m = Math.floor(secs / 60), s = secs % 60;
       return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
