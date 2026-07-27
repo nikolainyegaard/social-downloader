@@ -83,12 +83,12 @@ function initChannelApp(cfg) {
 
   // ── Section HTML ──────────────────────────────────────────────────────────
 
-  const _bmOutline = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21V3z"/></svg>`;
-  const _lockIcon   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
-  const _unlockIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
+  const _bmOutline = `<svg class="ic" viewBox="1.8 1.8 20.4 20.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21V3z"/></svg>`;
+  const _lockIcon   = `<svg class="ic" viewBox="0.9 0.9 22.2 22.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+  const _unlockIcon = `<svg class="ic" viewBox="0.9 0.9 22.2 22.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
   const _LOCK_TIP   = 'List scrolls with the page. Tap to scroll the list itself.';
   const _UNLOCK_TIP = 'List scrolls independently. Tap to lock it to the page.';
-  const _bmFilled  = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 0 1 1 1v19l-7-5.5L5 22V3a1 1 0 0 1 1-1z"/></svg>`;
+  const _bmFilled  = `<svg class="ic" viewBox="2 2 20 20" fill="currentColor"><path d="M6 2h12a1 1 0 0 1 1 1v19l-7-5.5L5 22V3a1 1 0 0 1 1-1z"/></svg>`;
 
   // The modal header's action row, shared verbatim by the desktop and mobile
   // headers: star, bookmark, Quick, Full, and the overflow menu
@@ -1806,7 +1806,7 @@ function initChannelApp(cfg) {
     _renderConnListRows();
   }
 
-  const _connPlusIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14M5 12h14"/></svg>`;
+  const _connPlusIcon = `<svg class="ic" viewBox="3.8 3.8 16.4 16.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14M5 12h14"/></svg>`;
 
   function _connAvatar(c) {
     return `<span class="conn-avatar-wrap" role="button" tabindex="0" title="${esc(c.display_name || c.handle)} (@${esc(c.handle)})"
@@ -2611,8 +2611,8 @@ function initChannelApp(cfg) {
         <div class="stories-cal" id="${P}StoriesCal"></div>
         <div class="stories-cal-foot">
           <div class="stories-cal-nav">
-            <button class="filter-pill" onclick="${P}StoriesCalStep(-1)" title="Earlier months"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
-            <button class="filter-pill" id="${P}StoriesCalFwd" disabled onclick="${P}StoriesCalStep(1)" title="Later months"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+            <button class="filter-pill" onclick="${P}StoriesCalStep(-1)" title="Earlier months"><svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <button class="filter-pill" id="${P}StoriesCalFwd" disabled onclick="${P}StoriesCalStep(1)" title="Later months"><svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
           </div>
           <div class="stories-cal-legend">
             <span>Less</span>

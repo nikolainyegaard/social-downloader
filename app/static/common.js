@@ -133,7 +133,7 @@ function _settingsRenderNav() {
   const platforms = _settingsRegistry.filter(t => t.id !== 'general');
   nav.innerHTML = `
     <button class="settings-nav-burger" onclick="toggleSettingsNav()" title="Menu" aria-label="Expand or collapse the navigation menu">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <svg class="ic" viewBox="2 2 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
     <div class="settings-nav-group">App</div>
     ${general.map(item).join('')}
@@ -1622,7 +1622,6 @@ function _cardMeta(items) {
 // Expandable text: one clamped line with an ellipsis that pops the full text over
 // itself in a hovering box on click. Extracted from the modal bio so any card or
 // panel can reuse it. Stops propagation so it works inside a clickable card.
-const _xCloseIcon = `<svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round"><path d="M1 1L9 9M9 1L1 9"/></svg>`;
 // X inside a circle: reset-filters buttons
 const _xCircleIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>`;
 const _xExpandIcon = `<svg class="xtext-exp" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
@@ -1635,7 +1634,7 @@ function _expandableText(text, boxed = false) {
   return `<div class="xtext${boxed ? ' xtext-boxed' : ''}" onclick="event.stopPropagation();_xtextToggle(this)" role="button" tabindex="0">` +
     `<div class="xtext-line"><span class="xtext-text">${t}</span>${_xExpandIcon}</div>` +
     `<div class="xtext-pop" onclick="event.stopPropagation()">` +
-    `<button class="xtext-close" onclick="_xtextClose(this)" aria-label="Close">${_xCloseIcon}</button>${t}</div></div>`;
+    `<button class="xtext-close" onclick="_xtextClose(this)" aria-label="Close">${_xIcon}</button>${t}</div></div>`;
 }
 // Always-present note field under a detail modal's action row. A populated
 // note renders as the same expandable xtext block as bios (click to expand);
@@ -1789,7 +1788,7 @@ function _logLineClass(line) {
 }
 
 /* Same stroked padlock family as the scroll-lock icons in channels.js */
-const LOCK_SVG = `<svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+const LOCK_SVG = `<svg class="lock-icon" viewBox="0.9 0.9 22.2 22.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
 
 function _fmtLastChecked(ts) {
   return ts
@@ -2433,12 +2432,12 @@ document.addEventListener('keydown', e => {
 // stroke-width = 1.3 * viewBox / display size. The .ic class sizes and
 // block-aligns them; media overlay badges are a separate, heavier family.
 function _starIcon(filled) {
-  return `<svg class="ic" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M12 2.5l3.09 6.26L22 9.77l-5 4.87 1.18 6.88L12 18.27l-6.18 3.25L7 14.64 2 9.77l6.91-1.01z"/></svg>`;
+  return `<svg class="ic" viewBox="0.8 0.8 22.4 22.4" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M12 2.5l3.09 6.26L22 9.77l-5 4.87 1.18 6.88L12 18.27l-6.18 3.25L7 14.64 2 9.77l6.91-1.01z"/></svg>`;
 }
-const _xIcon    = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
-const _caretIcon = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
-const _checkIcon = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 7"/></svg>`;
-const _dotsIcon = `<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
+const _xIcon    = `<svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+const _caretIcon = `<svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+const _checkIcon = `<svg class="ic" viewBox="2.8 3.05 18.4 18.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 7"/></svg>`;
+const _dotsIcon = `<svg class="ic" viewBox="3 3 18 18" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
 
 const _dlIcon         = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12L12 16M12 16L16 12M12 16V4M4 20H20"/></svg>`;
 const _linkIcon       = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
@@ -2454,7 +2453,7 @@ function _videoLinkBtn(url) {
   return `<span class="play-btn disabled" title="Deleted; no live URL"
            onclick="event.stopPropagation()">${_linkIcon}</span>`;
 }
-const _refreshIcon    = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12C21 16.9706 16.9706 21 12 21C9.69494 21 7.59227 20.1334 6 18.7083L3 16M3 12C3 7.02944 7.02944 3 12 3C14.3051 3 16.4077 3.86656 18 5.29168L21 8M3 21V16M3 16H8M21 3V8M21 8H16"/></svg>`;
+const _refreshIcon    = `<svg class="ic" viewBox="1.7 1.7 20.6 20.6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12C21 16.9706 16.9706 21 12 21C9.69494 21 7.59227 20.1334 6 18.7083L3 16M3 12C3 7.02944 7.02944 3 12 3C14.3051 3 16.4077 3.86656 18 5.29168L21 8M3 21V16M3 16H8M21 3V8M21 8H16"/></svg>`;
 const _imgPreviewIcon = `<svg width="13" height="13" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><g transform="translate(-124,-1319)" fill="currentColor" fill-rule="evenodd"><path d="M136,1329.07849 C136,1328.52795 136.448,1328.08114 137,1328.08114 C137.552,1328.08114 138,1328.52795 138,1329.07849 C138,1329.62903 137.552,1330.07585 137,1330.07585 C136.448,1330.07585 136,1329.62903 136,1329.07849 L136,1329.07849 Z M136.75,1332.0187 L140,1335.95527 L128,1335.95527 L132.518,1330.02399 L135.354,1334.06528 L136.75,1332.0187 Z M128,1325.9817 L128,1323.98699 C128,1323.43644 128.448,1322.98963 129,1322.98963 L133,1322.98963 C133.552,1322.98963 134,1323.43644 134,1323.98699 L134,1325.9817 C134,1326.53324 133.552,1326.97906 133,1326.97906 L129,1326.97906 C128.448,1326.97906 128,1326.53324 128,1325.9817 L128,1325.9817 Z M142,1336.05999 C142,1336.61053 141.552,1336.95263 141,1336.95263 L127,1336.95263 C126.448,1336.95263 126,1336.61053 126,1336.05999 L126,1322.09699 C126,1321.54645 126.448,1320.99491 127,1320.99491 L136,1320.99491 L136,1325.08906 C136,1326.19015 136.895,1326.97906 138,1326.97906 L142,1326.97906 L142,1336.05999 Z M143.707,1324.77091 L138.293,1319.34429 C138.105,1319.15778 137.851,1319.0002 137.586,1319.0002 L126,1319.0002 L126,1319.05306 C124.895,1319.05306 124,1319.97163 124,1321.07371 L124,1321.09964 L124,1337.05735 C124,1338.15843 124.895,1339.0002 126,1339.0002 L126,1338.94734 L142,1338.94734 L142,1339.0002 C143.105,1339.0002 144,1338.1325 144,1337.03142 L144,1325.50197 C144,1325.23767 143.895,1324.95741 143.707,1324.77091 L143.707,1324.77091 Z"/></g></svg>`;
 const _listViewIcon   = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><line x1="4" y1="3.5" x2="12" y2="3.5"/><line x1="4" y1="6.5" x2="12" y2="6.5"/><line x1="4" y1="9.5" x2="12" y2="9.5"/><circle cx="1.5" cy="3.5" r=".8" fill="currentColor" stroke="none"/><circle cx="1.5" cy="6.5" r=".8" fill="currentColor" stroke="none"/><circle cx="1.5" cy="9.5" r=".8" fill="currentColor" stroke="none"/></svg>`;
 const _gridViewIcon   = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".5"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".5"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".5"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".5"/></svg>`;
