@@ -76,6 +76,10 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Form controls do not inherit the page font by default; without this every
+   button and input renders in the browser's UI font instead of the mono */
+button, input, select, textarea { font-family: inherit; }
+
 /* Slim dark scrollbars everywhere. Standard properties only, honored by
    Chrome 121+, Firefox, and Edge. Safari keeps its overlay scrollbars. */
 * { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
@@ -282,6 +286,12 @@ button {
 button:disabled { opacity: 0.45; cursor: default; }
 button:not(:disabled):active { transform: translateY(1px); }
 
+/* Small secondary button: the default surface for dialog and settings
+   actions. Declared before the color variants so btn-primary / btn-ghost /
+   confirm-ok combos keep their own colors. */
+.btn-sm { font-size: 12px; padding: 5px 14px; background: var(--raised); color: var(--text); }
+.btn-sm:hover:not(:disabled) { background: var(--border); }
+
 /* Keyboard focus ring on anything clickable. Text fields keep their
    border-color focus treatment instead of a ring. */
 button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
@@ -311,37 +321,44 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
   background: color-mix(in srgb, var(--accent) 88%, white);
 }
 
-.btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 5px 10px; font-size: 12px; }
+/* Same box as .btn-primary (padding compensates the 1px border) so the two
+   can sit side by side in job cards without a height mismatch */
+.btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 6px 13px; }
 .btn-danger:hover:not(:disabled) { background: var(--red-bg-h); }
 
 .btn-run { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
 .btn-run:hover:not(:disabled) { background: var(--accent-bg); }
 .btn-trigger { padding: 4px 8px; font-size: 11px; white-space: nowrap; }
 
-/* Shared chrome icon sizing: every svg.ic renders 13px with a ~1.3px stroke.
+/* Shared chrome icon sizing: every svg.ic renders at its control's own type
+   size (1em), so icon and label can never disagree and an icon-only button
+   scales by setting font-size alone.
    display:block kills the baseline gap that mis-centered inline svgs. */
-svg.ic { width: 13px; height: 13px; display: block; flex-shrink: 0; }
-.ah-btn svg.ic { width: 11px; height: 11px; }
+svg.ic { width: 1em; height: 1em; display: block; flex-shrink: 0; }
 
 .btn-star { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; line-height: 1; display: inline-flex; align-items: center; }
-.btn-star:hover { color: var(--gold); border-color: var(--gold); }
+.btn-star:hover:not(:disabled) { color: var(--gold); border-color: var(--gold); }
 .btn-star.starred { color: var(--gold); border-color: var(--gold); }
 
 /* Bookmark toggle, same dimensions as the star button */
 .btn-bookmark { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; line-height: 1; display: inline-flex; align-items: center; }
-.btn-bookmark svg { width: 13px; height: 14px; display: block; }
-.btn-bookmark:hover { color: var(--accent); border-color: var(--accent); }
+.btn-bookmark svg { width: 1em; height: 1em; display: block; }
+.btn-bookmark:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .btn-bookmark.bookmarked { color: var(--accent); border-color: var(--accent); }
 /* X-in-circle reset button (panel-header filter rows) */
-.btn-reset-filter { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 7px; line-height: 1; display: inline-flex; align-items: center; }
+.btn-reset-filter { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; line-height: 1; display: inline-flex; align-items: center; }
 .btn-reset-filter svg { display: block; }
-.btn-reset-filter:hover { color: var(--text); border-color: var(--text-dim); }
+.btn-reset-filter:hover:not(:disabled) { color: var(--text); border-color: var(--text-dim); }
 
 .btn-ghost { background: var(--raised); color: var(--text); }
 .btn-ghost:hover:not(:disabled) { background: var(--border); }
 
 .btn-menu { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; line-height: 1; border-radius: var(--radius); cursor: pointer; display: inline-flex; align-items: center; }
-.btn-menu:hover { color: var(--text); border-color: var(--muted); }
+.btn-menu:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
+
+/* Card footers, panel headers, and loop rows mix these buttons in one flex
+   row; a shared height keeps the row aligned regardless of content */
+.btn-star, .btn-bookmark, .btn-reset-filter, .btn-menu, .btn-run, .btn-trigger { height: 26px; }
 
 /* Popover menu: top layer (never clipped, never under a dialog); JS sets the
    fixed coordinates, so the UA popover inset/margin are neutralized */
@@ -848,6 +865,9 @@ dialog:not([open]) { display: none !important; }
 .media-modal-close {
   position: absolute;
   width: 32px; height: 32px;
+  /* Explicit reset: the base button padding (7px 14px) otherwise acts as a
+     30px minimum width and turns the 26px variant into a rectangle */
+  padding: 0;
   background: var(--raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1006,7 +1026,7 @@ dialog:not([open]) { display: none !important; }
 @keyframes bio-fade { from { opacity: 0; } }
 .xtext-close      { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; padding: 0; border: 0;
                     background: transparent; color: var(--muted); cursor: pointer; display: flex;
-                    align-items: center; justify-content: center; border-radius: 4px; }
+                    align-items: center; justify-content: center; border-radius: var(--radius-sm); }
 .xtext-close:hover { background: var(--border); color: var(--text); }
 .modal-bio-link   { font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal-bio-link a { color: var(--accent); text-decoration: none; }
@@ -1458,7 +1478,7 @@ dialog:not([open]) { display: none !important; }
 /* .dd triggers fill their wrapper (settings panes size them); justify keeps
    the caret pinned right */
 .dd-btn { width: 100%; box-sizing: border-box; justify-content: space-between; gap: 8px; }
-.dd-btn:hover, .m-dd-btn:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.dd-btn:hover:not(:disabled), .m-dd-btn:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .dd.open .dd-btn { border-color: var(--accent); }
 .dd-caret, .m-dd-caret { color: var(--muted); font-size: 9px; }
 .dd-menu, .m-dd-menu {
@@ -1667,9 +1687,11 @@ dialog:not([open]) { display: none !important; }
 .confirm-check { margin-top: 16px; }
 .confirm-warn { margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--red); line-height: 1.45; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
-.confirm-ok { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.confirm-ok { background: var(--accent); color: var(--on-accent); }
+.confirm-ok:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, white); }
 /* Red fill wants white regardless of the theme's --on-accent */
-.confirm-ok.danger { background: var(--red); border-color: var(--red); color: #fff; }
+.confirm-ok.danger { background: var(--red); color: #fff; }
+.confirm-ok.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 88%, white); }
 
 .sort-dir-btn {
   display: inline-flex; align-items: center;
@@ -1682,9 +1704,10 @@ dialog:not([open]) { display: none !important; }
   padding: 0 12px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--dur-fast), color var(--dur-fast);
+  transition: border-color var(--dur-fast), color var(--dur-fast);
 }
-.sort-dir-btn:hover { background: var(--border); color: var(--text); }
+/* Same hover as the .dd/.m-dd triggers it shares a toolbar with */
+.sort-dir-btn:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); color: var(--text); }
 
 /* ── Edge-fade horizontal scroll (reusable) ──────────────────────────────── */
 
@@ -1849,7 +1872,7 @@ dialog:not([open]) { display: none !important; }
   transition: background var(--dur-fast);
   user-select: none;
 }
-.mv-nav:hover { background: rgba(255,255,255,.2); }
+.mv-nav:hover:not(:disabled) { background: rgba(255,255,255,.2); }
 .mv-nav:disabled { opacity: .2; cursor: default; }
 .mv-counter {
   position: absolute;
@@ -2195,8 +2218,8 @@ dialog:not([open]) { display: none !important; }
   line-height: 1;
   cursor: pointer;
 }
-.ah-btn:hover { color: var(--text); border-color: var(--muted); }
-.ah-btn-danger:hover { color: var(--red); border-color: var(--red); }
+.ah-btn:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
+.ah-btn-danger:hover:not(:disabled) { color: var(--red); border-color: var(--red); }
 
 /* Loop block */
 .loop-block { display: flex; flex-direction: column; gap: 6px; }
@@ -2220,7 +2243,7 @@ dialog:not([open]) { display: none !important; }
   cursor: pointer;
   transition: color var(--dur-fast), border-color var(--dur-fast);
 }
-.loop-pause-btn:hover  { color: var(--text); border-color: var(--muted); }
+.loop-pause-btn:hover:not(:disabled)  { color: var(--text); border-color: var(--muted); }
 .loop-pause-btn.paused { color: var(--yellow); border-color: var(--yellow); }
 
 .loop-meta    { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); }
@@ -2341,7 +2364,7 @@ dialog:not([open]) { display: none !important; }
   cursor: pointer;
   transition: background var(--dur-fast), color var(--dur-fast);
 }
-.btn-report:hover { background: var(--raised); color: var(--text); }
+.btn-report:hover:not(:disabled) { background: var(--raised); color: var(--text); }
 
 /* ── Settings modal ───────────────────────────────────────────────────────── */
 
@@ -2556,7 +2579,7 @@ dialog:not([open]) { display: none !important; }
   display: flex; align-items: center; justify-content: center;
   transition: background var(--dur-fast), color var(--dur-fast);
 }
-.btn-gear:hover { background: var(--border); color: var(--text); }
+.btn-gear:hover:not(:disabled) { background: var(--border); color: var(--text); }
 /* Mobile-only header user menu; the mobile media query swaps it in for the
    name, Log out link, and gear */
 .btn-user-menu { display: none; }
@@ -2610,7 +2633,7 @@ dialog:not([open]) { display: none !important; }
   align-items: center; justify-content: center;
   transition: background var(--dur-fast), color var(--dur-fast);
 }
-.back-to-top:hover { background: var(--raised); color: var(--text); }
+.back-to-top:hover:not(:disabled) { background: var(--raised); color: var(--text); }
 
 /* ── Mobile ──────────────────────────────────────────────────────────────── */
 
@@ -2897,7 +2920,7 @@ dialog:not([open]) { display: none !important; }
   bottom: -1px;
   height: 2px;
   background: var(--accent);
-  transition: left var(--dur) var(--var(--ease)), width var(--dur) var(--var(--ease));
+  transition: left var(--dur) var(--ease), width var(--dur) var(--ease);
   pointer-events: none;
 }
 
@@ -2979,7 +3002,7 @@ dialog:not([open]) { display: none !important; }
   font-size: 13px;
 }
 
-.btn-sm { font-size: 12px; padding: 5px 14px; }
+/* .btn-sm is defined with the button variants at the top of the file */
 
 /* Small uppercase sub-heading inside settings sections, matching the
    panel and filter label language */
@@ -3004,7 +3027,7 @@ dialog:not([open]) { display: none !important; }
   color: var(--muted);
   cursor: pointer;
 }
-.diag-copy-btn:hover { color: var(--text); border-color: var(--muted); }
+.diag-copy-btn:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
 
 .version-tag { font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
 

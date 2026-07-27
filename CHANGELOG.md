@@ -11,10 +11,17 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - A new General settings page holds everything that belongs to no platform: the platform on/off toggles and the app's OIDC login (moved from the old Access section)
 
 ### Changed
+- Buttons and inputs across the whole app now render in the app's mono font instead of the browser's default UI font
+- One button size system: small dialog and settings buttons get a proper dark surface instead of the browser's light grey default, red destructive buttons now match the size of the primary buttons they sit beside, and the mixed button rows on cards, panel headers, and loop panels align to one shared height
+- Icons inside buttons now scale with the button's own text size, so a glyph can no longer render undersized in a larger control
+- The sort direction and reset toolbar buttons now match the dropdowns they sit beside, with the same hover treatment
 - The settings modal was rebuilt around platforms instead of functions: the side menu now lists General plus one entry per enabled platform, and each platform page carries its own Account, Schedule, Jobs, Diagnostics, and Database tabs (plus Network for TikTok). Every pane is generated from the platform's own configuration, so new platforms get their settings automatically
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 
 ### Fixed
+- The modal close button rendered as a 30x26 rectangle instead of a 26px square: the base button padding acted as a minimum width
+- The platform tab underline slides again when switching tabs (a typo in its transition rule made it snap instantly)
+- Buttons no longer show hover feedback while disabled
 - The creator count next to the search box now reflects the Privacy and Relation filters: with only those active it showed the plain total and never moved when they changed (an old bug; the Privacy pills had it too)
 - The yellow highlight on a video row opened from the Recent activity feed survives the cursor already resting on it: hovering a highlighted row now tints yellow instead of the grey hover swallowing it, and dismissing the highlight fades out slowly instead of vanishing
 - The Stats tab's chart axis labels render in the app font instead of the browser's serif default (the chart code read the font off the root element, which carries no font; it now reads body)
