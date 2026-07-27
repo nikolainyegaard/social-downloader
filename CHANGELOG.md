@@ -32,6 +32,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 
 ### Fixed
+- Opening a modal no longer pins the GPU: page animations (spinning story rings, skeleton shimmer, spinners, progress bars) pause while a dialog is open, since a single animating pixel under the backdrop blur forced a full-screen re-blur every frame, and the status strip skips its once-a-second rewrite when the text has not changed
 - The path migration Run button always failed with "Migration failed": it posted to an API route that does not exist
 - Profile history and the activity feed no longer show raw database field names (account_status, bio_link) on platforms other than TikTok
 - The Stories and Stats panels in the creator modal show an error message instead of hanging on "Loading…" forever when their fetch fails

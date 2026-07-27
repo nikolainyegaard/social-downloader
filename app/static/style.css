@@ -871,6 +871,23 @@ dialog:not([open]) { display: none !important; }
 @keyframes modal-in   { from { opacity: 0; transform: scale(.975) translateY(8px); } }
 .modal-backdrop .modal-base { animation: modal-in var(--dur) var(--ease); }
 
+/* Every open overlay layers a backdrop blur over the page, and a single
+   animating pixel underneath forces that full-viewport blur to recompute
+   every frame (stacked settings + report modals pegged an M3 GPU purely on
+   spinning story rings). The page is static decoration while a dialog is up,
+   so pause every infinite page animation. Dialogs and toasts live outside
+   .app, so spinners and story rings inside them keep moving. */
+body:has(dialog[open]) .app .story-ring::before,
+body:has(dialog[open]) .app .tab.loop-active::before,
+body:has(dialog[open]) .app .spinner,
+body:has(dialog[open]) .app .skeleton-card,
+body:has(dialog[open]) .app .skel-dot,
+body:has(dialog[open]) .app .skel-bar,
+body:has(dialog[open]) .app .skel-pill,
+body:has(dialog[open]) .app .job-bar-fill.indeterminate {
+  animation-play-state: paused;
+}
+
 .modal-base {
   background: var(--surface);
   border: 1px solid var(--border);

@@ -990,39 +990,38 @@ function initChannelApp(cfg) {
       const m = Math.floor(secs / 60), s = secs % 60;
       return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
     };
+    let html;
     if (sleepUntil) {
       const rem = Math.max(0, Math.round((sleepUntil - Date.now()) / 1000));
-      bar.innerHTML = `sleeping ${dur(rem)}`
+      html = `sleeping ${dur(rem)}`
         + (sleepNext ? ` <span class="lab-next">· up next: ${esc(sleepNext)}</span>` : '');
-      return;
-    }
-    // A check in progress (session or manual run) outranks any countdown: the
-    // bar reports what is happening right now, stage from the server.
-    if (currentCreator) {
-      bar.innerHTML = `processing @${esc(currentCreator)}`
+    } else if (currentCreator) {
+      // A check in progress (session or manual run) outranks any countdown:
+      // the bar reports what is happening right now, stage from the server.
+      html = `processing @${esc(currentCreator)}`
         + (currentStage ? ` <span class="lab-next">· ${esc(currentStage)}</span>` : '');
-      return;
-    }
-    const extraActivity = cfg.currentActivity && cfg.currentActivity();
-    if (extraActivity) {
-      bar.innerHTML = esc(extraActivity);
-      return;
-    }
-    if (loopRunning) {
-      bar.innerHTML = 'session running';
-      return;
-    }
-    const now = Date.now();
-    const candidates = nextRuns
-      .map(c => ({ ts: new Date(c.iso).getTime(), label: c.label }))
-      .filter(c => c.ts > now)
-      .sort((a, b) => a.ts - b.ts);
-    if (candidates.length) {
-      const rem = Math.max(0, Math.round((candidates[0].ts - now) / 1000));
-      bar.innerHTML = `waiting ${dur(rem)} <span class="lab-next">· up next: ${esc(candidates[0].label)}</span>`;
+    } else if (cfg.currentActivity && cfg.currentActivity()) {
+      html = esc(cfg.currentActivity());
+    } else if (loopRunning) {
+      html = 'session running';
     } else {
-      bar.innerHTML = 'idle';
+      const now = Date.now();
+      const candidates = nextRuns
+        .map(c => ({ ts: new Date(c.iso).getTime(), label: c.label }))
+        .filter(c => c.ts > now)
+        .sort((a, b) => a.ts - b.ts);
+      const rem = candidates.length ? Math.max(0, Math.round((candidates[0].ts - now) / 1000)) : 0;
+      html = candidates.length
+        ? `waiting ${dur(rem)} <span class="lab-next">· up next: ${esc(candidates[0].label)}</span>`
+        : 'idle';
     }
+    // Skip the write when nothing changed: an unchanged 1 Hz innerHTML write
+    // still repaints the strip, and any repaint under an open modal's
+    // backdrop blur forces a full re-blur. Compared via dataset (not
+    // innerHTML) because the serializer does not round-trip entities.
+    if (bar.dataset.lastTick === html) return;
+    bar.dataset.lastTick = html;
+    bar.innerHTML = html;
   }
 
   X('ClearLog', () => {
