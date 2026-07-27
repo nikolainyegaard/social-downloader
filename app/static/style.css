@@ -2115,7 +2115,7 @@ dialog:not([open]) { display: none !important; }
    Fixed-width detail and time columns keep every row aligned. */
 .rf-row {
   display: grid;
-  grid-template-columns: 16px 20px minmax(0, 1fr) auto 92px;
+  grid-template-columns: 16px 20px minmax(0, 1fr) auto 108px;
   gap: 8px;
   align-items: center;
   padding: 4px 8px;
@@ -2142,7 +2142,7 @@ dialog:not([open]) { display: none !important; }
    priority: the 1fr track shrinks to 0 before auto gives up any width. */
 .ah-row { position: relative; border-radius: var(--radius-sm); font-size: 12px; --ah-hide: 64px; --ah-ramp: 14px; }
 .ah-row:hover { background: var(--raised); }
-.ah-row-content { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto 92px; gap: 8px; align-items: center; padding: 4px 8px; }
+.ah-row-content { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto 108px; gap: 8px; align-items: center; padding: 4px 8px; }
 /* Error rows overlay their actions on the right on hover; the row content
    fades out behind them like .edge-fade (fully transparent under the buttons
    box, --ah-hide wide, with an --ah-ramp run-up). */
