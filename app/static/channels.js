@@ -696,7 +696,8 @@ function initChannelApp(cfg) {
   // creators get a gold star prefix.
   const _nameStyle = r => r.account_status === 'banned' ? 'style="color:var(--red)"'
     : r.enabled === 0 ? 'style="color:var(--text-dim)"' : '';
-  const _namePrefix = r => r.starred ? '<span style="color:var(--gold)">★</span> ' : '';
+  // line-height 1 so the larger glyph cannot stretch the 12px row
+  const _namePrefix = r => r.starred ? '<span style="color:var(--gold);font-size:15px;line-height:1">★</span> ' : '';
 
   // Onclick string for a saved/deleted group: single-item groups jump straight
   // to the item; soft-disabled creators route through the platform fallback

@@ -322,6 +322,12 @@ button:not(:disabled):active { transform: translateY(1px); }
     outline-offset: 2px;
   }
 }
+/* Touch devices: hiding the accent ring above is not enough, the browser's
+   default focus-visible outline still draws and sticks to the last tapped
+   element. Suppress it explicitly. */
+@media (hover: none) {
+  button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: none; }
+}
 .tracking-search:focus, .modal-video-search:focus { outline: none; border-color: var(--accent); }
 .tracking-search {
   width: 200px;
@@ -867,13 +873,22 @@ dialog:not([open]) { display: none !important; }
   position: fixed;
   inset: 0;
   background: color-mix(in srgb, var(--bg) 72%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   /* Replays each time the dialog opens */
   animation: overlay-in var(--dur) var(--ease);
+}
+/* The page blur lives on ::backdrop, never on the dialog element itself:
+   backdrop-filter on the dialog composites the dialog's own content into the
+   blur layer, and the fractionally sized flex-centered modal then rasterizes
+   all its text off the pixel grid (blurry text on desktop). */
+.modal-backdrop::backdrop,
+.conn-backdrop::backdrop,
+.media-modal.dlg-dim::backdrop,
+dialog.about-modal::backdrop {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 @keyframes overlay-in { from { opacity: 0; } }
 @keyframes modal-in   { from { opacity: 0; transform: scale(.975) translateY(8px); } }
@@ -1673,8 +1688,6 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 .conn-backdrop {
   position: fixed; inset: 0;
   background: color-mix(in srgb, var(--bg) 72%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   display: flex; align-items: center; justify-content: center;
   animation: overlay-in var(--dur) var(--ease);
 }
@@ -1817,8 +1830,6 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 }
 .media-modal.dlg-dim {
   background: color-mix(in srgb, var(--bg) 72%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
 }
 /* Same enter motion as .modal-base; confirm cards had none */
 .media-modal .confirm-card { animation: modal-in var(--dur) var(--ease); }
@@ -2066,8 +2077,9 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 }
 @keyframes story-ring-spin { to { transform: rotate(360deg); } }
 .story-ring.story-seen::before { opacity: .3; animation: none; }
-/* The modal avatar is much larger; keep the ring proportionate */
-.modal-avatar-wrap.story-ring { --ring-gap: 6.8px; --ring-w: 4.2px; }
+/* The modal avatar is much larger; scale the gap but keep the stroke closer
+   to the card weight, a fully proportional 4.2px read too heavy */
+.modal-avatar-wrap.story-ring { --ring-gap: 6px; --ring-w: 3.5px; }
 .avatar-wrap.story-ring { box-shadow: none; }
 
 /* ── Dashboard: stat strip, then recent feed beside loop + add history ───── */
@@ -2750,9 +2762,11 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
   .filter-control-group .controls-reset { display: none; }
 
   /* Full-screen modals: no space to waste on a blurred backdrop */
-  .modal-backdrop {
+  .modal-backdrop::backdrop {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+  .modal-backdrop {
     align-items: flex-end; /* sheet slides up from bottom */
   }
   .modal,
@@ -2880,7 +2894,7 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
   .mh-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
   /* About modal: floats over the creator modal (opened from ...more) */
-  dialog.about-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: overlay-in var(--dur) var(--ease); }
+  dialog.about-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: color-mix(in srgb, var(--bg) 72%, transparent); animation: overlay-in var(--dur) var(--ease); }
   .about-card { position: relative; width: min(440px, 92%); max-height: 82%; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); padding: 20px; }
   .about-title { margin: 0 0 12px; font-size: 15px; font-weight: 700; }
   .about-bio { font-size: 13px; color: var(--text-dim); line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
@@ -2997,35 +3011,35 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 /* The :root blue is the neutral chrome accent; every platform overrides it,
    TikTok included. Rule of thumb: --on-accent is only for text/glyphs on
    SOLID accent fills; translucent accent tints keep --text. */
-.app.theme-tiktok {
+body.theme-tiktok {
   --accent:      var(--p-tiktok);   /* TikTok's official fuchsia */
   --accent-h:    #d31448;
   --accent-bg:   rgba(238,29,82,.15);
   --accent-bg-h: rgba(238,29,82,.28);
 }
 
-.app.theme-youtube {
+body.theme-youtube {
   --accent:      var(--p-youtube);
   --accent-h:    #e82020;
   --accent-bg:   rgba(255,60,60,.15);
   --accent-bg-h: rgba(255,60,60,.28);
 }
 
-.app.theme-instagram {
+body.theme-instagram {
   --accent:      var(--p-instagram);
   --accent-h:    #a62d6f;
   --accent-bg:   rgba(193,53,132,.15);
   --accent-bg-h: rgba(193,53,132,.28);
 }
 
-.app.theme-twitter {
+body.theme-twitter {
   --accent:      var(--p-twitter);
   --accent-h:    #1591d8;
   --accent-bg:   rgba(29,161,242,.15);
   --accent-bg-h: rgba(29,161,242,.28);
 }
 
-.app.theme-onlyfans {
+body.theme-onlyfans {
   --accent:      var(--p-onlyfans);
   --accent-h:    #0095cc;
   --accent-bg:   rgba(0,175,240,.15);

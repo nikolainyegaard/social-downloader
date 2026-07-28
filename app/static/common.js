@@ -62,9 +62,10 @@ function switchPlatform(name) {
     const el = document.getElementById('platform-' + p.id);
     if (el) el.style.display = p.id === name ? '' : 'none';
   });
-  const app = document.querySelector('.app');
-  PLATFORMS.forEach(p => app.classList.remove('theme-' + p.id));
-  app.classList.add('theme-' + name);
+  // Theme lives on body, not .app: dialogs and toasts are appended to body,
+  // so a theme scoped to .app left every modal on the neutral :root accent
+  PLATFORMS.forEach(p => document.body.classList.remove('theme-' + p.id));
+  document.body.classList.add('theme-' + name);
   _placeTabGlider();
   if (typeof _initAllGliders === 'function') _initAllGliders();
 }
@@ -2588,6 +2589,10 @@ function _renderStatsCharts(host, rows) {
   const font   = '11px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
   const xs     = rows.map(r => r.ts);
   const charts = [];
+  // Two passes: append every card first, then size the charts. The auto-fit
+  // grid reflows on each append, so measuring plot width card-by-card sized
+  // chart 1 to a one-column grid and it painted across every other panel.
+  const pending = [];
   for (const m of _STAT_METRICS) {
     const ys = rows.map(r => r[m.field]);
     if (!ys.some(v => v != null)) continue;
@@ -2607,7 +2612,9 @@ function _renderStatsCharts(host, rows) {
       </div>
       <div class="stat-chart-plot"></div>`;
     host.appendChild(card);
-    const plotEl = card.querySelector('.stat-chart-plot');
+    pending.push({ m, ys, plotEl: card.querySelector('.stat-chart-plot') });
+  }
+  for (const { m, ys, plotEl } of pending) {
     charts.push(new uPlot({
       width:  Math.max(plotEl.clientWidth, 240),
       height: 130,
