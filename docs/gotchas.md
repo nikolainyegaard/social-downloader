@@ -76,6 +76,16 @@ After `asyncio.run()` returns, Playwright's `BaseSubprocessTransport` objects ca
 
 Related: mobile CSS must target classes the engine generator emits (`.tracking-tab-row`, `.tracking-search`, `.modal-header`, `.modal-video-list`), never static per-platform ids. The engine fold-in left `#trackingSearch` and `#modalHeader` rules matching nothing, breaking the mobile layout with no error.
 
+## A modal `<dialog>` makes the whole page inert, top layer included
+
+Painting above an open modal dialog and being clickable over it are two different problems, and the top layer only solves the first. `showModal()` marks every element that is not a descendant of the dialog as inert, and an inert element is not hit-tested: the click passes through to whatever is behind it. Promoting an element into the top layer changes paint order, not inertness.
+
+That is why the toast container is a popover **and** reparented onto the innermost open dialog (`_hostToasts`, plus the `_dlgOpenStack` maintained by `_dlgOpen` / `_dlgDrop`). As a body child it painted above the modal but swallowed no clicks, so clicking a toast's X hit the dialog element behind it, and since the dialog is its own backdrop the modal closed instead. Being a DOM descendant of the dialog takes it out of the inert subtree; staying a popover keeps it in the top layer, so it still paints above that dialog's content and escapes the overlay fade-in and any clipping. Popover type (`auto` vs `manual`) makes no difference here; only the DOM parent does.
+
+Anything else that must be clickable over a modal needs the same treatment. The `.dd` / `.m-dd` menus are already fine because their markup sits inside the modal; `_openCardMenu` builds its menu and appends it to `document.body`, so it is subject to this.
+
+Reparenting reinserts the moved subtree, which replays any CSS animation declared on it. That is why `toast-in` lives on a one-shot `.toast.entering` class instead of on `.toast`: otherwise every dialog open slid the visible toasts in again.
+
 ## DB indexes on migrated columns go in `_migrate_db`
 
 A `CREATE INDEX` in `executescript` that references a migration-added column fails with "no such column". Create it inside `_migrate_db()` after the relevant `ALTER TABLE`.

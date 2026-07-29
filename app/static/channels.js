@@ -689,6 +689,34 @@ function initChannelApp(cfg) {
     renderStats(data);
   });
 
+  // ── Dashboard list plumbing ───────────────────────────────────────────────
+  //
+  // Both dashboard lists (recent activity, add history) refresh on every write
+  // while a loop runs, so they render through `_reconcileRows` rather than an
+  // innerHTML rewrite: see the helper in common.js for why. These two wrap the
+  // parts that are not the row diff itself. `state` is the panel's `{obs,
+  // hasMore, ...}` holder.
+
+  // Placeholder states (skeleton, empty, error) replace the whole list, so they
+  // bypass the row diff; the stash makes a repeat write a no-op.
+  function _listPlaceholder(el, state, html) {
+    if (el.dataset.ph === html) return;
+    el.dataset.ph = html;
+    if (state.obs) { state.obs.disconnect(); state.obs = null; }
+    el.innerHTML = html;
+  }
+
+  // Re-arm the paging sentinel only when rows actually moved. An idle
+  // re-render (the minute tick rolling relative day labels) leaves the armed
+  // one alone; re-arming there would fire the observer again and page in
+  // another block at the bottom of the list.
+  function _listSentinel(el, state, changed, load) {
+    if (!changed) return;
+    if (state.obs) { state.obs.disconnect(); state.obs = null; }
+    el.querySelector('.list-sentinel')?.remove();
+    if (state.hasMore) state.obs = _attachSentinel(el, load);
+  }
+
   // ── Recent panel ──────────────────────────────────────────────────────────
 
   // Usernames stay neutral (state lives in the row tint), with two exceptions:
@@ -737,6 +765,22 @@ function initChannelApp(cfg) {
     return `${API}/recent/feed?limit=40${kind}${flags}${before ? `&before=${before}` : ''}`;
   }
 
+  // Row identity for the keyed diff: kind, creator, event timestamp, plus the
+  // field for profile changes since one check can write several at once.
+  // Grouped events (saved/story/deleted) re-key when they absorb a newer post,
+  // which is what we want: their count changed, so the row has to be rewritten.
+  const _rfKeyOf = ev => `${ev.kind}|${ev.item.channel_id}|${ev.ts}|${ev.item.field || ''}`;
+
+  function _rfAttrs(ev) {
+    const it = ev.item;
+    const onclick = ev.kind === 'saved' || ev.kind === 'deleted'
+      ? _recentOnclick(it, ev.kind)
+      : ev.kind === 'changed'
+        ? `${P}OpenModalWithHistory('${esc(it.channel_id)}','${esc(it.field)}')`
+        : `${P}OpenModal('${esc(it.channel_id)}')`;
+    return { class: `rf-row rf-k-${ev.kind}`, onclick, title: `Open @${esc(it.handle)}` };
+  }
+
   function _rfRow(ev, now) {
     const it = ev.item;
     const detail = ev.kind === 'saved'   ? `${it.count} saved`
@@ -744,36 +788,28 @@ function initChannelApp(cfg) {
                  : ev.kind === 'deleted' ? `${it.count} deleted`
                  : ev.kind === 'changed' ? esc(FIELD_LABELS[it.field] || it.field)
                  : 'Banned';
-    const onclick = ev.kind === 'saved' || ev.kind === 'deleted'
-      ? _recentOnclick(it, ev.kind)
-      : ev.kind === 'changed'
-        ? `${P}OpenModalWithHistory('${esc(it.channel_id)}','${esc(it.field)}')`
-        : `${P}OpenModal('${esc(it.channel_id)}')`;
-    return `<div class="rf-row rf-k-${ev.kind}" onclick="${onclick}" role="button" tabindex="0" title="Open @${esc(it.handle)}">
-      <span class="rf-icon rf-${ev.kind}">${_RF_ICONS[ev.kind]}</span>
+    return `<span class="rf-icon rf-${ev.kind}">${_RF_ICONS[ev.kind]}</span>
       <span class="rf-avatar-wrap"><img class="rf-avatar" src="${API}/channels/${esc(it.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>
       <span class="rf-name" ${_nameStyle(it)}>${_namePrefix(it)}@${esc(it.handle)}</span>
       <span class="rf-detail rf-${ev.kind}">${detail}</span>
-      <span class="rf-time">${_recentDate(ev.ts, now)}</span>
-    </div>`;
+      <span class="rf-time">${_recentDate(ev.ts, now)}</span>`;
   }
+
+  const _rfInitRow = node => { node.setAttribute('role', 'button'); node.setAttribute('tabindex', '0'); };
 
   function _renderFeed(loading) {
     const el = document.getElementById(`${P}RecentFeed`);
     if (!el) return;
+    if (!_rf.items.length) {
+      _listPlaceholder(el, _rf, loading ? _RF_SKEL : '<div class="rf-empty">No activity yet</div>');
+      return;
+    }
     const now = new Date();
-    const html = _rf.items.length
-      ? _rf.items.map(e => _rfRow(e, now)).join('')
-      : loading ? _RF_SKEL : '<div class="rf-empty">No activity yet</div>';
-    // Skip identical rebuilds: the minute tick re-renders only to roll the
-    // relative day labels, which change once a day, and a no-op rebuild
-    // still recreates every row (and re-blurs under an open modal). The
-    // sentinel stays attached on a skip; it is only stale after a rewrite.
-    if (el.dataset.lastFeed === html) return;
-    el.dataset.lastFeed = html;
-    if (_rf.obs) { _rf.obs.disconnect(); _rf.obs = null; }
-    el.innerHTML = html;
-    if (_rf.hasMore) _rf.obs = _attachSentinel(el, _loadFeedMore);
+    delete el.dataset.ph;
+    const changed = _reconcileRows(el, _rf.items.map(ev => ({
+      key: _rfKeyOf(ev), html: _rfRow(ev, now), attrs: _rfAttrs(ev),
+    })), _rfInitRow);
+    _listSentinel(el, _rf, changed, _loadFeedMore);
   }
 
   async function _loadFeedMore() {
@@ -794,6 +830,10 @@ function initChannelApp(cfg) {
     _rf.sig     = c ? c.sig : null;
     _rf.items   = c ? c.items.slice() : [];
     _rf.hasMore = c ? c.hasMore : false;
+    // A different filter is a different list, so this is the one case that
+    // should jump back to the top; the row diff preserves scroll otherwise
+    const el = document.getElementById(`${P}RecentFeed`);
+    if (el) el.scrollTop = 0;
     _renderFeed(!c);
     loadRecent();
   }
@@ -850,17 +890,22 @@ function initChannelApp(cfg) {
     }
   });
 
-  // The 30 s poll refreshes page one of the feed. Pages the user scrolled in
-  // are reset only when page one actually changed, so idle polls never yank
-  // the scroll position. Older pages load through the scroll sentinel.
+  // Refreshes page one of the feed (SSE 'changed' while the tab is active, a
+  // 30 s poll otherwise). Pages the user scrolled in are kept: page one is
+  // authoritative for the newest window and every retained event older than
+  // its last one carries over, so the two halves stitch back into one
+  // contiguous list. Older pages load through the scroll sentinel.
+  // ponytail: a grouped event can show twice for one refresh cycle, once fresh
+  // above the split and once stale below it, if absorbing a new post moves it
+  // across. That needs 40+ feed events inside the grouping window's 5 minutes,
+  // and the next refresh clears it, so it does not earn a second request.
   const loadRecent = X('LoadRecent', async () => {
     const key = _rfKey();
     const { ok, data } = await apiJSON(_rfUrl());
     if (!ok) {
       if (!_rf.items.length) {
         const el = document.getElementById(`${P}RecentFeed`);
-        // Keep _renderFeed's skip-if-unchanged stash in step with the direct write
-        if (el) el.dataset.lastFeed = el.innerHTML = '<div class="rf-empty">Could not load activity. Retrying automatically.</div>';
+        if (el) _listPlaceholder(el, _rf, '<div class="rf-empty">Could not load activity. Retrying automatically.</div>');
       }
       return;
     }
@@ -868,9 +913,20 @@ function initChannelApp(cfg) {
     _rf.cache[key] = { items: data.items, hasMore: data.has_more, sig };
     if (key !== _rfKey()) return;   // filter changed while the fetch was in flight
     if (sig === _rf.sig) return;
+    // An empty page one means an empty feed, so nothing carries over
+    const cut = data.items.length ? data.items[data.items.length - 1].ts : -Infinity;
+    // The tail only stitches on when the fresh page still reaches it. More new
+    // events than fit in one page (a long-idle tab under a busy loop) push page
+    // one clear past what is loaded, leaving a hole the tail cannot fill, so
+    // there the list does reset to page one.
+    const tail = _rf.items.length && _rf.items[0].ts >= cut
+      ? _rf.items.filter(e => e.ts < cut)
+      : [];
     _rf.sig     = sig;
-    _rf.items   = data.items.slice();
-    _rf.hasMore = data.has_more;
+    _rf.items   = data.items.concat(tail);
+    // has_more describes page one's window; with a tail attached the last
+    // sentinel fetch is the one that knows whether anything older is left
+    _rf.hasMore = tail.length ? _rf.hasMore : data.has_more;
     _renderFeed();
   });
 
@@ -1237,15 +1293,13 @@ function initChannelApp(cfg) {
       ? `<button class="ah-btn" title="Try again" onclick="${P}AhRetry(${e.id})">${_refreshIcon}</button>
          <button class="ah-btn ah-btn-danger" title="Discard" onclick="${P}AhDiscard(${e.id})">${_xIcon}</button>`
       : '';
-    return `<div class="ah-row${actions ? ' has-actions' : ''}">
-      <div class="ah-row-content">
-        <span class="ah-icon ah-${esc(e.status)}">${icon}</span>
-        <span class="ah-handle" onclick="${P}AhOpen('${esc(e.handle)}')" role="button" tabindex="0" title="Open @${esc(e.handle)}">@${esc(e.handle)}</span>
-        ${status}
-        <span class="ah-time">${_recentDate(e.updated_at)}</span>
-      </div>
-      ${actions ? `<span class="ah-actions">${actions}</span>` : ''}
-    </div>`;
+    return `<div class="ah-row-content">
+      <span class="ah-icon ah-${esc(e.status)}">${icon}</span>
+      <span class="ah-handle" onclick="${P}AhOpen('${esc(e.handle)}')" role="button" tabindex="0" title="Open @${esc(e.handle)}">@${esc(e.handle)}</span>
+      ${status}
+      <span class="ah-time">${_recentDate(e.updated_at)}</span>
+    </div>
+    ${actions ? `<span class="ah-actions">${actions}</span>` : ''}`;
   }
 
   // Resolve at click time (not render time), so rows rendered before the
@@ -1256,14 +1310,22 @@ function initChannelApp(cfg) {
     else showToast(`@${handle} is not tracked.`, { type: 'info' });
   });
 
+  // Same keyed diff as the recent feed: every queue change refreshes this list,
+  // so rewriting it would reset the scroll position and restart the pending
+  // rows' spinners. Row ids are stable, so a pending row morphing into added
+  // or error touches nothing else.
   function _renderAddHistory() {
     const el = document.getElementById(`${P}AddHistory`);
     if (!el) return;
-    if (_ah.obs) { _ah.obs.disconnect(); _ah.obs = null; }
-    el.innerHTML = _ah.items.length
-      ? _ah.items.map(_ahRow).join('')
-      : `<div class="ah-empty">No ${CREATOR} adds yet</div>`;
-    if (_ah.hasMore) _ah.obs = _attachSentinel(el, () => loadAddHistory(false));
+    if (!_ah.items.length) {
+      _listPlaceholder(el, _ah, `<div class="ah-empty">No ${CREATOR} adds yet</div>`);
+      return;
+    }
+    delete el.dataset.ph;
+    const changed = _reconcileRows(el, _ah.items.map(e => ({
+      key: String(e.id), html: _ahRow(e), attrs: { class: `ah-row${e.status === 'error' ? ' has-actions' : ''}` },
+    })));
+    _listSentinel(el, _ah, changed, () => loadAddHistory(false));
   }
 
   const loadAddHistory = X('LoadAddHistory', async (reset) => {
@@ -1276,13 +1338,25 @@ function initChannelApp(cfg) {
     if (!ok) {
       if (!_ah.items.length) {
         const el = document.getElementById(`${P}AddHistory`);
-        if (el) el.innerHTML = '<div class="ah-empty">Could not load the add history.</div>';
+        if (el) _listPlaceholder(el, _ah, '<div class="ah-empty">Could not load the add history.</div>');
       }
       return;
     }
-    if (reset) _ah.items = [];
-    _ah.items.push(...data.items);
-    _ah.hasMore = data.has_more;
+    if (reset) {
+      // Keep the pages the sentinel loaded, same split as the recent feed: the
+      // fresh page owns the newest ids, retained entries everything below its
+      // last one, and the tail is dropped when the fresh page no longer
+      // reaches it. Ids are monotonic, so the split has no gap or duplicate.
+      const cut  = data.items.length ? data.items[data.items.length - 1].id : 0;
+      const tail = _ah.items.length && _ah.items[0].id >= cut
+        ? _ah.items.filter(i => i.id < cut)
+        : [];
+      _ah.items   = data.items.concat(tail);
+      _ah.hasMore = tail.length ? _ah.hasMore : data.has_more;
+    } else {
+      _ah.items.push(...data.items);
+      _ah.hasMore = data.has_more;
+    }
     _renderAddHistory();
   });
 
