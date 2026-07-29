@@ -11,6 +11,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - OnlyFans now has its own accent theme and tab identity dot instead of rendering in the neutral blue with a grey dot
 - Platforms can now be enabled and disabled from Settings > General. Disabling a platform takes effect immediately: its scheduled sessions, manual runs, and background loops stop (an in-flight session is stopped ASAP), its API routes are rejected, and its tab and settings disappear until it is enabled again. Saved media and tracked creators are kept, and re-enabling resumes the normal schedule
 - A new General settings page holds everything that belongs to no platform: the platform on/off toggles and the app's OIDC login (moved from the old Access section)
+- The creator modal's Stats tab has a day-range filter (14, 30, 60, 90 days, default 14) in the nav bar, capping how far back the graphs reach; spans shorter than the selected range show everything available as before
 
 ### Changed
 - The story ring renders at a consistent weight on creator cards and in the creator modal, scaled to the avatar size instead of looking thick on cards and thin on the large modal avatar

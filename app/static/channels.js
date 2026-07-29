@@ -2167,7 +2167,9 @@ function initChannelApp(cfg) {
   // Toolbar context-filter content for the non-media views, shared by the
   // desktop toolbar (cfg.contextFilters) and the mobile filter row.
   function _modalContextFilters(view) {
-    return view === 'history' ? _fieldsDd() : '';
+    if (view === 'history') return _fieldsDd();
+    if (view === 'stats')   return _statHistRows ? _statRangePills() : '';
+    return '';
   }
 
   // Toolbar count line for the non-media views (cfg.viewCount): filtered change
@@ -2786,6 +2788,26 @@ function initChannelApp(cfg) {
   let _statHistRows   = null;   // fetched snapshot rows; null until loaded
   let _statHistSig    = null;   // JSON signature; gates live repaints
   let _statHistCharts = [];     // live uPlot instances, destroyed on leave
+  let _statRange      = 14;     // max days shown in the graphs (snapshots are one per day)
+
+  // Last n snapshots; one row per day, so this is the last n tracked days.
+  const _statRangeRows = () => _statHistRows && _statHistRows.slice(-_statRange);
+
+  X('MStatsRange', n => {
+    _statRange = n;
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // repaint the active pill
+    if (_creatorState.view !== 'stats' || !_statHistRows) return;
+    _destroyStatsCharts();
+    _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statRangeRows());
+  });
+
+  function _statRangePills() {
+    return `<div class="filter-pills multi">`
+      + [14, 30, 60, 90].map(n =>
+          `<button class="filter-pill${_statRange === n ? ' active' : ''}" onclick="${P}MStatsRange(${n})">${n}d</button>`
+        ).join('')
+      + `</div>`;
+  }
 
   function _destroyStatsCharts() {
     _statHistCharts.forEach(c => { try { c.destroy(); } catch { /* already gone */ } });
@@ -2796,6 +2818,7 @@ function initChannelApp(cfg) {
     _destroyStatsCharts();
     _statHistRows = null;
     _statHistSig  = null;
+    _statRange    = 14;
     const panel = _el('StatsPanel');
     if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
   }
@@ -2811,7 +2834,7 @@ function initChannelApp(cfg) {
     if (!ok) { panel.innerHTML = '<div class="vlist-empty">Could not load stats. Close and reopen to retry.</div>'; return; }
     _statHistRows = data || [];
     _statHistSig  = JSON.stringify(data);
-    _statHistCharts = _renderStatsCharts(panel, _statHistRows);
+    _statHistCharts = _renderStatsCharts(panel, _statRangeRows());
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // day count now known
   }
 
@@ -2822,7 +2845,7 @@ function initChannelApp(cfg) {
     _statHistSig  = JSON.stringify(data);
     _statHistRows = data || [];
     _destroyStatsCharts();
-    _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statHistRows);
+    _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statRangeRows());
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);
   }
 
@@ -2835,7 +2858,7 @@ function initChannelApp(cfg) {
     _statHistResizeT = setTimeout(() => {
       if (_creatorState.view !== 'stats' || !_statHistRows) return;
       _destroyStatsCharts();
-      _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statHistRows);
+      _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statRangeRows());
     }, 200);
   });
 
