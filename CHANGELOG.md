@@ -32,6 +32,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 
 ### Fixed
+- Instagram sessions no longer hang 20+ minutes when the profile lookup is rate limited: a 429 from the web profile endpoint now fails immediately instead of retrying the same limit through instaloader's long sleep-and-retry fallback
 - Text inside modals no longer renders blurry on desktop: the backdrop blur sat on the dialog element itself, which pulled the modal's own content into the blurred compositing layer; the blur now lives behind the dialog instead
 - Story rings and every other accent-colored element inside modals now use the active platform's accent color: the theme was scoped to the page, so modals fell back to the neutral blue
 - The story ring on the large modal avatar is slightly thinner; the fully proportional stroke read too heavy next to the cards
