@@ -2150,9 +2150,9 @@ function initChannelApp(cfg) {
   X('MSort',   f => _mMobSort(MODAL_CFG, f));
   X('MStatus', k => _mMobStatus(MODAL_CFG, k));
   X('MType',   k => _mMobType(MODAL_CFG, k));
-  // Single-choice: pick one field, or click the active one again to clear.
+  // Multi-select: each pill toggles its field; empty selection shows all.
   X('MToggleField', field => {
-    phistField = phistField.has(field) ? new Set() : new Set([field]);
+    phistField.has(field) ? phistField.delete(field) : phistField.add(field);
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // repaint the field pills
     _renderPhistPanel();
   });
