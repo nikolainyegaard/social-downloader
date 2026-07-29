@@ -1901,6 +1901,7 @@ function _initAllGliders() {
 // the caller can store it for early cleanup on modal close.
 function _attachSentinel(listEl, callback) {
   const s = document.createElement('div');
+  s.className = 'list-sentinel';   // _reconcileRows leaves this child alone
   s.style.height = '1px';
   listEl.appendChild(s);
   const obs = new IntersectionObserver(entries => {
@@ -1927,6 +1928,58 @@ function _attachGridSentinel(gridEl, callback) {
   }, { rootMargin: '400px' });
   obs.observe(s);
   return obs;
+}
+
+// ── Keyed row reconcile ───────────────────────────────────────────────────────
+// Patch a scrolling list's rows in place instead of rewriting innerHTML. An
+// innerHTML rewrite empties the container, so the browser clamps scrollTop to 0
+// and every page the sentinel loaded is destroyed. The dashboard lists refresh
+// every couple of seconds while a loop runs, so a scrolled-down user was
+// yanked back to the top on each refresh. Matching rows by key also means an
+// unchanged row is never touched: no avatar refetch, no restarted spinner or
+// shimmer, no lost :hover, no reflow.
+//
+// `rows` is [{key, html, attrs}] in display order, where html is the row's
+// inner markup and attrs the wrapper attributes that vary per row (class,
+// onclick, title); static attributes belong in onCreate. Children without a
+// key are dropped (skeletons, empty and error lines), except the paging
+// sentinel, which stays last so callers can leave it armed. Returns true when
+// the DOM actually changed.
+/**
+ * @param {Element} el
+ * @param {{key: string, html: string, attrs?: Record<string, string>}[]} rows
+ * @param {(node: Element) => void} [onCreate]
+ */
+function _reconcileRows(el, rows, onCreate) {
+  const old = new Map();
+  for (const node of Array.from(el.children)) {
+    if (node.classList.contains('list-sentinel')) continue;
+    const key = node.dataset.rk;
+    // A duplicate key would leave one of the two nodes unreachable forever,
+    // so drop it and let this pass rebuild it
+    if (key && !old.has(key)) old.set(key, node);
+    else node.remove();
+  }
+  let changed = false;
+  let next = el.firstElementChild;
+  for (const r of rows) {
+    let node = old.get(r.key);
+    if (node) old.delete(r.key);
+    else {
+      node = document.createElement('div');
+      node.dataset.rk = r.key;
+      if (onCreate) onCreate(node);
+      changed = true;
+    }
+    for (const [name, value] of Object.entries(r.attrs || {})) {
+      if (node.getAttribute(name) !== value) { node.setAttribute(name, value); changed = true; }
+    }
+    if (node.dataset.rh !== r.html) { node.dataset.rh = r.html; node.innerHTML = r.html; changed = true; }
+    if (node === next) next = next.nextElementSibling;
+    else { el.insertBefore(node, next); changed = true; }
+  }
+  for (const node of old.values()) { node.remove(); changed = true; }
+  return changed;
 }
 
 // Horizontal-scroll edge fade: toggles fade-l/fade-r classes on a scrollable
