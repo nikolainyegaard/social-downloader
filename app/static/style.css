@@ -124,9 +124,11 @@ body {
 
 /* ── Toast notifications ─────────────────────────────────────────────────── */
 
-/* A manual popover so toasts live in the top layer, above any open <dialog>
-   (showToast re-promotes it whenever a dialog opens). The inset/margin/border
-   lines neutralize the UA popover box. */
+/* A manual popover so toasts live in the top layer, above any open <dialog>.
+   _hostToasts also reparents the container onto the innermost open dialog, since
+   a modal dialog makes everything outside its own subtree inert and the toasts
+   would paint on top but swallow no clicks. The inset/margin/border lines
+   neutralize the UA popover box. */
 #toast-container {
   position: fixed;
   /* Clears the back-to-top button (36px tall at bottom 24px, same corner) */
@@ -172,10 +174,13 @@ body {
   border: 1px solid var(--border);
   border-left-width: 3px;
   color: var(--text);
-  animation: toast-in var(--dur) var(--ease);
 }
 
-.toast.leaving { animation: toast-out var(--dur) var(--ease) forwards; }
+/* One-shot entrance, kept off .toast itself: _hostToasts moves the container
+   between hosts, and reinserting an element replays any animation declared on
+   it, so opening a dialog would slide every visible toast in again */
+.toast.entering { animation: toast-in var(--dur) var(--ease); }
+.toast.leaving  { animation: toast-out var(--dur) var(--ease) forwards; }
 .toast > .spinner { margin-top: 4px; }
 
 .toast-success { border-left-color: var(--green); }

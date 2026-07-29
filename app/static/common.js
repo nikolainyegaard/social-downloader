@@ -651,10 +651,15 @@ function showToast(message, { type = 'info', duration = type === 'error' ? 0 : 5
     container.popover = 'manual';
     document.body.appendChild(container);
   }
-  _topToasts();
+  _hostToasts();
 
   const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
+  // The entrance animation is a one-shot class, not a rule on .toast:
+  // _hostToasts moves the container between hosts, and reinserting an element
+  // replays any animation declared on it, so every open dialog would make the
+  // toasts already on screen slide in again
+  toast.className = `toast toast-${type} entering`;
+  toast.addEventListener('animationend', () => toast.classList.remove('entering'), { once: true });
   if (type === 'error') toast.setAttribute('role', 'alert');
 
   let spin = null;
@@ -698,6 +703,7 @@ function showToast(message, { type = 'info', duration = type === 'error' ? 0 : 5
   toast.appendChild(x);
 
   function dismiss() {
+    toast.classList.remove('entering');
     toast.classList.add('leaving');
     toast.addEventListener('animationend', () => toast.remove(), { once: true });
   }
@@ -730,19 +736,38 @@ function showToast(message, { type = 'info', duration = type === 'error' ? 0 : 5
 
 function _dlg(id) { return /** @type {HTMLDialogElement|null} */ (document.getElementById(id)); }
 
+// Open modal dialogs, innermost last. The toast container is parented to the
+// innermost one so it is never inert; see _hostToasts.
+/** @type {HTMLDialogElement[]} */
+const _dlgOpenStack = [];
+
 function _dlgOpen(id) {
   const el = _dlg(id);
   if (!el || el.open) return el;
   _dlgWire(id);
   el.showModal();
+  _dlgOpenStack.push(el);
   _lockScroll();
-  _topToasts();  // keep toasts above the newly topmost dialog
+  _hostToasts();  // move toasts into the new dialog: above it and still clickable
   return el;
 }
 
 function _dlgClose(id) {
   const el = _dlg(id);
-  if (el && el.open) el.close();
+  if (!el || !el.open) return;
+  // Move the toasts out before the dialog hides. The 'close' event that would
+  // otherwise do it is queued as a task, and a popover inside a dialog is
+  // force-hidden the moment the dialog leaves the top layer.
+  _dlgDrop(el);
+  el.close();
+}
+
+// Drop a dialog from the open stack and re-home the toasts. Called on both close
+// paths so native Escape is covered too; the second call for one close is a no-op.
+function _dlgDrop(el) {
+  const i = _dlgOpenStack.indexOf(el);
+  if (i !== -1) _dlgOpenStack.splice(i, 1);
+  _hostToasts();
 }
 
 function _dlgIsOpen(id) {
@@ -757,18 +782,34 @@ function _dlgWire(id, onClose) {
   const el = _dlg(id);
   if (!el || el.dataset.dlgWired) return;
   el.dataset.dlgWired = '1';
-  el.addEventListener('close', () => { _unlockScroll(); onClose?.(); });
+  el.addEventListener('close', () => { _dlgDrop(el); _unlockScroll(); onClose?.(); });
 }
 
-// Re-promote the toast container to the top of the top layer so toasts stay
-// above every open dialog.
-function _topToasts() {
+// Park the toast container on the innermost open dialog, or on body when none is
+// open, and re-promote it to the top of the top layer.
+//
+// Toasts have to paint above every overlay AND stay clickable there. A modal
+// <dialog> makes every element outside its own subtree inert, so a top-layer
+// popover parented to body painted above an open dialog but was not
+// hit-testable: a click on it fell through to the dialog element, which is its
+// own backdrop, so the modal closed instead of the toast dismissing. Parenting
+// the container to the dialog keeps it out of the inert subtree; keeping it a
+// popover keeps it in the top layer, so it still paints above that dialog's own
+// content and escapes the overlay fade-in and any clipping. Re-promoting on
+// every toast also lifts it above an open dropdown menu.
+function _hostToasts() {
   const c = document.getElementById('toast-container');
   if (!c) return;
+  const host = _dlgOpenStack[_dlgOpenStack.length - 1] || document.body;
   try {
     if (c.matches(':popover-open')) c.hidePopover();
+    if (c.parentElement !== host) host.appendChild(c);
     c.showPopover();
-  } catch (_) { /* popover API missing: toasts fall back to normal stacking */ }
+  } catch (_) {
+    // No Popover API (iOS/Safari 16): the reparent alone restores clickability,
+    // and style.css keeps the container laid out without the UA popover rules
+    if (c.parentElement !== host) host.appendChild(c);
+  }
 }
 
 // ── Error dialog ────────────────────────────────────────────────────────────────
