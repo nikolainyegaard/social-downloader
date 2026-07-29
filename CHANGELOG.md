@@ -14,6 +14,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The creator modal's Stats tab has a day-range filter (14, 30, 60, 90 days, default 14) in the nav bar, capping how far back the graphs reach; spans shorter than the selected range show everything available as before
 
 ### Changed
+- The History tab's field filter is a pill row in the nav bar instead of a dropdown menu, same single-choice behavior (click the active field again to clear)
 - The story ring renders at a consistent weight on creator cards and in the creator modal, scaled to the avatar size instead of looking thick on cards and thin on the large modal avatar
 - One close button: every modal and overlay close is the same X icon in one of two sizes; toasts, connection rows, and note fields use the same icon instead of four hand-drawn variants
 - Dropdown carets, menu checkmarks, and the stories calendar arrows are drawn icons instead of text characters, and the private-account lock matches the scroll-lock padlock style

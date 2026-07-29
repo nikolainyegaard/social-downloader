@@ -2153,21 +2153,23 @@ function initChannelApp(cfg) {
   // Single-choice: pick one field, or click the active one again to clear.
   X('MToggleField', field => {
     phistField = phistField.has(field) ? new Set() : new Set([field]);
-    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // rebuild the Fields dropdown
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // repaint the field pills
     _renderPhistPanel();
   });
-  function _fieldsDd() {
+  function _fieldsPills() {
     const fields = [...new Set(phistData.map(e => e.field))];
     if (!fields.length) return '';
-    const menu = fields.map(f =>
-      `<button class="m-dd-opt${phistField.has(f) ? ' active' : ''}" onclick="${P}MToggleField('${esc(f)}',this)">${FIELD_LABELS[f] || f}<span>${phistField.has(f) ? _checkIcon : ''}</span></button>`).join('');
-    return _mDd('Fields', menu);
+    return `<div class="filter-pills multi">`
+      + fields.map(f =>
+          `<button class="filter-pill${phistField.has(f) ? ' active' : ''}" onclick="${P}MToggleField('${esc(f)}')">${FIELD_LABELS[f] || f}</button>`
+        ).join('')
+      + `</div>`;
   }
 
   // Toolbar context-filter content for the non-media views, shared by the
   // desktop toolbar (cfg.contextFilters) and the mobile filter row.
   function _modalContextFilters(view) {
-    if (view === 'history') return _fieldsDd();
+    if (view === 'history') return _fieldsPills();
     if (view === 'stats')   return _statHistRows ? _statRangePills() : '';
     return '';
   }
