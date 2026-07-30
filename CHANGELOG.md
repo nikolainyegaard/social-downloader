@@ -13,6 +13,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - A new General settings page holds everything that belongs to no platform: the platform on/off toggles and the app's OIDC login (moved from the old Access section)
 - The creator modal's Stats tab has a day-range filter (14, 30, 60, 90 days, default 14) in the nav bar, capping how far back the graphs reach; spans shorter than the selected range show everything available as before
 - Video thumbnails in the list view show the video duration (MM:SS) in the lower left corner, and grid cells show the duration where the view count used to be
+- The media viewer has a post details panel (description, status, views, likes, comments, duration, resolution, dates, post ID): a sidebar next to the media on desktop, and an overlay behind a new info button in the top action row on mobile. Stories are unaffected
 
 ### Changed
 - The History tab's field filter is a pill row in the nav bar instead of a dropdown menu, and now selects multiple fields at once (empty selection shows all)

@@ -2279,6 +2279,12 @@ function mvToggleMute() {
   _mvMuted = vid.muted = !vid.muted;
 }
 
+// Mobile only: the info panel renders as an overlay card toggled from the
+// topbar info button (on desktop the panel is a permanent sidebar).
+function mvToggleInfo() {
+  document.getElementById('mvModal').classList.toggle('mv-info-open');
+}
+
 // Seek bar (plain video only): input drags set the position, timeupdate
 // events keep the bar tracking playback.
 function mvSeek(val) {
@@ -2482,6 +2488,11 @@ function _mvShowSlide(idx) {
   // the post's original URL (deleted posts and stories never do).
   const linkBtn = document.getElementById('mvLinkBtn');
   if (linkBtn) linkBtn.disabled = !(typeof slide !== 'string' && slide.link);
+  // Post details panel: slides opened from a video row carry pre-rendered
+  // info HTML; stories and bare URL slides do not, hiding panel and button
+  const info = (typeof slide !== 'string' && slide.info) || '';
+  document.getElementById('mvInfo').innerHTML = info;
+  document.getElementById('mvModal').classList.toggle('mv-has-info', !!info);
   if (_storyMode) _storyBeginSlide(idx, isVid, vid);
   _mvSync();
 }
@@ -2530,7 +2541,8 @@ function _mvTeardown() {
   const flash = document.getElementById('mvFlash');
   flash.classList.remove('on');
   flash.innerHTML = '';
-  document.getElementById('mvModal').classList.remove('mv-single');
+  document.getElementById('mvModal').classList.remove('mv-single', 'mv-has-info', 'mv-info-open');
+  document.getElementById('mvInfo').innerHTML = '';
   document.getElementById('mvImg').src = '';
   _mvSlides = [];
   _mvIdx    = 0;

@@ -458,6 +458,28 @@ function initChannelApp(cfg) {
     </div>`;
   }
 
+  // Pre-rendered details HTML carried on viewer slides: a sidebar right of
+  // the media on desktop, an overlay behind the topbar info button on mobile.
+  // Rows render only when the platform populates the field.
+  function _mvInfoFor(v) {
+    const { label: statusLabel } = _videoStatus(v);
+    const rows = [
+      ['Status', statusLabel],
+      [cfg.viewsLabel || 'Views', v.view_count != null ? fmtCount(v.view_count) : null],
+      ['Likes', v.like_count != null ? fmtCount(v.like_count) : null],
+      ['Comments', v.comment_count != null ? fmtCount(v.comment_count) : null],
+      ['Duration', v.duration ? fmtDur(v.duration) : null],
+      ['Resolution', v.width && v.height ? `${v.width}x${v.height}` : null],
+      ['Uploaded', v.upload_date ? fmt.date(v.upload_date) : null],
+      ['Downloaded', v.download_date ? fmt.date(v.download_date) : null],
+      ['Deleted', v.deleted_at ? fmt.date(v.deleted_at) : null],
+      ['Post ID', esc(v.video_id)],
+    ].filter(([, val]) => val != null);
+    return `<div class="mv-info-title">Details</div>
+      ${v.description ? `<div class="mv-info-desc">${esc(v.description)}</div>` : ''}
+      ${rows.map(([l, val]) => _hgRow(l, val)).join('')}`;
+  }
+
   function _defaultVideoActionBtns(v) {
     const id = esc(v.video_id);
     if (v.file_path) {
@@ -524,6 +546,7 @@ function initChannelApp(cfg) {
       type: 'video',
       name: `${videoId}.${ext}`,
       link: v ? _videoUrl(v) : null,
+      info: v ? _mvInfoFor(v) : null,
     }]);
   });
 
@@ -532,7 +555,8 @@ function initChannelApp(cfg) {
     if (!ok || !data.files || !data.files.length) return;
     const v    = _creatorState.videos.find(x => x.video_id === videoId);
     const link = v ? _videoUrl(v) : null;
-    openMediaViewer(data.files.map(f => ({ ...f, link })));
+    const info = v ? _mvInfoFor(v) : null;
+    openMediaViewer(data.files.map(f => ({ ...f, link, info })));
   });
 
   // Story row to viewer slide; name feeds the viewer's Download action (the
