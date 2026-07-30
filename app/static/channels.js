@@ -454,6 +454,7 @@ function initChannelApp(cfg) {
            onerror="this.style.opacity='.15'"
            onclick="event.stopPropagation();${_openMediaFor(v)}" title="${_isMulti(v) ? 'View media' : isImg ? 'View photo' : 'Play video'}" style="cursor:pointer">
       ${_isMulti(v) ? _photoBadge : isImg ? _imageBadge : thumbBadge(v)}
+      ${v.duration ? `<span class="thumb-dur">${fmtDur(v.duration)}</span>` : ''}
     </div>`;
   }
 

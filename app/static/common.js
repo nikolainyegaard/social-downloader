@@ -1532,6 +1532,15 @@ function _fmtBytes(n) {
   return _fmtSuffix(n, 1024 ** 2, ' MB');
 }
 
+// Video duration as MM:SS (H:MM:SS past an hour) for thumbnail badges
+function fmtDur(secs) {
+  if (secs == null || isNaN(secs)) return '';
+  const t = Math.round(secs);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  const p = n => String(n).padStart(2, '0');
+  return h ? `${h}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`;
+}
+
 // Loop pause toggle icons (loop panel headers)
 const _pauseIcon  = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>`;
 const _resumeIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l14 8-14 8z"/></svg>`;
@@ -3125,13 +3134,13 @@ function _appendModalGrid(cfg, vids, count) {
     cell.className   = `vgrid-cell${cls !== 'up' ? ' ' + cls : ''}`;
     cell.dataset.videoId = v.video_id;
     const id         = esc(v.video_id);
-    const viewsHtml  = v.view_count != null
-      ? `<span class="vgrid-views">${fmtCount(v.view_count)}</span>`
+    const durHtml    = v.duration
+      ? `<span class="vgrid-dur">${fmtDur(v.duration)}</span>`
       : '<span></span>';
     const typeIcon = cfg.typeIconFn ? cfg.typeIconFn(v) : '';
     const thumbSrc = cfg.gridThumbSrc ? cfg.gridThumbSrc(v) : '';
     cell.innerHTML = `<img src="${thumbSrc}" alt="" onerror="this.style.opacity='.15'">
-      <div class="vgrid-overlay">${viewsHtml}${typeIcon}</div>`;
+      <div class="vgrid-overlay">${durHtml}${typeIcon}</div>`;
     if (cfg.gridCellOnclick) {
       cell.onclick = () => cfg.gridCellOnclick(v);
       cell.setAttribute('role', 'button');

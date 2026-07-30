@@ -25,7 +25,7 @@ Shared across all platform apps.
 - `showToast(message, {type, duration, action, spinner})`: errors default to persistent with a two-line clamp and open the error dialog on click; the returned `{dismiss, update}` handle morphs a spinner toast into its result
 - `openPrompt`: accepts `multiline: true` (textarea instead of Enter-accepts input) and `suggest: q => [{value, label, sub, avatar}]` (typeahead rows via `_confirmRenderSuggest`, single-line only)
 - `openErrorModal(text)` / `closeErrorModal()` / `copyErrorModal()`: full error text, selectable, Copy button with a select-and-copy fallback
-- Formatting: `fmt` (relative/future/date/duration), `fmtCount`, `fmtDateShort`, `fmtDateOnly`, `_fmtLarge`, `_fmtSuffix`, `_cmp(av, bv, dir)`
+- Formatting: `fmt` (relative/future/date/duration), `fmtCount`, `fmtDur` (MM:SS thumbnail badges), `fmtDateShort`, `fmtDateOnly`, `_fmtLarge`, `_fmtSuffix`, `_cmp(av, bv, dir)`
 - Render helpers: `_videoStatus(v)`, `_trackingBadge(v)`, `_pill`, `_typePill`, `_hgRow(label, value, cls, click)`, `_noteFieldHtml(note, editFn, marginTop)`, `_xtextPlaceholderHtml(label)`, `_videoLinkBtn(url)`
 - Icons: `_dlIcon`, `_imgPreviewIcon`, `_listViewIcon`, `_gridViewIcon`, `_badgeStyle`, `_playBadge`, `_photoBadge`, `_vgridPlayIcon`, `_vgridPhotoIcon`
 - `_logLineClass(line)`: log console colorization (session separators, processing, errors, warnings, downloads, profile changes)
