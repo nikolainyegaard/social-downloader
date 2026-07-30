@@ -152,11 +152,15 @@ function _settingsPaneEl(target) {
   pane.style.display = 'none';
   pane.innerHTML = `
     <div class="settings-section-title">${esc(target.label)}</div>
-    <div class="settings-sub-tabs">${target.sections.map(s =>
+    <div class="settings-sub-tabs edge-fade">${target.sections.map(s =>
       `<button class="tab" id="stab-${target.id}-${s.id}" onclick="switchSettingsSection('${s.id}')">${esc(s.label)}</button>`).join('')}</div>
     ${target.sections.map(s =>
       `<div class="${s.diagFill ? 'ssec-diag' : ''}" id="ssec-${target.id}-${s.id}" style="display:none">${s.html}</div>`).join('')}`;
   document.getElementById('settingsContent').appendChild(pane);
+  // The section row does not fit a phone width, so it scrolls sideways with the
+  // shared fade. The pane is appended hidden; the ResizeObserver inside
+  // _attachEdgeFade picks the real width up when it is first shown.
+  _attachEdgeFade(pane.querySelector('.settings-sub-tabs'));
   target.sections.forEach(s => s.onRender?.());
   return pane;
 }
@@ -171,7 +175,11 @@ function switchSettingsSection(name) {
   target.sections.forEach(s => {
     const el = document.getElementById(`ssec-${target.id}-${s.id}`);
     if (el) el.style.display = s === next ? '' : 'none';
-    document.getElementById(`stab-${target.id}-${s.id}`)?.classList.toggle('active', s === next);
+    const tab = document.getElementById(`stab-${target.id}-${s.id}`);
+    tab?.classList.toggle('active', s === next);
+    // The row scrolls sideways on narrow screens, so a section opened by name
+    // (openSettings('diag')) would otherwise land out of sight
+    if (s === next) tab?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   });
   document.querySelector('.settings-content').classList.toggle('diag-fill', !!next.diagFill);
   next.onShow?.();

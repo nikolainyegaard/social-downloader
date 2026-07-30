@@ -1857,6 +1857,10 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* Details panel width, subtracted from the media's own width caps below:
+     the row centers as one unit, so media sized to the full cap pushes the
+     panel past the right edge. One token keeps the two in step. */
+  --mv-info-w: 260px;
 }
 /* The stage wraps exactly the visible media, so viewer chrome (progress bars,
    tap zones, top gradient, flash, seek) parents to it and stays aligned with
@@ -1935,7 +1939,7 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
    opened from a video row carry info (.mv-has-info); stories never do. */
 .mv-info {
   display: none;
-  width: 260px;
+  width: var(--mv-info-w);
   flex-shrink: 0;
   align-self: center;
   max-height: calc(100svh - 128px);
@@ -1950,6 +1954,12 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 #mvInfoBtn { display: none; }
 @media (min-width: 641px) {
   .mv-has-info .mv-info { display: block; }
+  /* Panel plus row gap comes out of the media's allowance. Without this a
+     widescreen video is wide enough on its own to fill the cap, and the panel
+     lands off screen (the flex row overflows the centered modal both ways). */
+  .mv-has-info .mv-inner img,
+  .mv-has-info .mv-inner video { max-width: min(78vw - var(--mv-info-w) - 10px, 520px); }
+  .mv-has-info.mv-single:not(.story-mode) .mv-inner video { max-width: calc(92vw - var(--mv-info-w) - 10px); }
 }
 @media (max-width: 640px) {
   .mv-has-info #mvInfoBtn { display: flex; }
@@ -2635,13 +2645,20 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 .loop-interval-field span { color: var(--muted); font-size: 13px; }
 /* ── Settings sub-tabs ─────────────────────────────────────────────────────── */
 
-/* Settings platform selector: shared .tab buttons on the standard underline row. */
+/* Settings platform selector: shared .tab buttons on the standard underline row.
+   Pairs with .edge-fade (attached in _settingsPaneEl) so six sections scroll
+   sideways on a phone instead of widening the pane, which made the whole
+   settings modal pan in both directions. */
 .settings-sub-tabs {
   display: flex;
   gap: 2px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
 }
+/* Overflow into that scroll rather than squashing labels, and drop the shared
+   -1px hairline overlap: the scroll container clips at its padding box, which
+   would shave the active tab's underline to 1px. */
+.settings-sub-tabs .tab { flex-shrink: 0; white-space: nowrap; margin-bottom: 0; }
 
 /* ── Diag output pre ────────────────────────────────────────────────────────── */
 
