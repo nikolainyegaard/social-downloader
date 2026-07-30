@@ -2762,6 +2762,9 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
      Reset moves out of the sideways-scrolling filter bar to sit next to search. */
   .view-tabs-row { flex-wrap: wrap; }
   .search-row { width: 100%; }
+  /* Own row means hiding it costs no layout shift, so the Log view (no search)
+     drops it entirely instead of leaving a blank full-width gap */
+  .search-row-hidden { display: none; }
   .tracking-search { flex: 1; min-width: 0; box-sizing: border-box; }
   .search-reset { display: inline-flex; flex-shrink: 0; }
   .filter-control-group .controls-reset { display: none; }

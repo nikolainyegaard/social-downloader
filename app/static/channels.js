@@ -2976,6 +2976,9 @@ function initChannelApp(cfg) {
     }
     const searchRst = _el('SearchReset');
     if (searchRst) searchRst.style.visibility = view === 'log' ? 'hidden' : '';
+    // Mobile drops the search row to its own full-width line, so an invisible
+    // box there is just an empty gap: the class hides it outright under 640px
+    searchEl?.closest('.search-row')?.classList.toggle('search-row-hidden', view === 'log');
     const countEl = _el('Count');
     if (countEl) countEl.style.visibility = view === 'log' ? 'hidden' : '';
     search = '';
