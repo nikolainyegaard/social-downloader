@@ -75,6 +75,10 @@ Adapter extras:
 
 Global:
 /api/health                       unauthenticated health check
+/api/transcode/status             AV1 transcode job: settings, current file, counts, recent results
+/api/transcode/settings           PATCH any transcode.json key (enabled, paused, min_size_mb, ...)
+/api/transcode/backfill           POST: scan the library and queue qualifying files (409 while scanning)
+/api/transcode/retry-failed       POST: requeue every failed row
 /api/platforms                    GET the platform list ({id, label, enabled})
 /api/platforms/<id>               PATCH {enabled}: toggle live; disabling stops the loop immediately and
                                   403s every /api/{p}/* route on that blueprint

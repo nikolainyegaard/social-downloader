@@ -29,9 +29,18 @@ A third failure class, distinct from both: a truncated thumbnail from an interru
 
 Without it ffmpeg fails on `dst + ".tmp"` because it cannot infer the container from the extension. This caused 100% failure of an initial 10,216-file conversion run.
 
-## AVIF for images only
+## AVIF for images, AV1 only for large H.264 files
 
-AV1/WebM video re-encoding was evaluated and abandoned: TikTok delivers HEVC, nearly as efficient as AV1, and a test encode came out 3x larger. JPEG to AVIF is the only reliable storage win (50-70% smaller at equivalent quality). Thumbnails are AVIF-first with a JPEG fallback: `_thumb_exists()` checks both extensions so the backfill does not regenerate over an existing `.jpg`, and the web endpoint tries `.avif` then `.jpg`.
+Blanket AV1/WebM video re-encoding was evaluated and abandoned early: TikTok delivers HEVC, nearly as efficient as AV1, and a test encode came out 3x larger. That conclusion does NOT hold for the long H.264 livestream VODs (OnlyFans and similar): those come from real-time encoders at ~6 Mbps and shrink 50-90% at visually transparent quality (VMAF-calibrated), which is what the AV1 transcode job (transcoder.py, Settings > General > Jobs) exists for. Its size threshold is what separates the two regimes; do not point it at small HEVC-sourced clips expecting wins. JPEG to AVIF remains the image-side win (50-70% smaller). Thumbnails are AVIF-first with a JPEG fallback: `_thumb_exists()` checks both extensions so the backfill does not regenerate over an existing `.jpg`, and the web endpoint tries `.avif` then `.jpg`.
+
+## AV1 transcode: swap deferral and the second ffmpeg
+
+Two decisions in transcoder.py that look odd without context:
+
+- **The swap is deferred, not locked.** On Linux, replacing a file mid-playback is safe at the filesystem level, but the viewer streams via HTTP range requests and every request reopens the path, so a swap mid-stream would serve ranges from a byte-incompatible file. Instead of blocking (a 60-minute VOD opened right after download would stall the queue for an hour), the media routes stamp `mark_served` on every serve and the worker parks a finished transcode as `swap_pending` when its file was served within the last 60 s, moving on to the next file and retrying the swap between items. If a swap ever races a stream anyway, the ETag changes with the file size, `If-Range` stops validating, and the browser re-fetches instead of corrupting playback.
+- **The job uses `/opt/ffmpeg/ffmpeg`, not the system ffmpeg.** Bookworm's package has SVT-AV1 1.4 (2022, far worse quality-per-bit) and no libvmaf, so the encode recipe and the verification gate both need the static BtbN build baked into the image. Do not switch the rest of the app to it: the in-app browser viewer depends on x11grab, which static builds do not reliably carry. With VMAF verification on and an ffmpeg without libvmaf (e.g. local dev), the worker deliberately refuses to process and says so in the panel rather than silently skipping the quality gate.
+
+Encoder settings (CRF 22, preset 4, 10-bit, tune=0, Opus 96k) were calibrated against VMAF on real archive samples in July 2026: mean 97+ with per-frame minimum 94+ on both a 720p landscape VOD and a 1080x1920 portrait VOD. The per-frame minimum floor ships at 85, not 94, because hour-long files hit scene cuts and near-black frames that score low without being visible defects; the mean floor of 96 is the real gate.
 
 ## Story downloads: validation and quarantine
 

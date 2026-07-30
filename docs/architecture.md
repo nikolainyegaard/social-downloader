@@ -28,6 +28,7 @@ social-downloader/
 │   ├── auth.py               OAuth2/OIDC blueprint: /login, /auth/callback, /logout
 │   ├── backup.py             daily SQLite backup, 14-day retention, daemon thread
 │   ├── downloader.py         yt-dlp download + direct photo/story download (shared)
+│   ├── transcoder.py         background AV1 transcode job: queue, worker, verification
 │   ├── photo_converter.py    background AVIF conversion; encode_avif helper
 │   ├── thumbnailer.py        thumbnails, avatar/banner caching, thumbnail repair
 │   ├── web.py                Flask app; global routes; mounts platform blueprints
@@ -104,6 +105,7 @@ social-downloader/
 - **Stats backfill (TikTok, on demand):** fetches video details for videos missing stats
 - **Thumbnail backfill:** generates missing thumbnails, started from main.py
 - **Photo converter:** JPEG to AVIF, 8 s startup delay so `init_db()` finishes first
+- **Transcode worker:** one serial AV1 re-encode at a time from a persistent queue (`data/transcode.db`), nice 19, started from main.py before the loop threads
 
 All threads are `daemon=True`. `asyncio.run()` inside a thread is safe (fresh event loop per call); never share an event loop across threads. All loop_state writes are guarded by a per-platform `_state_lock`.
 

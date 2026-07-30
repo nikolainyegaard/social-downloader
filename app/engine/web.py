@@ -20,6 +20,7 @@ from flask import Blueprint, Response, jsonify, request, send_file
 
 from config import DATA_DIR, MEDIA_DIR
 from thumbnailer import thumb_path_for
+import transcoder as _transcoder
 
 REPORTS_DIR = os.path.join(DATA_DIR, "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -615,6 +616,10 @@ def create_channel_blueprint(engine) -> Blueprint:
             return ("", 404)
         ext  = os.path.splitext(path)[1].lower()
         mime = _VIDEO_MIME.get(ext, "video/mp4")
+        # Every serve (each range request re-hits this route) stamps the file
+        # as being watched, so the transcode job defers its swap. See
+        # transcoder.mark_served.
+        _transcoder.mark_served(path)
         return send_file(path, mimetype=mime, conditional=True)
 
     def _sibling_files(video) -> list[str]:
@@ -662,6 +667,7 @@ def create_channel_blueprint(engine) -> Blueprint:
         if n < 0 or n >= len(files):
             return ("", 404)
         ext = os.path.splitext(files[n])[1].lower()
+        _transcoder.mark_served(files[n])
         return send_file(files[n], mimetype=_VIDEO_MIME.get(ext, "video/mp4"), conditional=True)
 
     # ── Stories ───────────────────────────────────────────────────────────────
@@ -692,6 +698,7 @@ def create_channel_blueprint(engine) -> Blueprint:
         if not story or not story.get("file_path") or not os.path.exists(story["file_path"]):
             return ("", 404)
         ext = os.path.splitext(story["file_path"])[1].lower()
+        _transcoder.mark_served(story["file_path"])
         return send_file(story["file_path"], mimetype=_VIDEO_MIME.get(ext, "video/mp4"), conditional=True)
 
     # ── Diagnostics ───────────────────────────────────────────────────────────

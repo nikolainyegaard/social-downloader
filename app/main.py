@@ -169,6 +169,7 @@ _POLLING_ENDPOINTS = (
     '"GET /api/twitter/status HTTP',
     '"GET /api/twitter/queue HTTP',
     '"GET /api/twitter/channels HTTP',
+    '"GET /api/transcode/status HTTP',
     # feed polls carry query strings, so no trailing HTTP anchor
     '"GET /api/tiktok/recent/feed',
     '"GET /api/youtube/recent/feed',
@@ -402,6 +403,11 @@ if __name__ == "__main__":
     print(f"{_ts()} Startup: activity scores computed for all creators.")
 
     app = create_app()
+
+    # Before the loop threads: downloads enqueue into the transcode queue, so
+    # its table and recovery pass must exist first.
+    import transcoder
+    transcoder.start()
 
     print(f"{_ts()} Starting loop threads...")
     for _engine in ENGINES.values():

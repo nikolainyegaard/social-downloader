@@ -17,6 +17,7 @@
 | `TIKTOK_STATS_REFRESH_DAYS` | `7` | Days between full item_list stats refreshes per user |
 | `TIKTOK_USER_LOOP_INTERVAL_MINUTES` | `180` | Legacy, superseded by the session scheduler |
 | `OAUTH_FORCE_DISABLE` | `false` | `true` bypasses auth enforcement without editing oauth.json; use when locked out |
+| `TRANSCODE_FFMPEG` | `/opt/ffmpeg/ffmpeg` if present, else `ffmpeg` | ffmpeg binary the AV1 transcode job uses (needs SVT-AV1 and libvmaf) |
 
 Per-platform scheduling vars, `{P}` = `TIKTOK`, `YOUTUBE`, `INSTAGRAM`, `TWITTER`, `ONLYFANS`:
 
@@ -55,6 +56,8 @@ data/
   backups/{platform}_YYYYMMDD.db   all platform DBs, 14-day retention
   sessions/                     flask-session store; always present (no-op when OAuth disabled)
   platforms.json                disabled-platform set (Settings > General)
+  transcode.json                AV1 transcode job settings (Settings > General > Jobs)
+  transcode.db                  transcode queue + history; derived state, rebuilt by Backfill
   oauth.json                    OAuth config (enabled, client_id, client_secret, discovery_url, lifetime)
   .secret_key                   auto-generated Flask session secret, first startup, never user-managed
 
@@ -74,6 +77,7 @@ media/{platform}/@handle/
 
 Build notes:
 - ffmpeg (libaom-av1 is in the Bookworm package), plus `xdotool` for the in-app viewer's input injection
+- A second, static ffmpeg at `/opt/ffmpeg/` (BtbN build, bound to a major ffmpeg line so image builds pick up patch updates) used only by the AV1 transcode job: the Bookworm package carries SVT-AV1 1.4 and no libvmaf. The apt ffmpeg stays for everything else because its x11grab backs the in-app browser viewer, which static builds do not reliably include
 - Browser per arch: Google Chrome on amd64 (better bot-detection resistance, no arm64 build exists), patchright's Chromium on arm64 (`patchright install chromium`). config.py detects google-chrome at startup and falls back to the bundled Chromium, so call sites work on both arches
 - `ARG BUILD_VERSION=dev` / `ENV APP_VERSION=${BUILD_VERSION}`
 - `ENV MEDIA_DIR=/app/media` pins the media path; without it the fallback `./media` depends on CWD and 404s video/thumbnail serving

@@ -194,6 +194,29 @@ def create_app() -> Flask:
         issues = get_path_issues()
         return jsonify({"ok": not issues, "issues": issues})
 
+    # AV1 transcode job (Settings > General > Jobs). App-wide: the queue spans
+    # every platform's media, so it lives here rather than on a blueprint.
+    import transcoder
+
+    @app.route("/api/transcode/status")
+    def transcode_status():
+        return jsonify(transcoder.get_status())
+
+    @app.route("/api/transcode/settings", methods=["PATCH"])
+    def transcode_settings():
+        body = request.get_json(silent=True) or {}
+        return jsonify({"ok": True, "settings": transcoder.save_settings(body)})
+
+    @app.route("/api/transcode/backfill", methods=["POST"])
+    def transcode_backfill():
+        if not transcoder.start_backfill():
+            return jsonify({"error": "A scan is already running"}), 409
+        return jsonify({"ok": True})
+
+    @app.route("/api/transcode/retry-failed", methods=["POST"])
+    def transcode_retry_failed():
+        return jsonify({"ok": True, "retried": transcoder.retry_failed()})
+
     @app.route("/api/migrate/preview")
     def migrate_preview():
         # Aggregate legacy path prefixes across every platform DB

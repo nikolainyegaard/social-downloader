@@ -265,6 +265,12 @@ def download_post_media(post, dest_dir: str) -> str | None:
         _L.download_post(post, target=target)
     except Exception:
         return None
+    # Videos land as {shortcode}.mp4 or {shortcode}_N.mp4 (carousel); offer
+    # each to the transcode queue (it filters by size and settings itself).
+    from transcoder import maybe_enqueue
+    for name in os.listdir(target):
+        if name.startswith(shortcode) and name.endswith(".mp4"):
+            maybe_enqueue(str(target / name))
     for ext in ("mp4", "jpg", "jpeg", "png", "webp"):
         path = target / f"{shortcode}.{ext}"
         if path.exists():

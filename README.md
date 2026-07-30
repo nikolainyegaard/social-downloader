@@ -66,6 +66,12 @@ Settings > General lists every platform with an on/off toggle. Disabling a platf
 
 ---
 
+## Shrinking the library: AV1 transcoding
+
+Settings > General > Jobs can re-encode large videos to AV1 with Opus audio, typically cutting 50-90% of their size at visually transparent quality. Turn on the auto toggle to transcode new downloads over the size threshold as they arrive, or hit Backfill to queue the existing library, largest files first. Every transcode is verified against the original (size, duration, and a VMAF quality score) before the original is replaced, files being watched are swapped only after playback stops, and the job survives restarts and power cuts. Encoding runs one file at a time at low CPU priority so it will not starve other services on the host.
+
+---
+
 ## TikTok VPN / proxy (optional)
 
 Settings > TikTok > Network can route all TikTok traffic (browser, page fetches, downloads) through a proxy while the web UI and the other platforms stay on the server's own connection. Two modes: any HTTP proxy address, or a [gluetun](https://github.com/qdm12/gluetun) VPN sidecar. For gluetun, add a service named exactly `gluetun` next to the app (the app targets its fixed address `http://gluetun:8888`):

@@ -13,6 +13,7 @@ from yt_dlp.utils import DownloadError
 from config import MEDIA_DIR, DATA_DIR, _ts
 from thumbnailer import generate_thumbnail
 from photo_converter import encode_avif, CRF_PHOTO
+import transcoder
 
 MIN_VALID_SIZE_BYTES = 10_000
 
@@ -133,6 +134,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
         print(f"[{_ts()}] Thumbnail OK: {os.path.basename(thumb)}")
     else:
         print(f"[{_ts()}] Thumbnail FAILED for {video_id} (see [thumb] lines above)")
+    transcoder.maybe_enqueue(actual_path)
     ytdlp_data = _clean_ytdlp_info(ydl_info)
     extracted_upload_date: int | None = None
     if ydl_info:
@@ -386,6 +388,7 @@ def download_story(*, story_id: str, username: str, platform: str,
             stamp=stamp, posted_at=posted_at, cookies_path=cookies_path, proxy=proxy,
         )
         if path:
+            transcoder.maybe_enqueue(path)
             return path
 
     # A live cookies dict (the fetching session's jar) wins over cookies.txt:
@@ -485,6 +488,7 @@ def download_story(*, story_id: str, username: str, platform: str,
             if i > 1:
                 print(f"[{_ts()}] Story {story_id} saved via fallback candidate {i} ({host})")
             print(f"[{_ts()}] Story {story_id} saved ({len(r.content) // 1024} KB) -> {mp4_path}")
+            transcoder.maybe_enqueue(mp4_path)
             return mp4_path
         resp = r
         if i > 1:

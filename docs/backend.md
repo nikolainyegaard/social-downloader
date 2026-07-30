@@ -35,6 +35,19 @@ Frontend counterpart in common.js: `_cookiesRender` / `_cookiesLoad` / `_cookies
 
 `from __future__ import annotations` is present here: it defers annotation evaluation so `str | None` works on Python < 3.10.
 
+## transcoder.py
+
+Background AV1 transcode job (Settings > General > Jobs). Re-encodes large mp4 files to SVT-AV1 10-bit + Opus, one file at a time under `nice 19` with an `lp` thread cap. Settings in `data/transcode.json` (read per call: `enabled`, `paused`, `min_size_mb`, `crf`, `preset`, `audio_bitrate_kbps`, `threads`, `verify_vmaf`, VMAF floors); queue and history in `data/transcode.db` (`transcodes` table, one row per path, status pending/encoding/verifying/swap_pending/done/failed/skipped). The queue DB is derived state: a lost DB is rebuilt by a Backfill scan.
+
+- **`start()`**: init + crash recovery (mid-flight rows back to pending, their temp files removed) + the worker thread. Called from main.py before the loop threads so downloads can enqueue
+- **`maybe_enqueue(path)`**: post-download hook, called from downloader.py (videos, video stories) and the Twitter/Instagram/OnlyFans `download_post_media`. Filters on `enabled`, `.mp4`, and `min_size_mb`; never raises. Re-enqueues done/skipped rows (a re-downloaded file is H.264 again); failed rows stay failed until Retry failed
+- **`start_backfill()`**: walks MEDIA_DIR in a thread and INSERT OR IGNOREs every qualifying mp4; largest files dequeue first
+- **Per-file gates**, all of which must pass before the original is touched: ffmpeg exit 0, output strictly smaller, container duration within 1 s, full-file VMAF above the mean and per-frame-minimum floors. Failures keep the original and record the reason
+- **Swap**: encode goes to `.transcode-{name}` next to the original (same filesystem), mtime copied over (it carries the upload date), then one atomic `os.replace`. The `videos` schema stores only path/duration/width/height, all unchanged by a swap, so no DB follow-up is needed
+- **Playback deferral**: the engine's file/story routes call `mark_served(path)` on every range request; a finished transcode whose file was served within the last 60 s parks as `swap_pending` and the worker moves on, retrying between queue items. Without this, a swap mid-playback would feed the player ranges from a different file (each range request reopens the path)
+- **`FFMPEG`/`FFPROBE`**: `TRANSCODE_FFMPEG` env, else the image's static build at `/opt/ffmpeg/ffmpeg` (Bookworm's ffmpeg has SVT-AV1 1.4 and no libvmaf), else system ffmpeg. `vmaf_available()` is checked once; with verification on and no libvmaf the worker refuses to run and says so in the panel
+- **`get_status()`**: settings, current file (phase/pct/speed from `-progress`), counts per status, bytes saved, last 10 finished rows; polled by the General Jobs pane via `/api/transcode/status`
+
 ## photo_converter.py
 
 **`encode_avif(src, dst, crf) -> bool`**: FFmpeg `libaom-av1 -still-picture 1 -crf {crf} -b:v 0 -cpu-used 6`, writes `dst + ".tmp"` then renames. Always pass `-f avif` explicitly (see [gotchas.md](gotchas.md)). CRF: `CRF_PHOTO = 28`, `CRF_THUMB = 38`, `CRF_AVATAR = 30`. Startup thread has an 8 s delay so `init_db()` finishes first.

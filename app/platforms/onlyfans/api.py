@@ -428,6 +428,8 @@ def download_post_media(files: list[dict], video_id: str, dest_dir: str,
                 os.utime(saved, (upload_date, upload_date))
             except OSError:
                 pass
+        from transcoder import maybe_enqueue
+        maybe_enqueue(saved)
         if first_path is None:
             first_path = os.path.abspath(saved)
 

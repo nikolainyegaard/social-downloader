@@ -33,6 +33,18 @@ RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
       patchright install chromium; \
     fi
 
+# Static ffmpeg for the AV1 transcode job only (transcoder.py). Bookworm's
+# ffmpeg carries SVT-AV1 1.4 (2022) and no libvmaf, so the transcoder brings
+# its own build; everything else (yt-dlp merging, thumbnails, AVIF) stays on
+# the apt ffmpeg, whose x11grab backs the in-app browser viewer. Bound to the
+# ffmpeg 8.1 line: every image build picks up BtbN's latest 8.1 patch build.
+RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils && \
+    if [ "$(dpkg --print-architecture)" = "arm64" ]; then FFARCH=linuxarm64; else FFARCH=linux64; fi && \
+    wget -q -O /tmp/ffmpeg.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-${FFARCH}-gpl-8.1.tar.xz" && \
+    mkdir -p /opt/ffmpeg && \
+    tar -xJf /tmp/ffmpeg.tar.xz -C /opt/ffmpeg --strip-components=2 --wildcards '*/bin/ffmpeg' '*/bin/ffprobe' && \
+    rm /tmp/ffmpeg.tar.xz && rm -rf /var/lib/apt/lists/*
+
 COPY . .
 
 RUN mkdir -p /app/data /app/media

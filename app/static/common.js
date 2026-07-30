@@ -339,8 +339,201 @@ const _GENERAL_ACCESS_HTML = `
     fix the configuration, then remove the override and restart again.
   </p>`;
 
+// ── Settings > General > Jobs: the AV1 transcode job ─────────────────────────
+// App-wide (the queue spans every platform's media), so it lives on the
+// General page, not a platform's Jobs pane. Backend: transcoder.py via
+// /api/transcode/*. Poll runs only while the pane is visible; the job itself
+// keeps running server-side.
+
+const _GENERAL_JOBS_HTML = `
+  <div class="job-card">
+    <div class="job-card-hdr">
+      <div style="flex:1">
+        <div class="job-card-title">Transcode videos to AV1</div>
+        <div class="job-card-desc">
+          Re-encodes large videos to AV1 with Opus audio, cutting most of their
+          size at visually transparent quality. Runs one file at a time at low
+          CPU priority. Each transcode is written next to the original and only
+          replaces it after passing verification; a file being watched keeps
+          its original until playback stops.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
+        <button class="btn-primary" id="gjBackfillBtn" onclick="_gjBackfill()">Backfill</button>
+        <button class="btn-sm" id="gjPauseBtn" onclick="_gjPause()">Pause</button>
+      </div>
+    </div>
+    <label class="tracking-toggle" style="margin-top:14px">
+      <input type="checkbox" id="gjEnabled" onchange="_gjToggle('enabled', this)">
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span class="toggle-label">Transcode new downloads automatically</span>
+    </label>
+    <label class="tracking-toggle" style="margin-top:10px">
+      <input type="checkbox" id="gjVerify" onchange="_gjToggle('verify_vmaf', this)">
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span class="toggle-label">Verify quality with VMAF</span>
+    </label>
+    <p class="settings-note" style="margin:6px 0 0">
+      Scores every frame of the transcode against the original; a file below
+      the quality floor keeps its original. Roughly doubles the work per file.
+    </p>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:14px">
+      <label class="settings-label">
+        <span>Minimum file size</span>
+        <div class="loop-interval-field">
+          <input type="number" id="gjMinSize" min="1" class="loop-interval-input" onchange="_gjNum('min_size_mb', this)">
+          <span>MB</span>
+        </div>
+      </label>
+      <label class="settings-label">
+        <span>Encoder threads</span>
+        <div class="loop-interval-field">
+          <input type="number" id="gjThreads" min="1" max="64" class="loop-interval-input" onchange="_gjNum('threads', this)">
+          <span>threads</span>
+        </div>
+      </label>
+    </div>
+    <div class="job-status" id="job-transcode-status" style="display:none">
+      <div id="job-transcode-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-transcode-bar"></div></div></div>
+      <div class="job-status-text" id="job-transcode-text"></div>
+    </div>
+    <div id="gjMsg" style="display:none;font-size:12px;color:var(--orange);margin-top:10px"></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;min-height:16px">
+      <span id="gjStats" style="font-size:12px;color:var(--muted)"></span>
+      <button class="btn-sm" id="gjRetryBtn" style="display:none" onclick="_gjRetryFailed()">Retry failed</button>
+    </div>
+    <div id="gjRecent" style="font-size:11px;color:var(--muted);line-height:1.7;margin-top:6px"></div>
+  </div>`;
+
+let _gjTimer  = null;
+let _gjPaused = false;
+const _gjWidget = _makeJobWidget('transcode');
+
+function _gjFmtBytes(n) {
+  if (!n) return '0 MB';
+  return n >= 1073741824 ? (n / 1073741824).toFixed(1) + ' GB'
+                         : Math.round(n / 1048576) + ' MB';
+}
+
+async function _gjTick() {
+  const { ok, data } = await apiJSON('/api/transcode/status');
+  if (!ok) return;
+  const s = data.settings || {};
+  const c = data.counts || {};
+  _gjPaused = !!s.paused;
+
+  const pauseBtn = document.getElementById('gjPauseBtn');
+  if (pauseBtn) pauseBtn.textContent = _gjPaused ? 'Resume' : 'Pause';
+  const backfillBtn = document.getElementById('gjBackfillBtn');
+  if (backfillBtn) backfillBtn.disabled = !!data.scanning;
+
+  if (data.current) {
+    const name  = (data.current.path || '').split('/').pop();
+    const phase = data.current.phase === 'verifying' ? 'Verifying' : 'Encoding';
+    const speed = data.current.speed ? ` · ${data.current.speed}` : '';
+    _gjWidget.update({ barPct: data.current.pct || 0,
+                       label: `${phase} ${name} · ${data.current.pct || 0}%${speed}` });
+  } else if (data.scanning) {
+    _gjWidget.update({ barPct: null, label: 'Scanning the library…' });
+  } else if (_gjPaused && c.pending > 0) {
+    _gjWidget.update({ label: `Paused · ${c.pending} file(s) queued` });
+  } else if (c.pending > 0) {
+    _gjWidget.update({ barPct: null, label: `Waiting · ${c.pending} file(s) queued` });
+  } else {
+    _gjWidget.hide();
+  }
+
+  const msgEl = document.getElementById('gjMsg');
+  if (msgEl) {
+    msgEl.style.display = data.message ? '' : 'none';
+    msgEl.textContent   = data.message || '';
+  }
+
+  const statsEl = document.getElementById('gjStats');
+  if (statsEl) {
+    const bits = [];
+    if (c.pending)      bits.push(`${c.pending.toLocaleString()} queued`);
+    if (c.swap_pending) bits.push(`${c.swap_pending} waiting to swap`);
+    if (c.done)         bits.push(`${c.done.toLocaleString()} done`);
+    if (c.failed)       bits.push(`${c.failed} failed`);
+    if (c.skipped)      bits.push(`${c.skipped} skipped`);
+    if (data.saved_bytes) bits.push(`${_gjFmtBytes(data.saved_bytes)} saved`);
+    statsEl.textContent = bits.join(' · ');
+  }
+  const retryBtn = document.getElementById('gjRetryBtn');
+  if (retryBtn) retryBtn.style.display = c.failed > 0 ? '' : 'none';
+
+  const recentEl = document.getElementById('gjRecent');
+  if (recentEl) {
+    recentEl.innerHTML = (data.recent || []).map(r => {
+      const name = esc((r.path || '').split('/').pop());
+      if (r.status === 'done' && r.new_bytes && r.orig_bytes) {
+        const cut  = Math.round((1 - r.new_bytes / r.orig_bytes) * 100);
+        const vmaf = r.vmaf_mean != null ? ` · VMAF ${r.vmaf_mean}` : '';
+        return `<div>${name} <span style="color:var(--green)">-${cut}%${vmaf}</span></div>`;
+      }
+      const color = r.status === 'failed' ? 'var(--red)' : 'var(--muted)';
+      return `<div>${name} <span style="color:${color}">${esc(r.status)}${r.reason ? ': ' + esc(r.reason) : ''}</span></div>`;
+    }).join('');
+  }
+}
+
+async function _gjPatch(changes) {
+  const { ok, data } = await apiJSON('/api/transcode/settings',
+                                     { method: 'PATCH', body: JSON.stringify(changes) });
+  if (!ok) showToast(data.error || 'Could not save transcode settings', { type: 'error' });
+  return ok;
+}
+
+function _gjToggle(key, input) { _gjPatch({ [key]: input.checked }); }
+
+function _gjNum(key, input) {
+  const v = parseInt(input.value, 10);
+  if (!Number.isFinite(v) || v < 1) return;
+  _gjPatch({ [key]: v });
+}
+
+async function _gjPause() {
+  if (await _gjPatch({ paused: !_gjPaused })) _gjTick();
+}
+
+async function _gjBackfill() {
+  if (!await openConfirm({
+    title: 'Backfill transcodes?',
+    message: 'Scans the whole media library and queues every video over the size threshold that is not yet AV1, largest first. Encoding runs in the background one file at a time; originals are only replaced after the new file passes verification.',
+    confirmLabel: 'Backfill',
+  })) return;
+  const { ok, data } = await apiJSON('/api/transcode/backfill', { method: 'POST' });
+  if (!ok) { showToast(data.error || 'Could not start the scan', { type: 'error' }); return; }
+  _gjTick();
+}
+
+async function _gjRetryFailed() {
+  const { ok, data } = await apiJSON('/api/transcode/retry-failed', { method: 'POST' });
+  if (ok) { showToast(`${data.retried} file(s) queued again.`, { type: 'success', duration: 3000 }); _gjTick(); }
+}
+
+async function _gjShow() {
+  const { ok, data } = await apiJSON('/api/transcode/status');
+  if (ok) {
+    const s = data.settings || {};
+    const seed = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+    seed('gjEnabled', el => { el.checked = !!s.enabled; });
+    seed('gjVerify',  el => { el.checked = !!s.verify_vmaf; });
+    seed('gjMinSize', el => { el.value = String(s.min_size_mb); });
+    seed('gjThreads', el => { el.value = String(s.threads); });
+  }
+  if (!_gjTimer) _gjTimer = setInterval(_gjTick, 2000);
+  _gjTick();
+}
+
+function _gjHide() {
+  if (_gjTimer) { clearInterval(_gjTimer); _gjTimer = null; }
+}
+
 _settingsRegister('general', 'General', [
   { id: 'platforms', label: 'Platforms', html: _generalPlatformsHtml() },
+  { id: 'jobs',      label: 'Jobs',      html: _GENERAL_JOBS_HTML, onShow: _gjShow, onHide: _gjHide },
   { id: 'access',    label: 'Access',    html: _GENERAL_ACCESS_HTML, onShow: loadAuthSettings },
 ]);
 
