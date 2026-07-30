@@ -136,6 +136,7 @@
 <dialog id="mvModal" class="media-modal" onclick="if(event.target===this)closeMediaViewer()">
   <div class="mv-spinner" id="mvSpinner" style="display:none"></div>
   <div class="mv-topbar">
+    <button class="mv-btn" id="mvInfoBtn" title="Post details" aria-label="Post details" onclick="mvToggleInfo()"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.5v.01"/></svg></button>
     <button class="mv-btn" title="Download" aria-label="Download" onclick="mvDownloadCurrent()"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12L12 16M12 16L16 12M12 16V4M4 20H20"/></svg></button>
     <button class="mv-btn" id="mvLinkBtn" title="Open original post" aria-label="Open original post" onclick="mvOpenLink()" disabled><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
     <button class="mv-btn" title="Close" aria-label="Close" onclick="closeMediaViewer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -155,6 +156,7 @@
       <button class="mv-glyph" id="mvMuteBtn" title="Mute" style="display:none" onclick="mvToggleMute()"></button>
     </div>
     <button class="mv-nav" id="mvNext" aria-label="Next" onclick="mvStep(1)"><svg width="20" height="20" viewBox="-4.5 0 20 20" fill="currentColor" fill-rule="evenodd" xmlns="http://www.w3.org/2000/svg"><g transform="translate(-249,-6519)"><path d="M249.365851,6538.70769 C249.770764,6539.09744 250.426289,6539.09744 250.830166,6538.70769 L259.393407,6530.44413 C260.202198,6529.66364 260.202198,6528.39747 259.393407,6527.61699 L250.768031,6519.29246 C250.367261,6518.90671 249.720021,6518.90172 249.314072,6519.28247 C248.899839,6519.67121 248.894661,6520.31179 249.302681,6520.70653 L257.196934,6528.32352 C257.601847,6528.71426 257.601847,6529.34685 257.196934,6529.73759 L249.365851,6537.29462 C248.960938,6537.68437 248.960938,6538.31795 249.365851,6538.70769"/></g></svg></button>
+    <div class="mv-info" id="mvInfo"></div>
     <div class="mv-counter" id="mvCounter"></div>
   </div>
 </dialog>

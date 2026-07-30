@@ -454,7 +454,30 @@ function initChannelApp(cfg) {
            onerror="this.style.opacity='.15'"
            onclick="event.stopPropagation();${_openMediaFor(v)}" title="${_isMulti(v) ? 'View media' : isImg ? 'View photo' : 'Play video'}" style="cursor:pointer">
       ${_isMulti(v) ? _photoBadge : isImg ? _imageBadge : thumbBadge(v)}
+      ${v.duration ? `<span class="thumb-dur">${fmtDur(v.duration)}</span>` : ''}
     </div>`;
+  }
+
+  // Pre-rendered details HTML carried on viewer slides: a sidebar right of
+  // the media on desktop, an overlay behind the topbar info button on mobile.
+  // Rows render only when the platform populates the field.
+  function _mvInfoFor(v) {
+    const { label: statusLabel } = _videoStatus(v);
+    const rows = [
+      ['Status', statusLabel],
+      [cfg.viewsLabel || 'Views', v.view_count != null ? fmtCount(v.view_count) : null],
+      ['Likes', v.like_count != null ? fmtCount(v.like_count) : null],
+      ['Comments', v.comment_count != null ? fmtCount(v.comment_count) : null],
+      ['Duration', v.duration ? fmtDur(v.duration) : null],
+      ['Resolution', v.width && v.height ? `${v.width}x${v.height}` : null],
+      ['Uploaded', v.upload_date ? fmt.date(v.upload_date) : null],
+      ['Downloaded', v.download_date ? fmt.date(v.download_date) : null],
+      ['Deleted', v.deleted_at ? fmt.date(v.deleted_at) : null],
+      ['Post ID', esc(v.video_id)],
+    ].filter(([, val]) => val != null);
+    return `<div class="mv-info-title">Details</div>
+      ${v.description ? `<div class="mv-info-desc">${esc(v.description)}</div>` : ''}
+      ${rows.map(([l, val]) => _hgRow(l, val)).join('')}`;
   }
 
   function _defaultVideoActionBtns(v) {
@@ -523,6 +546,7 @@ function initChannelApp(cfg) {
       type: 'video',
       name: `${videoId}.${ext}`,
       link: v ? _videoUrl(v) : null,
+      info: v ? _mvInfoFor(v) : null,
     }]);
   });
 
@@ -531,7 +555,8 @@ function initChannelApp(cfg) {
     if (!ok || !data.files || !data.files.length) return;
     const v    = _creatorState.videos.find(x => x.video_id === videoId);
     const link = v ? _videoUrl(v) : null;
-    openMediaViewer(data.files.map(f => ({ ...f, link })));
+    const info = v ? _mvInfoFor(v) : null;
+    openMediaViewer(data.files.map(f => ({ ...f, link, info })));
   });
 
   // Story row to viewer slide; name feeds the viewer's Download action (the
@@ -2150,24 +2175,28 @@ function initChannelApp(cfg) {
   X('MSort',   f => _mMobSort(MODAL_CFG, f));
   X('MStatus', k => _mMobStatus(MODAL_CFG, k));
   X('MType',   k => _mMobType(MODAL_CFG, k));
-  // Single-choice: pick one field, or click the active one again to clear.
+  // Multi-select: each pill toggles its field; empty selection shows all.
   X('MToggleField', field => {
-    phistField = phistField.has(field) ? new Set() : new Set([field]);
-    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // rebuild the Fields dropdown
+    phistField.has(field) ? phistField.delete(field) : phistField.add(field);
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // repaint the field pills
     _renderPhistPanel();
   });
-  function _fieldsDd() {
+  function _fieldsPills() {
     const fields = [...new Set(phistData.map(e => e.field))];
     if (!fields.length) return '';
-    const menu = fields.map(f =>
-      `<button class="m-dd-opt${phistField.has(f) ? ' active' : ''}" onclick="${P}MToggleField('${esc(f)}',this)">${FIELD_LABELS[f] || f}<span>${phistField.has(f) ? _checkIcon : ''}</span></button>`).join('');
-    return _mDd('Fields', menu);
+    return `<div class="filter-pills multi">`
+      + fields.map(f =>
+          `<button class="filter-pill${phistField.has(f) ? ' active' : ''}" onclick="${P}MToggleField('${esc(f)}')">${FIELD_LABELS[f] || f}</button>`
+        ).join('')
+      + `</div>`;
   }
 
   // Toolbar context-filter content for the non-media views, shared by the
   // desktop toolbar (cfg.contextFilters) and the mobile filter row.
   function _modalContextFilters(view) {
-    return view === 'history' ? _fieldsDd() : '';
+    if (view === 'history') return _fieldsPills();
+    if (view === 'stats')   return _statHistRows ? _statRangePills() : '';
+    return '';
   }
 
   // Toolbar count line for the non-media views (cfg.viewCount): filtered change
@@ -2786,6 +2815,26 @@ function initChannelApp(cfg) {
   let _statHistRows   = null;   // fetched snapshot rows; null until loaded
   let _statHistSig    = null;   // JSON signature; gates live repaints
   let _statHistCharts = [];     // live uPlot instances, destroyed on leave
+  let _statRange      = 14;     // max days shown in the graphs (snapshots are one per day)
+
+  // Last n snapshots; one row per day, so this is the last n tracked days.
+  const _statRangeRows = () => _statHistRows && _statHistRows.slice(-_statRange);
+
+  X('MStatsRange', n => {
+    _statRange = n;
+    _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // repaint the active pill
+    if (_creatorState.view !== 'stats' || !_statHistRows) return;
+    _destroyStatsCharts();
+    _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statRangeRows());
+  });
+
+  function _statRangePills() {
+    return `<div class="filter-pills multi">`
+      + [14, 30, 60, 90].map(n =>
+          `<button class="filter-pill${_statRange === n ? ' active' : ''}" onclick="${P}MStatsRange(${n})">${n}d</button>`
+        ).join('')
+      + `</div>`;
+  }
 
   function _destroyStatsCharts() {
     _statHistCharts.forEach(c => { try { c.destroy(); } catch { /* already gone */ } });
@@ -2796,6 +2845,7 @@ function initChannelApp(cfg) {
     _destroyStatsCharts();
     _statHistRows = null;
     _statHistSig  = null;
+    _statRange    = 14;
     const panel = _el('StatsPanel');
     if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
   }
@@ -2811,7 +2861,7 @@ function initChannelApp(cfg) {
     if (!ok) { panel.innerHTML = '<div class="vlist-empty">Could not load stats. Close and reopen to retry.</div>'; return; }
     _statHistRows = data || [];
     _statHistSig  = JSON.stringify(data);
-    _statHistCharts = _renderStatsCharts(panel, _statHistRows);
+    _statHistCharts = _renderStatsCharts(panel, _statRangeRows());
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);  // day count now known
   }
 
@@ -2822,7 +2872,7 @@ function initChannelApp(cfg) {
     _statHistSig  = JSON.stringify(data);
     _statHistRows = data || [];
     _destroyStatsCharts();
-    _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statHistRows);
+    _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statRangeRows());
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);
   }
 
@@ -2835,7 +2885,7 @@ function initChannelApp(cfg) {
     _statHistResizeT = setTimeout(() => {
       if (_creatorState.view !== 'stats' || !_statHistRows) return;
       _destroyStatsCharts();
-      _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statHistRows);
+      _statHistCharts = _renderStatsCharts(_el('StatsPanel'), _statRangeRows());
     }, 200);
   });
 

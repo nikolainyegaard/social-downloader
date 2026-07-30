@@ -131,6 +131,14 @@ def _profile_from_username(handle: str) -> instaloader.Profile:
         except instaloader.ProfileNotExistsException:
             raise
         except Exception as e:
+            if "HTTP 429" in str(e):
+                # The fallback below hits the same endpoint on the same
+                # session, so it cannot succeed; instaloader's 429 handling
+                # sleeps 20+ minutes before raising. Fail fast instead.
+                # Phrase without "does not exist" so this reads as transient
+                raise instaloader.ConnectionException(
+                    f"Profile lookup for {handle} rate limited (429), "
+                    "skipping search fallback") from e
             web_err = repr(e)
     else:
         web_err = "no session login"

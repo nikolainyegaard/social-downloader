@@ -11,8 +11,12 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - OnlyFans now has its own accent theme and tab identity dot instead of rendering in the neutral blue with a grey dot
 - Platforms can now be enabled and disabled from Settings > General. Disabling a platform takes effect immediately: its scheduled sessions, manual runs, and background loops stop (an in-flight session is stopped ASAP), its API routes are rejected, and its tab and settings disappear until it is enabled again. Saved media and tracked creators are kept, and re-enabling resumes the normal schedule
 - A new General settings page holds everything that belongs to no platform: the platform on/off toggles and the app's OIDC login (moved from the old Access section)
+- The creator modal's Stats tab has a day-range filter (14, 30, 60, 90 days, default 14) in the nav bar, capping how far back the graphs reach; spans shorter than the selected range show everything available as before
+- Video thumbnails in the list view show the video duration (MM:SS) in the lower left corner, and grid cells show the duration where the view count used to be
+- The media viewer has a post details panel (description, status, views, likes, comments, duration, resolution, dates, post ID): a sidebar next to the media on desktop, and an overlay behind a new info button in the top action row on mobile. Stories are unaffected
 
 ### Changed
+- The History tab's field filter is a pill row in the nav bar instead of a dropdown menu, and now selects multiple fields at once (empty selection shows all)
 - The story ring renders at a consistent weight on creator cards and in the creator modal, scaled to the avatar size instead of looking thick on cards and thin on the large modal avatar
 - One close button: every modal and overlay close is the same X icon in one of two sizes; toasts, connection rows, and note fields use the same icon instead of four hand-drawn variants
 - Dropdown carets, menu checkmarks, and the stories calendar arrows are drawn icons instead of text characters, and the private-account lock matches the scroll-lock padlock style
@@ -32,6 +36,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 
 ### Fixed
+- Instagram sessions no longer hang 20+ minutes when the profile lookup is rate limited: a 429 from the web profile endpoint now fails immediately instead of retrying the same limit through instaloader's long sleep-and-retry fallback
 - Text inside modals no longer renders blurry on desktop: the backdrop blur sat on the dialog element itself, which pulled the modal's own content into the blurred compositing layer; the blur now lives behind the dialog instead
 - Story rings and every other accent-colored element inside modals now use the active platform's accent color: the theme was scoped to the page, so modals fell back to the neutral blue
 - The story ring on the large modal avatar is slightly thinner; the fully proportional stroke read too heavy next to the cards

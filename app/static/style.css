@@ -1433,7 +1433,10 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 .video-grid--wide { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .video-grid--wide .vgrid-cell { aspect-ratio: 16/9; }
 .vgrid-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 16px 5px 4px; background: linear-gradient(transparent, rgba(0,0,0,.65)); display: flex; align-items: flex-end; justify-content: space-between; pointer-events: none; }
-.vgrid-views  { font-size: 11px; font-weight: 600; color: var(--on-media); text-shadow: 0 1px 2px rgba(0,0,0,.8); line-height: 1; }
+.vgrid-dur  { font-size: 11px; font-weight: 600; color: var(--on-media); text-shadow: 0 1px 2px rgba(0,0,0,.8); line-height: 1; }
+
+/* Duration badge on list-view thumbnails (lower left corner) */
+.thumb-dur { position: absolute; bottom: 3px; left: 3px; font-size: 10px; font-weight: 600; color: var(--on-media); background: rgba(0,0,0,.7); padding: 1px 4px; border-radius: var(--radius-sm); line-height: 1.3; pointer-events: none; }
 
 .video-thumb {
   width: 90px; height: 51px;
@@ -1926,6 +1929,39 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 .mv-glyph svg { width: 20px; height: 20px; display: block; }
 #mvPlayBtn { left: 6px; }
 #mvMuteBtn { right: 6px; }
+/* Post details panel. Desktop: a card sitting right of the media inside the
+   viewer's flex row. Mobile: hidden until the topbar info button toggles
+   .mv-info-open, then an overlay card pinned below the topbar. Only slides
+   opened from a video row carry info (.mv-has-info); stories never do. */
+.mv-info {
+  display: none;
+  width: 260px;
+  flex-shrink: 0;
+  align-self: center;
+  max-height: calc(100svh - 128px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.mv-info-title { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.mv-info-desc  { font-size: 12px; color: var(--text); line-height: 1.5; word-break: break-word; margin-bottom: 10px; }
+#mvInfoBtn { display: none; }
+@media (min-width: 641px) {
+  .mv-has-info .mv-info { display: block; }
+}
+@media (max-width: 640px) {
+  .mv-has-info #mvInfoBtn { display: flex; }
+  .mv-info-open .mv-info {
+    display: block;
+    position: fixed;
+    left: 14px; right: 14px; top: 66px;
+    width: auto;
+    max-height: calc(100svh - 132px);
+    z-index: 7;
+  }
+}
 .mv-nav {
   flex-shrink: 0;
   width: 36px; height: 36px;
