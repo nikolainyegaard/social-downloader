@@ -521,8 +521,11 @@ async function _gjTick() {
   const c = data.counts || {};
   _gjPaused = !!s.paused;
 
+  // Every write below is gated on the value actually changing: the 2 s poll
+  // must not replace identical DOM nodes, that collapses any text selection
+  // the user is dragging in the panel
   const pauseBtn = document.getElementById('gjPauseBtn');
-  if (pauseBtn) pauseBtn.textContent = _gjPaused ? 'Resume' : 'Pause';
+  if (pauseBtn) _setText(pauseBtn, _gjPaused ? 'Resume' : 'Pause');
   const backfillBtn = document.getElementById('gjBackfillBtn');
   if (backfillBtn) backfillBtn.disabled = !!data.scanning;
   const skipBtn = document.getElementById('gjSkipBtn');
@@ -547,7 +550,7 @@ async function _gjTick() {
   const msgEl = document.getElementById('gjMsg');
   if (msgEl) {
     msgEl.style.display = data.message ? '' : 'none';
-    msgEl.textContent   = data.message || '';
+    _setText(msgEl, data.message || '');
   }
 
   const statsEl = document.getElementById('gjStats');
@@ -560,7 +563,7 @@ async function _gjTick() {
     if (c.failed)       bits.push(`${c.failed} failed`);
     if (c.skipped)      bits.push(`${c.skipped} skipped`);
     if (data.saved_bytes) bits.push(`${_gjFmtBytes(data.saved_bytes)} saved`);
-    statsEl.textContent = bits.join(' · ');
+    _setText(statsEl, bits.join(' · '));
   }
   const retryBtn = document.getElementById('gjRetryBtn');
   if (retryBtn) retryBtn.style.display = c.failed > 0 ? '' : 'none';
@@ -573,19 +576,35 @@ async function _gjTick() {
       if (r.status === 'done' && r.new_bytes && r.orig_bytes) {
         const cut = Math.round((1 - r.new_bytes / r.orig_bytes) * 100);
         return name
-          + `<div style="text-align:right;white-space:nowrap">${_gjFmtBytes(r.orig_bytes)} → ${_gjFmtBytes(r.new_bytes)}</div>`
-          + `<div style="text-align:right;color:var(--green)">-${cut}%</div>`
-          + `<div style="text-align:right;white-space:nowrap">${r.vmaf_mean != null ? 'VMAF ' + r.vmaf_mean : ''}</div>`
-          + `<div style="text-align:right;white-space:nowrap">${r.elapsed ? _gjFmtSecs(r.elapsed) : ''}</div>`;
+          + `<div style="white-space:nowrap">${_gjFmtBytes(r.orig_bytes)} → ${_gjFmtBytes(r.new_bytes)}</div>`
+          + `<div style="color:var(--green)">-${cut}%</div>`
+          + `<div style="white-space:nowrap">${r.vmaf_mean != null ? 'VMAF ' + r.vmaf_mean : ''}</div>`
+          + `<div style="white-space:nowrap">${r.elapsed ? _gjFmtSecs(r.elapsed) : ''}</div>`;
       }
       const color = r.status === 'failed' ? 'var(--red)' : 'var(--muted)';
+      const detail = `${esc(r.status)}${r.reason ? ': ' + esc(r.reason) : ''}`;
+      // The absolutely positioned span keeps this cell out of track sizing: a
+      // long failure reason spanning columns 2-5 would otherwise inflate the
+      // max-content columns for every row. It ellipsizes at the panel edge
+      // instead; the title attribute carries the full text
       return name
-        + `<div style="grid-column:2/-1;text-align:right;color:${color};${ell}">${esc(r.status)}${r.reason ? ': ' + esc(r.reason) : ''}</div>`;
+        + `<div style="grid-column:2/-1;position:relative"><span style="position:absolute;inset:0;color:${color};${ell}" title="${detail}">${detail}</span></div>`;
     });
-    recentEl.innerHTML = rows.length
-      ? `<div style="display:grid;grid-template-columns:minmax(0,1fr) repeat(4,auto);column-gap:12px">${rows.join('')}</div>`
+    // Every column hugs its content and packs left; only the name column may
+    // shrink (to its ellipsis) when the panel is too narrow for the whole row
+    const html = rows.length
+      ? `<div style="display:grid;grid-template-columns:minmax(0,max-content) repeat(4,max-content);column-gap:14px">${rows.join('')}</div>`
       : '';
+    if (_gjRecentHtml !== html) { _gjRecentHtml = html; recentEl.innerHTML = html; }
   }
+}
+
+// Compared against the source string, not el.innerHTML: the getter re-serializes
+// the markup, which need not round-trip character for character
+let _gjRecentHtml = null;
+
+function _setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
 }
 
 // One save toast at a time: a rapid series of changes (spinning a number
