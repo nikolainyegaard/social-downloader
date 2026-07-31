@@ -1861,7 +1861,12 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
      the row centers as one unit, so media sized to the full cap pushes the
      panel past the right edge. One token keeps the two in step. */
   --mv-info-w: 260px;
+  /* The flex row's box extends over empty space (e.g. above and below a short
+     details panel next to tall media). Let clicks there fall through to the
+     dialog so its backdrop-click close fires; children stay interactive. */
+  pointer-events: none;
 }
+.mv-inner > * { pointer-events: auto; }
 /* The stage wraps exactly the visible media, so viewer chrome (progress bars,
    tap zones, top gradient, flash, seek) parents to it and stays aligned with
    the media regardless of what else shares the modal's flex row. Radius +
@@ -1998,20 +2003,34 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
    the play and mute glyphs, centered on their height */
 .mv-seek {
   position: absolute;
-  left: 42px; right: 42px; bottom: 19px;
+  /* The input is much taller than the drawn 4px track (painted on the track
+     pseudo-elements below) so seeking does not demand a pixel-perfect click.
+     bottom keeps the track's center where it was: 19px + 4px/2 = 21px. */
+  left: 42px; right: 42px; bottom: 10px;
   width: calc(100% - 84px);
-  height: 4px;
+  height: 22px;
   margin: 0;
   appearance: none;
   -webkit-appearance: none;
-  background: var(--media-dim);
-  border-radius: var(--radius-bar);
+  background: none;
   z-index: 4;
   cursor: pointer;
+}
+.mv-seek::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--media-dim);
+  border-radius: var(--radius-bar);
+}
+.mv-seek::-moz-range-track {
+  height: 4px;
+  background: var(--media-dim);
+  border-radius: var(--radius-bar);
 }
 .mv-seek::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 12px; height: 12px;
+  /* WebKit tops the thumb on the track edge; recenter on the 4px track */
+  margin-top: -4px;
   border-radius: 50%; border: none;
   background: var(--on-media);
 }

@@ -41,6 +41,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 
 ### Fixed
+- The video seek bar's click target is much taller than the drawn line, so grabbing it no longer needs a pixel-perfect click
+- Clicking the empty space around the media viewer's content (for example above or below the details panel) now closes the viewer; the invisible layout row was swallowing those clicks
 - A transcode queue row whose file was missing when the worker reached it is no longer dead forever: the Backfill scan requeues such rows once their file exists again, and a file that returned already transcoded is credited in the stats instead of being skipped
 - The audio-only file cleanup job now removes the matching database entry on every platform: it deleted files from all platforms' folders but only cleaned TikTok's database, leaving other platforms with orphaned records pointing at removed files
 - Instagram sessions no longer hang 20+ minutes when the profile lookup is rate limited: a 429 from the web profile endpoint now fails immediately instead of retrying the same limit through instaloader's long sleep-and-retry fallback
