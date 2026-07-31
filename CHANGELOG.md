@@ -8,6 +8,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Added
 - Videos can now be transcoded to AV1 with Opus audio (Settings > General > Jobs), cutting most of their size at visually transparent quality. New downloads over a size threshold transcode automatically when enabled, and a Backfill button queues the existing library, largest files first. Every transcode is verified (size, duration, and a full VMAF quality score with configurable floors) before the original is replaced; failures keep the original and can be retried from the panel. Encoding runs one file at a time at low CPU priority with a configurable thread cap, survives restarts and power cuts, and a file being watched keeps its original until playback stops. The panel shows live progress, queue counts, space saved, and recent results
+- The transcode job has a Skip current button to stop the in-flight encode without waiting for it: the file is parked as failed until Retry failed, the original untouched
 - Story rings on avatars now track what you have watched: a sweeping accent-gold ring means live stories not yet viewed in the app, and it fades to a dim static ring once every live story has been viewed. Viewed state is stored per story and updates live as you watch
 - OnlyFans now has its own accent theme and tab identity dot instead of rendering in the neutral blue with a grey dot
 - Platforms can now be enabled and disabled from Settings > General. Disabling a platform takes effect immediately: its scheduled sessions, manual runs, and background loops stop (an in-flight session is stopped ASAP), its API routes are rejected, and its tab and settings disappear until it is enabled again. Saved media and tracked creators are kept, and re-enabling resumes the normal schedule
@@ -38,6 +39,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 
 ### Fixed
+- A transcode queue row whose file was missing when the worker reached it is no longer dead forever: the Backfill scan requeues such rows once their file exists again, and a file that returned already transcoded is credited in the stats instead of being skipped
 - The audio-only file cleanup job now removes the matching database entry on every platform: it deleted files from all platforms' folders but only cleaned TikTok's database, leaving other platforms with orphaned records pointing at removed files
 - Instagram sessions no longer hang 20+ minutes when the profile lookup is rate limited: a 429 from the web profile endpoint now fails immediately instead of retrying the same limit through instaloader's long sleep-and-retry fallback
 - Text inside modals no longer renders blurry on desktop: the backdrop blur sat on the dialog element itself, which pulled the modal's own content into the blurred compositing layer; the blur now lives behind the dialog instead

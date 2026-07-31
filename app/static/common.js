@@ -360,6 +360,7 @@ const _GENERAL_JOBS_HTML = `
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
         <button class="btn-primary" id="gjBackfillBtn" onclick="_gjBackfill()">Backfill</button>
+        <button class="btn-sm" id="gjSkipBtn" onclick="_gjSkip()" style="display:none">Skip current</button>
         <button class="btn-sm" id="gjPauseBtn" onclick="_gjPause()" style="min-width:80px">Pause</button>
       </div>
     </div>
@@ -532,6 +533,8 @@ async function _gjTick() {
   if (pauseBtn) pauseBtn.textContent = _gjPaused ? 'Resume' : 'Pause';
   const backfillBtn = document.getElementById('gjBackfillBtn');
   if (backfillBtn) backfillBtn.disabled = !!data.scanning;
+  const skipBtn = document.getElementById('gjSkipBtn');
+  if (skipBtn) skipBtn.style.display = data.current ? '' : 'none';
 
   if (data.current) {
     const name  = (data.current.path || '').split('/').pop();
@@ -559,6 +562,7 @@ async function _gjTick() {
   if (statsEl) {
     const bits = [];
     if (c.pending)      bits.push(`${c.pending.toLocaleString()} queued`);
+    if (c.remote)       bits.push(`${c.remote.toLocaleString()} on another machine`);
     if (c.swap_pending) bits.push(`${c.swap_pending} waiting to swap`);
     if (c.done)         bits.push(`${c.done.toLocaleString()} done`);
     if (c.failed)       bits.push(`${c.failed} failed`);
@@ -611,6 +615,17 @@ async function _gjBackfill() {
   })) return;
   const { ok, data } = await apiJSON('/api/transcode/backfill', { method: 'POST' });
   if (!ok) { showToast(data.error || 'Could not start the scan', { type: 'error' }); return; }
+  _gjTick();
+}
+
+async function _gjSkip() {
+  if (!await openConfirm({
+    title: 'Skip this file?',
+    message: 'Stops the current encode and moves on to the next file. The original is untouched; the skipped file counts as failed until you press Retry failed.',
+    confirmLabel: 'Skip',
+  })) return;
+  const { ok, data } = await apiJSON('/api/transcode/skip-current', { method: 'POST' });
+  if (!ok) showToast(data.error || 'Nothing to skip', { type: 'error' });
   _gjTick();
 }
 

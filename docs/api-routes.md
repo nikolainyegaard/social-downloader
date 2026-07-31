@@ -78,6 +78,7 @@ Global:
 /api/transcode/settings           PATCH any transcode.json key (enabled, paused, min_size_mb, ...)
 /api/transcode/backfill           POST: scan the library and queue qualifying files (409 while scanning)
 /api/transcode/retry-failed       POST: requeue every failed row
+/api/transcode/skip-current       POST: kill the in-flight encode; the file is parked as failed (409 when idle)
 /api/jobs/photo-converter/status|start    JPEG to AVIF conversion, all platforms
 /api/jobs/thumbnail-repair/status|start   undecodable thumbnails, all platforms
 /api/jobs/audio-cleanup/status|start      delete audio-only files, all platforms

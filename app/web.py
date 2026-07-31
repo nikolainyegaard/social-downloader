@@ -52,7 +52,7 @@ def create_app() -> Flask:
 
     # Always initialize flask-session and ProxyFix regardless of whether OAuth is
     # currently enabled, so that enabling it in the UI and restarting the container
-    # is the only step required -- no code path changes needed.
+    # is the only step required; no code path changes needed.
     sessions_dir = os.path.join(DATA_DIR, "sessions")
     os.makedirs(sessions_dir, exist_ok=True)
     app.config.update(
@@ -216,6 +216,12 @@ def create_app() -> Flask:
     @app.route("/api/transcode/retry-failed", methods=["POST"])
     def transcode_retry_failed():
         return jsonify({"ok": True, "retried": transcoder.retry_failed()})
+
+    @app.route("/api/transcode/skip-current", methods=["POST"])
+    def transcode_skip_current():
+        if not transcoder.skip_current():
+            return jsonify({"error": "No file is being processed"}), 409
+        return jsonify({"ok": True})
 
     # App-wide maintenance jobs (Settings > General > Jobs). These operate on
     # every platform's media or databases, so they live on the app and not a

@@ -24,6 +24,12 @@ when a finished transcode finds its file served within the grace window the
 row parks as swap_pending and the worker moves on, retrying the swap between
 queue items instead of blocking on it.
 
+Offloading: queue rows claimed for processing outside the app (by setting
+status 'remote' directly in the DB) are ignored by the worker. When such a
+row returns to pending and its file probes as AV1 smaller than the
+orig_bytes recorded at enqueue time, the worker credits the saving as done
+with reason 'transcoded externally' instead of skipping.
+
 Uses its own ffmpeg (TRANSCODE_FFMPEG, default /opt/ffmpeg/ffmpeg from the
 image's static build) because Debian bookworm's ffmpeg carries SVT-AV1 1.4
 and no libvmaf. Encodes run serially under nice 19 with a thread cap, so the
@@ -82,6 +88,12 @@ _state: dict = {
 
 _wake = threading.Event()
 _worker_started = False
+
+# The in-flight ffmpeg process, so Skip current can kill it. _skip_requested
+# distinguishes a user cancel from a genuine encode failure.
+_proc_lock = threading.Lock()
+_current_proc: subprocess.Popen | None = None
+_skip_requested = False
 
 _served_lock: threading.Lock = threading.Lock()
 _served: dict[str, float] = {}   # abs path -> monotonic time of last serve
@@ -201,6 +213,19 @@ def start_backfill() -> bool:
             min_bytes = get_settings()["min_size_mb"] * 1024 * 1024
             now = int(time.time())
             with _db() as conn:
+                # Rows parked because their file was gone: if the file is back
+                # (moved away for external transcoding, restored from backup),
+                # requeue them. orig_bytes is kept, so a file that returned
+                # already transcoded still credits its saving.
+                gone = [r["path"] for r in conn.execute(
+                    "SELECT path FROM transcodes WHERE status = 'skipped' "
+                    "AND reason IN ('file missing', 'file removed before swap')")]
+                for p in gone:
+                    if os.path.exists(p):
+                        conn.execute(
+                            "UPDATE transcodes SET status = 'pending', reason = NULL, "
+                            "queued_at = ? WHERE path = ?", (now, p))
+                        added += 1
                 for dirpath, _dirs, files in os.walk(MEDIA_DIR):
                     for name in files:
                         if not name.lower().endswith(".mp4") or name.startswith(_TMP_PREFIX):
@@ -234,6 +259,30 @@ def retry_failed() -> int:
             "UPDATE transcodes SET status = 'pending', reason = NULL WHERE status = 'failed'")
     _wake.set()
     return cur.rowcount
+
+
+def skip_current() -> bool:
+    """Kill the in-flight ffmpeg. The file is marked failed with reason
+    'cancelled', so it stays parked until Retry failed; the original is
+    untouched. Returns False when nothing is running."""
+    global _skip_requested
+    with _proc_lock:
+        if _current_proc is None:
+            return False
+        _skip_requested = True
+        try:
+            _current_proc.terminate()
+        except OSError:
+            pass
+    return True
+
+
+def _consume_skip() -> bool:
+    global _skip_requested
+    with _proc_lock:
+        was = _skip_requested
+        _skip_requested = False
+    return was
 
 
 # ── Playback tracking ─────────────────────────────────────────────────────────
@@ -306,11 +355,14 @@ def _run_ffmpeg(cmd: list[str], duration: float | None, path: str, phase: str) -
     """Run ffmpeg with -progress on stdout, feeding the live panel. Returns
     (returncode, error tail). stderr is merged in; SVT's banner lines are
     filtered out of the tail so a real error is what remains."""
+    global _current_proc
     errors: list[str] = []
     with _state_lock:
         _state["current"] = {"path": path, "phase": phase, "pct": 0, "speed": ""}
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, errors="replace")
+    with _proc_lock:
+        _current_proc = proc
     assert proc.stdout is not None
     for line in proc.stdout:
         line = line.strip()
@@ -337,6 +389,8 @@ def _run_ffmpeg(cmd: list[str], duration: float | None, path: str, phase: str) -
                 errors.append(line)
                 del errors[:-5]
     proc.wait()
+    with _proc_lock:
+        _current_proc = None
     return proc.returncode, " | ".join(errors)[-300:]
 
 
@@ -379,7 +433,20 @@ def _process(path: str, s: dict) -> None:
             _finish(path, "skipped", reason="file missing")
             return
         if _video_codec(path) == "av1":
-            _finish(path, "skipped", reason="already AV1")
+            # Smaller than the size recorded at enqueue time means the file
+            # was transcoded outside the app (offloaded to another machine):
+            # credit the saving instead of skipping.
+            size = os.path.getsize(path)
+            with _db() as conn:
+                row = conn.execute("SELECT orig_bytes FROM transcodes WHERE path = ?",
+                                   (path,)).fetchone()
+            orig = row["orig_bytes"] if row else None
+            if orig and size < orig:
+                _finish(path, "done", new_bytes=size, reason="transcoded externally")
+                print(f"[{_ts()}] [transcode] credited external transcode for {path}: "
+                      f"{orig:,} -> {size:,} bytes")
+            else:
+                _finish(path, "skipped", reason="already AV1")
             return
 
         orig_bytes = os.path.getsize(path)
@@ -410,7 +477,8 @@ def _process(path: str, s: dict) -> None:
              "-f", "mp4", tmp],
             duration, path, "encoding")
         if rc != 0:
-            _finish(path, "failed", reason=f"encode failed: {err or f'exit {rc}'}")
+            _finish(path, "failed", reason="cancelled" if _consume_skip()
+                    else f"encode failed: {err or f'exit {rc}'}")
             return
 
         new_bytes = os.path.getsize(tmp)
@@ -428,7 +496,8 @@ def _process(path: str, s: dict) -> None:
             _set_row(path, status="verifying")
             scores = _measure_vmaf(tmp, path, s["threads"], duration)
             if scores is None:
-                _finish(path, "failed", new_bytes=new_bytes, reason="VMAF measurement failed")
+                _finish(path, "failed", new_bytes=new_bytes,
+                        reason="cancelled" if _consume_skip() else "VMAF measurement failed")
                 return
             vmaf_mean, vmaf_min = scores
             if vmaf_mean < s["vmaf_mean_floor"] or vmaf_min < s["vmaf_min_floor"]:
@@ -455,6 +524,9 @@ def _process(path: str, s: dict) -> None:
         print(f"[{_ts()}] [transcode] error on {path}: {type(e).__name__}: {e}")
         _finish(path, "failed", reason=f"{type(e).__name__}: {e}"[:300])
     finally:
+        # A skip that raced a natural exit could leave the flag set; never
+        # let it leak into the next file.
+        _consume_skip()
         with _state_lock:
             _state["current"] = None
         with _db() as conn:
@@ -579,7 +651,8 @@ def get_status() -> dict:
         "scanning":       scanning,
         "message":        message,
         "counts": {k: counts.get(k, 0) for k in
-                   ("pending", "encoding", "verifying", "swap_pending", "done", "failed", "skipped")},
+                   ("pending", "remote", "encoding", "verifying", "swap_pending",
+                    "done", "failed", "skipped")},
         "saved_bytes":    saved,
         "recent":         recent,
     }
