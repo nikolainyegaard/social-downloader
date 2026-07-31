@@ -522,6 +522,12 @@ function _gjFmtBytes(n) {
                          : Math.round(n / 1048576) + ' MB';
 }
 
+function _gjFmtSecs(s) {
+  if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m`;
+  if (s >= 60)   return `${Math.round(s / 60)}m`;
+  return `${s}s`;
+}
+
 async function _gjTick() {
   const { ok, data } = await apiJSON('/api/transcode/status');
   if (!ok) return;
@@ -580,7 +586,8 @@ async function _gjTick() {
       if (r.status === 'done' && r.new_bytes && r.orig_bytes) {
         const cut  = Math.round((1 - r.new_bytes / r.orig_bytes) * 100);
         const vmaf = r.vmaf_mean != null ? ` · VMAF ${r.vmaf_mean}` : '';
-        return `<div>${name} <span style="color:var(--green)">-${cut}%${vmaf}</span></div>`;
+        const took = r.elapsed ? ` · ${_gjFmtSecs(r.elapsed)}` : '';
+        return `<div>${name} <span style="color:var(--green)">-${cut}%${vmaf}</span><span style="color:var(--muted)">${took}</span></div>`;
       }
       const color = r.status === 'failed' ? 'var(--red)' : 'var(--muted)';
       return `<div>${name} <span style="color:${color}">${esc(r.status)}${r.reason ? ': ' + esc(r.reason) : ''}</span></div>`;

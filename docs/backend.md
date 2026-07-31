@@ -48,7 +48,7 @@ Background AV1 transcode job (Settings > General > Jobs). Re-encodes large mp4 f
 - **Swap**: encode goes to `.transcode-{name}` next to the original (same filesystem), mtime copied over (it carries the upload date), then one atomic `os.replace`. The `videos` schema stores only path/duration/width/height, all unchanged by a swap, so no DB follow-up is needed
 - **Playback deferral**: the engine's file/story routes call `mark_served(path)` on every range request; a finished transcode whose file was served within the last 60 s parks as `swap_pending` and the worker moves on, retrying between queue items. Without this, a swap mid-playback would feed the player ranges from a different file (each range request reopens the path)
 - **`FFMPEG`/`FFPROBE`**: `TRANSCODE_FFMPEG` env, else the image's static build at `/opt/ffmpeg/ffmpeg` (Bookworm's ffmpeg has SVT-AV1 1.4 and no libvmaf), else system ffmpeg. `vmaf_available()` is checked once; with verification on and no libvmaf the worker refuses to run and says so in the panel
-- **`get_status()`**: settings, current file (phase/pct/speed from `-progress`), counts per status, bytes saved, last 10 finished rows; polled by the General Jobs pane via `/api/transcode/status`
+- **`get_status()`**: settings, current file (phase/pct/speed from `-progress`), counts per status, bytes saved, last 10 finished rows (incl. per-file processing seconds, the `elapsed` column); polled by the General Jobs pane via `/api/transcode/status`
 
 ## photo_converter.py
 

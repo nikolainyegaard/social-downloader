@@ -150,10 +150,14 @@ def _init_db() -> None:
                 vmaf_mean   REAL,
                 vmaf_min    REAL,
                 queued_at   INTEGER,
-                finished_at INTEGER
+                finished_at INTEGER,
+                elapsed     INTEGER
             );
             CREATE INDEX IF NOT EXISTS idx_transcodes_status ON transcodes(status);
         """)
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(transcodes)")}
+        if "elapsed" not in cols:
+            conn.execute("ALTER TABLE transcodes ADD COLUMN elapsed INTEGER")
 
 
 def _tmp_path(path: str) -> str:
@@ -462,6 +466,10 @@ def _process(path: str, s: dict) -> None:
         with _state_lock:
             _state["message"] = ""
 
+        t0 = time.monotonic()
+        def _secs() -> int:
+            return int(time.monotonic() - t0)
+
         _set_row(path, status="encoding", orig_bytes=orig_bytes)
         print(f"[{_ts()}] [transcode] encoding {path} ({orig_bytes:,} bytes)")
         rc, err = _run_ffmpeg(
@@ -477,17 +485,17 @@ def _process(path: str, s: dict) -> None:
              "-f", "mp4", tmp],
             duration, path, "encoding")
         if rc != 0:
-            _finish(path, "failed", reason="cancelled" if _consume_skip()
+            _finish(path, "failed", elapsed=_secs(), reason="cancelled" if _consume_skip()
                     else f"encode failed: {err or f'exit {rc}'}")
             return
 
         new_bytes = os.path.getsize(tmp)
         if new_bytes >= orig_bytes:
-            _finish(path, "skipped", reason="no size win", new_bytes=new_bytes)
+            _finish(path, "skipped", reason="no size win", new_bytes=new_bytes, elapsed=_secs())
             return
         new_duration = _duration(tmp)
         if duration is None or new_duration is None or abs(duration - new_duration) > 1.0:
-            _finish(path, "failed", new_bytes=new_bytes,
+            _finish(path, "failed", new_bytes=new_bytes, elapsed=_secs(),
                     reason=f"duration mismatch ({duration} vs {new_duration})")
             return
 
@@ -496,12 +504,12 @@ def _process(path: str, s: dict) -> None:
             _set_row(path, status="verifying")
             scores = _measure_vmaf(tmp, path, s["threads"], duration)
             if scores is None:
-                _finish(path, "failed", new_bytes=new_bytes,
+                _finish(path, "failed", new_bytes=new_bytes, elapsed=_secs(),
                         reason="cancelled" if _consume_skip() else "VMAF measurement failed")
                 return
             vmaf_mean, vmaf_min = scores
             if vmaf_mean < s["vmaf_mean_floor"] or vmaf_min < s["vmaf_min_floor"]:
-                _finish(path, "failed", new_bytes=new_bytes,
+                _finish(path, "failed", new_bytes=new_bytes, elapsed=_secs(),
                         vmaf_mean=round(vmaf_mean, 2), vmaf_min=round(vmaf_min, 2),
                         reason=f"below VMAF floor (mean {vmaf_mean:.2f}, min {vmaf_min:.2f})")
                 return
@@ -509,7 +517,7 @@ def _process(path: str, s: dict) -> None:
         # mtime carries the upload date (set at download time); keep it.
         st = os.stat(path)
         os.utime(tmp, (st.st_atime, st.st_mtime))
-        cols = dict(new_bytes=new_bytes,
+        cols = dict(new_bytes=new_bytes, elapsed=_secs(),
                     vmaf_mean=round(vmaf_mean, 2) if vmaf_mean is not None else None,
                     vmaf_min=round(vmaf_min, 2) if vmaf_min is not None else None)
         if _recently_served(path):
@@ -636,7 +644,8 @@ def get_status() -> dict:
             "SELECT COALESCE(SUM(orig_bytes - new_bytes), 0) AS saved FROM transcodes "
             "WHERE status = 'done' AND new_bytes IS NOT NULL").fetchone()["saved"]
         recent = [dict(r) for r in conn.execute(
-            "SELECT path, status, reason, orig_bytes, new_bytes, vmaf_mean, vmaf_min, finished_at "
+            "SELECT path, status, reason, orig_bytes, new_bytes, vmaf_mean, vmaf_min, "
+            "elapsed, finished_at "
             "FROM transcodes WHERE finished_at IS NOT NULL "
             "ORDER BY finished_at DESC LIMIT 10")]
     with _state_lock:
