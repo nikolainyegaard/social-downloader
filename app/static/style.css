@@ -2626,8 +2626,10 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
   border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
   margin-bottom: 16px;
 }
-.job-card-hdr  { display: flex; align-items: flex-start; gap: 16px; }
-.job-card-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+.job-card-hdr  { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin-bottom: 6px; }
+.job-card-btns { display: flex; gap: 8px; flex-shrink: 0; }
+.job-card-hdr > button { flex-shrink: 0; }
+.job-card-title { font-size: 14px; font-weight: 600; color: var(--text); }
 .job-card-desc  { font-size: 12px; color: var(--text-dim); line-height: 1.55; }
 
 .loop-interval-input {

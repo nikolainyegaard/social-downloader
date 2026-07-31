@@ -3196,15 +3196,13 @@ function initChannelApp(cfg) {
     const cleanupCard = `
       <div class="job-card">
         <div class="job-card-hdr">
-          <div style="flex:1">
-            <div class="job-card-title">Database cleanup</div>
-            <div class="job-card-desc">
-              Removes orphaned thumbnails and cached images left behind when
-              ${CREATORS} are removed from tracking. Also runs VACUUM on the
-              ${platformLabel} SQLite database to compact freed space.
-            </div>
-          </div>
-          <button class="btn-primary" id="job-${P}-cleanup-btn" onclick="${P}TriggerCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+          <div class="job-card-title">Database cleanup</div>
+          <button class="btn-primary" id="job-${P}-cleanup-btn" onclick="${P}TriggerCleanup()">Run</button>
+        </div>
+        <div class="job-card-desc">
+          Removes orphaned thumbnails and cached images left behind when
+          ${CREATORS} are removed from tracking. Also runs VACUUM on the
+          ${platformLabel} SQLite database to compact freed space.
         </div>
         <div class="job-status" id="job-${P}-cleanup-status" style="display:none">
           <div id="job-${P}-cleanup-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-${P}-cleanup-bar"></div></div></div>

@@ -39,16 +39,14 @@ initChannelApp({
       html: `
         <div class="job-card">
           <div class="job-card-hdr">
-            <div style="flex:1">
-              <div class="job-card-title">Strip stored HTML</div>
-              <div class="job-card-desc">
-                Rewrites creator bios and post titles saved before the HTML
-                cleanup existed: br and p tags become line breaks, entities
-                like &lt;3 are decoded. Already-clean rows are left
-                untouched, so this is safe to run repeatedly.
-              </div>
-            </div>
-            <button class="btn-primary" id="job-of-cleanhtml-btn" onclick="ofCleanHtml()" style="flex-shrink:0;align-self:flex-start">Run</button>
+            <div class="job-card-title">Strip stored HTML</div>
+            <button class="btn-primary" id="job-of-cleanhtml-btn" onclick="ofCleanHtml()">Run</button>
+          </div>
+          <div class="job-card-desc">
+            Rewrites creator bios and post titles saved before the HTML
+            cleanup existed: br and p tags become line breaks, entities
+            like &lt;3 are decoded. Already-clean rows are left
+            untouched, so this is safe to run repeatedly.
           </div>
           <div class="job-status" id="job-of-cleanhtml-status" style="display:none">
             <div id="job-of-cleanhtml-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-of-cleanhtml-bar"></div></div></div>

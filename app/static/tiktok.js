@@ -788,14 +788,12 @@ const _TT_SETTINGS_NETWORK_HTML = `
 const _TT_SETTINGS_JOBS_HTML = `
   <div class="job-card">
     <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Stats backfill</div>
-        <div class="job-card-desc">
-          Fetches view counts, likes, and other metadata for downloaded videos that
-          are missing stats.
-        </div>
-      </div>
-      <button class="btn-primary" id="backfillBtn" onclick="triggerBackfill()" style="flex-shrink:0;align-self:flex-start">Run</button>
+      <div class="job-card-title">Stats backfill</div>
+      <button class="btn-primary" id="backfillBtn" onclick="triggerBackfill()">Run</button>
+    </div>
+    <div class="job-card-desc">
+      Fetches view counts, likes, and other metadata for downloaded videos that
+      are missing stats.
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;min-height:16px">
       <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
@@ -820,19 +818,17 @@ const _TT_SETTINGS_JOBS_HTML = `
 
   <div class="job-card">
     <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Missing file check</div>
-        <div class="job-card-desc">
-          Scans saved video records for files no longer present on disk.
-          Scan reports what would be removed. Purge removes the DB records,
-          after which videos will be re-downloaded on the next loop run.
-          Purge also runs automatically at midnight and noon.
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
+      <div class="job-card-title">Missing file check</div>
+      <div class="job-card-btns">
         <button class="btn-primary" id="job-filecheck-scan-btn" onclick="triggerFileScan()">Scan</button>
         <button class="btn-danger"  id="job-filecheck-purge-btn" onclick="triggerFilePurge()">Remove</button>
       </div>
+    </div>
+    <div class="job-card-desc">
+      Scans saved video records for files no longer present on disk.
+      Scan reports what would be removed. Purge removes the DB records,
+      after which videos will be re-downloaded on the next loop run.
+      Purge also runs automatically at midnight and noon.
     </div>
     <div class="job-status" id="job-filecheck-status" style="display:none">
       <div id="job-filecheck-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-filecheck-bar"></div></div></div>
@@ -849,22 +845,20 @@ const _TT_SETTINGS_JOBS_HTML = `
 
   <div class="job-card">
     <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Corrupted story recovery</div>
-        <div class="job-card-desc">
-          Scans saved stories for missing or unplayable files. Re-download
-          fetches fresh copies of the afflicted ones, but only while a story
-          is still live: TikTok drops stories 24 hours after posting, and
-          expired ones cannot be recovered, so Re-download removes them from
-          the library instead (they would otherwise warn in the story viewer
-          forever). Video stories only; photo stories are re-fetched by the
-          next loop check of their user.
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
+      <div class="job-card-title">Corrupted story recovery</div>
+      <div class="job-card-btns">
         <button class="btn-primary" id="job-storyfix-scan-btn" onclick="triggerStoryScan()">Scan</button>
         <button class="btn-primary" id="job-storyfix-redl-btn" onclick="triggerStoryRedownload()">Re-download</button>
       </div>
+    </div>
+    <div class="job-card-desc">
+      Scans saved stories for missing or unplayable files. Re-download
+      fetches fresh copies of the afflicted ones, but only while a story
+      is still live: TikTok drops stories 24 hours after posting, and
+      expired ones cannot be recovered, so Re-download removes them from
+      the library instead (they would otherwise warn in the story viewer
+      forever). Video stories only; photo stories are re-fetched by the
+      next loop check of their user.
     </div>
     <div class="job-status" id="job-storyfix-status" style="display:none">
       <div id="job-storyfix-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-storyfix-bar"></div></div></div>
@@ -874,22 +868,20 @@ const _TT_SETTINGS_JOBS_HTML = `
 
   <div class="job-card">
     <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Delete all avatars</div>
-        <div class="job-card-desc">
-          Deletes the current cached profile picture for tracked users. Archived avatar
-          history is preserved. On the next loop run, avatars will be re-downloaded and
-          saved without triggering a profile change event. Banned users are excluded by
-          default; their avatars cannot be re-fetched from TikTok.
-        </div>
-        <label class="tracking-toggle" style="margin-top:8px">
-          <input type="checkbox" id="util-clear-avatars-include-banned">
-          <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          <span class="toggle-label">Include banned users</span>
-        </label>
-      </div>
-      <button class="btn-danger" id="util-clear-avatars-btn" onclick="triggerClearAvatars()" style="flex-shrink:0;align-self:flex-start">Delete</button>
+      <div class="job-card-title">Delete all avatars</div>
+      <button class="btn-danger" id="util-clear-avatars-btn" onclick="triggerClearAvatars()">Delete</button>
     </div>
+    <div class="job-card-desc">
+      Deletes the current cached profile picture for tracked users. Archived avatar
+      history is preserved. On the next loop run, avatars will be re-downloaded and
+      saved without triggering a profile change event. Banned users are excluded by
+      default; their avatars cannot be re-fetched from TikTok.
+    </div>
+    <label class="tracking-toggle" style="margin-top:8px">
+      <input type="checkbox" id="util-clear-avatars-include-banned">
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span class="toggle-label">Include banned users</span>
+    </label>
     <div class="job-status" id="job-clear-avatars-status" style="display:none">
       <div class="job-status-text" id="job-clear-avatars-text"></div>
     </div>

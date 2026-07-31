@@ -348,21 +348,19 @@ const _GENERAL_ACCESS_HTML = `
 const _GENERAL_JOBS_HTML = `
   <div class="job-card">
     <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Transcode videos to AV1</div>
-        <div class="job-card-desc">
-          Re-encodes large videos to AV1 with Opus audio, cutting most of their
-          size at visually transparent quality. Runs one file at a time at low
-          CPU priority. Each transcode is written next to the original and only
-          replaces it after passing verification; a file being watched keeps
-          its original until playback stops.
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
+      <div class="job-card-title">Transcode videos to AV1</div>
+      <div class="job-card-btns">
         <button class="btn-primary" id="gjBackfillBtn" onclick="_gjBackfill()">Backfill</button>
         <button class="btn-sm" id="gjSkipBtn" onclick="_gjSkip()" style="display:none">Skip current</button>
         <button class="btn-sm" id="gjPauseBtn" onclick="_gjPause()" style="min-width:80px">Pause</button>
       </div>
+    </div>
+    <div class="job-card-desc">
+      Re-encodes large videos to AV1 with Opus audio, cutting most of their
+      size at visually transparent quality. Runs one file at a time at low
+      CPU priority. Each transcode is written next to the original and only
+      replaces it after passing verification; a file being watched keeps
+      its original until playback stops.
     </div>
     <label class="tracking-toggle" style="margin-top:14px">
       <input type="checkbox" id="gjEnabled" onchange="_gjToggle('enabled', this)">
@@ -408,15 +406,13 @@ const _GENERAL_JOBS_HTML = `
 
   <div class="job-card">
     <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Convert photos to AVIF</div>
-        <div class="job-card-desc">
-          Converts all existing photo post images, thumbnails, and profile avatars
-          from JPEG to AVIF. Runs automatically at startup; already-converted files
-          are skipped. New downloads are saved as AVIF directly.
-        </div>
-      </div>
-      <button class="btn-primary" id="job-avif-btn" onclick="triggerAvifJob()" style="flex-shrink:0;align-self:flex-start">Run</button>
+      <div class="job-card-title">Convert photos to AVIF</div>
+      <button class="btn-primary" id="job-avif-btn" onclick="triggerAvifJob()">Run</button>
+    </div>
+    <div class="job-card-desc">
+      Converts all existing photo post images, thumbnails, and profile avatars
+      from JPEG to AVIF. Runs automatically at startup; already-converted files
+      are skipped. New downloads are saved as AVIF directly.
     </div>
     <div class="job-status" id="job-avif-status" style="display:none">
       <div id="job-avif-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-avif-bar"></div></div></div>
@@ -426,19 +422,15 @@ const _GENERAL_JOBS_HTML = `
 
   <div class="job-card">
     <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Fix broken thumbnails</div>
-        <div class="job-card-desc">
-          Rebuilds thumbnails across every platform that browsers cannot decode.
-          Covers two cases: reserved colour tags older thumbnails inherited from
-          their source videos (blank in Firefox, Chrome tolerates it), and files
-          truncated by an interrupted write (broken everywhere). Scans every
-          thumbnail and regenerates only the affected ones from their source.
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
-        <button class="btn-primary" id="job-thumbfix-btn" onclick="triggerThumbnailRepair()">Run</button>
-      </div>
+      <div class="job-card-title">Fix broken thumbnails</div>
+      <button class="btn-primary" id="job-thumbfix-btn" onclick="triggerThumbnailRepair()">Run</button>
+    </div>
+    <div class="job-card-desc">
+      Rebuilds thumbnails across every platform that browsers cannot decode.
+      Covers two cases: reserved colour tags older thumbnails inherited from
+      their source videos (blank in Firefox, Chrome tolerates it), and files
+      truncated by an interrupted write (broken everywhere). Scans every
+      thumbnail and regenerates only the affected ones from their source.
     </div>
     <div class="job-status" id="job-thumbfix-status" style="display:none">
       <div id="job-thumbfix-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-thumbfix-bar"></div></div></div>
@@ -448,16 +440,14 @@ const _GENERAL_JOBS_HTML = `
 
   <div class="job-card">
     <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Remove audio-only files</div>
-        <div class="job-card-desc">
-          Scans every platform's media folder for audio-only files (.mp3, .m4a, etc.)
-          that were downloaded before yt-dlp was restricted to video-only formats.
-          Deletes each file from disk and removes its database entry. Safe to run
-          multiple times.
-        </div>
-      </div>
-      <button class="btn-danger" id="job-audio-btn" onclick="triggerAudioCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+      <div class="job-card-title">Remove audio-only files</div>
+      <button class="btn-danger" id="job-audio-btn" onclick="triggerAudioCleanup()">Run</button>
+    </div>
+    <div class="job-card-desc">
+      Scans every platform's media folder for audio-only files (.mp3, .m4a, etc.)
+      that were downloaded before yt-dlp was restricted to video-only formats.
+      Deletes each file from disk and removes its database entry. Safe to run
+      multiple times.
     </div>
     <div class="job-status" id="job-audio-status" style="display:none">
       <div id="job-audio-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-audio-bar"></div></div></div>
@@ -467,14 +457,12 @@ const _GENERAL_JOBS_HTML = `
 
   <div class="job-card">
     <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Delete all thumbnails</div>
-        <div class="job-card-desc">
-          Deletes all generated thumbnails for videos and photo posts. Thumbnails will
-          be regenerated automatically on the next startup backfill.
-        </div>
-      </div>
-      <button class="btn-danger" id="util-clear-thumbs-btn" onclick="triggerClearThumbnails()" style="flex-shrink:0;align-self:flex-start">Delete</button>
+      <div class="job-card-title">Delete all thumbnails</div>
+      <button class="btn-danger" id="util-clear-thumbs-btn" onclick="triggerClearThumbnails()">Delete</button>
+    </div>
+    <div class="job-card-desc">
+      Deletes all generated thumbnails for videos and photo posts. Thumbnails will
+      be regenerated automatically on the next startup backfill.
     </div>
     <div class="job-status" id="job-clear-thumbs-status" style="display:none">
       <div class="job-status-text" id="job-clear-thumbs-text"></div>
@@ -483,16 +471,14 @@ const _GENERAL_JOBS_HTML = `
 
   <div class="job-card">
     <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Path migration</div>
-        <div class="job-card-desc">
-          Upgrades from tiktok-downloader stored video files under <code>videos/</code> but the
-          new layout uses <code>media/</code>. This tool rewrites the stored file paths in every
-          platform's database to match your current folder layout. Before running: stop the
-          container, rename <code>videos/</code> to <code>media/</code> on the host, update your
-          docker-compose.yml volumes, then restart and open this panel.
-        </div>
-      </div>
+      <div class="job-card-title">Path migration</div>
+    </div>
+    <div class="job-card-desc">
+      Upgrades from tiktok-downloader stored video files under <code>videos/</code> but the
+      new layout uses <code>media/</code>. This tool rewrites the stored file paths in every
+      platform's database to match your current folder layout. Before running: stop the
+      container, rename <code>videos/</code> to <code>media/</code> on the host, update your
+      docker-compose.yml volumes, then restart and open this panel.
     </div>
     <div id="migrate-preview" style="margin:10px 0 0;font-size:13px;"></div>
     <div style="display:flex;flex-direction:column;gap:10px;max-width:440px;margin:10px 0 12px">
@@ -581,17 +567,24 @@ async function _gjTick() {
 
   const recentEl = document.getElementById('gjRecent');
   if (recentEl) {
-    recentEl.innerHTML = (data.recent || []).map(r => {
-      const name = esc((r.path || '').split('/').pop());
+    const ell = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    const rows = (data.recent || []).map(r => {
+      const name = `<div style="${ell}">${esc((r.path || '').split('/').pop())}</div>`;
       if (r.status === 'done' && r.new_bytes && r.orig_bytes) {
-        const cut  = Math.round((1 - r.new_bytes / r.orig_bytes) * 100);
-        const vmaf = r.vmaf_mean != null ? ` · VMAF ${r.vmaf_mean}` : '';
-        const took = r.elapsed ? ` · ${_gjFmtSecs(r.elapsed)}` : '';
-        return `<div>${name} <span style="color:var(--green)">-${cut}%${vmaf}</span><span style="color:var(--muted)">${took}</span></div>`;
+        const cut = Math.round((1 - r.new_bytes / r.orig_bytes) * 100);
+        return name
+          + `<div style="text-align:right;white-space:nowrap">${_gjFmtBytes(r.orig_bytes)} → ${_gjFmtBytes(r.new_bytes)}</div>`
+          + `<div style="text-align:right;color:var(--green)">-${cut}%</div>`
+          + `<div style="text-align:right;white-space:nowrap">${r.vmaf_mean != null ? 'VMAF ' + r.vmaf_mean : ''}</div>`
+          + `<div style="text-align:right;white-space:nowrap">${r.elapsed ? _gjFmtSecs(r.elapsed) : ''}</div>`;
       }
       const color = r.status === 'failed' ? 'var(--red)' : 'var(--muted)';
-      return `<div>${name} <span style="color:${color}">${esc(r.status)}${r.reason ? ': ' + esc(r.reason) : ''}</span></div>`;
-    }).join('');
+      return name
+        + `<div style="grid-column:2/-1;text-align:right;color:${color};${ell}">${esc(r.status)}${r.reason ? ': ' + esc(r.reason) : ''}</div>`;
+    });
+    recentEl.innerHTML = rows.length
+      ? `<div style="display:grid;grid-template-columns:minmax(0,1fr) repeat(4,auto);column-gap:12px">${rows.join('')}</div>`
+      : '';
   }
 }
 
