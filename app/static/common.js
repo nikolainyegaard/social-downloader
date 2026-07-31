@@ -588,10 +588,25 @@ async function _gjTick() {
   }
 }
 
-async function _gjPatch(changes) {
+// One save toast at a time: a rapid series of changes (spinning a number
+// field) reuses the slot instead of stacking toasts. "Saved" only appears
+// after the server has written the settings file, never optimistically.
+let _gjSaveToast = null;
+
+async function _gjPatch(changes, { toast = true } = {}) {
+  let t = null;
+  if (toast) {
+    _gjSaveToast?.dismiss();
+    t = _gjSaveToast = showToast('Saving…', { spinner: true, duration: 0 });
+  }
   const { ok, data } = await apiJSON('/api/transcode/settings',
                                      { method: 'PATCH', body: JSON.stringify(changes) });
-  if (!ok) showToast(data.error || 'Could not save transcode settings', { type: 'error' });
+  if (t) {
+    if (ok) t.update('Saved', { duration: 2000 });
+    else t.update(data.error || 'Could not save transcode settings', { type: 'error' });
+  } else if (!ok) {
+    showToast(data.error || 'Could not save transcode settings', { type: 'error' });
+  }
   return ok;
 }
 
@@ -604,7 +619,8 @@ function _gjNum(key, input) {
 }
 
 async function _gjPause() {
-  if (await _gjPatch({ paused: !_gjPaused })) _gjTick();
+  // No save toast: the button flipping to Resume is the feedback
+  if (await _gjPatch({ paused: !_gjPaused }, { toast: false })) _gjTick();
 }
 
 async function _gjBackfill() {
