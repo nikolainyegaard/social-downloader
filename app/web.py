@@ -217,6 +217,127 @@ def create_app() -> Flask:
     def transcode_retry_failed():
         return jsonify({"ok": True, "retried": transcoder.retry_failed()})
 
+    # App-wide maintenance jobs (Settings > General > Jobs). These operate on
+    # every platform's media or databases, so they live on the app and not a
+    # platform blueprint: a blueprint's routes 403 when its platform is
+    # disabled, which must never take a global job down with it.
+    import glob as _glob
+    import threading as _threading
+    import time as _time
+    import photo_converter as _photo_converter
+    from config import MEDIA_DIR
+
+    @app.route("/api/jobs/photo-converter/status")
+    def photo_converter_status():
+        return jsonify(_photo_converter.get_state())
+
+    @app.route("/api/jobs/photo-converter/start", methods=["POST"])
+    def photo_converter_start():
+        if not _photo_converter.start():
+            return jsonify({"error": "Already running"}), 409
+        return jsonify({"ok": True})
+
+    @app.route("/api/jobs/thumbnail-repair/status")
+    def thumbnail_repair_status():
+        from thumbnailer import get_repair_state
+        return jsonify(get_repair_state())
+
+    @app.route("/api/jobs/thumbnail-repair/start", methods=["POST"])
+    def thumbnail_repair_start():
+        # Regenerates thumbnails whose AVIF colour tags are reserved (Firefox
+        # renders them blank) or that were truncated by an interrupted write.
+        # Covers every platform since thumbnail generation is shared.
+        from thumbnailer import get_repair_state, repair_broken_thumbnails
+        if get_repair_state()["running"]:
+            return jsonify({"error": "Already running"}), 409
+        _threading.Thread(target=repair_broken_thumbnails, daemon=True,
+                          name="thumbnail-repair").start()
+        return jsonify({"ok": True})
+
+    _AUDIO_EXTENSIONS = frozenset([".mp3", ".m4a", ".m4b", ".aac", ".ogg", ".wav", ".flac", ".opus"])
+    _audio_cleanup_lock = _threading.Lock()
+    _audio_cleanup_state: dict = {
+        "running":    False,
+        "found":      0,
+        "deleted":    0,
+        "db_removed": 0,
+        "errors":     0,
+        "last_run":   None,
+    }
+
+    def _run_audio_cleanup() -> None:
+        with _audio_cleanup_lock:
+            if _audio_cleanup_state["running"]:
+                return
+            _audio_cleanup_state.update({"running": True, "found": 0, "deleted": 0, "db_removed": 0, "errors": 0})
+
+        print(f"[audio-cleanup] Scanning {MEDIA_DIR} for audio-only files...")
+        try:
+            audio_files = [
+                p for p in _glob.glob(os.path.join(MEDIA_DIR, "*", "@*", "*"))
+                if os.path.isfile(p) and os.path.splitext(p)[1].lower() in _AUDIO_EXTENSIONS
+            ]
+            with _audio_cleanup_lock:
+                _audio_cleanup_state["found"] = len(audio_files)
+            print(f"[audio-cleanup] Found {len(audio_files)} audio file(s)")
+
+            for path in audio_files:
+                video_id = os.path.splitext(os.path.basename(path))[0]
+                # The owning platform is the first path component under
+                # MEDIA_DIR, so the DB row is removed from the right engine
+                # (this job used to clean only the TikTok DB while deleting
+                # every platform's files).
+                platform = os.path.relpath(path, MEDIA_DIR).split(os.sep)[0]
+                engine   = ENGINES.get(platform)
+                try:
+                    os.remove(path)
+                    with _audio_cleanup_lock:
+                        _audio_cleanup_state["deleted"] += 1
+                    print(f"[audio-cleanup] Deleted {path}")
+                except OSError as e:
+                    print(f"[audio-cleanup] Failed to delete {path}: {e}")
+                    with _audio_cleanup_lock:
+                        _audio_cleanup_state["errors"] += 1
+                    continue
+                if engine and engine.db.delete_video(video_id):
+                    with _audio_cleanup_lock:
+                        _audio_cleanup_state["db_removed"] += 1
+                    print(f"[audio-cleanup] Removed {video_id} from database")
+        except Exception as e:
+            print(f"[audio-cleanup] Unexpected error: {e}")
+        finally:
+            with _audio_cleanup_lock:
+                _audio_cleanup_state["running"]  = False
+                _audio_cleanup_state["last_run"] = _time.strftime("%Y-%m-%d %H:%M:%S")
+
+    @app.route("/api/jobs/audio-cleanup/status")
+    def audio_cleanup_status():
+        with _audio_cleanup_lock:
+            return jsonify(dict(_audio_cleanup_state))
+
+    @app.route("/api/jobs/audio-cleanup/start", methods=["POST"])
+    def audio_cleanup_start():
+        with _audio_cleanup_lock:
+            if _audio_cleanup_state["running"]:
+                return jsonify({"error": "Already running"}), 409
+        _threading.Thread(target=_run_audio_cleanup, daemon=True, name="audio-cleanup").start()
+        return jsonify({"ok": True})
+
+    @app.route("/api/jobs/clear-thumbnails", methods=["POST"])
+    def clear_thumbnails():
+        deleted = 0
+        for thumbs_dir in _glob.glob(os.path.join(MEDIA_DIR, "*", "*", "thumbs")):
+            if not os.path.isdir(thumbs_dir):
+                continue
+            for fname in os.listdir(thumbs_dir):
+                if os.path.splitext(fname)[1].lower() in (".avif", ".jpg", ".jpeg"):
+                    try:
+                        os.remove(os.path.join(thumbs_dir, fname))
+                        deleted += 1
+                    except OSError:
+                        pass
+        return jsonify({"deleted": deleted})
+
     @app.route("/api/migrate/preview")
     def migrate_preview():
         # Aggregate legacy path prefixes across every platform DB

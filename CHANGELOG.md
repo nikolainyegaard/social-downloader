@@ -17,6 +17,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The media viewer has a post details panel (description, status, views, likes, comments, duration, resolution, dates, post ID): a sidebar next to the media on desktop, and an overlay behind a new info button in the top action row on mobile. Stories are unaffected
 
 ### Changed
+- The app-wide jobs (photo AVIF conversion, broken thumbnail repair, audio-only file cleanup, delete all thumbnails, path migration) moved from Settings > TikTok > Jobs to Settings > General > Jobs, so they stay available and visible even with TikTok disabled. TikTok's Jobs page keeps only its own jobs (stats backfill, missing file check, story recovery, avatar deletion)
 - The History tab's field filter is a pill row in the nav bar instead of a dropdown menu, and now selects multiple fields at once (empty selection shows all)
 - The story ring renders at a consistent weight on creator cards and in the creator modal, scaled to the avatar size instead of looking thick on cards and thin on the large modal avatar
 - One close button: every modal and overlay close is the same X icon in one of two sizes; toasts, connection rows, and note fields use the same icon instead of four hand-drawn variants
@@ -37,6 +38,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 
 ### Fixed
+- The audio-only file cleanup job now removes the matching database entry on every platform: it deleted files from all platforms' folders but only cleaned TikTok's database, leaving other platforms with orphaned records pointing at removed files
 - Instagram sessions no longer hang 20+ minutes when the profile lookup is rate limited: a 429 from the web profile endpoint now fails immediately instead of retrying the same limit through instaloader's long sleep-and-retry fallback
 - Text inside modals no longer renders blurry on desktop: the backdrop blur sat on the dialog element itself, which pulled the modal's own content into the blurred compositing layer; the blur now lives behind the dialog instead
 - Story rings and every other accent-colored element inside modals now use the active platform's accent color: the theme was scoped to the page, so modals fell back to the neutral blue

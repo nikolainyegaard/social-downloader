@@ -117,7 +117,7 @@ Reschedule pattern: `reschedule_loop()` sets a flag and fires the trigger event;
 
 Global Flask app. Registers one blueprint per platform from `ENGINES` via `engine.create_blueprint()`; TikTok's extras land on its engine blueprint through the adapter.
 
-Global routes: `GET /`, `GET /api/health`, `GET /api/platforms`, `PATCH /api/platforms/<id>`, `GET /api/migrate/preview`, `POST /api/migrate`, `GET/PATCH /api/auth/config`, `GET /assets/<path>`. `GET /` renders index.html with the platform list (tabs, sections, and script tags for enabled platforms; the full list injected as `window.__PLATFORMS__`). `after_request` sets the security headers and the vendored font cache header (the hashed-asset map cannot rewrite URLs inside CSS).
+Global routes: `GET /`, `GET /api/health`, `GET /api/platforms`, `PATCH /api/platforms/<id>`, `GET /api/migrate/preview`, `POST /api/migrate`, `/api/transcode/*`, `/api/jobs/*` (the app-wide maintenance jobs behind Settings > General > Jobs: photo converter, thumbnail repair, audio cleanup with its state and worker defined here, clear-thumbnails; they live on the app rather than a blueprint because a disabled platform's blueprint 403s), `GET/PATCH /api/auth/config`, `GET /assets/<path>`. `GET /` renders index.html with the platform list (tabs, sections, and script tags for enabled platforms; the full list injected as `window.__PLATFORMS__`). `after_request` sets the security headers and the vendored font cache header (the hashed-asset map cannot rewrite URLs inside CSS).
 
 ## auth.py
 

@@ -821,24 +821,6 @@ const _TT_SETTINGS_JOBS_HTML = `
   <div class="job-card">
     <div class="job-card-hdr">
       <div style="flex:1">
-        <div class="job-card-title">Convert photos to AVIF</div>
-        <div class="job-card-desc">
-          Converts all existing photo post images, thumbnails, and profile avatars
-          from JPEG to AVIF. Runs automatically at startup; already-converted files
-          are skipped. New downloads are saved as AVIF directly.
-        </div>
-      </div>
-      <button class="btn-primary" id="job-avif-btn" onclick="triggerAvifJob()" style="flex-shrink:0;align-self:flex-start">Run</button>
-    </div>
-    <div class="job-status" id="job-avif-status" style="display:none">
-      <div id="job-avif-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-avif-bar"></div></div></div>
-      <div class="job-status-text" id="job-avif-text"></div>
-    </div>
-  </div>
-
-  <div class="job-card">
-    <div class="job-card-hdr">
-      <div style="flex:1">
         <div class="job-card-title">Missing file check</div>
         <div class="job-card-desc">
           Scans saved video records for files no longer present on disk.
@@ -893,46 +875,6 @@ const _TT_SETTINGS_JOBS_HTML = `
   <div class="job-card">
     <div class="job-card-hdr">
       <div style="flex:1">
-        <div class="job-card-title">Fix broken thumbnails</div>
-        <div class="job-card-desc">
-          Rebuilds thumbnails (all apps) that browsers cannot decode. Covers two
-          cases: reserved colour tags older thumbnails inherited from TikTok's
-          source videos (blank in Firefox, Chrome tolerates it), and files
-          truncated by an interrupted write (broken everywhere). Scans every
-          thumbnail and regenerates only the affected ones from their source.
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-shrink:0;align-self:flex-start">
-        <button class="btn-primary" id="job-thumbfix-btn" onclick="triggerThumbnailRepair()">Run</button>
-      </div>
-    </div>
-    <div class="job-status" id="job-thumbfix-status" style="display:none">
-      <div id="job-thumbfix-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-thumbfix-bar"></div></div></div>
-      <div class="job-status-text" id="job-thumbfix-text"></div>
-    </div>
-  </div>
-
-  <div class="job-card">
-    <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Remove audio-only files</div>
-        <div class="job-card-desc">
-          Scans the videos folder for audio-only files (.mp3, .m4a, etc.) that were
-          downloaded before yt-dlp was restricted to video-only formats. Deletes each
-          file from disk and removes its database entry. Safe to run multiple times.
-        </div>
-      </div>
-      <button class="btn-danger" id="job-audio-btn" onclick="triggerAudioCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
-    </div>
-    <div class="job-status" id="job-audio-status" style="display:none">
-      <div id="job-audio-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-audio-bar"></div></div></div>
-      <div class="job-status-text" id="job-audio-text"></div>
-    </div>
-  </div>
-
-  <div class="job-card">
-    <div class="job-card-hdr">
-      <div style="flex:1">
         <div class="job-card-title">Delete all avatars</div>
         <div class="job-card-desc">
           Deletes the current cached profile picture for tracked users. Archived avatar
@@ -950,53 +892,6 @@ const _TT_SETTINGS_JOBS_HTML = `
     </div>
     <div class="job-status" id="job-clear-avatars-status" style="display:none">
       <div class="job-status-text" id="job-clear-avatars-text"></div>
-    </div>
-  </div>
-
-  <div class="job-card">
-    <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Delete all thumbnails</div>
-        <div class="job-card-desc">
-          Deletes all generated thumbnails for videos and photo posts. Thumbnails will
-          be regenerated automatically on the next startup backfill.
-        </div>
-      </div>
-      <button class="btn-danger" id="util-clear-thumbs-btn" onclick="triggerClearThumbnails()" style="flex-shrink:0;align-self:flex-start">Delete</button>
-    </div>
-    <div class="job-status" id="job-clear-thumbs-status" style="display:none">
-      <div class="job-status-text" id="job-clear-thumbs-text"></div>
-    </div>
-  </div>
-
-  <div class="job-card">
-    <div class="job-card-hdr">
-      <div style="flex:1">
-        <div class="job-card-title">Path migration</div>
-        <div class="job-card-desc">
-          Upgrades from tiktok-downloader stored video files under <code>videos/</code> but the
-          new layout uses <code>media/</code>. This tool rewrites the stored file paths in the
-          TikTok database to match your current folder layout. Before running: stop the
-          container, rename <code>videos/</code> to <code>media/</code> on the host, update your
-          docker-compose.yml volumes, then restart and open this panel.
-        </div>
-      </div>
-    </div>
-    <div id="migrate-preview" style="margin:10px 0 0;font-size:13px;"></div>
-    <div style="display:flex;flex-direction:column;gap:10px;max-width:440px;margin:10px 0 12px">
-      <label style="display:flex;gap:8px;font-size:13px">
-        <span style="color:var(--text-dim)">Old prefix</span>
-        <input type="text" id="migrateOldPrefix" class="text-input" placeholder="/app/videos">
-      </label>
-      <label style="display:flex;gap:8px;font-size:13px">
-        <span style="color:var(--text-dim)">New prefix</span>
-        <input type="text" id="migrateNewPrefix" class="text-input" placeholder="/app/media">
-      </label>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <button class="btn-primary btn-sm" onclick="loadMigratePreview()">Scan database</button>
-      <button class="btn-danger" id="migrateRunBtn" onclick="runMigration()" style="display:none;font-size:12px;padding:5px 14px">Rewrite paths</button>
-      <span id="migrateStatus" style="font-size:12px;color:var(--muted)"></span>
     </div>
   </div>`;
 
@@ -1034,31 +929,24 @@ const _TT_SETTINGS_DIAG_HTML = `
   </div>`;
 
 function _ttJobsShow() {
-  // The AVIF tick renders its idle state correctly, so it always runs once
-  // (and keeps polling only while the converter is live); the others resume
-  // their poll only when their job is still running server-side.
-  _jobPollStart('avif', _avifLoadStatus, 1500);
-  _jobResume('audio',     '/api/tiktok/jobs/audio-cleanup/status',    _audioTick,     1000);
-  _jobResume('filecheck', '/api/tiktok/jobs/file-check/status',       _filecheckTick, 1000);
-  _jobResume('storyfix',  '/api/tiktok/jobs/story-recovery/status',   _storyfixTick,  1500);
-  _jobResume('thumbfix',  '/api/tiktok/jobs/thumbnail-repair/status', _thumbfixTick,  1500);
-  _jobResume('backfill',  '/api/tiktok/backfill',                     _backfillTick,  2000);
+  // Jobs resume their poll only when still running server-side. The app-wide
+  // jobs (AVIF, thumbnail repair, audio cleanup, path migration) live in
+  // Settings > General > Jobs now.
+  _jobResume('filecheck', '/api/tiktok/jobs/file-check/status',     _filecheckTick, 1000);
+  _jobResume('storyfix',  '/api/tiktok/jobs/story-recovery/status', _storyfixTick,  1500);
+  _jobResume('backfill',  '/api/tiktok/backfill',                   _backfillTick,  2000);
 }
 
 function _ttJobsHide() {
   // Finished jobs: clear their widgets so the pane opens clean next time.
   // Running jobs: keep the widget state; _ttJobsShow resumes their poll.
   const byId = id => document.getElementById(id);
-  if (!_jobPolls['avif'])      { _avifWidget.hide();      const b = byId('job-avif-btn');     if (b) b.disabled = false; }
-  if (!_jobPolls['audio'])     { _audioWidget.hide();     const b = byId('job-audio-btn');    if (b) b.disabled = false; }
   if (!_jobPolls['filecheck']) { _filecheckWidget.hide(); _filecheckReport.hide(); _setFilecheckBtns(false); }
   if (!_jobPolls['storyfix'])  { _storyfixWidget.hide();  _setStoryfixBtns(false); }
-  if (!_jobPolls['thumbfix'])  { _thumbfixWidget.hide();  const b = byId('job-thumbfix-btn'); if (b) b.disabled = false; }
   if (!_jobPolls['backfill'])  { _backfillWidget.hide();  const b = byId('backfillBtn');      if (b) b.disabled = false; }
   _clearAvatarsWidget.hide();
-  _clearThumbsWidget.hide();
-  // No interval outlives the pane
-  _jobPollStopAll();
+  // No interval of this pane's outlives it
+  ['filecheck', 'storyfix', 'backfill'].forEach(_jobPollStop);
 }
 
 // ── App init ──────────────────────────────────────────────────────────────────
@@ -1919,183 +1807,21 @@ async function saveLoopSettings() {
 
 // ── Migration helpers ─────────────────────────────────────────────────────────
 
-async function loadMigratePreview() {
-  const previewEl  = document.getElementById('migrate-preview');
-  const statusEl   = document.getElementById('migrateStatus');
-  const runBtn     = document.getElementById('migrateRunBtn');
-  previewEl.textContent = 'Scanning…';
-  statusEl.textContent  = '';
-  runBtn.style.display  = 'none';
-  try {
-    const { ok, data } = await apiJSON('/api/migrate/preview');
-    if (!ok) { previewEl.textContent = data.error || 'Could not scan the database'; return; }
-    const total    = data.total_legacy || 0;
-    const prefixes = data.prefixes     || {};
-    const mediaDir = data.media_dir    || '';
-    if (total === 0) {
-      previewEl.innerHTML = '<span style="color:var(--green)">No legacy paths found. Database is already up to date.</span>';
-      return;
-    }
-    let html = `<div style="margin-bottom:8px;">Found <strong>${total}</strong> record${total !== 1 ? 's' : ''} with paths outside <code>${esc(mediaDir)}</code>:</div>`;
-    for (const [prefix, count] of Object.entries(prefixes)) {
-      html += `<div style="font-size:12px;color:var(--muted);margin-bottom:3px"><code>${esc(prefix)}</code> · ${_n(count, 'record')}</div>`;
-    }
-    previewEl.innerHTML = html;
-    const oldInput = document.getElementById('migrateOldPrefix');
-    const newInput = document.getElementById('migrateNewPrefix');
-    if (!oldInput.value) oldInput.value = Object.keys(prefixes)[0] || '';
-    if (!newInput.value) newInput.value = mediaDir.replace(/\/$/, '') + '/tiktok';
-    runBtn.style.display = '';
-  } catch (e) {
-    previewEl.textContent = 'Could not scan the database: ' + e.message;
-  }
-}
-
-async function runMigration() {
-  const oldPrefix = (document.getElementById('migrateOldPrefix').value || '').trim().replace(/\/$/, '');
-  const newPrefix = (document.getElementById('migrateNewPrefix').value || '').trim().replace(/\/$/, '');
-  const statusEl  = document.getElementById('migrateStatus');
-  const runBtn    = document.getElementById('migrateRunBtn');
-  if (!oldPrefix || !newPrefix) {
-    statusEl.textContent = 'Both path prefixes are required.';
-    return;
-  }
-  if (!await openConfirm({ title: 'Rewrite all DB paths?', message: `${oldPrefix}  →  ${newPrefix}\n\nA backup is made automatically before changes.`, confirmLabel: 'Rewrite' })) return;
-  runBtn.disabled = true;
-  statusEl.textContent = 'Running migration…';
-  try {
-    const { ok, data } = await apiJSON('/api/migrate', {
-      method: 'POST',
-      body: JSON.stringify({ old_prefix: oldPrefix, new_prefix: newPrefix }),
-    });
-    runBtn.disabled = false;
-    if (!ok) { statusEl.textContent = data.error || 'Could not run the migration'; return; }
-    statusEl.textContent = `Done: ${data.updated} record${data.updated !== 1 ? 's' : ''} updated. Backup: ${data.backup}`;
-    loadMigratePreview();
-  } catch (e) {
-    runBtn.disabled = false;
-    statusEl.textContent = 'Could not run the migration: ' + e.message;
-  }
-}
-
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 // One contract for every Jobs-pane job: progress and results render through
-// _makeJobWidget, and every polling loop registers in _jobPolls so the pane's
-// onHide stops them all. Jobs keep running server-side; reopening the pane
-// resumes the poll of any job still live (_jobResume).
+// _makeJobWidget, and every polling loop registers in _jobPolls (common.js) so
+// the pane's onHide stops them. Jobs keep running server-side; reopening the
+// pane resumes the poll of any job still live (_jobResume). The app-wide jobs
+// (AVIF converter, thumbnail repair, audio cleanup, delete thumbnails, path
+// migration) and their wiring live in common.js under Settings > General.
 
-const _jobPolls = {};
-function _jobPollStart(name, fn, ms) {
-  if (_jobPolls[name]) return;
-  _jobPolls[name] = setInterval(fn, ms);
-  fn();
-}
-function _jobPollStop(name) {
-  if (_jobPolls[name]) { clearInterval(_jobPolls[name]); _jobPolls[name] = null; }
-}
-function _jobPollStopAll() { Object.keys(_jobPolls).forEach(_jobPollStop); }
-async function _jobResume(name, statusUrl, tick, ms) {
-  if (_jobPolls[name]) return;
-  const { ok, data } = await apiJSON(statusUrl);
-  if (ok && data.running) _jobPollStart(name, tick, ms);
-}
-
-const _avifWidget         = _makeJobWidget('avif');
-const _audioWidget        = _makeJobWidget('audio');
 const _filecheckWidget    = _makeJobWidget('filecheck');
 const _storyfixWidget     = _makeJobWidget('storyfix');
-const _thumbfixWidget     = _makeJobWidget('thumbfix');
 const _backfillWidget     = _makeJobWidget('backfill');
 const _clearAvatarsWidget = _makeJobWidget('clear-avatars');
-const _clearThumbsWidget  = _makeJobWidget('clear-thumbs');
-
-// AVIF converter
-
-const _PHASE_LABELS = { startup: 'Checking…', counting: 'Counting…', photos: 'Photo posts…', thumbnails: 'Thumbnails…', avatars: 'Avatars…' };
-
-async function _avifLoadStatus() {
-  const { ok, data } = await apiJSON('/api/tiktok/jobs/photo-converter/status');
-  if (!ok) return;
-  const btn = document.getElementById('job-avif-btn');
-  const isPending = data.phase === 'startup';
-  btn.disabled = data.running || isPending;
-  const total = data.total || 0;
-  const done  = data.done  || 0;
-  const pct   = total > 0 ? Math.round(done / total * 100) : (data.running || isPending ? 0 : 100);
-  if (data.running || isPending) {
-    const count = total > 0 ? `${done.toLocaleString()} / ${total.toLocaleString()} (${pct}%)` : '';
-    _avifWidget.update({ barPct: pct, label: [_PHASE_LABELS[data.phase] || '', count].filter(Boolean).join('  ') });
-  } else if (done > 0 || data.errors > 0) {
-    const parts = [];
-    if (done > 0)        parts.push(`${done.toLocaleString()} converted`);
-    if (data.errors > 0) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
-    _avifWidget.update({ barPct: 100, label: parts.join(' · ') });
-  } else {
-    _avifWidget.update({ barPct: 100, label: total === 0 ? 'All images already in AVIF.' : '' });
-  }
-  if (!data.running && !isPending) _jobPollStop('avif');
-}
-
-async function triggerAvifJob() {
-  const btn = document.getElementById('job-avif-btn');
-  btn.disabled = true;
-  const { ok, data } = await apiJSON('/api/tiktok/jobs/photo-converter/start', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); btn.disabled = false; return; }
-  _jobPollStart('avif', _avifLoadStatus, 1500);
-}
 
 // Database cleanup runs through the engine's ttTriggerCleanup export
 // (channels.js) on the engine-generated cleanup card.
-
-// Audio cleanup
-
-async function triggerAudioCleanup() {
-  if (!await openConfirm({
-    title: 'Remove audio-only files?',
-    message: 'Every audio-only file found in the videos folder is deleted from disk and its database entry removed. This cannot be undone.',
-    confirmLabel: 'Remove', danger: true,
-  })) return;
-  const btn = document.getElementById('job-audio-btn');
-  btn.disabled = true;
-  const { ok, data } = await apiJSON('/api/tiktok/jobs/audio-cleanup/start', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); btn.disabled = false; return; }
-  _audioWidget.update({ barPct: null, label: 'Running…' });
-  _jobPollStart('audio', _audioTick, 1000);
-}
-
-async function _audioTick() {
-  const { ok, data } = await apiJSON('/api/tiktok/jobs/audio-cleanup/status');
-  if (!ok) return;
-  const btn = document.getElementById('job-audio-btn');
-  if (data.running) {
-    if (btn) btn.disabled = true;
-    _audioWidget.update({ barPct: null, label: `Running… ${data.deleted} deleted, ${data.db_removed} removed from DB` });
-    return;
-  }
-  _jobPollStop('audio');
-  if (btn) btn.disabled = false;
-  if (!data.last_run) return;
-  if (data.found === 0) {
-    _audioWidget.update({ label: 'No audio files found.' });
-  } else {
-    const parts = [`Found ${data.found}`, `deleted ${data.deleted}`, `removed ${data.db_removed} from DB`];
-    if (data.errors) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
-    _audioWidget.update({ label: parts.join(' · ') + ` (${data.last_run})` });
-  }
-}
-
-// Utilities: clear avatars and thumbnails
-
-async function _runDeleteJob(widget, btnId, apiPath, bodyFn, resultFn) {
-  const btn = document.getElementById(btnId);
-  btn.disabled = true;
-  widget.update({ label: 'Deleting…' });
-  const opts = { method: 'POST' };
-  if (bodyFn) opts.body = JSON.stringify(bodyFn());
-  const { ok, data } = await apiJSON(apiPath, opts);
-  btn.disabled = false;
-  widget.update({ label: ok ? resultFn(data) : (data.error || 'Could not complete the request.') });
-}
 
 async function triggerClearAvatars() {
   const includeBanned = document.getElementById('util-clear-avatars-include-banned').checked;
@@ -2111,20 +1837,6 @@ async function triggerClearAvatars() {
     '/api/tiktok/utils/clear-avatars',
     () => ({ include_banned: includeBanned }),
     d => `Deleted ${d.deleted} avatar file${d.deleted !== 1 ? 's' : ''}.`
-  );
-}
-
-async function triggerClearThumbnails() {
-  if (!await openConfirm({
-    title: 'Delete all thumbnails?',
-    message: 'All generated thumbnails are deleted from disk. They are regenerated automatically on the next startup backfill.',
-    confirmLabel: 'Delete', danger: true,
-  })) return;
-  return _runDeleteJob(
-    _clearThumbsWidget, 'util-clear-thumbs-btn',
-    '/api/tiktok/utils/clear-thumbnails',
-    null,
-    d => `Deleted ${d.deleted} thumbnail file${d.deleted !== 1 ? 's' : ''}.`
   );
 }
 
@@ -2259,40 +1971,6 @@ async function triggerStoryRedownload() {
   _storyfixMode = 'redownload';
   _storyfixWidget.update({ barPct: null, label: 'Re-downloading corrupted stories…' });
   _jobPollStart('storyfix', _storyfixTick, 1500);
-}
-
-// ── Fix blank thumbnails ─────────────────────────────────────────────────────
-const _nThumb = n => _n(n, 'thumbnail');
-
-async function _thumbfixTick() {
-  const { ok, data } = await apiJSON('/api/tiktok/jobs/thumbnail-repair/status');
-  if (!ok) return;
-  const btn = document.getElementById('job-thumbfix-btn');
-  if (data.running) {
-    if (btn) btn.disabled = true;
-    const total = data.total || 0;
-    _thumbfixWidget.update({
-      barPct: total ? Math.round((data.scanned || 0) / total * 100) : null,
-      label:  `Fixing thumbnails… ${data.scanned}/${data.total} scanned, ${data.repaired} fixed`,
-    });
-    return;
-  }
-  _jobPollStop('thumbfix');
-  if (btn) btn.disabled = false;
-  const parts = [];
-  if (data.repaired) parts.push(`${_nThumb(data.repaired)} fixed`);
-  else if (!data.broken) parts.push('No blank thumbnails found');
-  if (data.failed) parts.push(`${_nThumb(data.failed)} could not be rebuilt (source file missing)`);
-  if (parts.length) _thumbfixWidget.update({ label: parts.join(' · ') + '.' });
-}
-
-async function triggerThumbnailRepair() {
-  const btn = document.getElementById('job-thumbfix-btn');
-  btn.disabled = true;
-  const { ok, data } = await apiJSON('/api/tiktok/jobs/thumbnail-repair/start', { method: 'POST' });
-  if (!ok) { showToast(data.error || 'Could not start the job', { type: 'error' }); btn.disabled = false; return; }
-  _thumbfixWidget.update({ barPct: null, label: 'Scanning thumbnails…' });
-  _jobPollStart('thumbfix', _thumbfixTick, 1500);
 }
 
 // ── Diagnostics ────────────────────────────────────────────────────────────────

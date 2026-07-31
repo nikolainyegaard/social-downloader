@@ -23,8 +23,7 @@ TikTok extras on its engine blueprint:
 /api/tiktok/proxy/gluetun/restart POST: restart the gluetun container via the Docker socket (503 without it)
 /api/tiktok/proxy/test            POST: IP echo through proxy and direct; latency, same_ip flag
 /api/tiktok/jobs/story-recovery/status|scan|redownload
-/api/tiktok/jobs/thumbnail-repair/status|start   undecodable thumbnails, all platforms
-/api/tiktok/jobs/photo-converter/status|start, audio-cleanup/status|start, file-check/status|scan|purge
+/api/tiktok/jobs/file-check/status|scan|purge
 /api/tiktok/pause/sounds          pause the sound loop
 /api/tiktok/videos/<id>/...       TikTok video/photo serving
 
@@ -79,6 +78,10 @@ Global:
 /api/transcode/settings           PATCH any transcode.json key (enabled, paused, min_size_mb, ...)
 /api/transcode/backfill           POST: scan the library and queue qualifying files (409 while scanning)
 /api/transcode/retry-failed       POST: requeue every failed row
+/api/jobs/photo-converter/status|start    JPEG to AVIF conversion, all platforms
+/api/jobs/thumbnail-repair/status|start   undecodable thumbnails, all platforms
+/api/jobs/audio-cleanup/status|start      delete audio-only files, all platforms
+/api/jobs/clear-thumbnails                POST: delete every generated thumbnail
 /api/platforms                    GET the platform list ({id, label, enabled})
 /api/platforms/<id>               PATCH {enabled}: toggle live; disabling stops the loop immediately and
                                   403s every /api/{p}/* route on that blueprint

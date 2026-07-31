@@ -10,7 +10,6 @@ maintenance jobs, utilities, and the raw-fetch diagnostics.
 from __future__ import annotations
 
 import asyncio
-import glob as _glob
 import io
 import json
 import os
@@ -21,20 +20,15 @@ import traceback
 import zipfile
 from flask import jsonify, request, send_file, Response
 
-from config import DATA_DIR, MEDIA_DIR
+from config import DATA_DIR
 from platforms.tiktok.config import get_cookies_flat, COOKIES_PATH
 from platforms.tiktok.api import get_video_details, run_browser_job
 from platforms.tiktok.store import TikTokStore
 from platforms.tiktok.sounds import get_sound_loop
 from thumbnailer import AVATARS_DIR
 
-# Imported for its side effect: starts the AVIF conversion thread on import.
-import photo_converter as _photo_converter
-
 REPORTS_DIR = os.path.join(DATA_DIR, "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
-
-_AUDIO_EXTENSIONS = frozenset([".mp3", ".m4a", ".m4b", ".aac", ".ogg", ".wav", ".flac", ".opus"])
 
 
 def _write_report(slug: str, header: str, lines: list[str]) -> str:
@@ -390,17 +384,6 @@ def register_tiktok_routes(bp, engine) -> None:
         "last_run":      None,
     }
 
-    # Audio file cleanup state
-    _audio_cleanup_lock  = threading.Lock()
-    _audio_cleanup_state: dict = {
-        "running":    False,
-        "found":      0,
-        "deleted":    0,
-        "db_removed": 0,
-        "errors":     0,
-        "last_run":   None,
-    }
-
     # ── Workers ───────────────────────────────────────────────────────────────
 
     def _run_backfill() -> None:
@@ -516,49 +499,6 @@ def register_tiktok_routes(bp, engine) -> None:
             with _file_check_lock:
                 _file_check_state["running"]  = False
                 _file_check_state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
-
-    def _run_audio_cleanup() -> None:
-        with _audio_cleanup_lock:
-            if _audio_cleanup_state["running"]:
-                return
-            _audio_cleanup_state.update({"running": True, "found": 0, "deleted": 0, "db_removed": 0, "errors": 0})
-
-        print(f"[audio-cleanup] Scanning {MEDIA_DIR} for audio-only files...")
-        try:
-            audio_files = [
-                p for p in _glob.glob(os.path.join(MEDIA_DIR, "*", "@*", "*"))
-                if os.path.isfile(p) and os.path.splitext(p)[1].lower() in _AUDIO_EXTENSIONS
-            ]
-
-            with _audio_cleanup_lock:
-                _audio_cleanup_state["found"] = len(audio_files)
-
-            print(f"[audio-cleanup] Found {len(audio_files)} audio file(s)")
-
-            for path in audio_files:
-                video_id = os.path.splitext(os.path.basename(path))[0]
-                try:
-                    os.remove(path)
-                    with _audio_cleanup_lock:
-                        _audio_cleanup_state["deleted"] += 1
-                    print(f"[audio-cleanup] Deleted {path}")
-                except OSError as e:
-                    print(f"[audio-cleanup] Failed to delete {path}: {e}")
-                    with _audio_cleanup_lock:
-                        _audio_cleanup_state["errors"] += 1
-                    continue
-
-                if db.delete_video(video_id):
-                    with _audio_cleanup_lock:
-                        _audio_cleanup_state["db_removed"] += 1
-                    print(f"[audio-cleanup] Removed {video_id} from database")
-
-        except Exception as e:
-            print(f"[audio-cleanup] Unexpected error: {e}")
-        finally:
-            with _audio_cleanup_lock:
-                _audio_cleanup_state["running"]  = False
-                _audio_cleanup_state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
     def _story_repair_scan() -> None:
         from engine.tracker import scan_afflicted_stories
@@ -932,46 +872,6 @@ def register_tiktok_routes(bp, engine) -> None:
 
     # ── Jobs API ──────────────────────────────────────────────────────────────
 
-    @bp.route("/jobs/photo-converter/status", methods=["GET"])
-    def get_photo_converter_status():
-        return jsonify(_photo_converter.get_state())
-
-    @bp.route("/jobs/photo-converter/start", methods=["POST"])
-    def start_photo_converter():
-        if not _photo_converter.start():
-            return jsonify({"error": "Already running"}), 409
-        return jsonify({"ok": True})
-
-    @bp.route("/jobs/thumbnail-repair/status", methods=["GET"])
-    def thumbnail_repair_status():
-        from thumbnailer import get_repair_state
-        return jsonify(get_repair_state())
-
-    @bp.route("/jobs/thumbnail-repair/start", methods=["POST"])
-    def thumbnail_repair_start():
-        # Regenerates thumbnails (all platforms) whose AVIF colour tags are
-        # reserved/unspecified, which Firefox renders blank. Covers every
-        # platform since thumbnail generation is shared.
-        from thumbnailer import get_repair_state, repair_broken_thumbnails
-        if get_repair_state()["running"]:
-            return jsonify({"error": "Already running"}), 409
-        threading.Thread(target=repair_broken_thumbnails, daemon=True,
-                         name="thumbnail-repair").start()
-        return jsonify({"ok": True})
-
-    @bp.route("/jobs/audio-cleanup/status", methods=["GET"])
-    def get_audio_cleanup_status():
-        with _audio_cleanup_lock:
-            return jsonify(dict(_audio_cleanup_state))
-
-    @bp.route("/jobs/audio-cleanup/start", methods=["POST"])
-    def start_audio_cleanup():
-        with _audio_cleanup_lock:
-            if _audio_cleanup_state["running"]:
-                return jsonify({"error": "Already running"}), 409
-        threading.Thread(target=_run_audio_cleanup, daemon=True, name="audio-cleanup").start()
-        return jsonify({"ok": True})
-
     @bp.route("/jobs/file-check/status", methods=["GET"])
     def get_file_check_status():
         with _file_check_lock:
@@ -1052,21 +952,6 @@ def register_tiktok_routes(bp, engine) -> None:
                     [(cid,) for cid in deleted_ids]
                 )
 
-        return jsonify({"deleted": deleted})
-
-    @bp.route("/utils/clear-thumbnails", methods=["POST"])
-    def clear_thumbnails():
-        deleted = 0
-        for thumbs_dir in _glob.glob(os.path.join(MEDIA_DIR, "*", "*", "thumbs")):
-            if not os.path.isdir(thumbs_dir):
-                continue
-            for fname in os.listdir(thumbs_dir):
-                if os.path.splitext(fname)[1].lower() in (".avif", ".jpg", ".jpeg"):
-                    try:
-                        os.remove(os.path.join(thumbs_dir, fname))
-                        deleted += 1
-                    except OSError:
-                        pass
         return jsonify({"deleted": deleted})
 
     # ── Diagnostics API ───────────────────────────────────────────────────────
