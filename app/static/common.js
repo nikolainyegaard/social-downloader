@@ -575,11 +575,14 @@ async function _gjTick() {
       const name = `<div style="${ell}">${esc((r.path || '').split('/').pop())}</div>`;
       if (r.status === 'done' && r.new_bytes && r.orig_bytes) {
         const cut = Math.round((1 - r.new_bytes / r.orig_bytes) * 100);
+        const ext = r.reason === 'transcoded externally'
+          ? ` <span style="border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--muted);font-size:.85em" title="Transcoded on another machine">remote</span>`
+          : '';
         return name
           + `<div style="white-space:nowrap">${_gjFmtBytes(r.orig_bytes)} → ${_gjFmtBytes(r.new_bytes)}</div>`
           + `<div style="color:var(--green)">-${cut}%</div>`
           + `<div style="white-space:nowrap">${r.vmaf_mean != null ? 'VMAF ' + r.vmaf_mean : ''}</div>`
-          + `<div style="white-space:nowrap">${r.elapsed ? _gjFmtSecs(r.elapsed) : ''}</div>`;
+          + `<div style="white-space:nowrap">${r.elapsed ? _gjFmtSecs(r.elapsed) : ''}${ext}</div>`;
       }
       const color = r.status === 'failed' ? 'var(--red)' : 'var(--muted)';
       const detail = `${esc(r.status)}${r.reason ? ': ' + esc(r.reason) : ''}`;

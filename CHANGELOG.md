@@ -16,6 +16,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The creator modal's Stats tab has a day-range filter (14, 30, 60, 90 days, default 14) in the nav bar, capping how far back the graphs reach; spans shorter than the selected range show everything available as before
 - Video thumbnails in the list view show the video duration (MM:SS) in the lower left corner, and grid cells show the duration where the view count used to be
 - The media viewer has a post details panel (description, status, views, likes, comments, duration, resolution, dates, post ID): a sidebar next to the media on desktop, and an overlay behind a new info button in the top action row on mobile. Stories are unaffected
+- Transcode results tag files that were encoded on another machine with a small "remote" label
 
 ### Changed
 - Job cards in Settings put their buttons on the title row and let the description use the card's full width, instead of squeezing the text into a column beside the buttons
