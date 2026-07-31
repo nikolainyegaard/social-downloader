@@ -576,13 +576,14 @@ async function _gjTick() {
       if (r.status === 'done' && r.new_bytes && r.orig_bytes) {
         const cut = Math.round((1 - r.new_bytes / r.orig_bytes) * 100);
         const ext = r.reason === 'transcoded externally'
-          ? ` <span style="border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--muted);font-size:.85em" title="Transcoded on another machine">remote</span>`
+          ? `<span style="border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--muted);font-size:.85em" title="Transcoded on another machine">remote</span>`
           : '';
         return name
           + `<div style="white-space:nowrap">${_gjFmtBytes(r.orig_bytes)} → ${_gjFmtBytes(r.new_bytes)}</div>`
           + `<div style="color:var(--green)">-${cut}%</div>`
           + `<div style="white-space:nowrap">${r.vmaf_mean != null ? 'VMAF ' + r.vmaf_mean : ''}</div>`
-          + `<div style="white-space:nowrap">${r.elapsed ? _gjFmtSecs(r.elapsed) : ''}${ext}</div>`;
+          + `<div style="white-space:nowrap">${r.elapsed ? _gjFmtSecs(r.elapsed) : ''}</div>`
+          + `<div>${ext}</div>`;
       }
       const color = r.status === 'failed' ? 'var(--red)' : 'var(--muted)';
       const detail = `${esc(r.status)}${r.reason ? ': ' + esc(r.reason) : ''}`;
@@ -596,7 +597,7 @@ async function _gjTick() {
     // Every column hugs its content and packs left; only the name column may
     // shrink (to its ellipsis) when the panel is too narrow for the whole row
     const html = rows.length
-      ? `<div style="display:grid;grid-template-columns:minmax(0,max-content) repeat(4,max-content);column-gap:14px">${rows.join('')}</div>`
+      ? `<div style="display:grid;grid-template-columns:minmax(0,max-content) repeat(5,max-content);column-gap:14px">${rows.join('')}</div>`
       : '';
     if (_gjRecentHtml !== html) { _gjRecentHtml = html; recentEl.innerHTML = html; }
   }
