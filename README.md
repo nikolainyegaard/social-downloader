@@ -48,7 +48,7 @@ All loop settings can also be changed from the UI without restarting; the UI val
 | `./data` | Databases, cookies, avatars, logs; back this up |
 | `./media` | Downloaded videos and photos |
 
-**Storing one platform on another disk:** uncomment its override line in `docker-compose.yml` to mount a different disk over that platform's subfolder (e.g. `/mnt/bigdisk/onlyfans:/app/media/onlyfans`). The container path stays the same, so the app, databases, and playback need no changes. To move an existing library: copy the platform folder to the new disk with `rsync -a`, stop the container, run the same rsync again to catch changes, uncomment the mount line, and start the container. Verify playback before deleting the old folder. The mounted folder must be writable by the user the container runs as.
+**Storing one platform on another disk:** uncomment its override line in `docker-compose.yml` to mount a different disk over that platform's subfolder (e.g. `/mnt/bigdisk/onlyfans:/app/media/onlyfans`). The container path stays the same, so the app, databases, and playback need no changes. To move an existing library: copy the platform folder to the new disk with `rsync -a`, stop the container, run the same rsync again to catch changes, uncomment the mount line, and start the container. Verify playback, then delete the old folder's *contents* only (`rm -rf media/onlyfans/*` style): the folder itself is the mount anchor, and removing it while the container runs detaches the mount until a restart. The mounted folder must be writable by the user the container runs as.
 
 ---
 
