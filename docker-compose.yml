@@ -9,6 +9,15 @@ services:
       - ./data:/app/data
       # Downloaded media (videos, photos) are stored here.
       - ./media:/app/media
+      # Per-platform storage overrides: mount another disk over a platform's
+      # subfolder to keep its media there. The container path must stay
+      # /app/media/<platform> so nothing else changes; move the existing
+      # files onto the disk before switching (see README).
+      # - /mnt/bigdisk/tiktok:/app/media/tiktok
+      # - /mnt/bigdisk/youtube:/app/media/youtube
+      # - /mnt/bigdisk/twitter:/app/media/twitter
+      # - /mnt/bigdisk/instagram:/app/media/instagram
+      # - /mnt/bigdisk/onlyfans:/app/media/onlyfans
       # Optional: lets the app restart the gluetun VPN container from
       # Settings > Network > TikTok after saving a WireGuard config.
       # Note that the socket gives this container control over the host's

@@ -83,7 +83,7 @@ Build notes:
 - `ENV MEDIA_DIR=/app/media` pins the media path; without it the fallback `./media` depends on CWD and 404s video/thumbnail serving
 - CMD starts `Xvfb :99` in the background and `exec`s python (python stays PID 1), with `DISPLAY=:99` in ENV, so the TikTok browser runs headed (headless Chrome has its own fingerprint class). It removes the previous run's `/tmp/.X99-lock` and X socket first. Do NOT use xvfb-run: see the Xvfb gotcha in [tiktok.md](tiktok.md)
 
-Volumes: `./data:/app/data` (DBs, cookies, avatars, logs, back this up) and `./media:/app/media`.
+Volumes: `./data:/app/data` (DBs, cookies, avatars, logs, back this up) and `./media:/app/media`. Per-platform storage overrides are additional bind mounts over a platform's subfolder (`/mnt/bigdisk/onlyfans:/app/media/onlyfans`, commented templates in docker-compose.yml): the container path is unchanged, so stored absolute paths in the DBs stay valid; never point a platform at a new container path, that orphans every existing row.
 
 ## Reverse proxy (Caddy)
 

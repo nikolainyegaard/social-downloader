@@ -18,6 +18,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The media viewer has a post details panel (description, status, views, likes, comments, duration, resolution, dates, post ID): a sidebar next to the media on desktop, and an overlay behind a new info button in the top action row on mobile. Stories are unaffected
 - Transcode results tag files that were encoded on another machine with a small "remote" label
 - The transcode job skips sources that are already efficiently compressed (below a configurable bits per pixel threshold, default 0.10) instead of running a full encode that ends in "no size win"; low-bitrate TikTok downloads were burning encode time only to come out larger
+- docker-compose.yml has commented per-platform storage override lines: mount another disk over a platform's media subfolder to store that platform elsewhere, no app configuration needed (see README)
 
 ### Changed
 - Job cards in Settings put their buttons on the title row and let the description use the card's full width, instead of squeezing the text into a column beside the buttons
