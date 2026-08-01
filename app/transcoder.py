@@ -58,6 +58,7 @@ _DEFAULT_SETTINGS = {
     "enabled":            False,  # auto-enqueue new downloads
     "paused":             False,  # worker halted (queue keeps accepting)
     "min_size_mb":        50,
+    "min_bpp":            0.10,  # skip sources below this bits/pixel/frame: already compact, AV1 at this CRF only grows them
     "crf":                22,
     "preset":             4,
     "audio_bitrate_kbps": 96,
@@ -339,6 +340,22 @@ def _duration(path: str) -> float | None:
         return None
 
 
+def _bits_per_pixel(path: str, size: int, duration: float) -> float | None:
+    """Bits per pixel per frame of the video stream, the compactness measure
+    behind the min_bpp gate. None when the probe fails."""
+    try:
+        r = subprocess.run(
+            [FFPROBE, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height,r_frame_rate", "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=60)
+        w, h, rate = r.stdout.strip().split(",")
+        num, _, den = rate.partition("/")
+        fps = float(num) / float(den or 1)
+        return (size * 8 / duration) / (int(w) * int(h) * fps)
+    except Exception:
+        return None
+
+
 _vmaf_checked: bool | None = None
 
 
@@ -455,6 +472,11 @@ def _process(path: str, s: dict) -> None:
 
         orig_bytes = os.path.getsize(path)
         duration   = _duration(path)
+        if duration and s["min_bpp"] > 0:
+            bpp = _bits_per_pixel(path, orig_bytes, duration)
+            if bpp is not None and bpp < s["min_bpp"]:
+                _finish(path, "skipped", reason=f"source already compact ({bpp:.3f} bpp)")
+                return
         free       = shutil.disk_usage(os.path.dirname(path)).free
         if free < orig_bytes:
             # Not a per-file failure: the disk needs space. Park and wait.

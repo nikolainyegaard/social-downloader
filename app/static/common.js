@@ -385,6 +385,13 @@ const _GENERAL_JOBS_HTML = `
         </div>
       </label>
       <label class="settings-label">
+        <span>Skip compact sources below</span>
+        <div class="loop-interval-field">
+          <input type="number" id="gjMinBpp" min="0" step="0.01" class="loop-interval-input" onchange="_gjNum('min_bpp', this)">
+          <span>bits/pixel</span>
+        </div>
+      </label>
+      <label class="settings-label">
         <span>Encoder threads</span>
         <div class="loop-interval-field">
           <input type="number" id="gjThreads" min="1" max="64" class="loop-interval-input" onchange="_gjNum('threads', this)">
@@ -636,8 +643,9 @@ async function _gjPatch(changes, { toast = true } = {}) {
 function _gjToggle(key, input) { _gjPatch({ [key]: input.checked }); }
 
 function _gjNum(key, input) {
-  const v = parseInt(input.value, 10);
-  if (!Number.isFinite(v) || v < 1) return;
+  // min_bpp is a fraction and 0 disables its gate; the others are ints >= 1
+  const v = key === 'min_bpp' ? parseFloat(input.value) : parseInt(input.value, 10);
+  if (!Number.isFinite(v) || v < (key === 'min_bpp' ? 0 : 1)) return;
   _gjPatch({ [key]: v });
 }
 
@@ -681,6 +689,7 @@ async function _gjShow() {
     seed('gjEnabled', el => { el.checked = !!s.enabled; });
     seed('gjVerify',  el => { el.checked = !!s.verify_vmaf; });
     seed('gjMinSize', el => { el.value = String(s.min_size_mb); });
+    seed('gjMinBpp',  el => { el.value = String(s.min_bpp); });
     seed('gjThreads', el => { el.value = String(s.threads); });
   }
   if (!_gjTimer) _gjTimer = setInterval(_gjTick, 2000);
