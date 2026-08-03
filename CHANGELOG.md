@@ -21,6 +21,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - docker-compose.yml has commented per-platform storage override lines: mount another disk over a platform's media subfolder to store that platform elsewhere, no app configuration needed (see README)
 
 ### Changed
+- TikTok's Schedule settings pane renders from the shared schedule pane like the other platforms, picking up the shared field labels
 - Deletion tracking on YouTube, Twitter, Instagram, and OnlyFans now works like TikTok's: a post missing from a full listing is marked deleted right away (pending confirmation on the next full check), a post still missing on that check has its deletion confirmed, and one that reappears before confirmation is silently restored as a false positive. Posts already marked deleted by the old model count as confirmed after a one-time migration
 - The orange "missing" chip on creator cards counts posts awaiting deletion confirmation on every platform (they show as deleted in the post list, like TikTok's)
 - Job cards in Settings put their buttons on the title row and let the description use the card's full width, instead of squeezing the text into a column beside the buttons
@@ -45,6 +46,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 
 ### Fixed
+- The back-to-top button and the startup path-migration warning were wired inside TikTok's script, so with TikTok disabled the button did nothing and the warning never appeared on other platforms; both are app-wide now
 - The video seek bar's click target is much taller than the drawn line, so grabbing it no longer needs a pixel-perfect click
 - Clicking the empty space around the media viewer's content (for example above or below the details panel) now closes the viewer; the invisible layout row was swallowing those clicks
 - A transcode queue row whose file was missing when the worker reached it is no longer dead forever: the Backfill scan requeues such rows once their file exists again, and a file that returned already transcoded is credited in the stats instead of being skipped

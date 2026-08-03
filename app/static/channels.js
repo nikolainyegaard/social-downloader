@@ -55,7 +55,7 @@
  * @property {Function} [videoActionBtnsFn]
  * @property {(v: Object, ch: Object) => string} [videoUrl]  Original post URL on the platform (drives the Link buttons)
  * @property {(v: Object) => {label: string, danger?: boolean, disabled?: boolean, onclick: () => void}[]} [videoMenuItemsFn]  Items for the mobile row ••• menu
- * @property {{account?: {html: string, onShow?: () => void}, schedule?: {html: string, onShow?: () => void}, network?: {html: string, onShow?: () => void, onHide?: () => void}, jobs?: {html?: string, onShow?: () => void, onHide?: () => void, onRender?: () => void}, diag?: {html: string, onShow?: () => void}}} [settings]  Settings pane overrides and extras; Account/Schedule/Jobs/Database always exist, Network and Diagnostics only when provided
+ * @property {{account?: {html: string, onShow?: () => void}, schedule?: {html?: string, onShow?: () => void, opts?: Object}, network?: {html: string, onShow?: () => void, onHide?: () => void}, jobs?: {html?: string, onShow?: () => void, onHide?: () => void, onRender?: () => void}, diag?: {html: string, onShow?: () => void}}} [settings]  Settings pane overrides and extras; Account/Schedule/Jobs/Database always exist, Network and Diagnostics only when provided; schedule.opts feeds _schedulePaneHtml/_scheduleSettingsLoad/Save when html is omitted
  */
 
 /** @param {ChannelAppConfig} cfg */
@@ -1160,7 +1160,7 @@ function initChannelApp(cfg) {
     }
   });
 
-  X('SaveLoopSettings', () => _scheduleSettingsSave(cfg.id, `${P}Settings`));
+  X('SaveLoopSettings', () => _scheduleSettingsSave(cfg.id, `${P}Settings`, cfg.settings?.schedule?.opts));
 
   // Loops panel view toggle (platforms with a second loop, e.g. TikTok sounds)
   X('SetLoopView', which => {
@@ -3218,8 +3218,8 @@ function initChannelApp(cfg) {
     });
     sections.push({
       id: 'schedule', label: 'Schedule',
-      html:   S.schedule?.html ?? _schedulePaneHtml(`${P}Settings`, `${P}SaveLoopSettings`, CREATORS),
-      onShow: S.schedule?.onShow ?? (() => _scheduleSettingsLoad(cfg.id, `${P}Settings`)),
+      html:   S.schedule?.html ?? _schedulePaneHtml(`${P}Settings`, `${P}SaveLoopSettings`, CREATORS, S.schedule?.opts),
+      onShow: S.schedule?.onShow ?? (() => _scheduleSettingsLoad(cfg.id, `${P}Settings`, S.schedule?.opts)),
     });
     if (S.network) sections.push({ id: 'network', label: 'Network', ...S.network });
     sections.push({

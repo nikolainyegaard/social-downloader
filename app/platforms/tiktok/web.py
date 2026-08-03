@@ -26,20 +26,7 @@ from platforms.tiktok.api import get_video_details, run_browser_job
 from platforms.tiktok.store import TikTokStore
 from platforms.tiktok.sounds import get_sound_loop
 from thumbnailer import AVATARS_DIR
-
-REPORTS_DIR = os.path.join(DATA_DIR, "reports")
-os.makedirs(REPORTS_DIR, exist_ok=True)
-
-
-def _write_report(slug: str, header: str, lines: list[str]) -> str:
-    ts       = time.strftime("%Y%m%d-%H%M%S")
-    filename = f"{slug}-{ts}.txt"
-    path     = os.path.join(REPORTS_DIR, filename)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(header + "\n\n")
-        for line in lines:
-            f.write(line + "\n")
-    return filename
+from engine.web import _write_report
 
 
 def _annotate_photo_multi(videos: list[dict]) -> list[dict]:

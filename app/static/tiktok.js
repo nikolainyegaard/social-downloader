@@ -647,63 +647,19 @@ const _TT_SETTINGS_ACCOUNT_HTML = `
     <button class="btn-sm" id="ttViewerBtn" onclick="ttViewerOpen()">Open browser view</button>
   </div>`;
 
-const _TT_SETTINGS_SCHEDULE_HTML = `
-  <p class="settings-note">
-    Check sessions are spread randomly across each 24 hour window. Each session
-    processes only the users whose check interval has come due.
-    Changes take effect at the next scheduled session.
-  </p>
-  <div class="settings-subtitle">User loop</div>
-  <div class="settings-group">
-    <label class="settings-label">
-      <span>Sessions per day</span>
-      <div class="loop-interval-field">
-        <input type="number" id="settingsSessionsPerDay" min="1" max="24" class="loop-interval-input">
-        <span></span>
-      </div>
-    </label>
-    <label class="settings-label">
-      <span>Starred check interval</span>
-      <div class="loop-interval-field">
-        <input type="number" id="settingsHighPriorityHours" min="1" max="168" class="loop-interval-input">
-        <span>h</span>
-      </div>
-    </label>
-    <label class="settings-label">
-      <span>Active user check interval</span>
-      <div class="loop-interval-field">
-        <input type="number" id="settingsActiveHours" min="1" max="168" class="loop-interval-input">
-        <span>h</span>
-      </div>
-    </label>
-    <label class="settings-label">
-      <span>Inactive user check interval</span>
-      <div class="loop-interval-field">
-        <input type="number" id="settingsInactiveHours" min="1" max="720" class="loop-interval-input">
-        <span>h</span>
-      </div>
-    </label>
-    <label class="settings-label">
-      <span>Full refresh cycle</span>
-      <div class="loop-interval-field">
-        <input type="number" id="settingsStatsRefreshDays" min="1" max="30" class="loop-interval-input">
-        <span>days</span>
-      </div>
-    </label>
-  </div>
-  <div class="settings-subtitle">Sound loop</div>
-  <div class="settings-group">
-    <label class="settings-label">
-      <span>Sound loop interval</span>
-      <div class="loop-interval-field">
-        <input type="number" id="soundLoopIntervalInput" min="1" max="9999" class="loop-interval-input">
-        <span>min</span>
-      </div>
-    </label>
-  </div>
-  <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-    <button class="btn-primary btn-sm" onclick="saveLoopSettings()">Save</button>
-  </div>`;
+// Schedule pane: the shared _schedulePaneHtml renders it; these opts add the
+// TikTok deltas (stats_refresh_days drives the batch refresh cycle instead of
+// full_refresh_days, plus the sound loop's own interval field).
+const _TT_SCHEDULE_OPTS = {
+  subtitle: 'User loop',
+  fullRefresh: { key: 'stats_refresh_days', suffix: 'StatsRefreshDays', label: 'Full refresh cycle', min: 1, max: 30, unit: 'days' },
+  extraFields: { sound_loop_interval_minutes: 'soundLoopIntervalInput' },
+  extraHtml: `
+    <div class="settings-subtitle">Sound loop</div>
+    <div class="settings-group">
+      ${_scheduleFieldHtml('soundLoopIntervalInput', 'Sound loop interval', 1, 9999, 'min')}
+    </div>`,
+};
 
 const _TT_SETTINGS_NETWORK_HTML = `
   <div class="settings-group">
@@ -887,12 +843,15 @@ const _TT_SETTINGS_JOBS_HTML = `
     </div>
   </div>`;
 
-const _TT_SETTINGS_DIAG_HTML = `
-  <div id="diag-tiktok">
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
-      Run raw API calls and inspect the response. Useful for debugging download issues.
-      TikTokApi calls open a browser session and may take 10-30 seconds.
-    </div>
+// Diagnostics pane: shared scaffolding from _diagPaneHtml; the source+action
+// dropdown pair is TikTok's own (diagSourceChanged populates the action menu).
+const _TT_SETTINGS_DIAG_HTML = _diagPaneHtml('diag', {
+  note: `Run raw API calls and inspect the response. Useful for debugging download issues.
+      TikTokApi calls open a browser session and may take 10-30 seconds.`,
+  placeholder: 'https://www.tiktok.com/@user/video/123... or user ID',
+  runFn: 'diagRun',
+  copyFn: 'diagCopy',
+  ddRowHtml: `
     <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <div class="dd" id="diagSource" data-value="get_video_details" style="flex:1;min-width:160px">
         <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_ddToggle(this)"><span class="dd-label">get_video_details</span><span class="dd-caret">${_caretIcon}</span></button>
@@ -906,19 +865,9 @@ const _TT_SETTINGS_DIAG_HTML = `
         <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_ddToggle(this)"><span class="dd-label">(paste a URL below)</span><span class="dd-caret">${_caretIcon}</span></button>
         <div class="dd-menu" role="listbox" popover></div>
       </div>
-    </div>
-    <div style="display:flex;gap:10px;margin-bottom:12px">
-      <input id="diagInput" class="text-input" type="text"
-             placeholder="https://www.tiktok.com/@user/video/123... or user ID"
-             style="flex:1">
-      <button class="btn-primary" id="diagRunBtn" onclick="diagRun()" style="flex-shrink:0">Run</button>
-    </div>
-    <div id="diagOutputWrap" style="position:relative">
-      <pre id="diagOutput" class="diag-output">No output yet.</pre>
-      <button onclick="diagCopy()" title="Copy output" class="diag-copy-btn">Copy</button>
-    </div>
-    <div id="diagResolveHint" style="display:none;margin-top:8px;font-size:12px;color:var(--muted)"></div>
-  </div>`;
+    </div>`,
+  trailingHtml: `<div id="diagResolveHint" style="display:none;margin-top:8px;font-size:12px;color:var(--muted)"></div>`,
+});
 
 function _ttJobsShow() {
   // Jobs resume their poll only when still running server-side. The app-wide
@@ -1032,7 +981,7 @@ const tt = initChannelApp({
   onStatus:          _ttOnStatus,
   settings: {
     account:  { html: _TT_SETTINGS_ACCOUNT_HTML,  onShow: () => loadCookies() },
-    schedule: { html: _TT_SETTINGS_SCHEDULE_HTML, onShow: () => loadSettings() },
+    schedule: { opts: _TT_SCHEDULE_OPTS },
     network:  { html: _TT_SETTINGS_NETWORK_HTML,  onShow: () => ttProxyLoad() },
     jobs:     { html: _TT_SETTINGS_JOBS_HTML, onShow: _ttJobsShow, onHide: _ttJobsHide },
     diag:     { html: _TT_SETTINGS_DIAG_HTML, onShow: () => diagSourceChanged() },
@@ -1764,41 +1713,6 @@ async function _trackUser(tiktokId, username) {
   unsub = tt.onQueue(onQueue);
 }
 
-// ── Settings (schedule load/save; the pane itself registers via cfg.settings) ──
-
-async function loadSettings() {
-  const { ok, data } = await apiJSON('/api/tiktok/settings');
-  if (!ok) { showToast('Could not load the schedule settings.', { type: 'error' }); return; }
-  const _sv = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
-  _sv('settingsSessionsPerDay',    data.sessions_per_day);
-  _sv('settingsHighPriorityHours', data.high_priority_check_hours);
-  _sv('settingsActiveHours',       data.active_check_hours);
-  _sv('settingsInactiveHours',     data.inactive_check_hours);
-  _sv('settingsStatsRefreshDays',  data.stats_refresh_days);
-  _sv('soundLoopIntervalInput',    data.sound_loop_interval_minutes);
-}
-
-async function saveLoopSettings() {
-  const _iv = id => { const el = document.getElementById(id); return el ? parseInt(el.value, 10) : null; };
-  const body = {
-    sessions_per_day:          _iv('settingsSessionsPerDay'),
-    high_priority_check_hours: _iv('settingsHighPriorityHours'),
-    active_check_hours:        _iv('settingsActiveHours'),
-    inactive_check_hours:      _iv('settingsInactiveHours'),
-    stats_refresh_days:        _iv('settingsStatsRefreshDays'),
-    sound_loop_interval_minutes: _iv('soundLoopIntervalInput'),
-  };
-  if (Object.values(body).some(v => !v || v < 1)) {
-    showToast('All values must be positive integers.', { type: 'warning', duration: 4000 });
-    return;
-  }
-  const { ok, data } = await apiJSON('/api/tiktok/settings', { method: 'PATCH', body: JSON.stringify(body) });
-  if (!ok) { showToast(data.error || 'Could not save settings', { type: 'error' }); return; }
-  showToast('Settings saved', { type: 'success', duration: 2500 });
-}
-
-// ── Migration helpers ─────────────────────────────────────────────────────────
-
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 // One contract for every Jobs-pane job: progress and results render through
 // _makeJobWidget, and every polling loop registers in _jobPolls (common.js) so
@@ -2156,29 +2070,3 @@ setInterval(() => { if (_ttTabActive()) loadCookies(); }, 30000);
 setInterval(() => { if (_ttTabActive() && !tt.isLive()) loadSounds(); }, 60000);
 window.addEventListener('hashchange', () => { if (_ttTabActive()) { loadCookies(); loadSounds(); } });
 _initAllGliders();
-
-// Migration warning
-
-(async function checkMigrationStatus() {
-  try {
-    const { ok, data } = await apiJSON('/api/migrate/preview');
-    if (!ok || !data.total_legacy) return;
-    const n = data.total_legacy;
-    showToast(
-      `${n.toLocaleString()} post${n !== 1 ? 's' : ''} have paths that need migration.`,
-      {
-        type: 'warning',
-        duration: 0,
-        action: { label: 'Open Migration Settings', onclick: () => openSettings('migrate') },
-      }
-    );
-  } catch (_) {}
-})();
-
-// ── Back to top ───────────────────────────────────────────────────────────────
-(function() {
-  const btn = document.getElementById('backToTopBtn');
-  window.addEventListener('scroll', () => {
-    btn.style.display = window.scrollY > 200 ? 'flex' : 'none';
-  }, { passive: true });
-})();

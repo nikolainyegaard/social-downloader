@@ -289,8 +289,8 @@ async def process_single_user(
 
                 # Account recovered from a ban: restore all ban-deleted videos.
                 if _was_banned:
-                    restored = store.restore_banned_videos(channel_id)
-                    store.set_account_status(channel_id, "active")
+                    restored = db.restore_banned_videos(channel_id)
+                    db.set_account_status(channel_id, "active")
                     db.set_channel_tracking_enabled(channel_id, True)
                     log(f"  Account restored: ban cleared, {_npost(restored)} re-activated")
                     _was_banned = False  # ban handled; the listing-based restore must not re-fire
@@ -373,18 +373,18 @@ async def process_single_user(
                         log(f"  Banned for 14+ consecutive days -- tracking disabled")
                 else:
                     log(f"  Account banned/removed (TikTok ban code), marking as banned")
-                    store.set_account_status(channel_id, "banned")
-                    n = store.ban_channel_videos(channel_id)
+                    db.set_account_status(channel_id, "banned")
+                    n = db.ban_channel_videos(channel_id)
                     if n:
                         log(f"  {_npost(n)} marked deleted (user_banned)")
-                store.touch_last_checked(channel_id)
+                db.touch_last_checked(channel_id)
                 return _profile_ok, _deletion_detected
             except UserBlockedException:
                 _profile_ok = True
                 store.reset_profile_fail_count(channel_id)
                 log(f"  Cookies account blocked by this user -- skipping")
                 store.update_privacy_status(channel_id, "blocked")
-                store.touch_last_checked(channel_id)
+                db.touch_last_checked(channel_id)
                 return _profile_ok, _deletion_detected
             except UserPrivateException:
                 # Profile data unavailable (TikTok 10222 -- account is fully private at API level).
@@ -530,7 +530,7 @@ async def process_single_user(
         elif is_private and not info:
             # 10222 account, item_list returned no data (access lost or transient failure).
             # Still stamp last_checked so the card reflects when this account was last visited.
-            store.touch_last_checked(channel_id)
+            db.touch_last_checked(channel_id)
 
         # Do we follow this account? relation enum: 0=none, 1=we follow them,
         # 2=mutual/friends, 6=they follow us only. The page blob's relation is
@@ -613,8 +613,8 @@ async def process_single_user(
         # unbans). Public accounts with a successful profile fetch go through the
         # profile-level block above; skip here.
         if _was_banned and remote_ids and (is_private is True or not _profile_ok):
-            restored = store.restore_banned_videos(channel_id)
-            store.set_account_status(channel_id, "active")
+            restored = db.restore_banned_videos(channel_id)
+            db.set_account_status(channel_id, "active")
             db.set_channel_tracking_enabled(channel_id, True)
             log(f"  Account restored (videos are listable again): ban cleared, {_npost(restored)} re-activated")
 

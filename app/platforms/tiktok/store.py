@@ -1,9 +1,8 @@
 """TikTok-specific database operations over the shared engine ChannelDB.
 
 Covers everything the engine has no equivalent for: sound tracking (sounds and
-sound_videos tables), the video stats backfill machinery, ban and privacy
-status handling, the two-strike deletion confirmation flow, and the TikTok
-scheduler extras (quick video ID memory, refresh batches).
+sound_videos tables), the video stats backfill machinery, privacy status
+handling, and the refresh batch scheduler extras.
 
 The underlying SQLite file is the folded-in TikTok database: the schema was
 migrated in place to the engine vocabulary (users renamed to channels;
@@ -252,21 +251,6 @@ class TikTokStore:
                 (_STATS_ERROR_THRESHOLD,)
             ).fetchall()]
 
-    def count_videos_missing_stats(self) -> int:
-        """Count of downloaded, non-deleted videos that have never had a full stats fetch
-        and belong to a currently-tracked channel (matches what get_videos_missing_stats returns)."""
-        with self.db.get_db() as conn:
-            row = conn.execute(
-                """SELECT COUNT(*) FROM videos v
-                   JOIN channels c ON c.channel_id = v.channel_id
-                   WHERE v.stats_backfilled_at IS NULL
-                     AND COALESCE(v.stats_error_count, 0) < ?
-                     AND v.file_path IS NOT NULL
-                     AND v.status NOT IN ('deleted', 'undeleted')""",
-                (_STATS_ERROR_THRESHOLD,)
-            ).fetchone()
-        return row[0] if row else 0
-
     def get_videos_stats_failed(self) -> list[dict]:
         """Return videos permanently abandoned by backfill, with handle and last error."""
         with self.db.get_db() as conn:
@@ -281,20 +265,6 @@ class TikTokStore:
                    ORDER BY v.stats_error_count DESC""",
                 (_STATS_ERROR_THRESHOLD,)
             ).fetchall()]
-
-    def count_videos_stats_failed(self) -> int:
-        """Count of videos that have been permanently abandoned by backfill (too many errors)."""
-        with self.db.get_db() as conn:
-            row = conn.execute(
-                """SELECT COUNT(*) FROM videos v
-                   JOIN channels c ON c.channel_id = v.channel_id
-                   WHERE v.stats_backfilled_at IS NULL
-                     AND COALESCE(v.stats_error_count, 0) >= ?
-                     AND v.file_path IS NOT NULL
-                     AND v.status != 'deleted'""",
-                (_STATS_ERROR_THRESHOLD,)
-            ).fetchone()
-        return row[0] if row else 0
 
     def update_video_stats(self, video_id: str, view_count=None, like_count=None,
                            comment_count=None, share_count=None, save_count=None,
@@ -452,31 +422,6 @@ class TikTokStore:
                     (channel_id, old_status, int(time.time()))
                 )
 
-    def set_account_status(self, channel_id: str, status: str):
-        with self.db.get_db() as conn:
-            row = conn.execute(
-                "SELECT account_status FROM channels WHERE channel_id = ?", (channel_id,)
-            ).fetchone()
-            old_status = row["account_status"] if row else None
-            if status == "banned":
-                conn.execute(
-                    "UPDATE channels SET account_status = ?, banned_at = COALESCE(banned_at, ?) WHERE channel_id = ?",
-                    (status, int(time.time()), channel_id),
-                )
-            else:
-                conn.execute(
-                    "UPDATE channels SET account_status = ? WHERE channel_id = ?",
-                    (status, channel_id),
-                )
-            # Every transition is recorded so the modal's Profile History shows
-            # the full ban lifecycle; the activity feed hides the to-banned
-            # rows since its own banned event covers those (get_activity_feed).
-            if old_status and old_status != status:
-                conn.execute(
-                    "INSERT INTO profile_history (channel_id, field, old_value, changed_at) VALUES (?, 'account_status', ?, ?)",
-                    (channel_id, old_status, int(time.time()))
-                )
-
     def increment_profile_fail_count(self, channel_id: str) -> int:
         """Increment the consecutive profile-fetch failure counter. Returns the new count."""
         with self.db.get_db() as conn:
@@ -497,48 +442,6 @@ class TikTokStore:
                 "UPDATE channels SET profile_fail_count = 0 WHERE channel_id = ?",
                 (channel_id,),
             )
-
-    def ban_channel_videos(self, channel_id: str) -> int:
-        """Mark all active videos for a channel as deleted with reason 'user_banned'.
-        Only affects videos with status 'up' or 'undeleted'. Already-deleted videos
-        (deleted_reason='video_deleted') are left untouched.
-        Returns the number of videos affected.
-        """
-        with self.db.get_db() as conn:
-            conn.execute("""
-                UPDATE videos
-                SET status             = 'deleted',
-                    deleted_reason     = 'user_banned',
-                    deleted_at         = COALESCE(deleted_at, ?),
-                    deletion_confirmed = 1
-                WHERE channel_id = ? AND status IN ('up', 'undeleted')
-            """, (int(time.time()), channel_id))
-            row = conn.execute(
-                "SELECT changes() AS n"
-            ).fetchone()
-        return row["n"] if row else 0
-
-    def restore_banned_videos(self, channel_id: str) -> int:
-        """Re-activate all videos hidden by a ban back to plain active status.
-        A ban never actually deleted them, so they are not marked 'Restored'
-        (undeleted); the deletion metadata the ban stamped is simply cleared.
-        Videos individually deleted before the ban (deleted_reason='video_deleted')
-        are left untouched. Returns the number of videos restored.
-        """
-        with self.db.get_db() as conn:
-            conn.execute("""
-                UPDATE videos
-                SET status             = 'up',
-                    deleted_reason     = NULL,
-                    deleted_at         = NULL,
-                    deletion_confirmed = 0,
-                    undeleted_at       = NULL
-                WHERE channel_id = ? AND deleted_reason = 'user_banned'
-            """, (channel_id,))
-            row = conn.execute(
-                "SELECT changes() AS n"
-            ).fetchone()
-        return row["n"] if row else 0
 
     def get_ban_history(self, offset: int = 0, limit: int = 50) -> list[dict]:
         """Return paginated ban history (newest first)."""
@@ -565,62 +468,7 @@ class TikTokStore:
     def revert_or_undelete_video(self, video_id: str) -> str:
         return self.db.revert_or_undelete_video(video_id)
 
-    # Scheduling extras (quick video ID memory, refresh batches)
-
-    def get_last_quick_video_ids(self, channel_id: str) -> tuple[list, str]:
-        """Return (ordered video ID list, listing source) from the last
-        quick-window fetch, or ([], ""). The source tags which listing path
-        produced the window ('sniff' or 'item_list'): the two paths anchor
-        the window differently, so the position diff must only compare
-        same-source windows. Legacy plain-array rows predate the tag and were
-        all produced by the item_list endpoint."""
-        with self.db.get_db() as conn:
-            row = conn.execute(
-                "SELECT last_quick_video_ids FROM channels WHERE channel_id = ?",
-                (channel_id,),
-            ).fetchone()
-        if not row or not row[0]:
-            return [], ""
-        try:
-            data = json.loads(row[0])
-        except Exception:
-            return [], ""
-        if isinstance(data, dict):
-            return list(data.get("ids") or []), str(data.get("source") or "")
-        if isinstance(data, list):
-            return data, "item_list"
-        return [], ""
-
-    def set_last_quick_video_ids(self, channel_id: str, ordered_ids: list,
-                                 source: str = "") -> None:
-        """Store the ordered video ID window from the last quick-window fetch,
-        tagged with the listing source that produced it."""
-        payload = json.dumps({"source": source, "ids": ordered_ids}) if ordered_ids else None
-        with self.db.get_db() as conn:
-            conn.execute(
-                "UPDATE channels SET last_quick_video_ids = ? WHERE channel_id = ?",
-                (payload, channel_id),
-            )
-
-    def touch_last_checked(self, channel_id: str) -> None:
-        """Write last_checked = now without touching any other fields.
-
-        Used when TikTok responded but no full profile data is available (banned accounts,
-        10222 private accounts with inaccessible item_list).
-        """
-        with self.db.get_db() as conn:
-            conn.execute(
-                "UPDATE channels SET last_checked = ? WHERE channel_id = ?",
-                (int(time.time()), channel_id),
-            )
-
-    def set_channel_enabled(self, channel_id: str, enabled: bool) -> None:
-        """Set the enabled flag (whether the channel appears in the tracked list)."""
-        with self.db.get_db() as conn:
-            conn.execute(
-                "UPDATE channels SET enabled = ? WHERE channel_id = ?",
-                (1 if enabled else 0, channel_id),
-            )
+    # Scheduling extras (refresh batches)
 
     def assign_refresh_batches(self, n_days: int) -> int:
         """Start a new full-refresh cycle.
@@ -688,46 +536,6 @@ class TikTokStore:
             conn.execute(
                 "UPDATE channels SET full_refresh_pending = 0 WHERE channel_id = ?",
                 (channel_id,),
-            )
-
-    def get_last_check_time(self) -> int | None:
-        """Return MAX(last_checked) across all enabled channels, or None if none checked."""
-        with self.db.get_db() as conn:
-            row = conn.execute(
-                "SELECT MAX(last_checked) FROM channels WHERE enabled = 1"
-            ).fetchone()
-            return row[0] if row and row[0] else None
-
-    # Misc
-
-    def get_username_history(self, channel_id: str) -> list:
-        """Return all past usernames for a channel, oldest first (legacy table)."""
-        with self.db.get_db() as conn:
-            return [dict(r) for r in conn.execute(
-                """SELECT old_username, new_username, changed_at
-                   FROM username_history
-                   WHERE channel_id = ?
-                   ORDER BY changed_at""",
-                (channel_id,)
-            ).fetchall()]
-
-    def get_all_username_history(self) -> dict:
-        """Return all past usernames keyed by channel_id, oldest first. Reads from profile_history."""
-        with self.db.get_db() as conn:
-            rows = conn.execute(
-                "SELECT channel_id, old_value FROM profile_history WHERE field = 'username' ORDER BY changed_at"
-            ).fetchall()
-        result: dict = {}
-        for row in rows:
-            result.setdefault(row["channel_id"], []).append(row["old_value"])
-        return result
-
-    def update_video_file_path(self, video_id: str, file_path: str) -> None:
-        """Update the stored file path for a video (e.g. after format conversion)."""
-        with self.db.get_db() as conn:
-            conn.execute(
-                "UPDATE videos SET file_path = ? WHERE video_id = ?",
-                (file_path, video_id),
             )
 
     def add_video_full(self, video_id, channel_id, content_type, title, upload_date,

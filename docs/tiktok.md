@@ -18,7 +18,7 @@ channels (engine columns + TikTok extras):
   pinned_at,                       Quick Access pin; NULL = unpinned, set time orders the row
   last_video_at, next_check_at (NULL = due immediately), check_interval_secs,
   last_full_refresh_at,
-  last_quick_video_ids,            dead: retired with the yt-dlp deletion redesign, accessors unused
+  last_quick_video_ids,            dead: retired with the yt-dlp deletion redesign, accessors removed
   full_refresh_pending, refresh_batch   TikTok's daily full-refresh batch cycle
 
 videos:
@@ -43,9 +43,7 @@ Indexes from `store.init_tables()`: `idx_sound_videos_sound`, `idx_videos_channe
 - Deletion model: `mark_video_possibly_deleted` / `confirm_video_deletion` / `revert_or_undelete_video` are thin delegates to the engine ChannelDB, which owns the shared two-strike model (see backend.md); TikTok pioneered it and the engine platforms adopted it
 - `add_video_full(...)` sets `stats_backfilled_at` only when `view_count IS NOT NULL`, leaving NULL for backfill (`ChannelDB.add_video` is the generic insert)
 - `update_video_stats` (backfill worker, always stamps) / `update_video_stats_loop` (loop byproduct, COALESCE, stamps `stats_updated_at` and `stats_backfilled_at = COALESCE(..., now)`)
-- `set_account_status`: banned stamps `banned_at = COALESCE(banned_at, now)`; every transition recorded in profile_history
-- `ban_channel_videos` / `restore_banned_videos` (ChannelDB has engine versions)
-- `get_all_username_history()` reads `profile_history WHERE field = 'username'`, not legacy `username_history`
+- Ban lifecycle (`set_account_status`, `ban_channel_videos`, `restore_banned_videos`, `touch_last_checked`) lives on the engine ChannelDB; the TikTok tracker calls it there directly
 - `get_videos_missing_stats()`: `stats_backfilled_at IS NULL AND stats_error_count < 3 AND file_path IS NOT NULL AND status NOT IN ('deleted','undeleted')`, joined to channels
 - `ensure_sound_channel(channel_id, handle, sec_uid=None)` inserts with `enabled=0`
 - Scheduler extras: `assign_refresh_batches(n_days)`, `activate_refresh_batch(batch_num)`, `clear_full_refresh_pending(channel_id)`

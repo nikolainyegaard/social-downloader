@@ -2686,7 +2686,6 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 .settings-content.diag-fill { overflow: hidden; display: flex; flex-direction: column; }
 .settings-content.diag-fill .settings-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .settings-content.diag-fill .ssec-diag { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-#diag-tiktok { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #diagOutputWrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #diagResolveHint a { color: var(--accent); text-decoration: none; }
 @media (hover: hover) { #diagResolveHint a:hover { text-decoration: underline; } }

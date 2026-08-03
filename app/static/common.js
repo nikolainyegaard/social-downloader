@@ -1028,22 +1028,46 @@ const _SCHEDULE_FIELDS = [
   ['high_priority_check_hours', 'HighPriorityHours'],
   ['active_check_hours',        'ActiveHours'],
   ['inactive_check_hours',      'InactiveHours'],
-  ['full_refresh_days',         'FullRefreshDays'],
 ];
 
-async function _scheduleSettingsLoad(platform, idPrefix) {
+const _SCHEDULE_FULL_REFRESH = {
+  key: 'full_refresh_days', suffix: 'FullRefreshDays', label: 'Full check interval',
+  min: 1, max: 90, unit: 'd',
+  title: 'Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff',
+};
+
+// opts (all optional, used by platforms whose pane deviates from the default):
+//   fullRefresh: replacement for _SCHEDULE_FULL_REFRESH (TikTok: stats_refresh_days)
+//   extraFields: {settings_key: elementId} loaded/saved alongside the standard set
+//   subtitle:    heading above the standard field group
+//   extraHtml:   markup between the standard group and the Save button
+/** @typedef {{fullRefresh?: {key: string, suffix: string, label: string, min: number, max: number, unit: string, title?: string}, extraFields?: Object<string, string>, subtitle?: string, extraHtml?: string}} ScheduleOpts */
+
+/** @param {string} idPrefix @param {ScheduleOpts} [opts] */
+function _scheduleFieldDefs(idPrefix, opts = {}) {
+  const full = opts.fullRefresh || _SCHEDULE_FULL_REFRESH;
+  return [
+    ..._SCHEDULE_FIELDS.map(([key, suffix]) => [key, idPrefix + suffix]),
+    [full.key, idPrefix + full.suffix],
+    ...Object.entries(opts.extraFields || {}).map(([key, id]) => [key, id]),
+  ];
+}
+
+/** @param {string} platform @param {string} idPrefix @param {ScheduleOpts} [opts] */
+async function _scheduleSettingsLoad(platform, idPrefix, opts = {}) {
   const { ok, data } = await apiJSON(`/api/${platform}/settings`);
   if (!ok) { showToast('Could not load the schedule settings.', { type: 'error' }); return; }
-  for (const [key, suffix] of _SCHEDULE_FIELDS) {
-    const el = document.getElementById(idPrefix + suffix);
+  for (const [key, id] of _scheduleFieldDefs(idPrefix, opts)) {
+    const el = document.getElementById(id);
     if (el && data[key] !== undefined) el.value = data[key];
   }
 }
 
-async function _scheduleSettingsSave(platform, idPrefix) {
+/** @param {string} platform @param {string} idPrefix @param {ScheduleOpts} [opts] */
+async function _scheduleSettingsSave(platform, idPrefix, opts = {}) {
   const body = {};
-  for (const [key, suffix] of _SCHEDULE_FIELDS) {
-    const el = document.getElementById(idPrefix + suffix);
+  for (const [key, id] of _scheduleFieldDefs(idPrefix, opts)) {
+    const el = document.getElementById(id);
     if (!el) continue;
     const val = parseInt(el.value, 10);
     if (!val || val < 1) { showToast('All schedule values must be positive integers.', { type: 'warning', duration: 4000 }); return; }
@@ -1054,31 +1078,40 @@ async function _scheduleSettingsSave(platform, idPrefix) {
   showToast('Settings saved', { type: 'success', duration: 2500 });
 }
 
-// Settings schedule pane for session-scheduled platforms; field ids match
-// _scheduleSettingsLoad/_scheduleSettingsSave ({idPrefix}SessionsPerDay, ...).
-function _schedulePaneHtml(idPrefix, saveFn, creatorNounPlural) {
-  const field = (label, suffix, min, max, unit, title) => `
+/** @param {string} id @param {string} label @param {number} min @param {number} max @param {string} unit @param {string} [title] */
+function _scheduleFieldHtml(id, label, min, max, unit, title) {
+  return `
     <label class="settings-label"${title ? ` title="${title}"` : ''}>
       <span>${label}</span>
       <div class="loop-interval-field">
-        <input type="number" id="${idPrefix}${suffix}" min="${min}" max="${max}" class="loop-interval-input">
+        <input type="number" id="${id}" min="${min}" max="${max}" class="loop-interval-input">
         <span>${unit}</span>
       </div>
     </label>`;
+}
+
+// Settings schedule pane for session-scheduled platforms; field ids match
+// _scheduleSettingsLoad/_scheduleSettingsSave ({idPrefix}SessionsPerDay, ...).
+/** @param {string} idPrefix @param {string} saveFn @param {string} creatorNounPlural @param {ScheduleOpts} [opts] */
+function _schedulePaneHtml(idPrefix, saveFn, creatorNounPlural, opts = {}) {
+  const field = (label, suffix, min, max, unit, title) =>
+    _scheduleFieldHtml(idPrefix + suffix, label, min, max, unit, title);
+  const full = opts.fullRefresh || _SCHEDULE_FULL_REFRESH;
   return `
     <p class="settings-note">
       Check sessions are spread randomly across each 24 hour window. Each session
       processes only the ${creatorNounPlural} whose check interval has come due.
       Changes take effect at the next scheduled session.
     </p>
+    ${opts.subtitle ? `<div class="settings-subtitle">${opts.subtitle}</div>` : ''}
     <div class="settings-group">
       ${field('Sessions per day',        'SessionsPerDay',    1, 24,  '')}
       ${field('Starred check interval',  'HighPriorityHours', 1, 168, 'h')}
       ${field('Active check interval',   'ActiveHours',       1, 168, 'h')}
       ${field('Inactive check interval', 'InactiveHours',     1, 720, 'h')}
-      ${field('Full check interval',     'FullRefreshDays',   1, 90,  'd',
-              'Scheduled checks run quick (newest posts only) between full checks; a full check runs the complete deletion-detecting diff')}
+      ${field(full.label, full.suffix, full.min, full.max, full.unit, full.title)}
     </div>
+    ${opts.extraHtml || ''}
     <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
       <button class="btn-primary btn-sm" onclick="${saveFn}()">Save</button>
     </div>`;
@@ -1176,8 +1209,11 @@ async function copyText(text, btn) {
 // Settings diagnostics pane driven by _platformDiagRun/_platformDiagCopy
 // (Twitter, Instagram). opts: { note, placeholder, runFn, copyFn,
 // actions: [{value, label}] }; element ids follow the {idPrefix}Diag* shape.
+// ddRowHtml replaces the generated action dropdown row for panes whose
+// controls don't fit the single-dropdown shape (TikTok's source+action pair);
+// trailingHtml lands after the output block.
 function _diagPaneHtml(idPrefix, opts) {
-  const dd = opts.actions && opts.actions.length ? `
+  const dd = opts.ddRowHtml ? opts.ddRowHtml : opts.actions && opts.actions.length ? `
     <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <div class="dd" id="${idPrefix}Action" data-value="${opts.actions[0].value}" style="flex:1;min-width:160px">
         <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" onclick="_ddToggle(this)"><span class="dd-label">${opts.actions[0].label}</span><span class="dd-caret">${_caretIcon}</span></button>
@@ -1197,7 +1233,8 @@ function _diagPaneHtml(idPrefix, opts) {
     <div id="${idPrefix}OutputWrap" style="position:relative">
       <pre id="${idPrefix}Output" class="diag-output">No output yet.</pre>
       <button onclick="${opts.copyFn}()" title="Copy output" class="diag-copy-btn">Copy</button>
-    </div>`;
+    </div>
+    ${opts.trailingHtml || ''}`;
 }
 
 window.addEventListener('hashchange', () => {
@@ -1223,6 +1260,33 @@ async function checkHealth() {
 }
 
 checkHealth();
+
+// ── Migration warning ─────────────────────────────────────────────────────────
+
+(async function checkMigrationStatus() {
+  try {
+    const { ok, data } = await apiJSON('/api/migrate/preview');
+    if (!ok || !data.total_legacy) return;
+    const n = data.total_legacy;
+    showToast(
+      `${n.toLocaleString()} post${n !== 1 ? 's' : ''} have paths that need migration.`,
+      {
+        type: 'warning',
+        duration: 0,
+        action: { label: 'Open Migration Settings', onclick: () => openSettings('migrate') },
+      }
+    );
+  } catch (_) {}
+})();
+
+// ── Back to top ───────────────────────────────────────────────────────────────
+
+(function() {
+  const btn = document.getElementById('backToTopBtn');
+  window.addEventListener('scroll', () => {
+    btn.style.display = window.scrollY > 200 ? 'flex' : 'none';
+  }, { passive: true });
+})();
 
 // ── Toast notifications ────────────────────────────────────────────────────────
 // showToast(message, { type, duration, action })
