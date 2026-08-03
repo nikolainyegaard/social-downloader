@@ -22,7 +22,6 @@ from scheduling import (
 )
 from thumbnailer import cache_avatar, cache_banner
 
-_CONFIRM_THRESHOLD    = 2
 _ABORT_AFTER_FAILURES = 3  # consecutive channel failures that abort the session (rate limit or auth wall)
 
 # Media filename shapes: {id}.ext single file, {id}_NN.ext numbered siblings.
@@ -375,7 +374,7 @@ def process_single_channel(
             return "failed"
 
         remote_ids = set(remote_posts)
-        known_ids, active_ids, _confirm_pending = db.get_video_id_sets(channel_id)
+        known_ids, active_ids, pending_ids = db.get_video_id_sets(channel_id)
 
         # Posts present in the listing with nothing downloadable (OnlyFans
         # posts whose media is all locked/unpurchased): they count as present
@@ -388,6 +387,8 @@ def process_single_channel(
 
         new_ids       = remote_ids - known_ids - listing_only
         deleted_ids   = (active_ids - remote_ids) if mode == "full" else set()
+        confirm_ids   = (pending_ids - remote_ids) if mode == "full" else set()
+        # Any deleted video (pending or confirmed) visible again: revert or undelete.
         undeleted_ids = (known_ids - active_ids) & remote_ids
 
         # Fresh listings carry per-post counts (views, or likes on OnlyFans);
@@ -428,17 +429,12 @@ def process_single_channel(
                     incomplete_ids.add(vid_id)
 
         # Deletion spike guard: a truncated listing looks like a mass deletion.
-        # Skip the increments this run and let the ASAP re-check verify.
+        # Skip the marks and confirmations this run and let the ASAP re-check verify.
         deletion_spike = bool(deleted_ids) and len(deleted_ids) >= max(10, len(active_ids) // 4)
         if deletion_spike:
             log(f"  Deletion spike: {len(deleted_ids)} of {len(active_ids)} missing; skipping deletion marks this run (possible truncated listing)")
             deleted_ids = set()
-
-        pending_ids = db.get_pending_deletion_video_ids(channel_id)
-        recovered   = pending_ids & remote_ids
-        for vid_id in recovered:
-            db.clear_video_pending_deletion(vid_id)
-            log(f"  Deletion check cleared: {vid_id} (back on {engine.label})")
+            confirm_ids = set()
 
         if new_ids:
             log(f"  New: {len(new_ids)}")
@@ -448,9 +444,11 @@ def process_single_channel(
             log(f"  Retrying incomplete downloads: {len(incomplete_ids)}")
         if deleted_ids:
             log(f"  Missing (checking for deletion): {len(deleted_ids)}")
+        if confirm_ids:
+            log(f"  Confirming deletion: {len(confirm_ids)}")
         if undeleted_ids:
-            log(f"  Undeleted: {len(undeleted_ids)}")
-        if not (new_ids or retry_ids or incomplete_ids or deleted_ids or undeleted_ids or recovered):
+            log(f"  Back on {engine.label}: {len(undeleted_ids)}")
+        if not (new_ids or retry_ids or incomplete_ids or deleted_ids or confirm_ids or undeleted_ids):
             log("  No changes.")
 
         _new_sorted = sorted(new_ids | retry_ids | incomplete_ids)
@@ -465,21 +463,19 @@ def process_single_channel(
                 vid_id, remote_posts[vid_id], raw_posts[vid_id], log,
             )
 
-        deletion_candidates = False
         for vid_id in deleted_ids:
-            count = db.increment_video_pending_deletion(vid_id)
-            if count >= _CONFIRM_THRESHOLD:
-                db.mark_video_deleted(vid_id)
-                log(f"  Marked deleted (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD}): {vid_id}")
-            else:
-                deletion_candidates = True
-                log(f"  Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
+            db.mark_video_possibly_deleted(vid_id)
+            log(f"  Possibly deleted: {vid_id}")
+
+        for vid_id in confirm_ids:
+            db.confirm_video_deletion(vid_id)
+            log(f"  Confirmed deleted: {vid_id}")
 
         for vid_id in undeleted_ids:
-            db.mark_video_undeleted(vid_id)
-            log(f"  Marked undeleted: {vid_id}")
+            if db.revert_or_undelete_video(vid_id) == "undeleted":
+                log(f"  Undeleted: {vid_id}")
 
-        return "deletions" if (deletion_candidates or deletion_spike) else "ok"
+        return "deletions" if (deleted_ids or deletion_spike) else "ok"
 
     finally:
         _stage(None)

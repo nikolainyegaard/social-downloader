@@ -4,7 +4,7 @@ TikTok runs on the shared engine with its own session processor (`process_sessio
 
 ## Database: ChannelDB + store.py
 
-TikTok has no database module of its own. `ChannelDB("tiktok")` owns `DATA_DIR/tiktok/tiktok.db` on the shared schema; `TikTokStore` (constructed with that ChannelDB) holds what the engine has no equivalent for: sound tables, stats backfill, ban/privacy handling, the two-strike deletion confirmation, refresh batches. `platforms/tiktok/migrate.py` folds a pre-engine DB into the schema at startup (see the fold-in note below). TikTok-only tables `sounds` and `sound_videos` are created by `TikTokStore.init_tables()` via the adapter's `init_db_extra` hook. The legacy `username_history` table survives the migration; new writes go to profile_history.
+TikTok has no database module of its own. `ChannelDB("tiktok")` owns `DATA_DIR/tiktok/tiktok.db` on the shared schema; `TikTokStore` (constructed with that ChannelDB) holds what the engine has no equivalent for: sound tables, stats backfill, ban/privacy handling, refresh batches. `platforms/tiktok/migrate.py` folds a pre-engine DB into the schema at startup (see the fold-in note below). TikTok-only tables `sounds` and `sound_videos` are created by `TikTokStore.init_tables()` via the adapter's `init_db_extra` hook. The legacy `username_history` table survives the migration; new writes go to profile_history.
 
 ```
 channels (engine columns + TikTok extras):
@@ -40,7 +40,7 @@ sound_videos:  sound_id FK, video_id FK, added_at; PK (sound_id, video_id)
 Indexes from `store.init_tables()`: `idx_sound_videos_sound`, `idx_videos_channel_id`, `idx_videos_status`, `idx_profile_history_channel_id`, `idx_videos_stats_backfilled_at`, `idx_channels_next_check_at`.
 
 `TikTokStore` specifics:
-- Deletion model (TikTok does NOT use the engine's pending counters): `mark_video_possibly_deleted` (first absence: status='deleted', deletion_confirmed=0, deleted_at=now), `confirm_video_deletion` (second consecutive absence), `revert_or_undelete_video` (returns 'reverted' for an unconfirmed false positive, bumping false_positive_count, or 'undeleted' for a confirmed recovery)
+- Deletion model: `mark_video_possibly_deleted` / `confirm_video_deletion` / `revert_or_undelete_video` are thin delegates to the engine ChannelDB, which owns the shared two-strike model (see backend.md); TikTok pioneered it and the engine platforms adopted it
 - `add_video_full(...)` sets `stats_backfilled_at` only when `view_count IS NOT NULL`, leaving NULL for backfill (`ChannelDB.add_video` is the generic insert)
 - `update_video_stats` (backfill worker, always stamps) / `update_video_stats_loop` (loop byproduct, COALESCE, stamps `stats_updated_at` and `stats_backfilled_at = COALESCE(..., now)`)
 - `set_account_status`: banned stamps `banned_at = COALESCE(banned_at, now)`; every transition recorded in profile_history

@@ -332,6 +332,22 @@ class ChannelDB:
             except sqlite3.OperationalError:
                 pass
 
+        # One-time backfill: videos marked deleted under the retired counter
+        # model never got deletion_confirmed set, which the pending/revert
+        # logic would misread as "seen missing once". TikTok always maintained
+        # the flag, so its unconfirmed rows are genuinely pending and stay.
+        if self.platform != "tiktok":
+            done = conn.execute(
+                "SELECT 1 FROM settings WHERE key = 'deletion_confirmed_backfilled'"
+            ).fetchone()
+            if not done:
+                conn.execute(
+                    "UPDATE videos SET deletion_confirmed = 1 WHERE status = 'deleted' AND deletion_confirmed = 0"
+                )
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('deletion_confirmed_backfilled', '1')"
+                )
+
         return False
 
 
@@ -973,28 +989,59 @@ class ChannelDB:
             ))
 
 
-    def mark_video_deleted(self, video_id: str) -> None:
+    def mark_video_possibly_deleted(self, video_id: str) -> None:
+        """First absence: set status='deleted', stamp deleted_at, leave deletion_confirmed=0."""
         with self.get_db() as conn:
             conn.execute("""
                 UPDATE videos
-                SET status                 = 'deleted',
-                    deleted_at             = COALESCE(pending_deletion_since, ?),
-                    pending_deletion_count = 0,
-                    pending_deletion_since = NULL
+                SET status             = 'deleted',
+                    deleted_reason     = 'video_deleted',
+                    deleted_at         = COALESCE(deleted_at, ?)
                 WHERE video_id = ? AND status IN ('up', 'undeleted')
             """, (int(time.time()), video_id))
 
 
-    def mark_video_undeleted(self, video_id: str) -> None:
+    def confirm_video_deletion(self, video_id: str) -> None:
+        """Second consecutive absence: confirm the deletion."""
         with self.get_db() as conn:
             conn.execute("""
-                UPDATE videos
-                SET status                 = 'undeleted',
-                    undeleted_at           = ?,
-                    pending_deletion_count = 0,
-                    pending_deletion_since = NULL
+                UPDATE videos SET deletion_confirmed = 1
                 WHERE video_id = ? AND status = 'deleted'
-            """, (int(time.time()), video_id))
+            """, (video_id,))
+
+
+    def revert_or_undelete_video(self, video_id: str) -> str:
+        """Handle a deleted video that is visible again.
+
+        deletion_confirmed=0 (false positive): silently revert to 'up', clear deleted_at,
+          increment false_positive_count. Returns 'reverted'.
+        deletion_confirmed=1 (genuine recovery): mark as 'undeleted', record undeleted_at.
+          Returns 'undeleted'.
+        """
+        with self.get_db() as conn:
+            row = conn.execute(
+                "SELECT deletion_confirmed FROM videos WHERE video_id = ?", (video_id,)
+            ).fetchone()
+            if not row:
+                return "reverted"
+            if row["deletion_confirmed"]:
+                conn.execute("""
+                    UPDATE videos
+                    SET status       = 'undeleted',
+                        undeleted_at = ?
+                    WHERE video_id = ? AND status = 'deleted'
+                """, (int(time.time()), video_id))
+                return "undeleted"
+            else:
+                conn.execute("""
+                    UPDATE videos
+                    SET status               = 'up',
+                        deleted_at           = NULL,
+                        deletion_confirmed   = 0,
+                        false_positive_count = false_positive_count + 1
+                    WHERE video_id = ? AND status = 'deleted'
+                """, (video_id,))
+                return "reverted"
 
 
     # Blob columns excluded from list queries: ytdlp_data averages hundreds of KB
@@ -1059,44 +1106,13 @@ class ChannelDB:
                     COUNT(*)                                                                          AS video_total,
                     COUNT(download_date)                                                              AS video_downloaded,
                     MAX(download_date)                                                                AS last_saved,
-                    SUM(CASE WHEN status = 'deleted'                              THEN 1 ELSE 0 END) AS video_deleted,
+                    SUM(CASE WHEN status = 'deleted' AND deletion_confirmed = 1   THEN 1 ELSE 0 END) AS video_deleted,
                     SUM(CASE WHEN status = 'undeleted'                            THEN 1 ELSE 0 END) AS video_undeleted,
-                    SUM(CASE WHEN status = 'up' AND pending_deletion_count > 0    THEN 1 ELSE 0 END) AS video_missing
+                    SUM(CASE WHEN status = 'deleted' AND deletion_confirmed = 0   THEN 1 ELSE 0 END) AS video_missing
                 FROM videos
                 GROUP BY channel_id
             """).fetchall()
         return {r["channel_id"]: dict(r) for r in rows}
-
-
-    def get_pending_deletion_video_ids(self, channel_id: str) -> set:
-        with self.get_db() as conn:
-            rows = conn.execute(
-                "SELECT video_id FROM videos WHERE channel_id = ? AND pending_deletion_count > 0",
-                (channel_id,),
-            ).fetchall()
-        return {r["video_id"] for r in rows}
-
-
-    def increment_video_pending_deletion(self, video_id: str) -> int:
-        with self.get_db() as conn:
-            conn.execute("""
-                UPDATE videos
-                SET pending_deletion_count = pending_deletion_count + 1,
-                    pending_deletion_since = COALESCE(pending_deletion_since, ?)
-                WHERE video_id = ?
-            """, (int(time.time()), video_id))
-            row = conn.execute(
-                "SELECT pending_deletion_count FROM videos WHERE video_id = ?", (video_id,)
-            ).fetchone()
-        return row["pending_deletion_count"] if row else 0
-
-
-    def clear_video_pending_deletion(self, video_id: str) -> None:
-        with self.get_db() as conn:
-            conn.execute(
-                "UPDATE videos SET pending_deletion_count = 0, pending_deletion_since = NULL WHERE video_id = ?",
-                (video_id,),
-            )
 
 
     def rename_channel_video_paths(self, channel_id: str, old_handle: str, new_handle: str) -> None:

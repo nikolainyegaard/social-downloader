@@ -21,6 +21,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - docker-compose.yml has commented per-platform storage override lines: mount another disk over a platform's media subfolder to store that platform elsewhere, no app configuration needed (see README)
 
 ### Changed
+- Deletion tracking on YouTube, Twitter, Instagram, and OnlyFans now works like TikTok's: a post missing from a full listing is marked deleted right away (pending confirmation on the next full check), a post still missing on that check has its deletion confirmed, and one that reappears before confirmation is silently restored as a false positive. Posts already marked deleted by the old model count as confirmed after a one-time migration
+- The orange "missing" chip on creator cards counts posts awaiting deletion confirmation on every platform (they show as deleted in the post list, like TikTok's)
 - Job cards in Settings put their buttons on the title row and let the description use the card's full width, instead of squeezing the text into a column beside the buttons
 - The app-wide jobs (photo AVIF conversion, broken thumbnail repair, audio-only file cleanup, delete all thumbnails, path migration) moved from Settings > TikTok > Jobs to Settings > General > Jobs, so they stay available and visible even with TikTok disabled. TikTok's Jobs page keeps only its own jobs (stats backfill, missing file check, story recovery, avatar deletion)
 - The History tab's field filter is a pill row in the nav bar instead of a dropdown menu, and now selects multiple fields at once (empty selection shows all)

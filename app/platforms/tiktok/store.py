@@ -552,59 +552,18 @@ class TikTokStore:
             ).fetchall()
         return [dict(r) for r in rows]
 
-    # Deletion confirmation machinery
+    # Deletion confirmation machinery: implementations live on the engine
+    # Database (all platforms share the model); these delegates keep the
+    # store's call sites working.
 
     def mark_video_possibly_deleted(self, video_id: str) -> None:
-        """First absence: set status='deleted', stamp deleted_at, leave deletion_confirmed=0."""
-        with self.db.get_db() as conn:
-            conn.execute("""
-                UPDATE videos
-                SET status             = 'deleted',
-                    deleted_reason     = 'video_deleted',
-                    deleted_at         = COALESCE(deleted_at, ?)
-                WHERE video_id = ? AND status IN ('up', 'undeleted')
-            """, (int(time.time()), video_id))
+        self.db.mark_video_possibly_deleted(video_id)
 
     def confirm_video_deletion(self, video_id: str) -> None:
-        """Second consecutive absence: confirm the deletion."""
-        with self.db.get_db() as conn:
-            conn.execute("""
-                UPDATE videos SET deletion_confirmed = 1
-                WHERE video_id = ? AND status = 'deleted'
-            """, (video_id,))
+        self.db.confirm_video_deletion(video_id)
 
     def revert_or_undelete_video(self, video_id: str) -> str:
-        """Handle a deleted video that is visible again.
-
-        deletion_confirmed=0 (false positive): silently revert to 'up', clear deleted_at,
-          increment false_positive_count. Returns 'reverted'.
-        deletion_confirmed=1 (genuine recovery): mark as 'undeleted', record undeleted_at.
-          Returns 'undeleted'.
-        """
-        with self.db.get_db() as conn:
-            row = conn.execute(
-                "SELECT deletion_confirmed FROM videos WHERE video_id = ?", (video_id,)
-            ).fetchone()
-            if not row:
-                return "reverted"
-            if row["deletion_confirmed"]:
-                conn.execute("""
-                    UPDATE videos
-                    SET status       = 'undeleted',
-                        undeleted_at = ?
-                    WHERE video_id = ? AND status = 'deleted'
-                """, (int(time.time()), video_id))
-                return "undeleted"
-            else:
-                conn.execute("""
-                    UPDATE videos
-                    SET status               = 'up',
-                        deleted_at           = NULL,
-                        deletion_confirmed   = 0,
-                        false_positive_count = false_positive_count + 1
-                    WHERE video_id = ? AND status = 'deleted'
-                """, (video_id,))
-                return "reverted"
+        return self.db.revert_or_undelete_video(video_id)
 
     # Scheduling extras (quick video ID memory, refresh batches)
 
