@@ -8,7 +8,4 @@ authlib
 flask-session
 instaloader>=4.15.2
 gallery-dl
-# Pinned: onlyfans/api.py matches this version's API exactly (get_posts limit
-# semantics, dict-shaped media, capped fetch via endpoint_links internals).
-# The 3.x betas change all three; adapt api.py before bumping.
 ultima-scraper-api==2.2.45
