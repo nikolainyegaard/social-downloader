@@ -46,6 +46,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 
 ### Fixed
+- TikTok video downloads failed with "Failed to download" after TikTok started rejecting yt-dlp's default user agent on 2026-08-10 (yt-dlp issue 17403); downloads now send a current Chrome user agent
 - The back-to-top button and the startup path-migration warning were wired inside TikTok's script, so with TikTok disabled the button did nothing and the warning never appeared on other platforms; both are app-wide now
 - The video seek bar's click target is much taller than the drawn line, so grabbing it no longer needs a pixel-perfect click
 - Clicking the empty space around the media viewer's content (for example above or below the details panel) now closes the viewer; the invisible layout row was swallowing those clicks

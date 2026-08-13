@@ -70,6 +70,11 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
         **merge_fmt,
         "socket_timeout": 30,
         "retries":        3,
+        # TikTok bot detection rejects yt-dlp's default UA since 2026-08-10
+        # (yt-dlp #17403); a current Chrome UA passes. Harmless elsewhere.
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+        },
         "quiet":          True,
         "no_warnings":    False,
         **({"proxy": proxy} if proxy else {}),

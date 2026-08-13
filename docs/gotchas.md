@@ -42,6 +42,10 @@ Two decisions in transcoder.py that look odd without context:
 
 Encoder settings (CRF 22, preset 4, 10-bit, tune=0, Opus 96k) were calibrated against VMAF on real archive samples in July 2026: mean 97+ with per-frame minimum 94+ on both a 720p landscape VOD and a 1080x1920 portrait VOD. The per-frame minimum floor ships at 85, not 94, because hour-long files hit scene cuts and near-black frames that score low without being visible defects; the mean floor of 96 is the real gate.
 
+## yt-dlp downloads send a Chrome user agent
+
+On 2026-08-10 TikTok started rejecting yt-dlp's default UA on the video webpage endpoint: every download died instantly with "Unexpected response from webpage request" while listings, scrapes, and the browser session kept working (yt-dlp issue 17403; no fixed release existed at the time). `download_video` pins a current Chrome UA in `http_headers` for all platforms; it is what TikTok's heuristic checks and is harmless elsewhere. If downloads break again with that error, refresh the UA string to a current Chrome version before digging deeper.
+
 ## Story downloads: validation and quarantine
 
 Story CDN URLs are pre-signed and reused outside the browser, so downloads fail in varied ways (403, truncated transfer, garbage body). `downloader.download_story` tries yt-dlp on the story page first for videos (self-consistent client), then each direct CDN URL candidate; every video is ffprobe-gated (`_probe_media_file`, requires a decodable video stream) on BOTH paths, since unchecked yt-dlp output was the source of corrupt files slipping through. A rejected download is not just deleted: `_quarantine_story` writes the bytes plus a JSON trace (url/host, status, Content-Length vs bytes received, content-type, magic bytes, ffprobe reason) to `data/story_debug`, bounded to the most recent failures.
