@@ -1184,9 +1184,11 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
    populated values get; values grow rightward from their fixed labels */
 .stat-chart-card .u-legend { font-size: 11px; color: var(--muted); text-align: left; padding-top: 2px; white-space: nowrap; overflow: hidden; display: block; width: 100%; margin: 0; }
 .stat-chart-card .u-legend tbody { display: block; position: relative; height: 1.5em; width: 100%; }
-.stat-chart-card .u-legend .u-series { position: absolute; top: 0; margin: 0; }
-.stat-chart-card .u-legend .u-series:first-child { left: 28%; }
-.stat-chart-card .u-legend .u-series:last-child  { left: 62%; }
+/* translateX centers each entry on its third; the values are short enough
+   that their width changes barely move the centered block */
+.stat-chart-card .u-legend .u-series { position: absolute; top: 0; margin: 0; transform: translateX(-50%); }
+.stat-chart-card .u-legend .u-series:first-child { left: 33.33%; }
+.stat-chart-card .u-legend .u-series:last-child  { left: 66.67%; }
 .stat-chart-card .u-legend .u-marker { width: 8px; height: 8px; }
 .stat-chart-card .u-legend th, .stat-chart-card .u-legend td { padding: 0 4px; font-weight: 400; }
 
