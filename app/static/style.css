@@ -1187,8 +1187,8 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 /* translateX centers each entry on its third; the values are short enough
    that their width changes barely move the centered block */
 .stat-chart-card .u-legend .u-series { position: absolute; top: 0; margin: 0; transform: translateX(-50%); }
-.stat-chart-card .u-legend .u-series:first-child { left: 33.33%; }
-.stat-chart-card .u-legend .u-series:last-child  { left: 66.67%; }
+.stat-chart-card .u-legend .u-series:first-child { left: 25%; }
+.stat-chart-card .u-legend .u-series:last-child  { left: 75%; }
 .stat-chart-card .u-legend .u-marker { width: 8px; height: 8px; }
 .stat-chart-card .u-legend th, .stat-chart-card .u-legend td { padding: 0 4px; font-weight: 400; }
 
