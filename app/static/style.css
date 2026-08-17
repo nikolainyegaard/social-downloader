@@ -1180,8 +1180,10 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
    sheet's defaults are light-theme */
 .stat-chart-card .uplot { font-family: inherit; }
 /* nowrap: populated cursor values must not wrap the legend to a second row,
-   which grows the card and shifts the whole page while hovering */
+   which grows the card and shifts the whole page while hovering. The Date
+   series gets a fixed slot so the Value label does not shift as dates change */
 .stat-chart-card .u-legend { font-size: 11px; color: var(--muted); text-align: left; padding-top: 2px; white-space: nowrap; overflow: hidden; }
+.stat-chart-card .u-legend .u-series:first-child { width: 90px; margin-right: 0; }
 .stat-chart-card .u-legend .u-marker { width: 8px; height: 8px; }
 .stat-chart-card .u-legend th, .stat-chart-card .u-legend td { padding: 0 4px; font-weight: 400; }
 

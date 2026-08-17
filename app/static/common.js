@@ -3343,6 +3343,38 @@ const _STAT_METRICS = [
   { field: 'saved_count',      label: 'Posts saved' },
 ];
 
+// One point per calendar day: profile checks can snapshot more than once a
+// day, but the charts present daily values. Same-day rows average per metric
+// (rounded to an integer); the merged point sits at local noon so its axis
+// and legend labels read as the date. Also the unit of the day-range slice.
+function _normalizeStatRows(rows) {
+  const days = new Map();
+  for (const r of rows || []) {
+    const d = new Date(r.ts * 1000);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    let b = days.get(key);
+    if (!b) days.set(key, b = {
+      ts: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12).getTime() / 1000,
+      sum: {}, n: {},
+    });
+    for (const { field } of _STAT_METRICS) {
+      const v = r[field];
+      if (v == null) continue;
+      b.sum[field] = (b.sum[field] || 0) + v;
+      b.n[field]   = (b.n[field]   || 0) + 1;
+    }
+  }
+  return [...days.values()].map(b => {
+    const row = { ts: b.ts };
+    for (const { field } of _STAT_METRICS)
+      row[field] = b.n[field] ? Math.round(b.sum[field] / b.n[field]) : null;
+    return row;
+  }).sort((a, b) => a.ts - b.ts);
+}
+
+const _fmtStatDate = ts => ts == null ? '--'
+  : new Date(ts * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
 // canvas needs a resolved color; derive a translucent area fill from a hex accent
 function _hexFade(hex, alpha) {
   if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
@@ -3391,15 +3423,18 @@ function _renderStatsCharts(host, rows) {
       </div>
       <div class="stat-chart-plot"></div>`;
     host.appendChild(card);
-    pending.push({ m, ys, plotEl: card.querySelector('.stat-chart-plot') });
+    pending.push({ ys, plotEl: card.querySelector('.stat-chart-plot') });
   }
-  for (const { m, ys, plotEl } of pending) {
+  for (const { ys, plotEl } of pending) {
     charts.push(new uPlot({
       width:  Math.max(plotEl.clientWidth, 240),
       height: 130,
       series: [
-        {},
-        { label: m.label, stroke: accent, width: 2,
+        // Generic legend labels: the card title carries the metric identity,
+        // and short fixed labels keep the legend from shifting or overflowing
+        { label: 'Date', value: (u, ts) => _fmtStatDate(ts) },
+        { label: 'Value', stroke: accent, width: 2,
+          value: (u, v) => v == null ? '--' : v.toLocaleString(),
           fill: _hexFade(accent, 0.08) || undefined,
           points: { show: rows.length <= 30, size: 5 }, spanGaps: true },
       ],

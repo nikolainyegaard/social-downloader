@@ -45,6 +45,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The settings modal was rebuilt around platforms instead of functions: the side menu now lists General plus one entry per enabled platform, and each platform page carries its own Account, Schedule, Jobs, Diagnostics, and Database tabs (plus Network for TikTok). Every pane is generated from the platform's own configuration, so new platforms get their settings automatically
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
 - The change badge on the creator Stats graphs now shows the change across the whole displayed range (matching the 14/30/60/90 day filter) instead of just the last snapshot
+- The creator Stats graphs show one value per calendar day: multiple snapshots on the same day are averaged into a single whole number, and the day-range filter now always counts true days
+- The legend under each Stats graph reads "Date" with a short date and "Value" (the card title already names the metric), with a fixed slot for the date so nothing shifts or overflows while sweeping the cursor
 
 ### Fixed
 - The creators catalog showed two Reset buttons on desktop; the mobile-only one next to the search box is hidden again

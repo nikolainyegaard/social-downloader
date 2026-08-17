@@ -2815,10 +2815,12 @@ function initChannelApp(cfg) {
   let _statHistRows   = null;   // fetched snapshot rows; null until loaded
   let _statHistSig    = null;   // JSON signature; gates live repaints
   let _statHistCharts = [];     // live uPlot instances, destroyed on leave
-  let _statRange      = 14;     // max days shown in the graphs (snapshots are one per day)
+  let _statRange      = 14;     // max days shown in the graphs
 
-  // Last n snapshots; one row per day, so this is the last n tracked days.
-  const _statRangeRows = () => _statHistRows && _statHistRows.slice(-_statRange);
+  // Collapse snapshots to one row per day (common.js), then take the last n
+  // days. Normalizing before the slice keeps the range a true day count even
+  // when a day carries multiple snapshots.
+  const _statRangeRows = () => _statHistRows && _normalizeStatRows(_statHistRows).slice(-_statRange);
 
   X('MStatsRange', n => {
     _statRange = n;
