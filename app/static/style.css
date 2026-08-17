@@ -1179,12 +1179,14 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 /* uPlot chrome: recessive axes and a small muted hover readout; the vendor
    sheet's defaults are light-theme */
 .stat-chart-card .uplot { font-family: inherit; }
-/* Flex row, one line: Date pins left, Value pins right, so entries never
-   overlap or reflow the card while the cursor sweeps; the gap is the forced
-   minimum spacing when the card is narrow */
+/* One line, absolutely pinned entries: Date's label sits at the 1/3 line and
+   Value's at the 2/3 line of the card, so nothing shifts however wide the
+   populated values get; values grow rightward from their fixed labels */
 .stat-chart-card .u-legend { font-size: 11px; color: var(--muted); text-align: left; padding-top: 2px; white-space: nowrap; overflow: hidden; }
-.stat-chart-card .u-legend tbody { display: flex; justify-content: space-between; gap: 16px; }
-.stat-chart-card .u-legend .u-series { margin-right: 0; }
+.stat-chart-card .u-legend tbody { display: block; position: relative; height: 1.5em; }
+.stat-chart-card .u-legend .u-series { position: absolute; top: 0; margin: 0; }
+.stat-chart-card .u-legend .u-series:first-child { left: 28%; }
+.stat-chart-card .u-legend .u-series:last-child  { left: 62%; }
 .stat-chart-card .u-legend .u-marker { width: 8px; height: 8px; }
 .stat-chart-card .u-legend th, .stat-chart-card .u-legend td { padding: 0 4px; font-weight: 400; }
 
