@@ -3153,7 +3153,9 @@ function initChannelApp(cfg) {
     }
   }
 
-  window.addEventListener('hashchange', _syncEvents);
+  // Tick the bar immediately on switch: the shared strip otherwise shows the
+  // previous platform's text until this platform's next 1 Hz tick.
+  window.addEventListener('hashchange', () => { _syncEvents(); _tickActivityBar(); });
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
