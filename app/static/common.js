@@ -68,6 +68,10 @@ function switchPlatform(name) {
   document.body.classList.add('theme-' + name);
   _placeTabGlider();
   if (typeof _initAllGliders === 'function') _initAllGliders();
+  // Tab clicks land here via onclick and replaceState fires no hashchange,
+  // so platforms listen for this event instead to react to a switch
+  // (SSE handover, activity strip repaint, TikTok tab polls).
+  window.dispatchEvent(new Event('platformswitch'));
 }
 
 // Sliding underline for the platform tabs: an absolute element inside the

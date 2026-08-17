@@ -2068,5 +2068,5 @@ setInterval(() => { if (_ttTabActive()) loadCookies(); }, 30000);
 // Sounds arrive via the SSE 'changed' event while the stream is open; this
 // poll is the no-stream fallback
 setInterval(() => { if (_ttTabActive() && !tt.isLive()) loadSounds(); }, 60000);
-window.addEventListener('hashchange', () => { if (_ttTabActive()) { loadCookies(); loadSounds(); } });
+window.addEventListener('platformswitch', () => { if (_ttTabActive()) { loadCookies(); loadSounds(); } });
 _initAllGliders();

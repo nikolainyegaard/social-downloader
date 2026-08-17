@@ -3153,9 +3153,11 @@ function initChannelApp(cfg) {
     }
   }
 
-  // Tick the bar immediately on switch: the shared strip otherwise shows the
-  // previous platform's text until this platform's next 1 Hz tick.
-  window.addEventListener('hashchange', () => { _syncEvents(); _tickActivityBar(); });
+  // 'platformswitch' fires from switchPlatform on every switch (tab clicks
+  // use replaceState, which fires no hashchange). Tick the bar immediately:
+  // the shared strip otherwise shows the previous platform's text until this
+  // platform's next 1 Hz tick.
+  window.addEventListener('platformswitch', () => { _syncEvents(); _tickActivityBar(); });
 
   // ── Init ──────────────────────────────────────────────────────────────────
 

@@ -49,7 +49,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The legend under each Stats graph reads "Date" with a short date and "Value" (the card title already names the metric), with a fixed slot for the date so nothing shifts or overflows while sweeping the cursor
 
 ### Fixed
-- The activity strip under the tab bar updates immediately when switching platform tabs instead of showing the previous platform's status for up to a second
+- Switching platform tabs by click never fired the internal switch signal (only browser back/forward did), so the new tab kept polling on the slow hidden-tab schedule instead of opening its live event stream, the activity strip showed the previous platform's status for up to a second, and TikTok's cookie and sounds refresh did not run; tab switches now signal explicitly and all three react immediately
 - The creators catalog showed two Reset buttons on desktop; the mobile-only one next to the search box is hidden again
 - Hovering a creator Stats graph no longer shifts the page: the legend under each chart stays on one line when its values populate
 - TikTok story checks only found the first few of a user's live stories: the story listing endpoint paginates with different response keys than the video listing, so the fetch stopped after one page (about 3 stories)
