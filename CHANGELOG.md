@@ -49,6 +49,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The legend under each Stats graph reads "Date" with a short date and "Value" (the card title already names the metric), with a fixed slot for the date so nothing shifts or overflows while sweeping the cursor
 
 ### Fixed
+- The activity strip showed a bare "session running" between creators on YouTube, Twitter, Instagram, and OnlyFans sessions: the shared session runner never reported its inter-creator gap sleeps, unlike TikTok's. It now shows the sleep countdown and who is up next on every platform
 - Switching platform tabs by click never fired the internal switch signal (only browser back/forward did), so the new tab kept polling on the slow hidden-tab schedule instead of opening its live event stream, the activity strip showed the previous platform's status for up to a second, and TikTok's cookie and sounds refresh did not run; tab switches now signal explicitly and all three react immediately
 - The creators catalog showed two Reset buttons on desktop; the mobile-only one next to the search box is hidden again
 - Hovering a creator Stats graph no longer shifts the page: the legend under each chart stays on one line when its values populate

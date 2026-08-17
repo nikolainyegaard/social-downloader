@@ -477,7 +477,8 @@ class ChannelLoop:
                         on_large_deletion=self.schedule_midpoint_run) or 0
                 else:
                     _completed = process_all_channels(self.engine, channels, self._log,
-                                                      self._set_current_channel, self._stop_event) or 0
+                                                      self._set_current_channel, self._stop_event,
+                                                      set_sleep=self._set_sleep) or 0
             except Exception as e:
                 self._log(f"Unhandled {self.engine.label} loop error: {e}")
 

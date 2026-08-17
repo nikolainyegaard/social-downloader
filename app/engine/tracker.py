@@ -176,6 +176,7 @@ def process_all_channels(
     log: Callable[[str], None],
     set_current: Callable[[str | None], None] | None = None,
     stop_event: threading.Event | None = None,
+    set_sleep: Callable[[float | None, str | None], None] | None = None,
 ) -> int:
     """Process one session of due channels. Returns the count of successful runs.
 
@@ -206,14 +207,27 @@ def process_all_channels(
             # Gap sleep in 1s slices: a stop request ends the session right
             # here (without the re-check the current channel still got a full
             # run), and a manual run enqueued mid-sleep executes immediately,
-            # with the remaining sleep continuing afterwards.
-            ends    = time.monotonic() + channel_gap_secs(platform)
+            # with the remaining sleep continuing afterwards. The sleep
+            # indicator drops while an inserted run executes and resumes with
+            # the remaining time, same as TikTok's session.
+            gap        = channel_gap_secs(platform)
+            ends       = time.monotonic() + gap
+            next_label = f"@{channel.get('handle', '?')}"
+            if set_sleep:
+                set_sleep(time.time() + gap, next_label)
             stopped = False
             while True:
                 if stop_event and stop_event.is_set():
                     stopped = True
                     break
-                drained |= drain_manual_runs(engine, log, set_current)
+                loop_obj = getattr(engine, "loop", None)
+                if loop_obj is not None and loop_obj.has_pending_manual():
+                    if set_sleep:
+                        set_sleep(None, None)
+                    drained |= drain_manual_runs(engine, log, set_current)
+                    remaining = ends - time.monotonic()
+                    if set_sleep and remaining > 0:
+                        set_sleep(time.time() + remaining, next_label)
                 remaining = ends - time.monotonic()
                 if remaining <= 0:
                     break
@@ -221,6 +235,8 @@ def process_all_channels(
                     stop_event.wait(min(remaining, 1.0))
                 else:
                     time.sleep(min(remaining, 1.0))
+            if set_sleep:
+                set_sleep(None, None)
             if stopped:
                 log(f"=== {engine.label} loop stopped by request ===")
                 break
