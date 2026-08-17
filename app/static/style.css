@@ -1182,8 +1182,8 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 /* One line, absolutely pinned entries: Date's label sits at the 1/3 line and
    Value's at the 2/3 line of the card, so nothing shifts however wide the
    populated values get; values grow rightward from their fixed labels */
-.stat-chart-card .u-legend { font-size: 11px; color: var(--muted); text-align: left; padding-top: 2px; white-space: nowrap; overflow: hidden; }
-.stat-chart-card .u-legend tbody { display: block; position: relative; height: 1.5em; }
+.stat-chart-card .u-legend { font-size: 11px; color: var(--muted); text-align: left; padding-top: 2px; white-space: nowrap; overflow: hidden; display: block; width: 100%; margin: 0; }
+.stat-chart-card .u-legend tbody { display: block; position: relative; height: 1.5em; width: 100%; }
 .stat-chart-card .u-legend .u-series { position: absolute; top: 0; margin: 0; }
 .stat-chart-card .u-legend .u-series:first-child { left: 28%; }
 .stat-chart-card .u-legend .u-series:last-child  { left: 62%; }
