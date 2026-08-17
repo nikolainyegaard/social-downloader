@@ -44,8 +44,11 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The timestamp column in Recent activity and Add history is wide enough for the mono font ("Yesterday, 19:45" overflowed the panel edge)
 - The settings modal was rebuilt around platforms instead of functions: the side menu now lists General plus one entry per enabled platform, and each platform page carries its own Account, Schedule, Jobs, Diagnostics, and Database tabs (plus Network for TikTok). Every pane is generated from the platform's own configuration, so new platforms get their settings automatically
 - The platform tab bar, page sections, and per-platform scripts are now rendered from the server's platform list, so a disabled platform ships nothing to the browser
+- The change badge on the creator Stats graphs now shows the change across the whole displayed range (matching the 14/30/60/90 day filter) instead of just the last snapshot
 
 ### Fixed
+- The creators catalog showed two Reset buttons on desktop; the mobile-only one next to the search box is hidden again
+- Hovering a creator Stats graph no longer shifts the page: the legend under each chart stays on one line when its values populate
 - TikTok story checks only found the first few of a user's live stories: the story listing endpoint paginates with different response keys than the video listing, so the fetch stopped after one page (about 3 stories)
 - TikTok video downloads failed with "Failed to download" after TikTok started rejecting yt-dlp's default user agent on 2026-08-10 (yt-dlp issue 17403); downloads now send a current Chrome user agent
 - The back-to-top button and the startup path-migration warning were wired inside TikTok's script, so with TikTok disabled the button did nothing and the warning never appeared on other platforms; both are app-wide now

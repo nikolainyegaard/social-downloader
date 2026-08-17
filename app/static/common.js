@@ -3375,8 +3375,10 @@ function _renderStatsCharts(host, rows) {
     if (!ys.some(v => v != null)) continue;
     const nonNull = ys.filter(v => v != null);
     const cur     = nonNull[nonNull.length - 1];
-    const prev    = nonNull.length > 1 ? nonNull[nonNull.length - 2] : null;
-    const delta   = prev != null ? cur - prev : null;
+    // Delta spans the whole rendered range (rows arrive pre-sliced to the
+    // day-range filter), not just the last snapshot
+    const first   = nonNull.length > 1 ? nonNull[0] : null;
+    const delta   = first != null ? cur - first : null;
     const deltaHtml = delta
       ? `<span class="stat-chart-delta ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? '+' : ''}${delta.toLocaleString()}</span>`
       : '';

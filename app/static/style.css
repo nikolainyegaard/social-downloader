@@ -1179,7 +1179,9 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 /* uPlot chrome: recessive axes and a small muted hover readout; the vendor
    sheet's defaults are light-theme */
 .stat-chart-card .uplot { font-family: inherit; }
-.stat-chart-card .u-legend { font-size: 11px; color: var(--muted); text-align: left; padding-top: 2px; }
+/* nowrap: populated cursor values must not wrap the legend to a second row,
+   which grows the card and shifts the whole page while hovering */
+.stat-chart-card .u-legend { font-size: 11px; color: var(--muted); text-align: left; padding-top: 2px; white-space: nowrap; overflow: hidden; }
 .stat-chart-card .u-legend .u-marker { width: 8px; height: 8px; }
 .stat-chart-card .u-legend th, .stat-chart-card .u-legend td { padding: 0 4px; font-weight: 400; }
 
@@ -1517,8 +1519,9 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 }
 .view-tabs-row .search-row { display: flex; align-items: center; gap: 6px; margin-left: auto; margin-bottom: 5px; }
 /* The Reset next to the search box exists for mobile; desktop keeps the one in
-   the filter bar (hidden there under 640px, swapped for this one) */
-.search-reset { display: none; }
+   the filter bar (hidden there under 640px, swapped for this one). Scoped to
+   .search-row so the later .sort-dir-btn display rule cannot outrank it */
+.search-row .search-reset { display: none; }
 
 /* ── Dropdowns: ONE spec for both families ────────────────────────────────
    .dd (catalog filter bar, settings panes) and .m-dd (modal toolbar, mobile
@@ -2840,7 +2843,7 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
      so it outweighs the desktop .view-tabs-row .search-row display: flex */
   .search-row.search-row-hidden { display: none; }
   .tracking-search { flex: 1; min-width: 0; box-sizing: border-box; }
-  .search-reset { display: inline-flex; flex-shrink: 0; }
+  .search-row .search-reset { display: inline-flex; flex-shrink: 0; }
   .filter-control-group .controls-reset { display: none; }
 
   /* Full-screen modals: no space to waste on a blurred backdrop */
