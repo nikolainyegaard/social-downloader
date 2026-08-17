@@ -949,25 +949,38 @@ async def get_user_stories(api, author_id: str) -> list[dict]:
     Users without live stories return an empty list.
     """
     items: list[dict] = []
-    cursor = "0"
-    for _page in range(5):  # stories cap out well below 5 pages of 30
+    seen: set[str] = set()
+    cursor = 0
+    for _page in range(10):  # TikTok caps pages at ~3 items regardless of count
         data = await api.make_request(
             url="https://www.tiktok.com/api/story/item_list/",
             params={
                 "authorId":     str(author_id),
                 "count":        "30",
-                "cursor":       cursor,
+                "cursor":       str(cursor),
                 "loadBackward": "false",
             },
         )
         if not data or not isinstance(data.get("itemList"), list):
             break
-        items.extend(data["itemList"])
-        if not data.get("hasMore"):
+        for item in data["itemList"]:
+            sid = str(item.get("id"))
+            if sid not in seen:
+                seen.add(sid)
+                items.append(item)
+        # Story pagination uses HasMoreAfter/MaxCursor, not the lowercase
+        # hasMore/cursor keys the other item_list endpoints use (see
+        # gallery-dl's TiktokStoryTimeCursor). Checking hasMore here silently
+        # stopped after the first ~3-item page.
+        if not (data.get("HasMoreAfter") or data.get("hasMore")):
             break
-        cursor = str(data.get("cursor") or "")
-        if not cursor or cursor == "0":
+        try:
+            next_cursor = int(data.get("MaxCursor") or data.get("cursor") or 0)
+        except (ValueError, TypeError):
             break
+        if next_cursor <= cursor:  # cursor moves forward in time; stall = done
+            break
+        cursor = next_cursor
     return items
 
 

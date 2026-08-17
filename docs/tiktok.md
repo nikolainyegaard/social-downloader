@@ -61,7 +61,7 @@ Indexes from `store.init_tables()`: `idx_sound_videos_sound`, `idx_videos_channe
 | Stats enrichment (primary) | profile page sniff | Captures the `/api/post/item_list/` responses the page's own frontend requests while scrolling. Adds view/like counts, photo type, image URLs yt-dlp lacks |
 | Stats enrichment (fallback) | TikTokApi item_list | The constructed endpoint, kept for self-healing |
 | Video detail / stats | curl_cffi page scrape | New videos not in item_list; stats backfill |
-| Live stories | TikTokApi story/item_list | Same endpoint gallery-dl uses; needs logged-in cookies |
+| Live stories | TikTokApi story/item_list | Same endpoint gallery-dl uses; needs logged-in cookies. Pagination keys differ from the other item_list endpoints: response carries `HasMoreAfter`/`MaxCursor` (not `hasMore`/`cursor`), the request cursor moves forward in time, and TikTok caps each page at ~3 items regardless of `count`. Reading `hasMore` here silently truncated stories to the first page |
 | Story download | yt-dlp on `/@handle/video/{id}` | yt-dlp fetches the page itself so the media URL is signed for its own request. Must be `/video/`, not `/story/`. Direct CDN GETs are the fallback and the path for photo stories |
 | Downloads | yt-dlp (video), requests (photos) | yt-dlp returns audio only for photo posts |
 
