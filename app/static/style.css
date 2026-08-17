@@ -1184,11 +1184,12 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
    populated values get; values grow rightward from their fixed labels */
 .stat-chart-card .u-legend { font-size: 11px; color: var(--muted); text-align: left; padding-top: 2px; white-space: nowrap; overflow: hidden; display: block; width: 100%; margin: 0; }
 .stat-chart-card .u-legend tbody { display: block; position: relative; height: 1.5em; width: 100%; }
-/* translateX centers each entry on its third; the values are short enough
-   that their width changes barely move the centered block */
-.stat-chart-card .u-legend .u-series { position: absolute; top: 0; margin: 0; transform: translateX(-50%); }
-.stat-chart-card .u-legend .u-series:first-child { left: 25%; }
-.stat-chart-card .u-legend .u-series:last-child  { left: 75%; }
+/* Fixed left-edge pins: the 48px backset centers a typical populated entry
+   ("Date: Aug 12", marker included) on the 25%/75% anchors. No transform, so
+   value width changes never move the label; text only grows rightward */
+.stat-chart-card .u-legend .u-series { position: absolute; top: 0; margin: 0; }
+.stat-chart-card .u-legend .u-series:first-child { left: calc(25% - 48px); }
+.stat-chart-card .u-legend .u-series:last-child  { left: calc(75% - 48px); }
 .stat-chart-card .u-legend .u-marker { width: 8px; height: 8px; }
 .stat-chart-card .u-legend th, .stat-chart-card .u-legend td { padding: 0 4px; font-weight: 400; }
 
