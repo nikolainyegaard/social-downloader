@@ -1179,11 +1179,12 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 /* uPlot chrome: recessive axes and a small muted hover readout; the vendor
    sheet's defaults are light-theme */
 .stat-chart-card .uplot { font-family: inherit; }
-/* nowrap: populated cursor values must not wrap the legend to a second row,
-   which grows the card and shifts the whole page while hovering. The Date
-   series gets a fixed slot so the Value label does not shift as dates change */
+/* Flex row, one line: Date pins left, Value pins right, so entries never
+   overlap or reflow the card while the cursor sweeps; the gap is the forced
+   minimum spacing when the card is narrow */
 .stat-chart-card .u-legend { font-size: 11px; color: var(--muted); text-align: left; padding-top: 2px; white-space: nowrap; overflow: hidden; }
-.stat-chart-card .u-legend .u-series:first-child { width: 90px; margin-right: 0; }
+.stat-chart-card .u-legend tbody { display: flex; justify-content: space-between; gap: 16px; }
+.stat-chart-card .u-legend .u-series { margin-right: 0; }
 .stat-chart-card .u-legend .u-marker { width: 8px; height: 8px; }
 .stat-chart-card .u-legend th, .stat-chart-card .u-legend td { padding: 0 4px; font-weight: 400; }
 
