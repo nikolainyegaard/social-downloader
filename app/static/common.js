@@ -1890,7 +1890,12 @@ function _openCardMenu(triggerEl, items) {
     menu.appendChild(btn);
   }
 
-  document.body.appendChild(menu);
+  // Parent inside the trigger's open <dialog> when there is one: showModal()
+  // makes everything outside the dialog inert, and a body-appended popover
+  // would paint above the modal but swallow no clicks (top layer does not
+  // lift inertness). Placement doesn't affect layout; popovers position in
+  // the top layer regardless of parent.
+  (triggerEl.closest('dialog[open]') || document.body).appendChild(menu);
   _cardMenuEl = menu;
   // beforetoggle, not toggle: toggle is dispatched async, which would stamp
   // menuClosedAt after the trigger's click handler already reopened the menu
