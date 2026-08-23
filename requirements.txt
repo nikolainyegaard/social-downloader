@@ -1,6 +1,6 @@
 TikTokApi>=7.3
 patchright
-yt-dlp[default]
+yt-dlp[default]>=2026.8.19
 curl_cffi
 flask
 requests
