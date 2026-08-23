@@ -72,4 +72,9 @@ EXPOSE 5000
 #
 # xdotool injects mouse input into that display at the X server level, which
 # backs the in-app browser viewer (Settings > TikTok) used to solve captchas.
-CMD ["sh", "-c", "rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 && Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & exec python app/main.py"]
+# Deps updated at start, not build: extractors (yt-dlp, instaloader,
+# gallery-dl) break between releases and a container restart is cheaper than
+# a rebuild. requirements.txt is the control surface: == pins never move,
+# >= floors advance to latest. || true so a PyPI outage degrades to the
+# baked-in versions instead of blocking startup.
+CMD ["sh", "-c", "pip install -q --upgrade -r requirements.txt || true; rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 && Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & exec python app/main.py"]
