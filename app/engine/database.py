@@ -1276,15 +1276,16 @@ class ChannelDB:
         }
 
 
-    def _group_consecutive_by_channel(self, rows: list[dict], date_key: str) -> list[dict]:
-        """Collapse a newest-first row list into per-channel groups. A row joins
-        its channel's most recent group when the gap to that group's previous
-        row is 5 minutes or less; rows from OTHER channels in between do not
-        break the group. Grouping used to require strict adjacency, so two
-        creators downloading in parallel shredded each other's runs into
-        hundreds of 1-item lines. Groups are ordered by their newest row."""
-        groups: list[dict] = []
-        open_by_channel: dict = {}
+    def _group_into(self, groups: list[dict], open_by_channel: dict,
+                    rows: list[dict], date_key: str) -> None:
+        """Fold `rows` (newest-first, continuing any previous chunk) into
+        per-channel groups: a row joins its channel's most recent group when
+        the gap to that group's previous row is 5 minutes or less; rows from
+        OTHER channels in between do not break the group (strict adjacency
+        shredded parallel downloads into hundreds of 1-item lines). Open-run
+        state lives in `open_by_channel` so a run split across scan chunks
+        stays one group. Groups are ordered by their newest row and keep a
+        transient _last_ts (oldest row so far) until the caller strips it."""
         for row in rows:
             g = open_by_channel.get(row["channel_id"])
             if g is not None and g["_last_ts"] - row[date_key] <= 300:
@@ -1305,9 +1306,47 @@ class ChannelDB:
                 }
                 groups.append(g)
                 open_by_channel[row["channel_id"]] = g
-        for g in groups:
+
+
+    def _scan_groups(self, conn, sql: str, args: tuple, date_key: str,
+                     cap: int, offset: int = 0,
+                     drop_at_or_above: int | None = None) -> tuple[list[dict], bool]:
+        """Scan raw rows in _GROUP_SCAN chunks, grouping incrementally, until
+        the first `cap` groups can no longer change (no emitted group's run is
+        still open within the 5-minute glue of the scan boundary) or the rows
+        run out. One long run therefore reports its true length instead of the
+        chunk size, and a full first chunk no longer hides everything older.
+
+        `sql` must end with its ORDER BY <date> DESC (no LIMIT); `args` are
+        its WHERE parameters. `drop_at_or_above` discards groups whose newest
+        row is at or above that timestamp: with a lookback query window it
+        drops the tail of a group a previous feed page already showed.
+        Returns (groups[:cap] with _last_ts stripped, more) where `more` means
+        rows or groups remain beyond what was returned.
+
+        ponytail: 40-chunk ceiling (100k rows); a single run longer than that
+        reports a floor count instead of scanning unboundedly."""
+        groups: list[dict] = []
+        open_by_channel: dict = {}
+        exhausted = False
+        live = groups
+        for _ in range(40):
+            rows = [dict(r) for r in conn.execute(
+                f"{sql} LIMIT ? OFFSET ?", (*args, self._GROUP_SCAN, offset)).fetchall()]
+            self._group_into(groups, open_by_channel, rows, date_key)
+            offset += len(rows)
+            live = (groups if drop_at_or_above is None else
+                    [g for g in groups if g[date_key] < drop_at_or_above])
+            if len(rows) < self._GROUP_SCAN:
+                exhausted = True
+                break
+            boundary = rows[-1][date_key]
+            if len(live) >= cap and all(g["_last_ts"] - boundary > 300 for g in live[:cap]):
+                break
+        out = live[:cap]
+        for g in out:
             del g["_last_ts"]
-        return groups
+        return out, (not exhausted) or len(live) > cap
 
 
     def _sound_id_select(self, conn) -> str:
@@ -1324,14 +1363,13 @@ class ChannelDB:
     def get_recent_activity(self) -> dict:
         with self.get_db() as conn:
             _sound = self._sound_id_select(conn)
-            del_rows = [dict(r) for r in conn.execute(f"""
+            deletions, _ = self._scan_groups(conn, f"""
                 SELECT v.video_id, v.deleted_at, c.handle, c.channel_id, c.enabled,
                        c.starred, c.account_status, {_sound} AS sound_id
                 FROM videos v JOIN channels c ON c.channel_id = v.channel_id
                 WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
                   AND (v.deleted_reason IS NULL OR v.deleted_reason != 'user_banned')
-                ORDER BY v.deleted_at DESC LIMIT 300
-            """).fetchall()]
+                ORDER BY v.deleted_at DESC""", (), "deleted_at", 3)
             profile_changes = [dict(r) for r in conn.execute("""
                 SELECT ph.field, ph.changed_at, c.handle, c.channel_id, c.starred, c.account_status
                 FROM profile_history ph JOIN channels c ON c.channel_id = ph.channel_id
@@ -1343,15 +1381,12 @@ class ChannelDB:
                 WHERE account_status = 'banned' AND banned_at IS NOT NULL
                 ORDER BY banned_at DESC LIMIT 1
             """).fetchall()]
-            saved_rows = [dict(r) for r in conn.execute(f"""
+            saved, _ = self._scan_groups(conn, f"""
                 SELECT v.download_date, c.handle, c.channel_id, c.enabled,
                        c.starred, c.account_status, v.video_id, {_sound} AS sound_id
                 FROM videos v JOIN channels c ON c.channel_id = v.channel_id
                 WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
-                ORDER BY v.download_date DESC LIMIT 2000
-            """).fetchall()]
-        deletions = self._group_consecutive_by_channel(del_rows, "deleted_at")[:3]
-        saved     = self._group_consecutive_by_channel(saved_rows, "download_date")[:9]
+                ORDER BY v.download_date DESC""", (), "download_date", 9)
         return {"deletions": deletions, "profile_changes": profile_changes,
                 "bans": bans, "saved": saved}
 
@@ -1364,50 +1399,60 @@ class ChannelDB:
         Keyset pagination via `before` (event unix ts). `kind` restricts to one
         event type (saved, story, deleted, changed, banned). Each source fetches
         limit+1 events so has_more stays correct when one source dominates.
-        ponytail: a strict before cursor can drop one of two adjacent events
-        sharing an identical timestamp across a page boundary."""
-        cap    = limit + 1
-        events = []
+        Grouped sources scan with a 5-minute lookback past the cursor so a
+        group the previous page already showed is recognized and dropped
+        instead of re-emitted as its remaining tail.
+        ponytail: for changed/banned a strict before cursor can drop one of two
+        adjacent events sharing an identical timestamp across a page boundary."""
+        cap      = limit + 1
+        events   = []
+        src_more = False
         # Flag filters on the joined channels table (bare column names for the
         # bans query, which selects from channels directly)
         flags   = ("AND c.starred = 1 " if starred else "") + ("AND c.bookmarked = 1 " if bookmarked else "")
         flags_b = ("AND starred = 1 "   if starred else "") + ("AND bookmarked = 1 "   if bookmarked else "")
         with self.get_db() as conn:
             _sound = self._sound_id_select(conn)
+            # Grouped sources: the +300s widens the query window past the
+            # cursor so a run crossing it glues to its already-shown head,
+            # which drop_at_or_above then discards (see _scan_groups).
             if kind in (None, "saved"):
                 w    = f"{flags}" + ("AND v.download_date < ?" if before else "")
-                args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)
-                rows = [dict(r) for r in conn.execute(f"""
+                args = (before + 300,) if before else ()
+                groups, more = self._scan_groups(conn, f"""
                     SELECT v.download_date, c.handle, c.channel_id, c.enabled,
                            c.starred, c.account_status, v.video_id, {_sound} AS sound_id
                     FROM videos v JOIN channels c ON c.channel_id = v.channel_id
                     WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL {w}
-                    ORDER BY v.download_date DESC LIMIT ?""", args).fetchall()]
-                for g in self._group_consecutive_by_channel(rows, "download_date")[:cap]:
-                    events.append({"ts": g["download_date"], "kind": "saved", "item": g})
+                    ORDER BY v.download_date DESC""", args, "download_date", cap,
+                    drop_at_or_above=before)
+                src_more = src_more or more
+                events += [{"ts": g["download_date"], "kind": "saved", "item": g} for g in groups]
             if kind in (None, "story"):
                 w    = f"{flags}" + ("AND s.saved_at < ?" if before else "")
-                args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)
-                rows = [dict(r) for r in conn.execute(f"""
+                args = (before + 300,) if before else ()
+                groups, more = self._scan_groups(conn, f"""
                     SELECT s.saved_at, c.handle, c.channel_id, c.enabled,
                            c.starred, c.account_status
                     FROM stories s JOIN channels c ON c.channel_id = s.channel_id
                     WHERE s.saved_at IS NOT NULL {w}
-                    ORDER BY s.saved_at DESC LIMIT ?""", args).fetchall()]
-                for g in self._group_consecutive_by_channel(rows, "saved_at")[:cap]:
-                    events.append({"ts": g["saved_at"], "kind": "story", "item": g})
+                    ORDER BY s.saved_at DESC""", args, "saved_at", cap,
+                    drop_at_or_above=before)
+                src_more = src_more or more
+                events += [{"ts": g["saved_at"], "kind": "story", "item": g} for g in groups]
             if kind in (None, "deleted"):
                 w    = f"{flags}" + ("AND v.deleted_at < ?" if before else "")
-                args = (before, self._GROUP_SCAN) if before else (self._GROUP_SCAN,)
-                rows = [dict(r) for r in conn.execute(f"""
+                args = (before + 300,) if before else ()
+                groups, more = self._scan_groups(conn, f"""
                     SELECT v.video_id, v.deleted_at, c.handle, c.channel_id, c.enabled,
                            c.starred, c.account_status, {_sound} AS sound_id
                     FROM videos v JOIN channels c ON c.channel_id = v.channel_id
                     WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
                       AND (v.deleted_reason IS NULL OR v.deleted_reason != 'user_banned') {w}
-                    ORDER BY v.deleted_at DESC LIMIT ?""", args).fetchall()]
-                for g in self._group_consecutive_by_channel(rows, "deleted_at")[:cap]:
-                    events.append({"ts": g["deleted_at"], "kind": "deleted", "item": g})
+                    ORDER BY v.deleted_at DESC""", args, "deleted_at", cap,
+                    drop_at_or_above=before)
+                src_more = src_more or more
+                events += [{"ts": g["deleted_at"], "kind": "deleted", "item": g} for g in groups]
             if kind in (None, "changed"):
                 w    = f"{flags}" + ("AND ph.changed_at < ?" if before else "")
                 args = (before, cap) if before else (cap,)
@@ -1434,7 +1479,7 @@ class ChannelDB:
                     ORDER BY banned_at DESC LIMIT ?""", args).fetchall()
                 events += [{"ts": r["banned_at"], "kind": "banned", "item": dict(r)} for r in rows]
         events.sort(key=lambda e: e["ts"], reverse=True)
-        return {"items": events[:limit], "has_more": len(events) > limit}
+        return {"items": events[:limit], "has_more": len(events) > limit or src_more}
 
 
     def get_deletion_history(self, offset: int = 0, limit: int = 50) -> list[dict]:
@@ -1455,16 +1500,13 @@ class ChannelDB:
         Returns {"items": [...groups...], "rows_consumed": N}."""
         with self.get_db() as conn:
             _sound = self._sound_id_select(conn)
-            rows = [dict(r) for r in conn.execute(f"""
+            groups, _ = self._scan_groups(conn, f"""
                 SELECT v.video_id, v.deleted_at, c.handle, c.channel_id, c.enabled,
                        c.starred, c.account_status, {_sound} AS sound_id
                 FROM videos v JOIN channels c ON c.channel_id = v.channel_id
                 WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
                   AND (v.deleted_reason IS NULL OR v.deleted_reason != 'user_banned')
-                ORDER BY v.deleted_at DESC LIMIT ? OFFSET ?""",
-                (self._GROUP_SCAN, offset),
-            ).fetchall()]
-        groups = self._group_consecutive_by_channel(rows, "deleted_at")[:limit]
+                ORDER BY v.deleted_at DESC""", (), "deleted_at", limit, offset=offset)
         return {"items": groups, "rows_consumed": sum(g["count"] for g in groups)}
 
 
@@ -1490,15 +1532,12 @@ class ChannelDB:
         """
         with self.get_db() as conn:
             _sound = self._sound_id_select(conn)
-            rows = [dict(r) for r in conn.execute(f"""
+            groups, _ = self._scan_groups(conn, f"""
                 SELECT v.download_date, c.handle, c.channel_id, c.enabled,
                        c.starred, c.account_status, v.video_id, {_sound} AS sound_id
                 FROM videos v JOIN channels c ON c.channel_id = v.channel_id
                 WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
-                ORDER BY v.download_date DESC LIMIT ? OFFSET ?""",
-                (self._GROUP_SCAN, offset),
-            ).fetchall()]
-        groups = self._group_consecutive_by_channel(rows, "download_date")[:limit]
+                ORDER BY v.download_date DESC""", (), "download_date", limit, offset=offset)
         return {"items": groups, "rows_consumed": sum(g["count"] for g in groups)}
 
 

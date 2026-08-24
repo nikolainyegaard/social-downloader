@@ -95,7 +95,7 @@ Painting above an open modal dialog and being clickable over it are two differen
 
 That is why the toast container is a popover **and** reparented onto the innermost open dialog (`_hostToasts`, plus the `_dlgOpenStack` maintained by `_dlgOpen` / `_dlgDrop`). As a body child it painted above the modal but swallowed no clicks, so clicking a toast's X hit the dialog element behind it, and since the dialog is its own backdrop the modal closed instead. Being a DOM descendant of the dialog takes it out of the inert subtree; staying a popover keeps it in the top layer, so it still paints above that dialog's content and escapes the overlay fade-in and any clipping. Popover type (`auto` vs `manual`) makes no difference here; only the DOM parent does.
 
-Anything else that must be clickable over a modal needs the same treatment. The `.dd` / `.m-dd` menus are already fine because their markup sits inside the modal; `_openCardMenu` builds its menu and appends it to `document.body`, so it is subject to this.
+Anything else that must be clickable over a modal needs the same treatment. The `.dd` / `.m-dd` menus are already fine because their markup sits inside the modal; `_openCardMenu` appends its menu to the trigger's enclosing open dialog when there is one (body otherwise) for the same reason.
 
 Reparenting reinserts the moved subtree, which replays any CSS animation declared on it. That is why `toast-in` lives on a one-shot `.toast.entering` class instead of on `.toast`: otherwise every dialog open slid the visible toasts in again.
 
@@ -112,6 +112,12 @@ A `CREATE INDEX` in `executescript` that references a migration-added column fai
 
 Video files on disk are never touched: this is an archiving tool.
 
-## Consecutive-creator grouping: raw-row pagination
+## Consecutive-creator grouping: chunked scan, raw-row pagination
 
-"Recently Saved" groups consecutive same-creator rows server-side by scanning `_GROUP_SCAN = 2500` raw rows. `offset` is a raw-row offset, not a group offset; the frontend advances by `rows_consumed` and stitches boundary groups client-side. A group breaks when the gap between two adjacent rows exceeds 5 minutes, even for the same creator. Each row is compared to its immediate predecessor, not the group anchor, so a chain of sub-5-minute gaps stays in one group even if the first and last rows are far apart.
+"Recently Saved" and the feed group consecutive same-creator rows server-side. A group breaks when the gap between two adjacent rows exceeds 5 minutes, even for the same creator. Each row is compared to its immediate predecessor, not the group anchor, so a chain of sub-5-minute gaps stays in one group even if the first and last rows are far apart; rows from other creators in between do not break the group.
+
+The scan (`_scan_groups`) fetches `_GROUP_SCAN = 2500` raw rows at a time and keeps fetching until the groups it will return can no longer change: every returned group's run must be closed at the scan boundary (its last row more than 5 minutes above it) or the rows exhausted. A fixed single window used to let one 4300-post run cap its own count at the window size and push everything older out of the feed, with `has_more` false because it counted groups, not rows. The chunk loop is capped at 40 chunks (100k rows), so a run longer than that reports a floor count.
+
+Feed pagination (`get_activity_feed`): the `before` cursor is an event timestamp, and a group's timestamp is its newest row, so a page fetched below the cursor would re-emit the rest of an already-shown group as a duplicate. Grouped sources therefore query with a 5-minute lookback past the cursor (any run crossing the cursor glues to at least one row in that band) and drop every group whose newest row is at or above it. `has_more` is true while any source has unscanned rows left.
+
+For the offset-paginated history lists, `offset` is a raw-row offset, not a group offset; the frontend advances by `rows_consumed` and stitches boundary groups client-side. `scripts/test_scan_groups.py` is the runnable check for the scan and cursor-drop rules.

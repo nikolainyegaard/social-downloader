@@ -70,7 +70,8 @@ social-downloader/
 │   ├── redownload_stories.py      re-download afflicted TikTok video stories (live only)
 │   ├── clean_false_avatar_history.py  delete spurious avatar history rows from the
 │   │                              8-9 Jul 2026 re-encode-hash bug (dry run by default)
-│   └── clean_onlyfans_html.py     flatten stored OnlyFans HTML to plain text
+│   ├── clean_onlyfans_html.py     flatten stored OnlyFans HTML to plain text
+│   └── test_scan_groups.py        self-check for the activity group scan (no docker needed)
 ├── Dockerfile
 ├── docker-compose.yml        (docker-compose.override.yml is gitignored, local dev)
 ├── jsconfig.json             tsc --checkJs config for the frontend JS
