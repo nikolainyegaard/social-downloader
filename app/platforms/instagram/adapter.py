@@ -89,7 +89,9 @@ instagram_adapter = ChannelAdapter(
     prefix="ig",
     creator_noun="profile",
     item_noun="post",
-    quick_limit=30,
+    # One HikerAPI media page is 9 items and each page is a billed request,
+    # so a quick check stops at one page
+    quick_limit=9,
     has_banner=False,
     has_stories=True,
     fetch_stories=_fetch_stories,
