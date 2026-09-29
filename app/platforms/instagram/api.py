@@ -1,4 +1,11 @@
-"""Instagram data fetching via instaloader."""
+"""Instagram data fetching via instaloader, with HikerAPI for profile lookup
+and post listing when HIKERAPI_KEY is set.
+
+Instagram gates the web profile and feed endpoints per session (429 and
+"feedback_required") long before it touches the story GraphQL query or the
+CDN, so a flagged cookies.txt still fetches stories and downloads media but
+never lists posts. HikerAPI (a hosted Instagram data API) takes over exactly
+those two calls; everything else keeps running on the local session."""
 
 from __future__ import annotations
 
@@ -13,6 +20,9 @@ import instaloader
 import requests
 
 from cookies import cookies_path, get_cookies_flat
+
+HIKERAPI_KEY = os.environ.get("HIKERAPI_KEY", "").strip()
+_HIKERAPI    = "https://api.hikerapi.com"
 
 _L = instaloader.Instaloader(
     quiet=True,
@@ -77,6 +87,33 @@ def normalize_handle(handle: str) -> str:
 
 
 _WEB_APP_ID = "936619743392459"  # X-IG-App-ID the instagram.com web frontend sends
+
+
+def _hiker_iter_posts(user_id: str) -> Generator[tuple[dict, dict], None, None]:
+    """HikerAPI /g2/user/medias, one request per page of 9 to 12 items. The
+    raw post is the HikerAPI item dict (private API media shape) and goes to
+    download_post_media as is. Some keys arrive with a GraphQL type prefix
+    ("1ltaken_at", "1fvideo_duration"), hence the fallbacks."""
+    page_id = None
+    while True:
+        params = {"user_id": user_id}
+        if page_id:
+            params["next_page_id"] = page_id
+        data  = _hiker_get("/g2/user/medias", params)
+        items = (data.get("response") or {}).get("items") or []
+        for item in items:
+            caption = item.get("caption")
+            yield {
+                "video_id":     item["code"],
+                "title":        ((caption or {}).get("text") if isinstance(caption, dict) else caption or "")[:500],
+                "upload_date":  item.get("taken_at") or item.get("1ltaken_at"),
+                "duration":     item.get("video_duration") or item.get("1fvideo_duration"),
+                "view_count":   item.get("like_count"),
+                "content_type": "video" if item.get("media_type") == 2 else "image",
+            }, item
+        page_id = data.get("next_page_id")
+        if not items or not page_id:
+            break
 
 
 def _web_api_get(url: str, params: dict, referer: str) -> dict:
@@ -153,8 +190,49 @@ def _profile_from_username(handle: str) -> instaloader.Profile:
             f"{web_err}; search fallback found no match") from e
 
 
+def _hiker_get(path: str, params: dict) -> dict:
+    """GET a HikerAPI endpoint. Raises on a non-200 response with the body,
+    so the run log shows HikerAPI's own reason (balance, not found)."""
+    resp = requests.get(_HIKERAPI + path, params=params, timeout=30,
+                        headers={"x-access-key": HIKERAPI_KEY, "accept": "application/json"})
+    if resp.status_code != 200:
+        raise RuntimeError(f"HikerAPI HTTP {resp.status_code}: {resp.text[:300]}")
+    return resp.json()
+
+
+def _hiker_profile_info(handle: str) -> dict:
+    try:
+        user = _hiker_get("/v2/user/by/username", {"username": handle})["user"]
+    except RuntimeError as e:
+        # HikerAPI answers 404 for unknown, deleted, and banned usernames
+        # alike. Phrase with "does not exist" so the adapter's gone markers
+        # match, the same contract as the instaloader path
+        if "HTTP 404" in str(e):
+            raise RuntimeError(f"Profile {handle} does not exist ({e})") from e
+        raise
+    hd = user.get("hd_profile_pic_url_info") or {}
+    return {
+        "channel_id":       str(user.get("pk") or user["id"]),
+        "handle":           user["username"],
+        "display_name":     user.get("full_name") or user["username"],
+        "description":      user.get("biography"),
+        "subscriber_count": user.get("follower_count"),
+        "video_count":      user.get("media_count"),
+        "avatar_url":       hd.get("url") or user.get("profile_pic_url"),
+        "banner_url":       None,
+        "raw_channel_data": json.dumps({
+            "external_url": user.get("external_url"),
+            "is_verified":  user.get("is_verified"),
+            "is_private":   user.get("is_private"),
+            "following":    user.get("following_count"),
+        }),
+    }
+
+
 def fetch_profile_info(handle: str) -> dict:
     """Fetch profile metadata. Returns dict matching the channels DB schema."""
+    if HIKERAPI_KEY:
+        return _hiker_profile_info(handle)
     profile = _profile_from_username(handle)
     return {
         "channel_id":       str(profile.userid),
@@ -185,6 +263,9 @@ def iter_profile_posts(user_id: str, limit: int | None = None) -> Generator[tupl
     a persistent 401 dressed up as a rate limit message (instaloader issue
     #2689, unfixed in 4.15.2). Feed items come in the shape
     Post.from_iphone_struct wraps, so downloads work unchanged."""
+    if HIKERAPI_KEY:
+        yield from _hiker_iter_posts(user_id)
+        return
     url    = f"https://www.instagram.com/api/v1/feed/user/{user_id}/"
     max_id = None
     while True:
@@ -256,10 +337,52 @@ def fetch_stories(user_id: str) -> list[dict]:
     return stories
 
 
+def _media_url(item: dict) -> str | None:
+    """Best media URL of one private-API media item: the largest video
+    version, else the largest image candidate."""
+    vids = item.get("video_versions") or []
+    if vids:
+        return max(vids, key=lambda v: (v.get("width") or 0) * (v.get("height") or 0))["url"]
+    cands = (item.get("image_versions2") or {}).get("candidates") or []
+    if cands:
+        return max(cands, key=lambda c: (c.get("width") or 0) * (c.get("height") or 0))["url"]
+    return None
+
+
+def _download_hiker_media(item: dict, target: pathlib.Path) -> str | None:
+    """Direct CDN GETs for a HikerAPI item, named like instaloader's output
+    ({code}.ext, carousel {code}_N.ext) so the rest of the app sees no
+    difference. Raises on the first failed file."""
+    from urllib.parse import urlparse
+    from transcoder import maybe_enqueue
+    code     = item["code"]
+    children = item.get("carousel_media") or []
+    jobs = ([(f"{code}_{n}", _media_url(c)) for n, c in enumerate(children, 1)]
+            if children else [(code, _media_url(item))])
+    first = None
+    for stem, url in jobs:
+        if not url:
+            raise RuntimeError(f"{stem}: no media URL in HikerAPI item")
+        ext  = os.path.splitext(urlparse(url).path)[1].lstrip(".") or "bin"
+        path = target / f"{stem}.{ext}"
+        with requests.get(url, stream=True, timeout=60) as r:
+            if r.status_code != 200:
+                raise RuntimeError(f"{stem}: CDN HTTP {r.status_code}")
+            with open(path, "wb") as f:
+                for chunk in r.iter_content(1 << 16):
+                    f.write(chunk)
+        if ext == "mp4":
+            maybe_enqueue(str(path))
+        first = first or str(path.resolve())
+    return first
+
+
 def download_post_media(post, dest_dir: str) -> str | None:
     """Download a post's primary media file to dest_dir. Returns absolute path or None."""
     target = pathlib.Path(dest_dir)
     target.mkdir(parents=True, exist_ok=True)
+    if isinstance(post, dict):
+        return _download_hiker_media(post, target)
     shortcode = post.shortcode
     try:
         _L.download_post(post, target=target)

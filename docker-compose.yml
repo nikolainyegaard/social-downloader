@@ -29,6 +29,7 @@ services:
       # Loop intervals are configurable from Settings in the UI and do not need to be set here.
       # WEB_PORT: "5000"         # change if needed (also update the ports below)
       # MEDIA_DIR: /app/media  # override media storage path inside the container
+      # HIKERAPI_KEY: ""        # Instagram: HikerAPI access key for profile lookup and post listing (https://hikerapi.com)
 
       # OAuth is configured via Settings > Authentication in the UI, not here.
       # Emergency escape hatch: uncomment the line below if you are locked out because

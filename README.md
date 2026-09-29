@@ -6,7 +6,7 @@ Self-hosted social media archiver. Monitors creators across multiple platforms, 
 - TikTok: users, sounds, and stories (sign in with a QR code from the UI)
 - YouTube: channels
 - Twitter/X: accounts (requires an uploaded cookies.txt from a logged-in account)
-- Instagram: profiles and stories (requires an uploaded cookies.txt from a logged-in browser session)
+- Instagram: profiles and stories (requires an uploaded cookies.txt from a logged-in browser session; posts need a HikerAPI key, see Configuration)
 
 ---
 
@@ -34,6 +34,7 @@ Key environment variables (set in `docker-compose.yml`). The scheduling variable
 | `{P}_INACTIVE_CHECK_HOURS` | `72` | Check interval for inactive creators |
 | `{P}_FULL_REFRESH_DAYS` | `7` | Days between full deletion-detecting checks per creator |
 | `TIKTOK_SOUND_LOOP_INTERVAL_MINUTES` | `60` | How often to check tracked TikTok sounds |
+| `HIKERAPI_KEY` | | Instagram: [HikerAPI](https://hikerapi.com) access key. Instagram rate limits post listing on cookie sessions; with a key, profile lookup and post listing go through HikerAPI instead (about two requests per profile per check) |
 | `TZ` | system | Timezone for log timestamps (e.g. `Europe/Oslo`) |
 | `WEB_PORT` | `5000` | Flask listen port |
 

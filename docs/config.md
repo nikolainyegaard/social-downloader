@@ -16,6 +16,7 @@
 | `TIKTOK_SOUND_LOOP_INTERVAL_MINUTES` | `60` | Sound loop interval |
 | `TIKTOK_STATS_REFRESH_DAYS` | `7` | Days between full item_list stats refreshes per user |
 | `TIKTOK_USER_LOOP_INTERVAL_MINUTES` | `180` | Legacy, superseded by the session scheduler |
+| `HIKERAPI_KEY` | | Instagram: HikerAPI access key. When set, profile lookup and post listing go through HikerAPI and post media downloads straight from the CDN; stories and avatars stay on the cookies.txt session |
 | `OAUTH_FORCE_DISABLE` | `false` | `true` bypasses auth enforcement without editing oauth.json; use when locked out |
 | `TRANSCODE_FFMPEG` | `/opt/ffmpeg/ffmpeg` if present, else `ffmpeg` | ffmpeg binary the AV1 transcode job uses (needs SVT-AV1 and libvmaf) |
 

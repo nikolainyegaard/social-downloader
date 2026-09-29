@@ -33,7 +33,11 @@ def _download_item(engine, channel_id, handle, display_name, vid_id, post, raw_p
         view_count=post.get("view_count"), duration=post.get("duration"),
         content_type=post.get("content_type", "video"),
     )
-    file_path = api.download_post_media(raw_post, dest_dir)
+    try:
+        file_path = api.download_post_media(raw_post, dest_dir)
+    except Exception as e:
+        log(f"  Failed to download {vid_id}: {e}")
+        return
     if file_path:
         engine.db.update_video_downloaded(vid_id, file_path)
         generate_thumbnail(vid_id, file_path)
