@@ -1108,6 +1108,7 @@ function renderSounds() {
 
     const stats = _statChip('saved', s.video_count || 0)
       + (s.video_deleted   ? _statChip('deleted', s.video_deleted, 'red') : '')
+      + (s.video_banned    ? _statChip('banned', s.video_banned, 'orange') : '')
       + (s.video_undeleted ? _statChip('restored', s.video_undeleted, 'yellow') : '');
 
     // Same footer shape as the channel card: star + run button(s) + overflow menu.
@@ -1470,6 +1471,7 @@ function _renderSoundModalHeader(s) {
   const archiveRows =
       _hgRow('Saved',    _fmtLarge(s.video_count || 0),      s.video_count      ? '' : ' tzero')
     + _hgRow('Deleted',  String(s.video_deleted || 0),       s.video_deleted    ? ' tred'    : ' tzero')
+    + (s.video_banned ? _hgRow('Banned', String(s.video_banned), ' torange') : '')
     + _hgRow('Restored', String(s.video_undeleted || 0),     s.video_undeleted  ? ' tyellow' : ' tzero');
   document.getElementById('soundModalHeader').innerHTML = `
     <div class="modal-header-left">

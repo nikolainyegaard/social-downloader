@@ -21,6 +21,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - docker-compose.yml has commented per-platform storage override lines: mount another disk over a platform's media subfolder to store that platform elsewhere, no app configuration needed (see README)
 
 ### Changed
+- Posts that were still live when a creator was banned now show an orange Banned status instead of the red Deleted one, so a banned creator's individually deleted posts stay distinguishable. Banned posts have their own filter in the creator modal and their own count on cards and in the About panel; the Deleted count no longer includes them
 - TikTok's Schedule settings pane renders from the shared schedule pane like the other platforms, picking up the shared field labels
 - Deletion tracking on YouTube, Twitter, Instagram, and OnlyFans now works like TikTok's: a post missing from a full listing is marked deleted right away (pending confirmation on the next full check), a post still missing on that check has its deletion confirmed, and one that reappears before confirmation is silently restored as a false positive. Posts already marked deleted by the old model count as confirmed after a one-time migration
 - The orange "missing" chip on creator cards counts posts awaiting deletion confirmation on every platform (they show as deleted in the post list, like TikTok's)

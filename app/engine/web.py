@@ -316,6 +316,7 @@ def create_channel_blueprint(engine) -> Blueprint:
             ch["video_total"]           = stats.get("video_total",      0)
             ch["video_downloaded"]      = stats.get("video_downloaded",  0)
             ch["video_deleted"]         = stats.get("video_deleted",     0)
+            ch["video_banned"]          = stats.get("video_banned",      0)
             ch["video_undeleted"]       = stats.get("video_undeleted",   0)
             ch["video_missing"]         = stats.get("video_missing",     0)
             ch["last_saved"]            = stats.get("last_saved")

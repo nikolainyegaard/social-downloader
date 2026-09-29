@@ -27,7 +27,7 @@ Shared across all platform apps.
 - `openPrompt`: accepts `multiline: true` (textarea instead of Enter-accepts input) and `suggest: q => [{value, label, sub, avatar}]` (typeahead rows via `_confirmRenderSuggest`, single-line only)
 - `openErrorModal(text)` / `closeErrorModal()` / `copyErrorModal()`: full error text, selectable, Copy button with a select-and-copy fallback
 - Formatting: `fmt` (relative/future/date/duration), `fmtCount`, `fmtDur` (MM:SS thumbnail badges), `fmtDateShort`, `fmtDateOnly`, `_fmtLarge`, `_fmtSuffix`, `_cmp(av, bv, dir)`
-- Render helpers: `_videoStatus(v)`, `_trackingBadge(v)`, `_pill`, `_typePill`, `_hgRow(label, value, cls, click)`, `_noteFieldHtml(note, editFn, marginTop)`, `_xtextPlaceholderHtml(label)`, `_videoLinkBtn(url)`
+- Render helpers: `_statusKey(v)` (up|deleted|banned|undeleted; banned = deleted with `deleted_reason` user_banned, every pill/filter/sort/count goes through it), `_videoStatus(v)`, `_trackingBadge(v)`, `_pill`, `_typePill`, `_hgRow(label, value, cls, click)`, `_noteFieldHtml(note, editFn, marginTop)`, `_xtextPlaceholderHtml(label)`, `_videoLinkBtn(url)`
 - Icons: `_dlIcon`, `_imgPreviewIcon`, `_listViewIcon`, `_gridViewIcon`, `_badgeStyle`, `_playBadge`, `_photoBadge`, `_vgridPlayIcon`, `_vgridPhotoIcon`
 - `_logLineClass(line)`: log console colorization (session separators, processing, errors, warnings, downloads, profile changes)
 - `apiJSON(url, opts)`: fetch wrapper; adds `Content-Type: application/json` only with a body; redirects to `/login` on 401, with `_loginRedirectPending` so concurrent polling 401s cannot each overwrite OAuth state

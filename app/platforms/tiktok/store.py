@@ -105,7 +105,9 @@ class TikTokStore:
             rows = conn.execute("""
                 SELECT s.*,
                        COUNT(sv.video_id)                                              AS video_count,
-                       SUM(CASE WHEN v.status = 'deleted'   THEN 1 ELSE 0 END)        AS video_deleted,
+                       SUM(CASE WHEN v.status = 'deleted'
+                                 AND COALESCE(v.deleted_reason, '') != 'user_banned' THEN 1 ELSE 0 END) AS video_deleted,
+                       SUM(CASE WHEN v.status = 'deleted' AND v.deleted_reason = 'user_banned' THEN 1 ELSE 0 END) AS video_banned,
                        SUM(CASE WHEN v.status = 'undeleted' THEN 1 ELSE 0 END)        AS video_undeleted,
                        MAX(v.download_date)                                            AS last_saved
                 FROM sounds s

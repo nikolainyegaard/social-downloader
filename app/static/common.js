@@ -2267,14 +2267,18 @@ function fmtDateOnly(unix) {
 const SOUND_STAT_IDS = { active: 'sfStatActive', inactive: 'sfStatInactive' };
 const SOUND_STAR_IDS = { starred: 'sfStarStarred' };
 
+// Status key: 'banned' is a deleted row whose deleted_reason is user_banned
+// (the post was live when the creator was banned), kept apart from individual
+// deletions in every pill, filter, and count.
+/** @param {Object} v @returns {'up'|'deleted'|'banned'|'undeleted'} */
+function _statusKey(v) {
+  if (v.status === 'deleted') return v.deleted_reason === 'user_banned' ? 'banned' : 'deleted';
+  return v.status === 'undeleted' ? 'undeleted' : 'up';
+}
+const _STATUS_LABEL = { up: 'Active', deleted: 'Deleted', banned: 'Banned', undeleted: 'Restored' };
 function _videoStatus(v) {
-  const cls   = v.status === 'deleted'   ? 'deleted'
-              : v.status === 'undeleted' ? 'undeleted'
-              :                           'up';
-  const label = v.status === 'deleted'   ? 'Deleted'
-              : v.status === 'undeleted' ? 'Restored'
-              :                           'Active';
-  return { cls, label };
+  const cls = _statusKey(v);
+  return { cls, label: _STATUS_LABEL[cls] };
 }
 
 const _GHOST_CARD = '<div class="user-card" aria-hidden="true" style="visibility:hidden;pointer-events:none;min-height:220px"></div>';
@@ -2547,12 +2551,9 @@ function _cmp(av, bv, dir) {
   return av < bv ? (dir === 'asc' ? -1 : 1) : av > bv ? (dir === 'asc' ? 1 : -1) : 0;
 }
 
-// Status sort rank: active=0, restored=2, deleted=3
-function _statusSortVal(v) {
-  if (v.status === 'deleted')   return 3;
-  if (v.status === 'undeleted') return 2;
-  return 0;
-}
+// Status sort rank: active=0, restored=2, deleted=3, banned=4
+const _STATUS_SORT = { up: 0, undeleted: 2, deleted: 3, banned: 4 };
+function _statusSortVal(v) { return _STATUS_SORT[_statusKey(v)]; }
 
 function _sortByField(arr, field, dir) {
   return [...arr].sort((a, b) => {
@@ -3268,11 +3269,12 @@ const _imageBadge = `<span style="${_badgeStyle}"><svg width="18" height="18" vi
 
 // ── Modal engine ──────────────────────────────────────────────────────────────
 
-const _STATUS_FILTER_KEY = { up: 'active', deleted: 'deleted', undeleted: 'restored' };
+/** @type {Record<ReturnType<typeof _statusKey>, 'active'|'deleted'|'banned'|'restored'>} */
+const _STATUS_FILTER_KEY = { up: 'active', deleted: 'deleted', banned: 'banned', undeleted: 'restored' };
 
 function _mFiltered(cfg, skipSearch = false) {
   let vids = cfg.st.videos;
-  if (cfg.st.filter.size)     vids = vids.filter(v => cfg.st.filter.has(_STATUS_FILTER_KEY[v.status]));
+  if (cfg.st.filter.size)     vids = vids.filter(v => cfg.st.filter.has(_STATUS_FILTER_KEY[_statusKey(v)]));
   if (cfg.st.typeFilter.size) vids = vids.filter(v => cfg.st.typeFilter.has(v.type));
   if (!skipSearch && cfg.st.search) {
     const q = cfg.st.search.toLowerCase();
@@ -3464,13 +3466,11 @@ function _mRenderToolbar(cfg, vids) {
   if (cfg.mobileToolbar && _mIsMobile()) { _mRenderToolbarMobile(cfg, vids); return; }
   const _fh = cfg.filtersHostId && document.getElementById(cfg.filtersHostId);
   if (_fh) { _fh.innerHTML = ''; _fh.style.display = 'none'; }  // desktop: no separate filter row
-  const counts     = { all: 0, active: 0, deleted: 0, restored: 0 };
+  const counts     = { all: 0, active: 0, deleted: 0, banned: 0, restored: 0 };
   const typeCounts = { video: 0, photo: 0 };
   vids.forEach(v => {
     counts.all++;
-    if      (v.status === 'up')        counts.active++;
-    else if (v.status === 'deleted')   counts.deleted++;
-    else if (v.status === 'undeleted') counts.restored++;
+    counts[_STATUS_FILTER_KEY[_statusKey(v)]]++;
     if      (v.type === 'video') typeCounts.video++;
     else if (v.type === 'photo') typeCounts.photo++;
   });
@@ -3534,6 +3534,7 @@ function _mRenderToolbar(cfg, vids) {
     html += `<div class="filter-pills multi">`
       + pill('active', 'Active')
       + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
+      + (counts.banned   ? pill('banned',   'Banned')   : '')
       + (counts.restored ? pill('restored', 'Restored') : '')
       + `</div>`
       + (hasMultipleTypes
@@ -3590,6 +3591,7 @@ function _mFilterDds(cfg, counts, typeCounts) {
   let out = _mDd(sf ? `${sf.label} ${arrow}` : 'Sort', sortMenu);
   const statusOpts = [{ k: '', l: 'All' }, { k: 'active', l: 'Active' }];
   if (counts.deleted)  statusOpts.push({ k: 'deleted',  l: 'Deleted' });
+  if (counts.banned)   statusOpts.push({ k: 'banned',   l: 'Banned' });
   if (counts.restored) statusOpts.push({ k: 'restored', l: 'Restored' });
   const curS = statusOpts.find(o => o.k && cfg.st.filter.has(o.k)) || statusOpts[0];
   const statusMenu = statusOpts.map(o =>
@@ -3606,12 +3608,10 @@ function _mFilterDds(cfg, counts, typeCounts) {
 }
 
 function _mRenderToolbarMobile(cfg, vids) {
-  const counts = { active: 0, deleted: 0, restored: 0 };
+  const counts = { active: 0, deleted: 0, banned: 0, restored: 0 };
   const typeCounts = { video: 0, photo: 0 };
   vids.forEach(v => {
-    if      (v.status === 'up')        counts.active++;
-    else if (v.status === 'deleted')   counts.deleted++;
-    else if (v.status === 'undeleted') counts.restored++;
+    counts[_STATUS_FILTER_KEY[_statusKey(v)]]++;
     if      (v.type === 'video') typeCounts.video++;
     else if (v.type === 'photo') typeCounts.photo++;
   });

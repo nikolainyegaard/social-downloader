@@ -1106,9 +1106,12 @@ class ChannelDB:
                     COUNT(*)                                                                          AS video_total,
                     COUNT(download_date)                                                              AS video_downloaded,
                     MAX(download_date)                                                                AS last_saved,
-                    SUM(CASE WHEN status = 'deleted' AND deletion_confirmed = 1   THEN 1 ELSE 0 END) AS video_deleted,
+                    SUM(CASE WHEN status = 'deleted' AND deletion_confirmed = 1
+                              AND COALESCE(deleted_reason, '') != 'user_banned'    THEN 1 ELSE 0 END) AS video_deleted,
+                    SUM(CASE WHEN status = 'deleted' AND deleted_reason = 'user_banned' THEN 1 ELSE 0 END) AS video_banned,
                     SUM(CASE WHEN status = 'undeleted'                            THEN 1 ELSE 0 END) AS video_undeleted,
-                    SUM(CASE WHEN status = 'deleted' AND deletion_confirmed = 0   THEN 1 ELSE 0 END) AS video_missing
+                    SUM(CASE WHEN status = 'deleted' AND deletion_confirmed = 0
+                              AND COALESCE(deleted_reason, '') != 'user_banned'    THEN 1 ELSE 0 END) AS video_missing
                 FROM videos
                 GROUP BY channel_id
             """).fetchall()

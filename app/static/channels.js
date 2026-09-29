@@ -1676,6 +1676,7 @@ function initChannelApp(cfg) {
     const stats = (ch.subscriber_count != null ? _statChip(cfg.subLabelCard, (ch.subscriber_count || 0).toLocaleString()) : '')
       + _statChip('saved', ch.video_total || 0)
       + ((ch.video_deleted || 0) > 0 ? _statChip('deleted', ch.video_deleted, 'red') : '')
+      + (ch.video_banned ? _statChip('banned', ch.video_banned, 'orange') : '')
       + (ch.video_missing ? _statChip('missing', ch.video_missing, 'orange') : '')
       + (cfg.hasStories && ch.story_count ? _statChip('stories', ch.story_count, 'purple') : '');
 
@@ -2270,6 +2271,7 @@ function initChannelApp(cfg) {
     statTiles.push({ v: _mediaCountVal(ch.channel_id, 'videos'), l: 'Videos' });
     statTiles.push({ v: _mediaCountVal(ch.channel_id, 'photos'), l: 'Photos' });
     if ((ch.video_deleted || 0) > 0) statTiles.push({ v: ch.video_deleted,   l: 'Deleted',  cls: 'tred' });
+    if (ch.video_banned)             statTiles.push({ v: ch.video_banned,    l: 'Banned',   cls: 'torange' });
     if (ch.video_undeleted)          statTiles.push({ v: ch.video_undeleted, l: 'Restored', cls: 'tyellow' });
     if (cfg.hasStories && ch.story_count) statTiles.push({ v: _fmtLarge(ch.story_count), l: 'Stories' });
     statTiles.push({ v: _storageTileVal(ch.channel_id), l: 'Storage' });
@@ -2438,6 +2440,7 @@ function initChannelApp(cfg) {
       + _hgRow('Videos',   _mediaCountVal(ch.channel_id, 'videos'))
       + _hgRow('Photos',   _mediaCountVal(ch.channel_id, 'photos'))
       + _hgRow('Deleted',  String(ch.video_deleted || 0),    ch.video_deleted   ? ' tred'    : ' tzero')
+      + (ch.video_banned ? _hgRow('Banned', String(ch.video_banned), ' torange') : '')
       + _hgRow('Restored', String(ch.video_undeleted || 0),  ch.video_undeleted ? ' tyellow' : ' tzero')
       + (cfg.hasStories ? _hgRow('Stories', _fmtLarge(ch.story_count || 0), _zero(ch.story_count)) : '')
       + _hgRow('Storage', _storageTileVal(ch.channel_id));

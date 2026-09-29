@@ -1015,6 +1015,7 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 .hg-v      { color: var(--text-dim); font-weight: 600; font-size: 11px; white-space: nowrap; }
 .hg-v.tred    { color: var(--red); }
 .hg-v.tyellow { color: var(--yellow); }
+.hg-v.torange { color: var(--orange); }
 .hg-v.tzero   { color: var(--muted); opacity: .45; }
 .hg-v.tlink   { color: var(--accent); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 /* Mid-width windows: once the header (content box) is too narrow for the
@@ -1438,6 +1439,7 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 @media (hover: hover) { .vgrid-cell:hover { opacity: .85; } }
 .vgrid-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .vgrid-cell.deleted   { outline: 2px solid var(--red);    outline-offset: -2px; }
+.vgrid-cell.banned    { outline: 2px solid var(--orange); outline-offset: -2px; }
 .vgrid-cell.undeleted { outline: 2px solid var(--yellow); outline-offset: -2px; }
 .vgrid-cell.missing   { outline: 2px solid var(--orange);       outline-offset: -2px; }
 .video-grid--wide { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
@@ -1473,6 +1475,7 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 /* The normal state is quiet text: colored pills are reserved for exceptions */
 .vstatus.up        { background: none; color: var(--muted); padding: 2px 0; }
 .vstatus.deleted   { background: var(--red-bg);   color: var(--red); }
+.vstatus.banned    { background: var(--orange-bg); color: var(--orange); }
 .vstatus.undeleted { background: var(--yellow-bg);  color: var(--yellow); }
 .vstatus.missing   { background: var(--orange-bg);   color: var(--orange); }
 .vstatus.direct    { background: var(--raised); color: var(--muted); margin-left: 4px; }
@@ -2964,6 +2967,7 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
   .yt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .yt-thumb.deleted { outline: 2px solid var(--red); outline-offset: -2px; }
   .yt-thumb.undeleted { outline: 2px solid var(--yellow); outline-offset: -2px; }
+  .yt-thumb.banned    { outline: 2px solid var(--orange); outline-offset: -2px; }
   .yt-thumb-badge { position: absolute; bottom: 4px; right: 4px; display: inline-flex; filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); }
   .yt-body { flex: 1; min-width: 0; padding-top: 1px; padding-right: 34px; }
   /* Styling context for the shared .xtext expandable description inside a row. */
@@ -3001,6 +3005,7 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
   .about-dates .tv { font-size: 12px; font-weight: 600; color: var(--text-dim); }
   .about-grid .tile.tred .tv { color: var(--red); }
   .about-grid .tile.tyellow .tv { color: var(--yellow); }
+  .about-grid .tile.torange .tv { color: var(--orange); }
   .about-grid .tile.tlink { cursor: pointer; }
   .about-grid .tile.tlink .tv { text-decoration: underline dotted; text-underline-offset: 2px; }
 }
