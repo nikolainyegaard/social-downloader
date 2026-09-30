@@ -347,6 +347,13 @@ class ChannelDB:
                 conn.execute(
                     "INSERT INTO settings (key, value) VALUES ('deletion_confirmed_backfilled', '1')"
                 )
+            # Pending deletions on banned creators can never get their second
+            # strike; confirm them (ban_channel_videos does this for new bans)
+            conn.execute("""
+                UPDATE videos SET deletion_confirmed = 1
+                WHERE status = 'deleted' AND deletion_confirmed = 0
+                  AND channel_id IN (SELECT channel_id FROM channels WHERE account_status = 'banned')
+            """)
 
         return False
 
@@ -578,8 +585,15 @@ class ChannelDB:
 
     def ban_channel_videos(self, channel_id: str) -> int:
         """Mark all active videos deleted with reason 'user_banned'. Videos already
-        deleted individually keep their video_deleted reason. Returns the count."""
+        deleted individually keep their video_deleted reason; ones still awaiting
+        their second-strike confirmation are confirmed, since the ban makes the
+        re-check impossible and a banned creator cannot have "missing" posts.
+        Returns the count of newly hidden videos."""
         with self.get_db() as conn:
+            conn.execute("""
+                UPDATE videos SET deletion_confirmed = 1
+                WHERE channel_id = ? AND status = 'deleted' AND deletion_confirmed = 0
+            """, (channel_id,))
             conn.execute("""
                 UPDATE videos
                 SET status             = 'deleted',
