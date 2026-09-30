@@ -347,13 +347,15 @@ class ChannelDB:
                 conn.execute(
                     "INSERT INTO settings (key, value) VALUES ('deletion_confirmed_backfilled', '1')"
                 )
-            # Pending deletions on banned creators can never get their second
-            # strike; confirm them (ban_channel_videos does this for new bans)
-            conn.execute("""
-                UPDATE videos SET deletion_confirmed = 1
-                WHERE status = 'deleted' AND deletion_confirmed = 0
-                  AND channel_id IN (SELECT channel_id FROM channels WHERE account_status = 'banned')
-            """)
+
+        # Pending deletions on banned creators can never get their second
+        # strike; confirm them (ban_channel_videos does this for new bans).
+        # Runs for every platform, TikTok included
+        conn.execute("""
+            UPDATE videos SET deletion_confirmed = 1
+            WHERE status = 'deleted' AND deletion_confirmed = 0
+              AND channel_id IN (SELECT channel_id FROM channels WHERE account_status = 'banned')
+        """)
 
         return False
 
