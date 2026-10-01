@@ -36,6 +36,7 @@ Key environment variables (set in `docker-compose.yml`). The scheduling variable
 | `{P}_FULL_REFRESH_DAYS` | `7` | Days between full deletion-detecting checks per creator |
 | `TIKTOK_SOUND_LOOP_INTERVAL_MINUTES` | `60` | How often to check tracked TikTok sounds |
 | `HIKERAPI_KEY` | | Instagram: [HikerAPI](https://hikerapi.com) access key. Instagram rate limits post listing on cookie sessions; with a key, profile lookup and post listing go through HikerAPI instead (about two requests per profile per check) |
+| `TEXT_INDEX_GPU_MEM_GB` | `2` | GPU memory cap for the OCR text index, in GB |
 | `TEXT_INDEX_GPU` | `0` | `1` runs the OCR text index on an NVIDIA GPU. Build the image with `--build-arg OCR_GPU=1` (amd64 only) and uncomment `gpus: all` in docker-compose.yml |
 | `TZ` | system | Timezone for log timestamps (e.g. `Europe/Oslo`) |
 | `WEB_PORT` | `5000` | Flask listen port |

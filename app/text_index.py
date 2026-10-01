@@ -148,7 +148,8 @@ def _engine(threads: int):
             # arena by what is asked, not by doubling, and cap it. cublasCreate
             # fails with "resource allocation failed" once the card is full
             "EngineConfig.onnxruntime.cuda_ep_cfg.arena_extend_strategy": "kSameAsRequested",
-            "EngineConfig.onnxruntime.cuda_ep_cfg.gpu_mem_limit": 2 * 1024 ** 3,
+            "EngineConfig.onnxruntime.cuda_ep_cfg.gpu_mem_limit":
+                int(float(os.environ.get("TEXT_INDEX_GPU_MEM_GB", "2")) * 1024 ** 3),
             # Overlay text is large; 1280 px on the long side keeps detector
             # memory and time in check for big photo posts (default 2000)
             "Global.max_side_len": 1280,
