@@ -42,6 +42,13 @@ Two decisions in transcoder.py that look odd without context:
 
 Encoder settings (CRF 22, preset 4, 10-bit, tune=0, Opus 96k) were calibrated against VMAF on real archive samples in July 2026: mean 97+ with per-frame minimum 94+ on both a 720p landscape VOD and a 1080x1920 portrait VOD. The per-frame minimum floor ships at 85, not 94, because hour-long files hit scene cuts and near-black frames that score low without being visible defects; the mean floor of 96 is the real gate.
 
+## OCR text index: RapidOCR packaging
+
+- `rapidocr` depends on the full `opencv-python`, which links libGL and libxcb even though nothing is displayed. The image installs `libgl1 libglib2.0-0` (libxcb comes with the browser deps); without them `import cv2` fails at runtime, not at pip time. Do not swap in `opencv-python-headless`: pip still pulls the full package for rapidocr's dependency and the two fight over the `cv2` module
+- OpenCV cannot decode AVIF, and every saved photo and photo story is AVIF. `text_index._to_png` decodes through ffmpeg first; feeding the AVIF path to RapidOCR returns an empty result with no error
+- The CPU build and the GPU build are the same code: `onnxruntime-gpu` replaces `onnxruntime` (same import name) and the CUDA and cuDNN runtime wheels load through `onnxruntime.preload_dlls()`. A GPU image on a host without the NVIDIA container toolkit still runs, on CPU; the panel shows the provider, which is the only way to tell
+- The `videos.text_indexed` column is the queue on purpose: a separate queue DB would need backfill and recovery passes like the transcoder's, while a per-row version stamp gives retries, rebuilds and model upgrades for free
+
 ## yt-dlp downloads send a Chrome user agent
 
 On 2026-08-10 TikTok started rejecting yt-dlp's default UA on the video webpage endpoint: every download died instantly with "Unexpected response from webpage request" while listings, scrapes, and the browser session kept working (yt-dlp issue 17403; no fixed release existed at the time). `download_video` pins a current Chrome UA in `http_headers` for all platforms; it is what TikTok's heuristic checks and is harmless elsewhere. If downloads break again with that error, refresh the UA string to a current Chrome version before digging deeper.

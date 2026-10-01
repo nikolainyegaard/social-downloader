@@ -417,6 +417,60 @@ const _GENERAL_JOBS_HTML = `
 
   <div class="job-card">
     <div class="job-card-hdr">
+      <div class="job-card-title">Index text in media</div>
+      <div class="job-card-btns">
+        <button class="btn-sm" id="tiRebuildBtn" onclick="_tiRebuild()">Rebuild</button>
+        <button class="btn-sm" id="tiPauseBtn" onclick="_tiPause()" style="min-width:80px">Pause</button>
+      </div>
+    </div>
+    <div class="job-card-desc">
+      Reads the text in saved photos, stories and video frames with OCR so
+      the search box (Ctrl+K) finds words inside media, not only captions.
+      Videos are sampled every few seconds; long videos are skipped. Runs in
+      the background at low priority and picks up new downloads on its own.
+    </div>
+    <label class="tracking-toggle" style="margin-top:14px">
+      <input type="checkbox" id="tiEnabled" onchange="_tiToggle('enabled', this)">
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span class="toggle-label">Index media text</span>
+    </label>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:14px">
+      <label class="settings-label">
+        <span>Sample a video frame every</span>
+        <div class="loop-interval-field">
+          <input type="number" id="tiInterval" min="1" max="30" class="loop-interval-input" onchange="_tiNum('frame_interval_secs', this)">
+          <span>s</span>
+        </div>
+      </label>
+      <label class="settings-label">
+        <span>Skip videos longer than</span>
+        <div class="loop-interval-field">
+          <input type="number" id="tiMaxVideo" min="10" class="loop-interval-input" onchange="_tiNum('max_video_secs', this)">
+          <span>s</span>
+        </div>
+      </label>
+      <label class="settings-label">
+        <span>CPU threads</span>
+        <div class="loop-interval-field">
+          <input type="number" id="tiThreads" min="1" max="64" class="loop-interval-input" onchange="_tiNum('threads', this)">
+          <span>threads</span>
+        </div>
+      </label>
+    </div>
+    <div class="job-status" id="job-textindex-status" style="display:none">
+      <div id="job-textindex-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-textindex-bar"></div></div></div>
+      <div class="job-status-text" id="job-textindex-text"></div>
+    </div>
+    <div id="tiMsg" style="display:none;font-size:12px;color:var(--orange);margin-top:10px"></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;min-height:16px">
+      <span id="tiStats" style="font-size:12px;color:var(--muted)"></span>
+      <button class="btn-sm" id="tiRetryBtn" style="display:none" onclick="_tiRetryFailed()">Retry failed</button>
+    </div>
+    <div id="tiRecent" style="font-size:11px;color:var(--muted);line-height:1.7;margin-top:6px"></div>
+  </div>
+
+  <div class="job-card">
+    <div class="job-card-hdr">
       <div class="job-card-title">Convert photos to AVIF</div>
       <button class="btn-primary" id="job-avif-btn" onclick="triggerAvifJob()">Run</button>
     </div>
@@ -685,7 +739,124 @@ async function _gjRetryFailed() {
   if (ok) { showToast(`${data.retried} file(s) queued again.`, { type: 'success', duration: 3000 }); _gjTick(); }
 }
 
+// ── Text index job (OCR into media_text) ──────────────────────────────────────
+
+let _tiTimer  = null;
+let _tiPaused = false;
+let _tiSaveToast = null;
+const _tiWidget = _makeJobWidget('textindex');
+
+async function _tiTick() {
+  const { ok, data } = await apiJSON('/api/text-index/status');
+  if (!ok) return;
+  const s = data.settings || {};
+  const c = data.counts || {};
+  _tiPaused = !!s.paused;
+  const pauseBtn = document.getElementById('tiPauseBtn');
+  if (pauseBtn) _setText(pauseBtn, _tiPaused ? 'Resume' : 'Pause');
+  const total = (c.pending || 0) + (c.done || 0) + (c.failed || 0);
+  const cur = data.current;
+  if (cur) {
+    const what = cur.item_type === 'story' ? 'story' : 'post';
+    _tiWidget.update({
+      barPct: total ? Math.round((c.done + (c.failed || 0)) / total * 100) : null,
+      label:  `${cur.platform} ${what} ${cur.item_id}: ${cur.phase}`,
+    });
+  } else if (s.enabled && !s.paused && c.pending) {
+    _tiWidget.update({ barPct: null, label: 'Waiting for the next item…' });
+  } else {
+    _tiWidget.hide();
+  }
+  const msg = document.getElementById('tiMsg');
+  if (msg) {
+    const text = data.message
+      || (data.gpu_requested && data.provider && !data.provider.startsWith('CUDA')
+          ? `GPU requested but onnxruntime loaded ${data.provider}; build the image with OCR_GPU=1 and give the container a GPU` : '');
+    _setText(msg, text);
+    msg.style.display = text ? '' : 'none';
+  }
+  const stats = document.getElementById('tiStats');
+  if (stats) {
+    const parts = [`${(c.done || 0).toLocaleString()} indexed`, `${(c.pending || 0).toLocaleString()} pending`];
+    if (c.failed) parts.push(`${c.failed.toLocaleString()} failed`);
+    if (data.items_per_min) parts.push(`${data.items_per_min}/min`);
+    if (data.provider) parts.push(data.provider.replace('ExecutionProvider', ''));
+    _setText(stats, parts.join(' · '));
+  }
+  const retry = document.getElementById('tiRetryBtn');
+  if (retry) retry.style.display = c.failed ? '' : 'none';
+  const recent = document.getElementById('tiRecent');
+  if (recent) {
+    const html = (data.recent || []).map(r =>
+      `<div>${esc(r.platform)} ${esc(r.item_type)} ${esc(r.item_id)}: ${r.error ? `<span style="color:var(--orange)">${esc(r.error)}</span>` : `${r.blocks} text block${r.blocks === 1 ? '' : 's'}`} (${r.secs}s)</div>`).join('');
+    if (recent.innerHTML !== html) recent.innerHTML = html;
+  }
+}
+
+async function _tiPatch(changes, { toast = true } = {}) {
+  let t = null;
+  if (toast) {
+    _tiSaveToast?.dismiss();
+    t = _tiSaveToast = showToast('Saving…', { spinner: true, duration: 0 });
+  }
+  const { ok, data } = await apiJSON('/api/text-index/settings',
+                                     { method: 'PATCH', body: JSON.stringify(changes) });
+  if (t) {
+    if (ok) t.update('Saved', { duration: 2000 });
+    else t.update(data.error || 'Could not save text index settings', { type: 'error' });
+  } else if (!ok) {
+    showToast(data.error || 'Could not save text index settings', { type: 'error' });
+  }
+  return ok;
+}
+
+function _tiToggle(key, input) { _tiPatch({ [key]: input.checked }); }
+
+function _tiNum(key, input) {
+  const v = parseInt(input.value, 10);
+  if (!Number.isFinite(v) || v < 1) return;
+  _tiPatch({ [key]: v });
+}
+
+async function _tiPause() {
+  if (await _tiPatch({ paused: !_tiPaused }, { toast: false })) _tiTick();
+}
+
+async function _tiRetryFailed() {
+  const { ok, data } = await apiJSON('/api/text-index/retry-failed', { method: 'POST' });
+  if (ok) { showToast(`${data.reset} item(s) queued again.`, { type: 'success', duration: 3000 }); _tiTick(); }
+}
+
+async function _tiRebuild() {
+  if (!await openConfirm({
+    title: 'Rebuild the text index?',
+    message: 'Queues every saved post and story for OCR again. Existing results stay searchable until each item is re-indexed. With a large library this runs for a long time in the background.',
+    confirmLabel: 'Rebuild',
+  })) return;
+  const { ok, data } = await apiJSON('/api/text-index/rebuild', { method: 'POST' });
+  if (ok) { showToast(`${data.reset} item(s) queued.`, { type: 'success', duration: 3000 }); _tiTick(); }
+}
+
+async function _tiShow() {
+  const { ok, data } = await apiJSON('/api/text-index/status');
+  if (ok) {
+    const s = data.settings || {};
+    const seed = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+    seed('tiEnabled',  el => { el.checked = !!s.enabled; });
+    seed('tiInterval', el => { el.value = String(s.frame_interval_secs); });
+    seed('tiMaxVideo', el => { el.value = String(s.max_video_secs); });
+    seed('tiThreads',  el => { el.value = String(s.threads); });
+  }
+  if (!_tiTimer) _tiTimer = setInterval(_tiTick, 2000);
+  _tiTick();
+}
+
+function _tiHide() {
+  if (_tiTimer) { clearInterval(_tiTimer); _tiTimer = null; }
+}
+
 async function _gjShow() {
+  _tiShow();
   const { ok, data } = await apiJSON('/api/transcode/status');
   if (ok) {
     const s = data.settings || {};
@@ -707,6 +878,7 @@ async function _gjShow() {
 }
 
 function _gjHide() {
+  _tiHide();
   if (_gjTimer) { clearInterval(_gjTimer); _gjTimer = null; }
   // Finished jobs: clear their widgets so the pane opens clean next time.
   // Running jobs: keep the widget state; _gjShow resumes their poll.
@@ -1531,11 +1703,12 @@ const _SEARCH_SOURCE = { caption: 'Caption', image: 'Image', frame: 'Frame', sto
 
 function _searchRow(r) {
   const plat   = PLATFORMS.find(p => p.id === r.platform);
-  const where  = r.item_type === 'story' ? 'Story'
+  const where  = r.item_type === 'story' ? (r.source === 'frame' ? `Story ${fmtDur(r.start_ts || 0)}` : 'Story')
                : r.source === 'frame'    ? `Frame ${fmtDur(r.start_ts || 0)}`
+               : r.source === 'image' && r.start_ts ? `Image ${r.start_ts}`
                :                           (_SEARCH_SOURCE[r.source] || r.source);
   const open   = r.item_type === 'story'
-    ? `${r.prefix}OpenModal('${esc(r.channel_id)}')`
+    ? `${r.prefix}OpenStory('${esc(r.channel_id)}','${esc(r.item_id)}')`
     : `${r.prefix}OpenModalAndHighlight('${esc(r.channel_id)}','${esc(r.item_id)}')`;
   return `<div class="sr-row" role="button" tabindex="0" onclick="_searchOpen('${esc(r.platform)}',()=>${open})">
     <span class="snav-badge" title="${esc(plat?.label || r.platform)}">${esc((plat?.label || r.platform)[0])}</span>

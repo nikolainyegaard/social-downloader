@@ -24,12 +24,17 @@ services:
       # Docker daemon, so leave it out if you do not use the gluetun setup.
       # - /var/run/docker.sock:/var/run/docker.sock
 
+    # GPU for the OCR text index (see TEXT_INDEX_GPU below): uncomment with
+    # the NVIDIA container toolkit installed on the host.
+    # gpus: all
+
     environment:
       TZ: "Europe/Oslo"                           # set your timezone so log timestamps are in local time
       # Loop intervals are configurable from Settings in the UI and do not need to be set here.
       # WEB_PORT: "5000"         # change if needed (also update the ports below)
       # MEDIA_DIR: /app/media  # override media storage path inside the container
       # HIKERAPI_KEY: ""        # Instagram: HikerAPI access key for profile lookup and post listing (https://hikerapi.com)
+      # TEXT_INDEX_GPU: "1"     # OCR text index on the GPU; needs an image built with --build-arg OCR_GPU=1 and gpus: all below
 
       # OAuth is configured via Settings > Authentication in the UI, not here.
       # Emergency escape hatch: uncomment the line below if you are locked out because

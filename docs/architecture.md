@@ -29,6 +29,7 @@ social-downloader/
 │   ├── backup.py             daily SQLite backup, 14-day retention, daemon thread
 │   ├── downloader.py         yt-dlp download + direct photo/story download (shared)
 │   ├── transcoder.py         background AV1 transcode job: queue, worker, verification
+│   ├── text_index.py         background OCR job: media text into media_text for search
 │   ├── photo_converter.py    background AVIF conversion; encode_avif helper
 │   ├── thumbnailer.py        thumbnails, avatar/banner caching, thumbnail repair
 │   ├── web.py                Flask app; global routes; mounts platform blueprints

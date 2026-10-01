@@ -1680,6 +1680,75 @@ class ChannelDB:
         return [dict(r) for r in rows]
 
 
+    # ── Text index job (text_index.py) ────────────────────────────────────────
+
+    def get_text_index_pending(self, version: int, limit: int = 50) -> list[dict]:
+        """Items with a file whose media the OCR job has not processed at this
+        version: text_indexed below it, except rows that failed at exactly this
+        version (negative), which wait for Retry failed. Newest first."""
+        with self.get_db() as conn:
+            vids = conn.execute("""
+                SELECT 'video' AS item_type, video_id AS item_id, channel_id, file_path,
+                       content_type, duration, upload_date AS ts
+                FROM videos
+                WHERE file_path IS NOT NULL AND text_indexed < ? AND text_indexed != -?
+                ORDER BY upload_date DESC LIMIT ?
+            """, (version, version, limit)).fetchall()
+            stories = conn.execute("""
+                SELECT 'story' AS item_type, story_id AS item_id, channel_id, file_path,
+                       content_type, NULL AS duration, posted_at AS ts
+                FROM stories
+                WHERE file_path IS NOT NULL AND text_indexed < ? AND text_indexed != -?
+                ORDER BY posted_at DESC LIMIT ?
+            """, (version, version, limit)).fetchall()
+        rows = [dict(r) for r in vids] + [dict(r) for r in stories]
+        rows.sort(key=lambda r: r["ts"] or 0, reverse=True)
+        return rows[:limit]
+
+    def text_index_counts(self, version: int) -> dict:
+        with self.get_db() as conn:
+            out = {"pending": 0, "done": 0, "failed": 0}
+            for table in ("videos", "stories"):
+                r = conn.execute(f"""
+                    SELECT SUM(text_indexed >= ?)                       AS done,
+                           SUM(text_indexed = -?)                        AS failed,
+                           SUM(text_indexed < ? AND text_indexed != -?) AS pending
+                    FROM {table} WHERE file_path IS NOT NULL
+                """, (version, version, version, version)).fetchone()
+                for k in out:
+                    out[k] += r[k] or 0
+        return out
+
+    def set_text_indexed(self, item_type: str, item_id: str, version: int) -> None:
+        table, key = ("stories", "story_id") if item_type == "story" else ("videos", "video_id")
+        with self.get_db() as conn:
+            conn.execute(f"UPDATE {table} SET text_indexed = ? WHERE {key} = ?", (version, item_id))
+
+    def replace_media_text(self, item_type: str, item_id: str, channel_id: str,
+                           rows: list[tuple]) -> None:
+        """Replace the OCR rows of one item (caption rows stay). rows are
+        (source, start_ts, end_ts, text, confidence) tuples."""
+        with self.get_db() as conn:
+            conn.execute("""
+                DELETE FROM media_text
+                WHERE item_type = ? AND item_id = ? AND source != 'caption'
+            """, (item_type, item_id))
+            conn.executemany("""
+                INSERT INTO media_text (item_type, item_id, channel_id, source, start_ts, end_ts, text, confidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, [(item_type, item_id, channel_id, *r) for r in rows])
+
+    def reset_text_index(self, version: int, failed_only: bool) -> int:
+        """Retry failed rows (failed_only) or queue everything for a rebuild."""
+        n = 0
+        with self.get_db() as conn:
+            for table in ("videos", "stories"):
+                where = "text_indexed = -?" if failed_only else "text_indexed != 0"
+                n += conn.execute(f"UPDATE {table} SET text_indexed = 0 WHERE {where}",
+                                  (version,) if failed_only else ()).rowcount
+        return n
+
+
     def delete_video(self, video_id: str) -> bool:
         with self.get_db() as conn:
             cur = conn.execute("DELETE FROM videos WHERE video_id = ?", (video_id,))

@@ -63,6 +63,24 @@ _SCHEDULE_KEYS = (
 )
 
 
+def sibling_files(video) -> list[str]:
+    """Media files of a post: multi-media posts store numbered siblings with the
+    first file as file_path ({id}_01.ext on Twitter, {id}_1.ext on Instagram);
+    single-file posts store {id}.ext."""
+    main   = video["file_path"]
+    vid_id = video["video_id"]
+    if not os.path.basename(main).startswith(f"{vid_id}_"):
+        return [main] if os.path.exists(main) else []
+    rx = _re.compile(_re.escape(vid_id) + r"_(\d+)\.\w+$")
+    files = []
+    for path in _glob.glob(os.path.join(_glob.escape(os.path.dirname(main)),
+                                        _glob.escape(vid_id) + "_*")):
+        m = rx.fullmatch(os.path.basename(path))
+        if m and os.path.splitext(path)[1].lower() in _VIDEO_MIME:
+            files.append((int(m.group(1)), path))
+    return [path for _, path in sorted(files)]
+
+
 def create_channel_blueprint(engine) -> Blueprint:
     db       = engine.db
     loop     = engine.loop
@@ -623,29 +641,13 @@ def create_channel_blueprint(engine) -> Blueprint:
         _transcoder.mark_served(path)
         return send_file(path, mimetype=mime, conditional=True)
 
-    def _sibling_files(video) -> list[str]:
-        """Media files of a post: multi-media posts store numbered siblings with the
-        first file as file_path ({id}_01.ext on Twitter, {id}_1.ext on Instagram);
-        single-file posts store {id}.ext."""
-        main   = video["file_path"]
-        vid_id = video["video_id"]
-        if not os.path.basename(main).startswith(f"{vid_id}_"):
-            return [main] if os.path.exists(main) else []
-        rx = _re.compile(_re.escape(vid_id) + r"_(\d+)\.\w+$")
-        files = []
-        for path in _glob.glob(os.path.join(_glob.escape(os.path.dirname(main)),
-                                            _glob.escape(vid_id) + "_*")):
-            m = rx.fullmatch(os.path.basename(path))
-            if m and os.path.splitext(path)[1].lower() in _VIDEO_MIME:
-                files.append((int(m.group(1)), path))
-        return [path for _, path in sorted(files)]
 
     @bp.route("/videos/<video_id>/files", methods=["GET"])
     def video_files(video_id: str):
         video = db.get_video(video_id)
         if not video or not video.get("file_path"):
             return ("", 404)
-        files = _sibling_files(video)
+        files = sibling_files(video)
         if not files:
             return ("", 404)
         items = []
@@ -664,7 +666,7 @@ def create_channel_blueprint(engine) -> Blueprint:
         video = db.get_video(video_id)
         if not video or not video.get("file_path"):
             return ("", 404)
-        files = _sibling_files(video)
+        files = sibling_files(video)
         if n < 0 or n >= len(files):
             return ("", 404)
         ext = os.path.splitext(files[n])[1].lower()

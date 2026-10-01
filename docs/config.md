@@ -18,6 +18,7 @@
 | `TIKTOK_USER_LOOP_INTERVAL_MINUTES` | `180` | Legacy, superseded by the session scheduler |
 | `HIKERAPI_KEY` | | Instagram: HikerAPI access key. When set, profile lookup and post listing go through HikerAPI and post media downloads straight from the CDN; stories and avatars stay on the cookies.txt session |
 | `OAUTH_FORCE_DISABLE` | `false` | `true` bypasses auth enforcement without editing oauth.json; use when locked out |
+| `TEXT_INDEX_GPU` | `0` | `1` runs the OCR text index on the GPU (CUDA onnxruntime); needs an image built with `--build-arg OCR_GPU=1` and a GPU passed to the container |
 | `TRANSCODE_FFMPEG` | `/opt/ffmpeg/ffmpeg` if present, else `ffmpeg` | ffmpeg binary the AV1 transcode job uses (needs SVT-AV1 and libvmaf) |
 
 Per-platform scheduling vars, `{P}` = `TIKTOK`, `YOUTUBE`, `INSTAGRAM`, `TWITTER`, `ONLYFANS`:
@@ -59,6 +60,7 @@ data/
   platforms.json                disabled-platform set (Settings > General)
   transcode.json                AV1 transcode job settings (Settings > General > Jobs)
   transcode.db                  transcode queue + history; derived state, rebuilt by Backfill
+  text_index.json               OCR text index job settings (Settings > General > Jobs)
   oauth.json                    OAuth config (enabled, client_id, client_secret, discovery_url, lifetime)
   .secret_key                   auto-generated Flask session secret, first startup, never user-managed
 

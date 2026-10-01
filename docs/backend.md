@@ -51,6 +51,17 @@ Background AV1 transcode job (Settings > General > Jobs). Re-encodes large mp4 f
 - **`FFMPEG`/`FFPROBE`**: `TRANSCODE_FFMPEG` env, else the image's static build at `/opt/ffmpeg/ffmpeg` (Bookworm's ffmpeg has SVT-AV1 1.4 and no libvmaf), else system ffmpeg. `vmaf_available()` is checked once; with verification on and no libvmaf the worker refuses to run and says so in the panel
 - **`get_status()`**: settings, current file (phase/pct/speed from `-progress`), counts per status, bytes saved, last 10 finished rows (incl. per-file processing seconds, the `elapsed` column); polled by the General Jobs pane via `/api/transcode/status`
 
+## text_index.py
+
+Background OCR job (Settings > General > Jobs, "Index text in media") that fills `media_text` so the global search finds words inside photos, stories and video frames. Settings in `data/text_index.json` (read per call: `enabled`, `paused`, `frame_interval_secs`, `max_video_secs`, `min_confidence`, `threads`). No queue DB: `videos.text_indexed` / `stories.text_indexed` are the queue (0 pending, `VERSION` done, `-VERSION` failed at this version and parked until Retry failed). Bumping `VERSION` after a model or pipeline change re-indexes everything.
+
+- **`start()`**: worker thread at nice 19 (thread-level `setpriority`, ffmpeg children under `nice -n 19`). Polls every enabled engine's `get_text_index_pending(VERSION, 25)` newest first, sleeps 60 s when nothing is pending, 15 s while disabled or paused
+- **Engine**: RapidOCR (PP-OCRv6 small det + rec, no cls) on onnxruntime, built once on first use with `Global.use_cls False`, `intra_op_num_threads` from settings and `use_cuda` when `TEXT_INDEX_GPU=1`. The status reports the provider that actually loaded, so a GPU build that fell back to CPU shows in the panel. An import failure (package missing) is reported as a message, not a crash
+- **Images**: every file of the post (`engine.web.sibling_files`, now module level) or the story file, decoded to PNG through ffmpeg first because OpenCV cannot read AVIF. One `image` row per file; carousels put the slot number in `start_ts`
+- **Videos**: ffmpeg `fps=1/interval` sampling with `showinfo` for the real pts of each frame, downscaled to 1080 wide; frames without text cost only the detector pass. `collapse_frames` merges consecutive frames whose normalised text matches at `SequenceMatcher` ratio 0.75 or better into one `frame` row spanning `start_ts` to `end_ts` (the last frame plus one interval), keeping the highest-confidence reading. Videos over `max_video_secs` are marked done with no rows
+- **`replace_media_text`** swaps the item's OCR rows (captions untouched) and `set_text_indexed` stamps the version; a failure stamps `-VERSION` and logs the reason
+- **`get_status()`**: settings, provider, current item and phase, pending/done/failed counts summed over enabled platforms, items per minute since start, last 10 results; polled by the Jobs pane via `/api/text-index/status`. `reset(failed_only)` backs Retry failed and Rebuild
+
 ## photo_converter.py
 
 **`encode_avif(src, dst, crf) -> bool`**: FFmpeg `libaom-av1 -still-picture 1 -crf {crf} -b:v 0 -cpu-used 6`, writes `dst + ".tmp"` then renames. Always pass `-f avif` explicitly (see [gotchas.md](gotchas.md)). CRF: `CRF_PHOTO = 28`, `CRF_THUMB = 38`, `CRF_AVATAR = 30`. Startup thread has an 8 s delay so `init_db()` finishes first.

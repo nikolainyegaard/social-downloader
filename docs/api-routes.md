@@ -81,6 +81,10 @@ Global:
 /api/transcode/backfill           POST: scan the library and queue qualifying files (409 while scanning)
 /api/transcode/retry-failed       POST: requeue every failed row
 /api/transcode/skip-current       POST: kill the in-flight encode; the file is parked as failed (409 when idle)
+/api/text-index/status            OCR text index job: settings, provider, current item, counts, recent results
+/api/text-index/settings          PATCH any text_index.json key (enabled, paused, frame_interval_secs, max_video_secs, threads)
+/api/text-index/retry-failed      POST: requeue items that failed at the current model version
+/api/text-index/rebuild           POST: requeue every indexed item
 /api/jobs/photo-converter/status|start    JPEG to AVIF conversion, all platforms
 /api/jobs/thumbnail-repair/status|start   undecodable thumbnails, all platforms
 /api/jobs/audio-cleanup/status|start      delete audio-only files, all platforms

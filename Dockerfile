@@ -9,12 +9,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
       libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
       fonts-liberation xvfb xdotool \
+      libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# OCR on the GPU (text_index.py): OCR_GPU=1 swaps onnxruntime for the CUDA
+# build plus the CUDA 12 and cuDNN 9 runtime wheels it loads at import. amd64
+# only; the container also needs a GPU (compose: gpus: all) and the host the
+# NVIDIA container toolkit. Set TEXT_INDEX_GPU=1 at runtime to use it.
+ARG OCR_GPU=0
+RUN if [ "$OCR_GPU" = "1" ]; then \
+      pip uninstall -y onnxruntime && \
+      pip install --no-cache-dir onnxruntime-gpu nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia-cudnn-cu12; \
+    fi
 
 # Browser for TikTokApi (driven by patchright, the leak-patched Playwright
 # fork main.py aliases in). Google Chrome on amd64: noticeably better bot

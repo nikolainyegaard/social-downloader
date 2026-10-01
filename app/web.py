@@ -255,6 +255,26 @@ def create_app() -> Flask:
     import photo_converter as _photo_converter
     from config import MEDIA_DIR
 
+    # Text index job (OCR into media_text), app-wide like the transcoder
+    import text_index
+
+    @app.route("/api/text-index/status")
+    def text_index_status():
+        return jsonify(text_index.get_status())
+
+    @app.route("/api/text-index/settings", methods=["PATCH"])
+    def text_index_settings():
+        body = request.get_json(silent=True) or {}
+        return jsonify({"ok": True, "settings": text_index.save_settings(body)})
+
+    @app.route("/api/text-index/retry-failed", methods=["POST"])
+    def text_index_retry():
+        return jsonify({"ok": True, "reset": text_index.reset(failed_only=True)})
+
+    @app.route("/api/text-index/rebuild", methods=["POST"])
+    def text_index_rebuild():
+        return jsonify({"ok": True, "reset": text_index.reset(failed_only=False)})
+
     @app.route("/api/jobs/photo-converter/status")
     def photo_converter_status():
         return jsonify(_photo_converter.get_state())

@@ -148,6 +148,8 @@ sys.stderr = _Tee(sys.__stderr__)
 # logger so only meaningful HTTP activity reaches the transcript.
 
 _POLLING_ENDPOINTS = (
+    '"GET /api/text-index/status HTTP',
+    '"GET /api/transcode/status HTTP',
     '"GET /api/tiktok/login/qr HTTP',
     '"GET /api/tiktok/screen HTTP',
     '"POST /api/tiktok/screen/input HTTP',
@@ -408,6 +410,8 @@ if __name__ == "__main__":
     # its table and recovery pass must exist first.
     import transcoder
     transcoder.start()
+    import text_index
+    text_index.start()
 
     print(f"{_ts()} Starting loop threads...")
     for _engine in ENGINES.values():

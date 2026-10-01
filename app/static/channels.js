@@ -587,6 +587,19 @@ function initChannelApp(cfg) {
     openStoryViewer(live.map(_storySlide));
   });
 
+  // Open one saved story (live or expired) in the story viewer, used by the
+  // text search results. The whole saved set loads so prev/next still work,
+  // positioned on the requested story.
+  X('OpenStory', async (channelId, storyId) => {
+    openMediaViewerPending();
+    const { ok, data } = await apiJSON(`${API}/channels/${encodeURIComponent(channelId)}/stories`);
+    if (!_mvIsOpen()) return;
+    if (!ok || !(data || []).length) { closeMediaViewer(); return; }
+    const all = data.slice().reverse();
+    const idx = Math.max(0, all.findIndex(s => String(s.story_id) === String(storyId)));
+    openStoryViewer(all.slice(idx).concat(all.slice(0, idx)).map(_storySlide));
+  });
+
   // ── Detail modal config ───────────────────────────────────────────────────
 
   const VCOLS = [
