@@ -1104,10 +1104,33 @@ async function runMigration() {
   }
 }
 
+// General > Diagnostics: run the OCR text index on one post or story and show
+// the full trace. The action dropdown of the shared pane picks the platform.
+function _tiDiagRun() {
+  const itemId   = (document.getElementById('gdiagInput').value || '').trim();
+  const platform = _ddValue('gdiagAction');
+  const btn = document.getElementById('gdiagRunBtn');
+  const out = document.getElementById('gdiagOutput');
+  if (!itemId) { out.textContent = 'Enter a post or story ID first.'; return; }
+  btn.disabled = true; btn.textContent = 'Running…';
+  out.textContent = 'Running OCR, this takes a few seconds per frame on CPU…';
+  apiJSON('/api/text-index/diagnose', { method: 'POST', body: JSON.stringify({ platform, item_id: itemId }) })
+    .then(({ ok, data }) => { out.textContent = ok ? data.text : (data.error || 'Failed'); })
+    .catch(e => { out.textContent = 'Error: ' + e; })
+    .finally(() => { btn.disabled = false; btn.textContent = 'Run'; });
+}
+function _tiDiagCopy() { _platformDiagCopy('gdiag'); }
+
 _settingsRegister('general', 'General', [
   { id: 'platforms', label: 'Platforms', html: _generalPlatformsHtml() },
   { id: 'jobs',      label: 'Jobs',      html: _GENERAL_JOBS_HTML, onShow: _gjShow, onHide: _gjHide },
   { id: 'access',    label: 'Access',    html: _GENERAL_ACCESS_HTML, onShow: loadAuthSettings },
+  { id: 'diag',      label: 'Diagnostics', diagFill: true, html: PLATFORMS.length ? _diagPaneHtml('gdiag', {
+      note: 'Run the text index OCR on one saved post or story and inspect every step: files, settings, provider, each sampled frame with its raw lines and scores, and the rows the index would store. Nothing is written. Copy post ID in the media viewer gives you the ID.',
+      placeholder: 'Post or story ID',
+      runFn: '_tiDiagRun', copyFn: '_tiDiagCopy',
+      actions: PLATFORMS.map(p => ({ value: p.id, label: p.label })),
+    }) : '<div class="settings-note">Enable a platform first.</div>' },
 ]);
 
 // ── Cookies panel (shared by cookies-based platforms) ─────────────────────────
@@ -3242,6 +3265,14 @@ function mvDownloadCurrent() {
 // Opens the current slide's original post URL in a new tab. The button is
 // disabled by _mvShowSlide when the slide has no link, so this only fires
 // with one present.
+function mvCopyId() {
+  const slide = _mvSlides[_mvIdx];
+  const id = typeof slide !== 'string' && slide.postId;
+  if (!id) return;
+  copyText(String(id));
+  showToast(`Copied ${id}`, { duration: 1500 });
+}
+
 function mvOpenLink() {
   const slide = _mvSlides[_mvIdx];
   const link  = (slide && typeof slide !== 'string') ? slide.link : null;
@@ -3413,6 +3444,8 @@ function _mvShowSlide(idx) {
   // the post's original URL (deleted posts and stories never do).
   const linkBtn = document.getElementById('mvLinkBtn');
   if (linkBtn) linkBtn.disabled = !(typeof slide !== 'string' && slide.link);
+  const idBtn = document.getElementById('mvCopyIdBtn');
+  if (idBtn) idBtn.disabled = !(typeof slide !== 'string' && slide.postId);
   // Post details panel: slides opened from a video row carry pre-rendered
   // info HTML; stories and bare URL slides do not, hiding panel and button
   const info = (typeof slide !== 'string' && slide.info) || '';

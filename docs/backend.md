@@ -61,6 +61,7 @@ Background OCR job (Settings > General > Jobs, "Index text in media") that fills
 - **Videos**: ffmpeg `fps=1/interval` sampling with `showinfo` for the real pts of each frame, downscaled to 1080 wide; frames without text cost only the detector pass. `collapse_frames` merges consecutive frames whose normalised text matches at `SequenceMatcher` ratio 0.75 or better into one `frame` row spanning `start_ts` to `end_ts` (the last frame plus one interval), keeping the highest-confidence reading. Videos over `max_video_secs` are marked done with no rows
 - **`replace_media_text`** swaps the item's OCR rows (captions untouched) and `set_text_indexed` stamps the version; a failure stamps `-VERSION` and logs the reason
 - **`get_status()`**: settings, provider, current item and phase, pending/done/failed counts summed over enabled platforms, items per minute since start, last 10 results; polled by the Jobs pane via `/api/text-index/status`. `reset(failed_only)` backs Retry failed and Rebuild
+- **`diagnose(platform, item_id)`** (General > Diagnostics): runs `_index_item` with `dry_run=True` and a `trace` list that `_ocr_image` and `_index_video_file` append to (every raw line with its score, per-step timing, sampled frame times, the duration gate), and formats a plain-text report ending with the rows the index would store. Writes nothing
 
 ## photo_converter.py
 

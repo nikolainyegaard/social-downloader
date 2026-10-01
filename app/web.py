@@ -271,6 +271,18 @@ def create_app() -> Flask:
     def text_index_retry():
         return jsonify({"ok": True, "reset": text_index.reset(failed_only=True)})
 
+    @app.route("/api/text-index/diagnose", methods=["POST"])
+    def text_index_diagnose():
+        body = request.get_json(silent=True) or {}
+        platform = (body.get("platform") or "").strip()
+        item_id  = (body.get("item_id") or "").strip()
+        if not platform or not item_id:
+            return jsonify({"error": "platform and item_id are required"}), 400
+        try:
+            return jsonify(text_index.diagnose(platform, item_id))
+        except (ValueError, LookupError) as e:
+            return jsonify({"error": str(e)}), 404
+
     @app.route("/api/text-index/rebuild", methods=["POST"])
     def text_index_rebuild():
         return jsonify({"ok": True, "reset": text_index.reset(failed_only=False)})

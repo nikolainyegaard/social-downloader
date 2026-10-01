@@ -547,6 +547,7 @@ function initChannelApp(cfg) {
       name: `${videoId}.${ext}`,
       link: v ? _videoUrl(v) : null,
       info: v ? _mvInfoFor(v) : null,
+      postId: videoId,
     }]);
   });
 
@@ -556,7 +557,7 @@ function initChannelApp(cfg) {
     const v    = _creatorState.videos.find(x => x.video_id === videoId);
     const link = v ? _videoUrl(v) : null;
     const info = v ? _mvInfoFor(v) : null;
-    openMediaViewer(data.files.map(f => ({ ...f, link, info })));
+    openMediaViewer(data.files.map(f => ({ ...f, link, info, postId: videoId })));
   });
 
   // Story row to viewer slide; name feeds the viewer's Download action (the
@@ -565,6 +566,7 @@ function initChannelApp(cfg) {
     url:  s.url,
     type: s.content_type === 'photo' ? 'image' : 'video',
     name: `${s.story_id}.${s.content_type === 'photo' ? 'avif' : 'mp4'}`,
+    postId: s.story_id,
     // Fire-and-forget viewed stamp; the write bumps the creators SSE domain,
     // so the avatar rings grey out on the next refetch without a reload
     onView: () => { apiJSON(`${API}/stories/${encodeURIComponent(s.story_id)}/viewed`, { method: 'POST' }); },

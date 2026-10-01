@@ -85,6 +85,7 @@ Global:
 /api/text-index/settings          PATCH any text_index.json key (enabled, paused, frame_interval_secs, max_video_secs, threads)
 /api/text-index/retry-failed      POST: requeue items that failed at the current model version
 /api/text-index/rebuild           POST: requeue every indexed item
+/api/text-index/diagnose          POST {platform, item_id}: dry-run OCR of one post or story with a verbose text report
 /api/jobs/photo-converter/status|start    JPEG to AVIF conversion, all platforms
 /api/jobs/thumbnail-repair/status|start   undecodable thumbnails, all platforms
 /api/jobs/audio-cleanup/status|start      delete audio-only files, all platforms

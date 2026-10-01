@@ -135,14 +135,19 @@ def _engine(threads: int):
         return _ocr
 
 
-def _ocr_image(path: str, s: dict) -> tuple[str, float] | None:
+def _ocr_image(path: str, s: dict, trace: list | None = None,
+               label: str = "") -> tuple[str, float] | None:
     """Recognise one image file. Returns (text, mean confidence) or None when
-    no text above the confidence floor was found."""
+    no text above the confidence floor was found. trace, when given, gets
+    one entry per call with every raw line and score (the diagnostics)."""
+    t0  = time.time()
     res = _engine(s["threads"])(path)
-    if not res or not getattr(res, "txts", None):
-        return None
-    pairs = [(t.strip(), float(c)) for t, c in zip(res.txts, res.scores or [])
-             if t and t.strip() and float(c) >= s["min_confidence"]]
+    raw = [(str(t).strip(), float(c)) for t, c in zip(getattr(res, "txts", None) or [],
+                                                      getattr(res, "scores", None) or [])]
+    pairs = [(t, c) for t, c in raw if t and c >= s["min_confidence"]]
+    if trace is not None:
+        trace.append({"label": label, "secs": round(time.time() - t0, 3), "lines": raw,
+                      "kept": len(pairs)})
     if not pairs:
         return None
     return " ".join(t for t, _ in pairs), statistics.fmean(c for _, c in pairs)
@@ -232,16 +237,24 @@ def _set_phase(phase: str) -> None:
             _state["current"]["phase"] = phase
 
 
-def _index_video_file(path: str, item: dict, s: dict, tmpdir: str) -> list[tuple] | None:
+def _index_video_file(path: str, item: dict, s: dict, tmpdir: str,
+                      trace: list | None = None) -> list[tuple] | None:
     """Rows for one video file, or None when it exceeds max_video_secs."""
     dur = item.get("duration") or _duration(path)
+    if trace is not None:
+        trace.append({"label": "duration", "secs": 0, "lines": [], "kept": 0,
+                      "note": f"{dur} s (db: {item.get('duration')}), limit {s['max_video_secs']} s"})
     if dur and dur > s["max_video_secs"]:
         return None
+    t0 = time.time()
     frames = _frames(path, float(s["frame_interval_secs"]), tmpdir)
+    if trace is not None:
+        trace.append({"label": "sampling", "secs": round(time.time() - t0, 3), "lines": [], "kept": 0,
+                      "note": f"{len(frames)} frames at {[round(t, 2) for t, _ in frames]}"})
     hits = []
     for i, (ts, fpath) in enumerate(frames):
         _set_phase(f"frame {i + 1} of {len(frames)}")
-        got = _ocr_image(fpath, s)
+        got = _ocr_image(fpath, s, trace, f"frame {i + 1} @ {ts:.2f}s")
         if got:
             hits.append((ts, got[0], got[1]))
         os.unlink(fpath)
@@ -250,8 +263,10 @@ def _index_video_file(path: str, item: dict, s: dict, tmpdir: str) -> list[tuple
     return collapse_frames(hits, float(s["frame_interval_secs"]))
 
 
-def _index_item(engine, item: dict, s: dict) -> tuple[int, str | None]:
-    """Index one post or story. Returns (row count, skip reason)."""
+def _index_item(engine, item: dict, s: dict, dry_run: bool = False,
+                trace: list | None = None) -> tuple[list[tuple], str | None]:
+    """Index one post or story. Returns (rows, skip reason). dry_run skips
+    the DB write (diagnostics)."""
     from engine.web import sibling_files
     files = sibling_files({"file_path": item["file_path"], "video_id": item["item_id"]}) \
         if item["item_type"] == "video" else \
@@ -266,7 +281,7 @@ def _index_item(engine, item: dict, s: dict) -> tuple[int, str | None]:
             ext = os.path.splitext(path)[1].lower()
             if ext in _VIDEO_EXT:
                 _set_phase("sampling frames")
-                got = _index_video_file(path, item, s, tmpdir)
+                got = _index_video_file(path, item, s, tmpdir, trace)
                 if got is None:
                     skipped = "longer than the video limit"
                     continue
@@ -276,12 +291,88 @@ def _index_item(engine, item: dict, s: dict) -> tuple[int, str | None]:
                 rows.extend(got)
             elif ext in _IMAGE_EXT:
                 _set_phase(f"image {n} of {len(files)}" if multi else "image")
-                got = _ocr_image(_to_png(path, tmpdir), s)
+                got = _ocr_image(_to_png(path, tmpdir), s, trace, f"image {n}: {os.path.basename(path)}")
                 if got:
                     rows.append(("image", float(n) if multi else None, None, got[0], got[1]))
-    engine.db.replace_media_text(item["item_type"], item["item_id"], item["channel_id"], rows)
-    engine.db.set_text_indexed(item["item_type"], item["item_id"], VERSION)
-    return len(rows), skipped
+    if not dry_run:
+        engine.db.replace_media_text(item["item_type"], item["item_id"], item["channel_id"], rows)
+        engine.db.set_text_indexed(item["item_type"], item["item_id"], VERSION)
+    return rows, skipped
+
+
+def diagnose(platform: str, item_id: str) -> dict:
+    """Run the full pipeline on one post or story without writing anything,
+    and return a verbose report: the item, its files, the settings and
+    provider in use, every frame's raw OCR lines and timing, and the rows
+    the index would store."""
+    from platforms.registry import ENGINES
+    from engine.web import sibling_files
+    eng = ENGINES.get(platform)
+    if not eng:
+        raise ValueError(f"unknown platform {platform}")
+    v = eng.db.get_video(item_id)
+    st = None if v else eng.db.get_story(item_id)
+    if not v and not st:
+        raise LookupError(f"no post or story with id {item_id} on {platform}")
+    row = v or st
+    item = {"item_type": "video" if v else "story", "item_id": item_id,
+            "channel_id": row["channel_id"], "file_path": row.get("file_path"),
+            "content_type": row.get("content_type"), "duration": row.get("duration")}
+    s = get_settings()
+    lines = [f"{item['item_type']} {item_id} on {platform} (channel {row['channel_id']})",
+             f"content_type: {row.get('content_type')}   duration (db): {row.get('duration')}",
+             f"status: {row.get('status')}   text_indexed: {row.get('text_indexed')} (current version {VERSION})",
+             f"file_path: {row.get('file_path')}"]
+    files = []
+    if item["file_path"]:
+        files = sibling_files({"file_path": item["file_path"], "video_id": item_id}) if v else             ([item["file_path"]] if os.path.exists(item["file_path"]) else [])
+    for f in files:
+        try:
+            size = os.path.getsize(f)
+        except OSError:
+            size = None
+        lines.append(f"  file: {f}  ({size} bytes)")
+    if not files:
+        lines.append("  no files on disk")
+    lines.append("")
+    lines.append("settings: " + json.dumps(s))
+    lines.append(f"gpu requested: {os.environ.get('TEXT_INDEX_GPU') == '1'}")
+    trace: list = []
+    rows: list = []
+    skipped = error = None
+    t0 = time.time()
+    try:
+        rows, skipped = _index_item(eng, item, s, dry_run=True, trace=trace)
+    except Exception as e:
+        error = f"{type(e).__name__}: {e}"
+    total = round(time.time() - t0, 2)
+    with _state_lock:
+        provider = _state["provider"]
+    lines.append(f"provider: {provider}")
+    lines.append("")
+    lines.append("steps:")
+    for t in trace:
+        head = f"  [{t['secs']:.3f}s] {t['label']}"
+        if t.get("note"):
+            head += f": {t['note']}"
+        lines.append(head)
+        for text, score in t["lines"]:
+            mark = " " if score >= s["min_confidence"] else "x"
+            lines.append(f"      {mark} {score:.3f}  {text}")
+        if t["lines"]:
+            lines.append(f"      kept {t['kept']} of {len(t['lines'])} line(s)")
+    lines.append("")
+    if error:
+        lines.append(f"FAILED: {error}")
+    elif skipped:
+        lines.append(f"skipped: {skipped}")
+    lines.append(f"rows the index would store ({len(rows)}):")
+    for src, a, b, text, conf in rows:
+        span = f"{a:.1f}s to {b:.1f}s" if src == "frame" else (f"slot {int(a)}" if a else "")
+        lines.append(f"  {src:5} {span:>16}  conf {conf:.3f}  {text}")
+    lines.append("")
+    lines.append(f"total {total}s, dry run: nothing was written")
+    return {"ok": not error, "text": "\n".join(lines), "rows": len(rows), "error": error}
 
 
 # ── Worker ────────────────────────────────────────────────────────────────────
@@ -329,7 +420,8 @@ def _worker() -> None:
                     rec = {"platform": eng.platform, "item_type": item["item_type"],
                            "item_id": item["item_id"], "blocks": 0, "secs": 0, "error": None}
                     try:
-                        rec["blocks"], skipped = _index_item(eng, item, s)
+                        rows, skipped = _index_item(eng, item, s)
+                        rec["blocks"] = len(rows)
                         if skipped:
                             rec["error"] = skipped
                     except Exception as e:

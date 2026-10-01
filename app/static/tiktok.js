@@ -1345,6 +1345,7 @@ function _soundOpenVid(vid) {
     type: 'video',
     name: `${vid}.mp4`,
     link: v ? _soundVideoUrl(v) : null,
+    postId: vid,
   }]);
 }
 async function _soundOpenCarousel(vid) {
@@ -1352,7 +1353,7 @@ async function _soundOpenCarousel(vid) {
   if (!ok || !data.files || !data.files.length) return;
   const v    = _soundState.videos.find(x => x.video_id === vid);
   const link = v ? _soundVideoUrl(v) : null;
-  openMediaViewer(data.files.map(f => ({ ...f, link })));
+  openMediaViewer(data.files.map(f => ({ ...f, link, postId: vid })));
 }
 
 const _SOUND_MODAL_CFG = {
