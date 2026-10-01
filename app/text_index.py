@@ -137,6 +137,10 @@ def _engine(threads: int):
             "Global.log_level": "warning",
             "EngineConfig.onnxruntime.intra_op_num_threads": max(1, int(threads)),
             "EngineConfig.onnxruntime.use_cuda": bool(gpu),
+            # The default EXHAUSTIVE search benchmarks every convolution
+            # algorithm for each new input shape, and the recogniser meets a
+            # new width per text box, so a short run is nothing but warm-up
+            "EngineConfig.onnxruntime.cuda_ep_cfg.cudnn_conv_algo_search": "HEURISTIC",
         }
         _ocr = RapidOCR(params=params)
         try:
@@ -403,10 +407,17 @@ def _worker() -> None:
     from platforms.registry import ENGINES
     from config import platform_enabled
     _lower_priority()
+    print(f"[{_ts()}] [text-index] worker started, model version {VERSION}")
+    was_active = None
     while True:
         try:
             s = get_settings()
-            if not s["enabled"] or s["paused"]:
+            active = s["enabled"] and not s["paused"]
+            if active != was_active:
+                print(f"[{_ts()}] [text-index] " + ("running" if active else
+                      ("paused" if s["enabled"] else "disabled, waiting")))
+                was_active = active
+            if not active:
                 _wake.wait(15)
                 _wake.clear()
                 continue
@@ -445,6 +456,12 @@ def _worker() -> None:
                         print(f"[{_ts()}] [text-index] {eng.platform} {item['item_type']} "
                               f"{item['item_id']} failed: {rec['error']}")
                     rec["secs"] = round(time.time() - t0, 1)
+                    if not rec["error"]:
+                        print(f"[{_ts()}] [text-index] {eng.platform} {item['item_type']} "
+                              f"{item['item_id']}: {rec['blocks']} block(s) in {rec['secs']}s")
+                    elif rec["blocks"] == 0 and not rec["error"][0].isupper():
+                        print(f"[{_ts()}] [text-index] {eng.platform} {item['item_type']} "
+                              f"{item['item_id']}: skipped, {rec['error']}")
                     with _state_lock:
                         _state["recent"].appendleft(rec)
                         _state["items_done"] += 1
@@ -453,6 +470,7 @@ def _worker() -> None:
                     if not s["enabled"] or s["paused"]:
                         break
             if not did_any:
+                print(f"[{_ts()}] [text-index] nothing pending, checking again in 60 s")
                 _wake.wait(60)
                 _wake.clear()
         except Exception as e:
