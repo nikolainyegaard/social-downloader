@@ -4,6 +4,10 @@
 // disabled platforms only appear in the Settings > General toggle list.
 const _ALL_PLATFORMS = window.__PLATFORMS__ || [];
 const PLATFORMS = _ALL_PLATFORMS.filter(p => p.enabled);
+// Dropdown glyphs, declared up here because pane markup built at load time
+// (Settings > General) renders dropdowns through _diagPaneHtml
+const _caretIcon = `<svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+const _checkIcon = `<svg class="ic" viewBox="2.8 3.05 18.4 18.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 7"/></svg>`;
 
 // ── Header auth pill ──────────────────────────────────────────────────────────
 // Each platform app reports its auth state via setHdrAuth(); the header pill
@@ -1121,16 +1125,23 @@ function _tiDiagRun() {
 }
 function _tiDiagCopy() { _platformDiagCopy('gdiag'); }
 
+// General > Diagnostics pane. Rendered at load like the other General panes;
+// anything it reads (PLATFORMS, the dropdown glyphs) must be declared above
+function _generalDiagHtml() {
+  if (!PLATFORMS.length) return '<div class="settings-note">Enable a platform first.</div>';
+  return _diagPaneHtml('gdiag', {
+    note: 'Run the text index OCR on one saved post or story and inspect every step: files, settings, provider, each sampled frame with its raw lines and scores, and the rows the index would store. Nothing is written. Copy post ID in the media viewer gives you the ID.',
+    placeholder: 'Post or story ID',
+    runFn: '_tiDiagRun', copyFn: '_tiDiagCopy',
+    actions: PLATFORMS.map(p => ({ value: p.id, label: p.label })),
+  });
+}
+
 _settingsRegister('general', 'General', [
   { id: 'platforms', label: 'Platforms', html: _generalPlatformsHtml() },
   { id: 'jobs',      label: 'Jobs',      html: _GENERAL_JOBS_HTML, onShow: _gjShow, onHide: _gjHide },
   { id: 'access',    label: 'Access',    html: _GENERAL_ACCESS_HTML, onShow: loadAuthSettings },
-  { id: 'diag',      label: 'Diagnostics', diagFill: true, html: PLATFORMS.length ? _diagPaneHtml('gdiag', {
-      note: 'Run the text index OCR on one saved post or story and inspect every step: files, settings, provider, each sampled frame with its raw lines and scores, and the rows the index would store. Nothing is written. Copy post ID in the media viewer gives you the ID.',
-      placeholder: 'Post or story ID',
-      runFn: '_tiDiagRun', copyFn: '_tiDiagCopy',
-      actions: PLATFORMS.map(p => ({ value: p.id, label: p.label })),
-    }) : '<div class="settings-note">Enable a platform first.</div>' },
+  { id: 'diag',      label: 'Diagnostics', diagFill: true, html: _generalDiagHtml() },
 ]);
 
 // ── Cookies panel (shared by cookies-based platforms) ─────────────────────────
@@ -3526,8 +3537,6 @@ function _starIcon(filled) {
   return `<svg class="ic" viewBox="0.8 0.8 22.4 22.4" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M12 2.5l3.09 6.26L22 9.77l-5 4.87 1.18 6.88L12 18.27l-6.18 3.25L7 14.64 2 9.77l6.91-1.01z"/></svg>`;
 }
 const _xIcon    = `<svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
-const _caretIcon = `<svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
-const _checkIcon = `<svg class="ic" viewBox="2.8 3.05 18.4 18.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 7"/></svg>`;
 const _dotsIcon = `<svg class="ic" viewBox="3 3 18 18" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
 
 const _dlIcon         = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12L12 16M12 16L16 12M12 16V4M4 20H20"/></svg>`;
