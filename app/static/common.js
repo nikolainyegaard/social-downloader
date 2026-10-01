@@ -1117,7 +1117,7 @@ function _tiDiagRun() {
   const out = document.getElementById('gdiagOutput');
   if (!itemId) { out.textContent = 'Enter a post or story ID first.'; return; }
   btn.disabled = true; btn.textContent = 'Running…';
-  out.textContent = 'Running OCR, this takes a few seconds per frame on CPU…';
+  out.textContent = 'Running OCR…';
   apiJSON('/api/text-index/diagnose', { method: 'POST', body: JSON.stringify({ platform, item_id: itemId }) })
     .then(({ ok, data }) => { out.textContent = ok ? data.text : (data.error || 'Failed'); })
     .catch(e => { out.textContent = 'Error: ' + e; })
