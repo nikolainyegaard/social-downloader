@@ -91,6 +91,9 @@ _wake = threading.Event()
 _worker_started = False
 _ocr = None
 _ocr_lock = threading.Lock()
+# One inference at a time: the worker and a Diagnostics run each get their own
+# CUDA stream and cuBLAS handle otherwise, doubling the card's footprint
+_run_lock = threading.Lock()
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────
@@ -141,6 +144,14 @@ def _engine(threads: int):
             # algorithm for each new input shape, and the recogniser meets a
             # new width per text box, so a short run is nothing but warm-up
             "EngineConfig.onnxruntime.cuda_ep_cfg.cudnn_conv_algo_search": "HEURISTIC",
+            # The card is shared (Jellyfin transcodes on it too): grow the
+            # arena by what is asked, not by doubling, and cap it. cublasCreate
+            # fails with "resource allocation failed" once the card is full
+            "EngineConfig.onnxruntime.cuda_ep_cfg.arena_extend_strategy": "kSameAsRequested",
+            "EngineConfig.onnxruntime.cuda_ep_cfg.gpu_mem_limit": 2 * 1024 ** 3,
+            # Overlay text is large; 1280 px on the long side keeps detector
+            # memory and time in check for big photo posts (default 2000)
+            "Global.max_side_len": 1280,
         }
         _ocr = RapidOCR(params=params)
         try:
@@ -160,7 +171,8 @@ def _ocr_image(path: str, s: dict, trace: list | None = None,
     no text above the confidence floor was found. trace, when given, gets
     one entry per call with every raw line and score (the diagnostics)."""
     t0  = time.time()
-    res = _engine(s["threads"])(path)
+    with _run_lock:
+        res = _engine(s["threads"])(path)
     raw = [(str(t).strip(), float(c)) for t, c in zip(getattr(res, "txts", None) or [],
                                                       getattr(res, "scores", None) or [])]
     pairs = [(t, c) for t, c in raw if t and not _keep_line(t, c, s)]
@@ -452,7 +464,10 @@ def _worker() -> None:
                             rec["error"] = skipped
                     except Exception as e:
                         eng.db.set_text_indexed(item["item_type"], item["item_id"], -VERSION)
-                        rec["error"] = f"{type(e).__name__}: {str(e)[:160]}"
+                        # onnxruntime wraps a traceback in the message; the
+                        # last non-empty line is the one that says why
+                        last = next((l for l in reversed(str(e).splitlines()) if l.strip()), "")
+                        rec["error"] = f"{type(e).__name__}: {last.strip()[:200]}"
                         print(f"[{_ts()}] [text-index] {eng.platform} {item['item_type']} "
                               f"{item['item_id']} failed: {rec['error']}")
                     rec["secs"] = round(time.time() - t0, 1)
