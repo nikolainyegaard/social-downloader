@@ -69,12 +69,20 @@ _SAME_TEXT_RATIO = 0.75
 _MIN_LINE_CHARS = 3
 
 
+# Platform watermarks burned into the media: every OnlyFans file carries
+# "OnlyFans.com/handle" in a corner and TikTok's own downloads "TikTok @handle".
+# Indexing them makes every post of a creator match their name
+_WATERMARK_RX = re.compile(r"onlyfans\s*\.?\s*com\s*/|^\W*tiktok\W*@", re.IGNORECASE)
+
+
 def _keep_line(text: str, score: float, s: dict) -> str | None:
     """None when the line passes, else the reason it is dropped."""
     if score < s["min_confidence"]:
         return "confidence"
     if sum(ch.isalnum() for ch in text) < _MIN_LINE_CHARS:
         return "too short"
+    if _WATERMARK_RX.search(text):
+        return "watermark"
     return None
 
 _state_lock = threading.Lock()

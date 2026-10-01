@@ -12,6 +12,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - Settings > General > Diagnostics runs the OCR on one post or story and shows the full trace: files, settings, provider, every sampled frame with its raw lines and scores, and what the index would store, without writing anything
 - The media viewer has a Copy post ID button next to Download and Link
 - The GPU image no longer loses its CUDA onnxruntime to the startup dependency upgrade (onnxruntime moved out of requirements.txt into the image build)
+- Platform watermarks burned into media (OnlyFans.com/handle, TikTok @handle) are no longer indexed, and ones already indexed are removed on the next start
 - GPU OCR no longer fails with a cuBLAS allocation error once the shared card fills up: the memory arena grows by request instead of doubling and is capped (`TEXT_INDEX_GPU_MEM_GB`, default 2), detector input is limited to 1280 px, and the worker and Diagnostics no longer run inference at the same time
 - The text index job logs what it is doing: start, running/paused/disabled switches, every item with its block count and time, skips and failures, and idle polls
 - OCR lines with fewer than 3 letters or digits, or below 0.7 confidence, are dropped: the detector fires on logos, stickers and UI chrome and returned one or two character fragments that only polluted the search. The diagnostics report names the reason next to every dropped line

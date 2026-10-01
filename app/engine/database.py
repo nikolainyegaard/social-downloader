@@ -395,6 +395,16 @@ class ChannelDB:
                     "INSERT INTO settings (key, value) VALUES ('deletion_confirmed_backfilled', '1')"
                 )
 
+        # One-off: OCR rows that are only a platform watermark, indexed before
+        # text_index.py learnt to drop them (same pattern as its _WATERMARK_RX);
+        # the text_indexed stamps stay, nothing re-runs
+        if not conn.execute("SELECT 1 FROM settings WHERE key = 'media_text_watermarks_purged'").fetchone():
+            conn.execute("""
+                DELETE FROM media_text WHERE source != 'caption'
+                  AND (lower(text) LIKE '%onlyfans%com%/%' OR lower(text) LIKE 'tiktok%@%')
+            """)
+            conn.execute("INSERT INTO settings (key, value) VALUES ('media_text_watermarks_purged', '1')")
+
         # Pending deletions on banned creators can never get their second
         # strike; confirm them (ban_channel_videos does this for new bans).
         # Runs for every platform, TikTok included
