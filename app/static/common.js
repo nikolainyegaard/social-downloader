@@ -1440,7 +1440,7 @@ function _diagPaneHtml(idPrefix, opts) {
       <input id="${idPrefix}Input" class="text-input" type="text" placeholder="${opts.placeholder}" style="flex:1">
       <button class="btn-primary" id="${idPrefix}RunBtn" onclick="${opts.runFn}()" style="flex-shrink:0">Run</button>
     </div>
-    <div id="${idPrefix}OutputWrap" style="position:relative">
+    <div id="${idPrefix}OutputWrap" class="diag-output-wrap" style="position:relative">
       <pre id="${idPrefix}Output" class="diag-output">No output yet.</pre>
       <button onclick="${opts.copyFn}()" title="Copy output" class="diag-copy-btn">Copy</button>
     </div>
