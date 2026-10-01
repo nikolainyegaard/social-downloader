@@ -1481,6 +1481,86 @@ function _hostToasts() {
 // ── Error dialog ────────────────────────────────────────────────────────────────
 // Full text behind a truncated error toast: selectable, with a Copy button.
 
+// ── Global text search ────────────────────────────────────────────────────────
+// One dialog over /api/search: captions today, OCR text of images, stories and
+// video frames once the text index job has run. App-wide, so it lives here and
+// opens the hit through the owning platform's exported modal functions.
+
+let _searchTimer = null;
+let _searchSeq   = 0;
+
+function openSearch() {
+  _dlgOpen('searchModal');
+  const inp = document.getElementById('searchInput');
+  inp.focus();
+  inp.select();
+}
+
+function closeSearch() {
+  _dlgClose('searchModal');
+}
+
+function _searchOnInput(q) {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => _searchRun(q.trim()), 150);
+}
+
+async function _searchRun(q) {
+  const hint = document.getElementById('searchHint');
+  const list = document.getElementById('searchResults');
+  if (q.length < 3) {
+    hint.textContent = 'Type at least 3 characters';
+    list.innerHTML = '';
+    return;
+  }
+  const seq = ++_searchSeq;
+  const { ok, data } = await apiJSON(`/api/search?q=${encodeURIComponent(q)}&limit=50`);
+  if (seq !== _searchSeq) return;  // a newer query already landed
+  if (!ok) { hint.textContent = 'Search failed'; return; }
+  const rows = data.results || [];
+  hint.textContent = !rows.length ? 'No matches'
+    : data.more ? '50+ matches, showing the best 50. Add a word to narrow it down'
+    : `${rows.length} ${rows.length === 1 ? 'match' : 'matches'}`;
+  list.innerHTML = rows.map(_searchRow).join('');
+}
+
+// FTS snippets arrive with <b> marks around the hits; escape everything else
+const _searchSnippet = s => esc(s).replace(/&lt;b&gt;/g, '<b>').replace(/&lt;\/b&gt;/g, '</b>');
+
+const _SEARCH_SOURCE = { caption: 'Caption', image: 'Image', frame: 'Frame', story: 'Story' };
+
+function _searchRow(r) {
+  const plat   = PLATFORMS.find(p => p.id === r.platform);
+  const where  = r.item_type === 'story' ? 'Story'
+               : r.source === 'frame'    ? `Frame ${fmtDur(r.start_ts || 0)}`
+               :                           (_SEARCH_SOURCE[r.source] || r.source);
+  const open   = r.item_type === 'story'
+    ? `${r.prefix}OpenModal('${esc(r.channel_id)}')`
+    : `${r.prefix}OpenModalAndHighlight('${esc(r.channel_id)}','${esc(r.item_id)}')`;
+  return `<div class="sr-row" role="button" tabindex="0" onclick="_searchOpen('${esc(r.platform)}',()=>${open})">
+    <span class="snav-badge" title="${esc(plat?.label || r.platform)}">${esc((plat?.label || r.platform)[0])}</span>
+    <span class="rf-avatar-wrap"><img class="rf-avatar" src="/api/${esc(r.platform)}/channels/${esc(r.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>
+    <span class="sr-body">
+      <span class="sr-top"><span class="rf-name">@${esc(r.handle)}</span><span class="sr-where">${where}</span></span>
+      <span class="sr-snippet">${_searchSnippet(r.snippet || r.text || '')}</span>
+    </span>
+    <span class="rf-time">${r.ts ? fmtDateShort(r.ts) : ''}</span>
+  </div>`;
+}
+
+function _searchOpen(platform, fn) {
+  closeSearch();
+  if (platform !== _activePlatform) switchPlatform(platform);
+  fn();
+}
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    openSearch();
+  }
+});
+
 function openErrorModal(text) {
   document.getElementById('errorModalText').textContent = text;
   _dlgOpen('errorModal');

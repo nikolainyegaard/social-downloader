@@ -7,6 +7,7 @@ Self-hosted social media archiver. Monitors creators across multiple platforms, 
 - YouTube: channels
 - Twitter/X: accounts (requires an uploaded cookies.txt from a logged-in account)
 - Instagram: profiles and stories (requires an uploaded cookies.txt from a logged-in browser session; posts need a HikerAPI key, see Configuration)
+- Instant text search across all platforms (header magnifier or Ctrl+K): post captions today, with OCR of images, stories and video frames coming
 
 ---
 

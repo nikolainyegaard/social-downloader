@@ -188,6 +188,28 @@ def create_app() -> Flask:
                 get_sound_loop(engine).request_stop()
         return jsonify({"ok": True, "id": platform_id, "enabled": enabled})
 
+    @app.route("/api/search")
+    def global_search():
+        """Instant text search across every enabled platform's media_text
+        index (captions now, OCR text once the index job has run). Fans out
+        to each platform DB and merges by FTS rank; paging is not offered
+        across platforms, so a capped result set says "more" instead."""
+        q     = (request.args.get("q") or "").strip()
+        limit = max(1, min(int(request.args.get("limit", 50)), 200))
+        only  = request.args.get("platform")
+        if len(q) < 3:
+            return jsonify({"results": [], "more": False})
+        results = []
+        for e in ENGINES.values():
+            if not platform_enabled(e.platform) or (only and e.platform != only):
+                continue
+            for r in e.db.search_text(q, limit + 1):
+                r["platform"] = e.platform
+                r["prefix"]   = e.adapter.prefix
+                results.append(r)
+        results.sort(key=lambda r: r["rank"])
+        return jsonify({"results": results[:limit], "more": len(results) > limit})
+
     @app.route("/api/health")
     def health():
         from config import get_path_issues

@@ -27,6 +27,7 @@ videos:
   status (up|deleted|undeleted), deleted_at, undeleted_at,
   deleted_reason (video_deleted|user_banned|NULL),
   deletion_confirmed INTEGER NOT NULL DEFAULT 0,   TikTok model: 0 = first absence, 1 = confirmed
+  text_indexed INTEGER NOT NULL DEFAULT 0,          OCR model version that indexed the media (stories too)
   false_positive_count, direct_added,
   view/like/comment/share/save/repost counts, duration, width, height,
   music_title, music_artist, music_id, raw_video_data, ytdlp_data,
@@ -35,6 +36,8 @@ videos:
 sounds:        sound_id TEXT PK, label, comment, added_at, last_checked, enabled,
                tracking_enabled, starred
 sound_videos:  sound_id FK, video_id FK, added_at; PK (sound_id, video_id)
+media_text:    id PK, item_type (video|story), item_id, channel_id, source (caption|image|frame),
+               start_ts, end_ts, text, confidence; media_text_fts is its FTS5 trigram index (see backend.md)
 ```
 
 Indexes from `store.init_tables()`: `idx_sound_videos_sound`, `idx_videos_channel_id`, `idx_videos_status`, `idx_profile_history_channel_id`, `idx_videos_stats_backfilled_at`, `idx_channels_next_check_at`.

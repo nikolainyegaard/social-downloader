@@ -195,8 +195,51 @@ class ChannelDB:
                     FOREIGN KEY (channel_a) REFERENCES channels(channel_id),
                     FOREIGN KEY (channel_b) REFERENCES channels(channel_id)
                 );
+
+                -- Searchable text per post or story: captions now, OCR of
+                -- images and video frames from the text index job. One row
+                -- per distinct text block; frame rows carry the seconds the
+                -- text was on screen. The FTS5 table indexes it externally
+                -- (text stored once) with trigrams, so partial words and
+                -- OCR misreads still match; the triggers keep it in sync.
+                CREATE TABLE IF NOT EXISTS media_text (
+                    id         INTEGER PRIMARY KEY,
+                    item_type  TEXT NOT NULL,
+                    item_id    TEXT NOT NULL,
+                    channel_id TEXT NOT NULL,
+                    source     TEXT NOT NULL,
+                    start_ts   REAL,
+                    end_ts     REAL,
+                    text       TEXT NOT NULL,
+                    confidence REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_media_text_item ON media_text(item_type, item_id);
+                CREATE VIRTUAL TABLE IF NOT EXISTS media_text_fts USING fts5(
+                    text, content='media_text', content_rowid='id', tokenize='trigram'
+                );
+                CREATE TRIGGER IF NOT EXISTS media_text_ai AFTER INSERT ON media_text BEGIN
+                    INSERT INTO media_text_fts(rowid, text) VALUES (new.id, new.text);
+                END;
+                CREATE TRIGGER IF NOT EXISTS media_text_ad AFTER DELETE ON media_text BEGIN
+                    INSERT INTO media_text_fts(media_text_fts, rowid, text) VALUES ('delete', old.id, old.text);
+                END;
+                CREATE TRIGGER IF NOT EXISTS media_text_au AFTER UPDATE ON media_text BEGIN
+                    INSERT INTO media_text_fts(media_text_fts, rowid, text) VALUES ('delete', old.id, old.text);
+                    INSERT INTO media_text_fts(rowid, text) VALUES (new.id, new.text);
+                END;
             """)
             needs_vacuum = self._migrate_db(conn)
+            # Captions of every post not yet in media_text (first launch after
+            # the search feature, and any row added by a path that bypassed
+            # add_video); idempotent through the NOT EXISTS
+            conn.execute("""
+                INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                SELECT 'video', v.video_id, v.channel_id, 'caption', v.title FROM videos v
+                WHERE v.title IS NOT NULL AND v.title != ''
+                  AND NOT EXISTS (SELECT 1 FROM media_text m
+                                  WHERE m.item_type = 'video' AND m.item_id = v.video_id
+                                    AND m.source = 'caption')
+            """)
             # One-time backfill: seed the add history from already tracked
             # channels so the panel starts populated instead of empty. A no-op
             # once add_queue has any rows.
@@ -325,6 +368,10 @@ class ChannelDB:
             # listing (e.g. TikTok subscriber-only posts, invisible to scraping).
             # Exempt from listing-based deletion detection.
             "ALTER TABLE videos   ADD COLUMN direct_added           INTEGER NOT NULL DEFAULT 0",
+            # OCR model version that indexed the item's media: 0 pending,
+            # negative = failed at that version (abs), see text_index.py
+            "ALTER TABLE videos   ADD COLUMN text_indexed           INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE stories  ADD COLUMN text_indexed           INTEGER NOT NULL DEFAULT 0",
         ]
         for sql in migrations:
             try:
@@ -388,6 +435,7 @@ class ChannelDB:
             conn.execute("DELETE FROM channels WHERE channel_id = ?", (channel_id,))
             conn.execute("DELETE FROM channel_connections WHERE ? IN (channel_a, channel_b)",
                          (channel_id,))
+            conn.execute("DELETE FROM media_text WHERE channel_id = ?", (channel_id,))
 
 
     def get_all_channels(self) -> list[dict]:
@@ -890,6 +938,11 @@ class ChannelDB:
                     (video_id, channel_id, title, upload_date, view_count, duration, content_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (video_id, channel_id, title, upload_date, view_count, duration, content_type or "video"))
+            if title and conn.execute("SELECT changes()").fetchone()[0]:
+                conn.execute("""
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    VALUES ('video', ?, ?, 'caption', ?)
+                """, (video_id, channel_id, title))
 
 
     def update_video_downloaded(self, video_id: str, file_path: str, ytdlp_data_json: str | None = None) -> None:
@@ -1578,12 +1631,59 @@ class ChannelDB:
             history = conn.execute(
                 "DELETE FROM profile_history WHERE channel_id NOT IN (SELECT channel_id FROM channels)"
             ).rowcount
+            conn.execute(
+                "DELETE FROM media_text WHERE channel_id NOT IN (SELECT channel_id FROM channels)"
+            )
         return videos + history
+
+
+    # ── Text search ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def fts_query(q: str) -> str:
+        """User text to an FTS5 MATCH expression: each whitespace word becomes a
+        quoted phrase (no operator syntax leaks through), implicitly ANDed.
+        Words under 3 characters cannot match a trigram index and are dropped;
+        returns '' when nothing usable remains."""
+        words = [w.replace('"', '""') for w in q.split() if len(w) >= 3]
+        return " ".join(f'"{w}"' for w in words)
+
+    def search_text(self, q: str, limit: int = 50, offset: int = 0,
+                    channel_id: str | None = None) -> list[dict]:
+        """Full-text search over media_text, best match first. Each hit carries
+        the item's channel and date plus an FTS snippet with <b> marks."""
+        match = self.fts_query(q)
+        if not match:
+            return []
+        where = "AND m.channel_id = ?" if channel_id else ""
+        params: list = [match] + ([channel_id] if channel_id else []) + [limit, offset]
+        with self.get_db() as conn:
+            rows = conn.execute(f"""
+                SELECT m.id, m.item_type, m.item_id, m.channel_id, m.source,
+                       m.start_ts, m.end_ts, m.text, m.confidence,
+                       snippet(media_text_fts, 0, '<b>', '</b>', '…', 14) AS snippet,
+                       bm25(media_text_fts) AS rank,
+                       c.handle, c.display_name,
+                       COALESCE(v.upload_date, s.posted_at) AS ts,
+                       v.status, v.deleted_reason,
+                       COALESCE(v.content_type, s.content_type) AS content_type,
+                       COALESCE(v.file_path, s.file_path) IS NOT NULL AS has_file
+                FROM media_text_fts
+                JOIN media_text m ON m.id = media_text_fts.rowid
+                JOIN channels c   ON c.channel_id = m.channel_id
+                LEFT JOIN videos  v ON m.item_type = 'video' AND v.video_id = m.item_id
+                LEFT JOIN stories s ON m.item_type = 'story' AND s.story_id = m.item_id
+                WHERE media_text_fts MATCH ? {where}
+                ORDER BY rank
+                LIMIT ? OFFSET ?
+            """, params).fetchall()
+        return [dict(r) for r in rows]
 
 
     def delete_video(self, video_id: str) -> bool:
         with self.get_db() as conn:
             cur = conn.execute("DELETE FROM videos WHERE video_id = ?", (video_id,))
+            conn.execute("DELETE FROM media_text WHERE item_type = 'video' AND item_id = ?", (video_id,))
             return cur.rowcount > 0
 
 

@@ -16,6 +16,7 @@ interface HTMLElement {
   download: string;
   type: string;
   placeholder: string;
+  select(): void;
   play(): Promise<void>;
   pause(): void;
   paused: boolean;
