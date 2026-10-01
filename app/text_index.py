@@ -52,7 +52,7 @@ _DEFAULT_SETTINGS = {
     "paused":              False,
     "frame_interval_secs": 2,      # video sampling period
     "max_video_secs":      180,    # longer videos are skipped (marked done, no text)
-    "min_confidence":      0.5,    # OCR lines below this are dropped
+    "min_confidence":      0.7,    # OCR lines below this are dropped
     "threads":             4,      # onnxruntime intra-op threads (CPU)
 }
 
@@ -61,6 +61,21 @@ _IMAGE_EXT = {".avif", ".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 # How alike two consecutive frames' text must be to count as the same block
 _SAME_TEXT_RATIO = 0.75
+
+# A line needs this many letters or digits to count as text. The detector
+# fires on logos, stickers and UI chrome and the recogniser then returns one
+# or two confident characters ("OA", "8", a CJK glyph), which would fill the
+# index with noise; real overlay text is never that short
+_MIN_LINE_CHARS = 3
+
+
+def _keep_line(text: str, score: float, s: dict) -> str | None:
+    """None when the line passes, else the reason it is dropped."""
+    if score < s["min_confidence"]:
+        return "confidence"
+    if sum(ch.isalnum() for ch in text) < _MIN_LINE_CHARS:
+        return "too short"
+    return None
 
 _state_lock = threading.Lock()
 _state: dict = {
@@ -144,7 +159,7 @@ def _ocr_image(path: str, s: dict, trace: list | None = None,
     res = _engine(s["threads"])(path)
     raw = [(str(t).strip(), float(c)) for t, c in zip(getattr(res, "txts", None) or [],
                                                       getattr(res, "scores", None) or [])]
-    pairs = [(t, c) for t, c in raw if t and c >= s["min_confidence"]]
+    pairs = [(t, c) for t, c in raw if t and not _keep_line(t, c, s)]
     if trace is not None:
         trace.append({"label": label, "secs": round(time.time() - t0, 3), "lines": raw,
                       "kept": len(pairs)})
@@ -357,8 +372,8 @@ def diagnose(platform: str, item_id: str) -> dict:
             head += f": {t['note']}"
         lines.append(head)
         for text, score in t["lines"]:
-            mark = " " if score >= s["min_confidence"] else "x"
-            lines.append(f"      {mark} {score:.3f}  {text}")
+            why = _keep_line(text, score, s)
+            lines.append(f"      {'x' if why else ' '} {score:.3f}  {text}{f'   (dropped: {why})' if why else ''}")
         if t["lines"]:
             lines.append(f"      kept {t['kept']} of {len(t['lines'])} line(s)")
     lines.append("")
