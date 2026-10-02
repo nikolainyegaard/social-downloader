@@ -20,16 +20,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 # onnxruntime for the OCR text index (text_index.py) is installed here, not
 # from requirements.txt: the startup pip upgrade would otherwise reinstall the
 # CPU build into the user site (/app/data/.local when running as a non-root
-# user) and shadow the GPU build. amd64 gets the CUDA build with the
-# [cuda,cudnn] extras, which pull the exact runtime wheels that release was
-# built against, so one image serves GPU and CPU hosts (the CPU provider is
-# the fallback; TEXT_INDEX_GPU=1 at runtime, gpus: all in compose and the
-# NVIDIA container toolkit on the host turn the GPU on). Pinned to 1.26, the
-# last CUDA 12 release: 1.27+ is built for CUDA 13 and needs an NVIDIA driver
-# from the 580 series or newer, which a stable-distro host does not have.
-# NVIDIA publishes no arm64 wheels, so arm64 takes the CPU build.
-RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+# user) and shadow the GPU build. CUDA picks the variant (docker-bake.hcl
+# builds all three): empty is the CPU build on every arch, 12 and 13 are
+# onnxruntime-gpu with the [cuda,cudnn] extras, which pull the exact runtime
+# wheels that release was built against. The suffix is the CUDA major the
+# host driver must support: 1.26 is the last CUDA 12 release (driver 550
+# series), 1.27+ targets CUDA 13 (driver 580 series or newer). amd64 only.
+# At runtime TEXT_INDEX_GPU=1, gpus: all in compose and the NVIDIA container
+# toolkit turn the GPU on; without them the same image runs on CPU.
+ARG CUDA=
+RUN if [ "$CUDA" = "12" ]; then \
       pip install --no-cache-dir "onnxruntime-gpu[cuda,cudnn]==1.26.0"; \
+    elif [ "$CUDA" = "13" ]; then \
+      pip install --no-cache-dir "onnxruntime-gpu[cuda,cudnn]>=1.27"; \
     else \
       pip install --no-cache-dir onnxruntime; \
     fi

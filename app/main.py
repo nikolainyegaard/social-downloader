@@ -413,8 +413,6 @@ if __name__ == "__main__":
     transcoder.start()
     import text_index
     text_index.start()
-    import comments
-    comments.start()
 
     print(f"{_ts()} Starting loop threads...")
     for _engine in ENGINES.values():

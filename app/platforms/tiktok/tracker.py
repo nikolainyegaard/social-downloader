@@ -19,7 +19,7 @@ from scheduling import set_channel_next_check, set_channel_last_full
 from platforms.tiktok.api import (
     browser_gate, create_tiktok_session,
     get_user_info, get_user_videos, get_user_videos_with_stats,
-    get_user_videos_browser,
+    get_user_videos_browser, get_video_comments,
     fetch_sound_video_ids, get_video_details, get_user_stories, parse_story_item,
     get_session_cookies,
     UserBannedException, UserPrivateException, UserBlockedException,
@@ -784,6 +784,32 @@ async def process_single_user(
                         details.get("save_count"),
                         details.get("repost_count"),
                     )
+
+        # ── Comments of opted-in posts whose count moved since the last fetch ─
+        # The listing's commentCount decides: no change, no request. Runs on
+        # this session, capped per check (comments.py), stop honoured per post.
+        if item_list_map and not (stop_event and stop_event.is_set()):
+            import comments
+            from platforms.registry import ENGINES
+            _eng = ENGINES["tiktok"]
+            _due = comments.due_posts(_eng, channel_id,
+                                      {vid: d.get("comment_count") for vid, d in item_list_map.items()})
+            _max_per_post = int(comments.get_settings()["max_per_post"])
+            for _i, (_vid, _count) in enumerate(_due, 1):
+                if stop_event and stop_event.is_set():
+                    break
+                _stage(f"fetching comments {_i} of {len(_due)}")
+                _t0 = time.time()
+                try:
+                    _rows = await get_video_comments(api, _vid, _max_per_post)
+                except Exception as e:
+                    if _is_bot_error(e):
+                        raise _restart_error(e) from e
+                    comments.record(_eng, _vid, channel_id, user["handle"], _count, None, e,
+                                    time.time() - _t0, log)
+                    continue
+                comments.record(_eng, _vid, channel_id, user["handle"], _count, _rows, None,
+                                time.time() - _t0, log)
 
 
         return _profile_ok, _deletion_detected, _large_deletion_spike

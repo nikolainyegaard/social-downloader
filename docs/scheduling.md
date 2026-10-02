@@ -12,6 +12,10 @@ The TikTok user loop and all engine platforms share one model (`app/scheduling.p
 8. **First run / upgrade.** Everyone starts `next_check_at IS NULL`, so the first session processes all enabled creators; after that only due ones.
 9. **DB wins over env.** Scheduler threads read `db.get_setting(key, env_default)` at runtime, so a value set in the Settings UI survives restarts even if the env var differs.
 
+## Comments ride the creator check
+
+Opted-in posts get their comments fetched inside the creator check, after the stats upsert, only when the listing's comment count differs from the count at the last fetch (`comments.due_posts`, capped per check). No separate schedule: comment freshness follows the check cadence, a quick check covers the newest 30 posts, a full check all of them. Stop is honoured between posts. See backend.md comments.py.
+
 ## Quick/full cadence
 
 Scheduled sessions run a quick check per creator (newest posts only, no deletion detection) unless the last full check is older than `full_refresh_days` (default 7), which triggers a full deletion-detecting check and stamps `last_full_refresh_at`. Manual Full runs stamp it too. TikTok uses explicit daily batches (`refresh_batch`, `full_refresh_pending`); engine platforms gate per creator on `last_full_refresh_at`, which staggers naturally.

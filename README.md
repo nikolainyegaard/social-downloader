@@ -8,7 +8,7 @@ Self-hosted social media archiver. Monitors creators across multiple platforms, 
 - Twitter/X: accounts (requires an uploaded cookies.txt from a logged-in account)
 - Instagram: profiles and stories (requires an uploaded cookies.txt from a logged-in browser session; posts need a HikerAPI key, see Configuration)
 - Instant text search across all platforms (header magnifier or Ctrl+K): post captions, plus the text inside photos, stories and video frames once the Index text in media job has run (Settings > General > Jobs; optional GPU, see Configuration)
-- Comment scraping, opt-in per creator or per post (TikTok): a Comments toggle on the creator, a selector and Fetch now in the post viewer, the Comments job in Settings > General > Jobs. Saved comments show in the viewer and are searchable
+- Comment scraping, opt-in per creator or per post (TikTok): a Comments toggle on the creator, a selector and Fetch now in the post viewer. Comments are fetched during the normal creator check, only for posts whose comment count changed. Saved comments show in the viewer and are searchable
 
 ---
 
@@ -38,7 +38,7 @@ Key environment variables (set in `docker-compose.yml`). The scheduling variable
 | `TIKTOK_SOUND_LOOP_INTERVAL_MINUTES` | `60` | How often to check tracked TikTok sounds |
 | `HIKERAPI_KEY` | | Instagram: [HikerAPI](https://hikerapi.com) access key. Instagram rate limits post listing on cookie sessions; with a key, profile lookup and post listing go through HikerAPI instead (about two requests per profile per check) |
 | `TEXT_INDEX_GPU_MEM_GB` | `2` | GPU memory cap for the OCR text index, in GB |
-| `TEXT_INDEX_GPU` | `0` | `1` runs the OCR text index on an NVIDIA GPU. Uncomment `gpus: all` in docker-compose.yml (amd64 image, NVIDIA container toolkit on the host) |
+| `TEXT_INDEX_GPU` | `0` | `1` runs the OCR text index on an NVIDIA GPU. Pull the `-cuda12` (driver 550 series) or `-cuda13` (driver 580 series or newer) image tag, amd64 only, and uncomment `gpus: all` in docker-compose.yml (NVIDIA container toolkit on the host) |
 | `TZ` | system | Timezone for log timestamps (e.g. `Europe/Oslo`) |
 | `WEB_PORT` | `5000` | Flask listen port |
 

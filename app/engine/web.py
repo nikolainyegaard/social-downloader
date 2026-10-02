@@ -543,8 +543,6 @@ def create_channel_blueprint(engine) -> Blueprint:
         if not isinstance(enabled, bool):
             return jsonify({"error": "enabled must be a boolean"}), 400
         db.set_channel_comments(channel_id, enabled)
-        import comments
-        comments.wake()
         return jsonify({"ok": True})
 
     @bp.route("/videos/<video_id>/comments", methods=["GET"])
@@ -563,8 +561,6 @@ def create_channel_blueprint(engine) -> Blueprint:
         if enabled is not None and not isinstance(enabled, bool):
             return jsonify({"error": "enabled must be a boolean or null"}), 400
         db.set_video_comments(video_id, enabled)
-        import comments
-        comments.wake()
         return jsonify({"ok": True})
 
     @bp.route("/videos/<video_id>/comments/fetch", methods=["POST"])
@@ -574,11 +570,9 @@ def create_channel_blueprint(engine) -> Blueprint:
             return jsonify({"error": f"{adapter.label} has no comment scraping"}), 501
         if not db.get_video(video_id):
             return jsonify({"error": "post not found"}), 404
-        db.queue_video_comments(video_id)
         import comments
-        comments.wake()
-        s = comments.get_settings()
-        return jsonify({"ok": True, "job_enabled": bool(s["enabled"] and not s["paused"])})
+        comments.fetch_now(engine, video_id)
+        return jsonify({"ok": True})
 
     @bp.route("/channels/<channel_id>/profile-history", methods=["GET"])
     def channel_profile_history(channel_id: str):

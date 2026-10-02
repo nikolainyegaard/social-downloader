@@ -476,27 +476,20 @@ const _GENERAL_JOBS_HTML = `
   <div class="job-card">
     <div class="job-card-hdr">
       <div class="job-card-title">Comments</div>
-      <div class="job-card-btns">
-        <button class="btn-sm" id="cmPauseBtn" onclick="_cmPause()" style="min-width:80px">Pause</button>
-      </div>
     </div>
     <div class="job-card-desc">
       Saves the comments of posts you opt in: the Comments toggle on a
       creator covers every post, the selector in the post viewer covers one.
-      Comment text is searchable (Ctrl+K). Posts younger than the refresh
-      window are fetched again once a day. Platforms: <span id="cmPlatforms"></span>.
+      Fetched during the normal creator check, only for posts whose comment
+      count changed since the last fetch, so unchanged posts cost nothing.
+      Comment text is searchable (Ctrl+K). Platforms: <span id="cmPlatforms"></span>.
     </div>
-    <label class="tracking-toggle" style="margin-top:14px">
-      <input type="checkbox" id="cmEnabled" onchange="_cmToggle('enabled', this)">
-      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-      <span class="toggle-label">Fetch comments</span>
-    </label>
     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:14px">
       <label class="settings-label">
-        <span>Refresh posts younger than</span>
+        <span>Posts per creator check</span>
         <div class="loop-interval-field">
-          <input type="number" id="cmRefresh" min="0" max="365" class="loop-interval-input" onchange="_cmNum('refresh_days', this, 0)">
-          <span>days</span>
+          <input type="number" id="cmPerCheck" min="1" max="500" class="loop-interval-input" onchange="_cmNum('max_per_check', this, 1)">
+          <span>max</span>
         </div>
       </label>
       <label class="settings-label">
@@ -506,17 +499,6 @@ const _GENERAL_JOBS_HTML = `
           <span>max</span>
         </div>
       </label>
-      <label class="settings-label">
-        <span>Pause between posts</span>
-        <div class="loop-interval-field">
-          <input type="number" id="cmGap" min="1" max="600" class="loop-interval-input" onchange="_cmNum('gap_secs', this, 1)">
-          <span>s</span>
-        </div>
-      </label>
-    </div>
-    <div class="job-status" id="job-comments-status" style="display:none">
-      <div id="job-comments-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-comments-bar"></div></div></div>
-      <div class="job-status-text" id="job-comments-text"></div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;min-height:16px">
       <span id="cmStats" style="font-size:12px;color:var(--muted)"></span>
@@ -911,41 +893,22 @@ function _tiHide() {
   if (_tiTimer) { clearInterval(_tiTimer); _tiTimer = null; }
 }
 
-// ── Comments job ──────────────────────────────────────────────────────────────
+// ── Comments status (Settings > General > Jobs) ──────────────────────────────────────────────────────────────
 
 let _cmTimer  = null;
-let _cmPaused = false;
 let _cmSaveToast = null;
-const _cmWidget = _makeJobWidget('comments');
 
 async function _cmTick() {
   const { ok, data } = await apiJSON('/api/comments/status');
   if (!ok) return;
-  const s = data.settings || {};
   const c = data.counts || {};
-  _cmPaused = !!s.paused;
-  const pauseBtn = document.getElementById('cmPauseBtn');
-  if (pauseBtn) _setText(pauseBtn, _cmPaused ? 'Resume' : 'Pause');
-  const total = (c.pending || 0) + (c.done || 0) + (c.failed || 0);
-  const cur = data.current;
-  if (cur) {
-    _cmWidget.update({
-      barPct: total ? Math.round(((c.done || 0) + (c.failed || 0)) / total * 100) : null,
-      label:  `${cur.platform} @${cur.handle} ${cur.video_id}`,
-    });
-  } else if (s.enabled && !s.paused && c.pending) {
-    _cmWidget.update({ barPct: null, label: 'Waiting for the next post…' });
-  } else {
-    _cmWidget.hide();
-  }
   const plats = document.getElementById('cmPlatforms');
   if (plats) _setText(plats, (data.platforms || []).map(id => PLATFORMS.find(p => p.id === id)?.label || id).join(', ') || 'none');
   const stats = document.getElementById('cmStats');
   if (stats) {
     const parts = [`${(c.comments || 0).toLocaleString()} comments`, `${(c.done || 0).toLocaleString()} posts fetched`,
-                   `${(c.pending || 0).toLocaleString()} pending`];
+                   `${(c.pending || 0).toLocaleString()} due on the next check`];
     if (c.failed) parts.push(`${c.failed.toLocaleString()} failed`);
-    if (data.posts_per_min) parts.push(`${data.posts_per_min} posts/min`);
     _setText(stats, parts.join(' · '));
   }
   const retry = document.getElementById('cmRetryBtn');
@@ -975,16 +938,10 @@ async function _cmPatch(changes, { toast = true } = {}) {
   return ok;
 }
 
-function _cmToggle(key, input) { _cmPatch({ [key]: input.checked }); }
-
 function _cmNum(key, input, min) {
   const v = parseInt(input.value, 10);
   if (!Number.isFinite(v) || v < min) return;
   _cmPatch({ [key]: v });
-}
-
-async function _cmPause() {
-  if (await _cmPatch({ paused: !_cmPaused }, { toast: false })) _cmTick();
 }
 
 async function _cmRetryFailed() {
@@ -997,10 +954,8 @@ async function _cmShow() {
   if (ok) {
     const s = data.settings || {};
     const seed = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
-    seed('cmEnabled', el => { el.checked = !!s.enabled; });
-    seed('cmRefresh', el => { el.value = String(s.refresh_days); });
-    seed('cmMax',     el => { el.value = String(s.max_per_post); });
-    seed('cmGap',     el => { el.value = String(s.gap_secs); });
+    seed('cmPerCheck', el => { el.value = String(s.max_per_check); });
+    seed('cmMax',      el => { el.value = String(s.max_per_post); });
   }
   if (!_cmTimer) _cmTimer = setInterval(_cmTick, 2000);
   _cmTick();

@@ -392,10 +392,13 @@ class ChannelDB:
             "ALTER TABLE stories  ADD COLUMN text_indexed           INTEGER NOT NULL DEFAULT 0",
             # Comment scraping (comments.py): the channel default, the per-post
             # override (NULL follows the channel), when the post's comments were
-            # last fetched, and consecutive failures (3 parks it)
+            # last fetched and the platform's comment count at that moment (a
+            # later listing with a different count triggers a re-fetch), and
+            # consecutive failures (3 parks it)
             "ALTER TABLE channels ADD COLUMN comments_enabled       INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE videos   ADD COLUMN comments_enabled       INTEGER",
             "ALTER TABLE videos   ADD COLUMN comments_fetched_at    INTEGER",
+            "ALTER TABLE videos   ADD COLUMN comments_count_at_fetch INTEGER",
             "ALTER TABLE videos   ADD COLUMN comments_failed        INTEGER NOT NULL DEFAULT 0",
         ]
         for sql in migrations:
@@ -1805,33 +1808,41 @@ class ChannelDB:
     def queue_video_comments(self, video_id: str) -> None:
         """Fetch now: turns the post on and clears its stamp and failures."""
         with self.get_db() as conn:
-            conn.execute("""UPDATE videos SET comments_enabled = 1, comments_fetched_at = NULL,
+            conn.execute("""UPDATE videos SET comments_enabled = 1, comments_count_at_fetch = NULL,
                             comments_failed = 0 WHERE video_id = ?""", (video_id,))
 
+    # Opted in (post override, else channel), not deleted, not parked
     _COMMENTS_WANTED = """
         COALESCE(v.comments_enabled, c.comments_enabled) = 1
         AND v.status != 'deleted' AND v.comments_failed < 3"""
 
-    def get_comments_pending(self, refresh_days: int, limit: int = 20) -> list[dict]:
-        """Posts whose comments are wanted and never fetched, plus posts younger
-        than refresh_days whose last fetch is over a day old. Newest first."""
-        now = int(time.time())
+    def get_comments_due(self, channel_id: str, counts: dict) -> list[tuple[str, int]]:
+        """From a listing's {video_id: comment_count}: the opted-in posts whose
+        count differs from the one stamped at their last fetch (NULL = never
+        fetched, due when the count is above zero). Never-fetched first."""
+        wanted = {k: v for k, v in counts.items() if v}
+        if not wanted:
+            return []
         with self.get_db() as conn:
-            return [dict(r) for r in conn.execute(f"""
-                SELECT v.video_id, v.channel_id, v.upload_date, v.comments_fetched_at, c.handle
+            rows = conn.execute(f"""
+                SELECT v.video_id, v.comments_count_at_fetch
                 FROM videos v JOIN channels c ON c.channel_id = v.channel_id
-                WHERE {self._COMMENTS_WANTED}
-                  AND (v.comments_fetched_at IS NULL
-                       OR (v.upload_date > ? AND v.comments_fetched_at < ?))
-                ORDER BY v.comments_fetched_at IS NOT NULL, v.upload_date DESC LIMIT ?
-            """, (now - refresh_days * 86400, now - 86400, limit)).fetchall()]
+                WHERE v.channel_id = ? AND {self._COMMENTS_WANTED}
+            """, (channel_id,)).fetchall()
+        due = [(r["video_id"], wanted[r["video_id"]], r["comments_count_at_fetch"])
+               for r in rows if r["video_id"] in wanted and r["comments_count_at_fetch"] != wanted[r["video_id"]]]
+        due.sort(key=lambda t: t[2] is not None)
+        return [(vid, n) for vid, n, _ in due]
 
     def comments_counts(self) -> dict:
+        """pending: opted-in posts whose stored count differs from the stamp
+        (the next check that lists them fetches), done, parked, total rows."""
         with self.get_db() as conn:
             r = conn.execute(f"""
-                SELECT SUM(v.comments_fetched_at IS NOT NULL)                         AS done,
-                       SUM(v.comments_failed >= 3)                                    AS failed,
-                       SUM(v.comments_fetched_at IS NULL AND v.comments_failed < 3)   AS pending
+                SELECT SUM(v.comments_fetched_at IS NOT NULL)  AS done,
+                       SUM(v.comments_failed >= 3)             AS failed,
+                       SUM(v.comments_failed < 3 AND COALESCE(v.comment_count, 0) > 0
+                           AND v.comments_count_at_fetch IS NOT v.comment_count) AS pending
                 FROM videos v JOIN channels c ON c.channel_id = v.channel_id
                 WHERE COALESCE(v.comments_enabled, c.comments_enabled) = 1 AND v.status != 'deleted'
             """).fetchone()
@@ -1839,9 +1850,11 @@ class ChannelDB:
             out["comments"] = conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
             return out
 
-    def replace_comments(self, video_id: str, channel_id: str, rows: list[dict]) -> None:
-        """Swap the post's comments and their search rows, stamp the fetch.
-        rows: {comment_id, parent_id, author, author_id, text, likes, created_at}."""
+    def replace_comments(self, video_id: str, channel_id: str, rows: list[dict],
+                         count: int | None) -> None:
+        """Swap the post's comments and their search rows, stamp the fetch with
+        the platform's count at that moment. rows: {comment_id, parent_id,
+        author, author_id, text, likes, created_at}."""
         now = int(time.time())
         with self.get_db() as conn:
             conn.execute("DELETE FROM comments WHERE video_id = ?", (video_id,))
@@ -1858,8 +1871,8 @@ class ChannelDB:
                 INSERT INTO media_text (item_type, item_id, channel_id, source, text)
                 VALUES ('video', ?, ?, 'comment', ?)
             """, [(video_id, channel_id, r["text"]) for r in rows if r["text"].strip()])
-            conn.execute("""UPDATE videos SET comments_fetched_at = ?, comments_failed = 0
-                            WHERE video_id = ?""", (now, video_id))
+            conn.execute("""UPDATE videos SET comments_fetched_at = ?, comments_count_at_fetch = ?,
+                            comments_failed = 0 WHERE video_id = ?""", (now, count, video_id))
 
     def mark_comments_failed(self, video_id: str) -> None:
         with self.get_db() as conn:

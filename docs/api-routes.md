@@ -40,7 +40,7 @@ Engine blueprint, shared by every platform ({p} = tiktok|youtube|twitter|instagr
 /api/{p}/channels/<id>/comments        PATCH {enabled}: scrape comments of every post (501 without fetch_comments)
 /api/{p}/videos/<id>/comments          GET saved comments (replies after their parent); PATCH {enabled: bool|null}
                                        sets the per-post override, null follows the creator
-/api/{p}/videos/<id>/comments/fetch    POST: turn the post on and queue it now; job_enabled says whether the job runs
+/api/{p}/videos/<id>/comments/fetch    POST: turn the post on and fetch its comments now, in the background
 /api/{p}/channels/<id>/profile-history change history
 /api/{p}/channels/<id>/stats-history   daily snapshots (followers, following, posts, saved), oldest first
 /api/{p}/channels/<id>/connections     GET list, POST {handle} links, DELETE /<other_id> unlinks
@@ -90,8 +90,8 @@ Global:
 /api/text-index/retry-failed      POST: requeue items that failed at the current model version
 /api/text-index/rebuild           POST: requeue every indexed item
 /api/text-index/diagnose          POST {platform, item_id}: dry-run OCR of one post or story with a verbose text report
-/api/comments/status              comment scraping job: settings, platforms with a fetcher, current post, counts, recent results
-/api/comments/settings            PATCH any comments.json key (enabled, paused, refresh_days, max_per_post, gap_secs)
+/api/comments/status              comment scraping: settings, platforms with a fetcher, counts, recent results
+/api/comments/settings            PATCH any comments.json key (max_per_post, max_per_check)
 /api/comments/retry-failed        POST: clear the failure count of parked posts
 /api/jobs/photo-converter/status|start    JPEG to AVIF conversion, all platforms
 /api/jobs/thumbnail-repair/status|start   undecodable thumbnails, all platforms

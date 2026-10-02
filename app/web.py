@@ -287,7 +287,7 @@ def create_app() -> Flask:
     def text_index_rebuild():
         return jsonify({"ok": True, "reset": text_index.reset(failed_only=False)})
 
-    # Comment scraping job, app-wide like the text index
+    # Comment scraping status and settings, app-wide like the text index
     import comments
 
     @app.route("/api/comments/status")

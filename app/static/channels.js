@@ -1914,8 +1914,7 @@ function initChannelApp(cfg) {
     if (v) v.comments_enabled = 1;
     const sel = /** @type {HTMLSelectElement|null} */ (document.querySelector('#mvInfo .mv-cm-select'));
     if (sel) sel.value = 'on';
-    showToast(data.job_enabled ? 'Queued, comments arrive in a moment' : 'Queued; the Comments job is off (Settings > General > Jobs)',
-              { duration: 3500 });
+    showToast('Fetching comments, reopen the post in a moment', { duration: 3500 });
   });
 
   X('SetTracking', async (channelId, enabled) => {
