@@ -47,6 +47,7 @@
  * @property {() => (string|null)} [currentActivity]  Extra-loop activity line for the log bar (TikTok: sound loop stage)
  * @property {(state: Object) => {iso: string, label: string}[]} [nextRunCandidates]
  * @property {boolean} [hasStories]     Platform saves stories: adds the Stories card stat and sort option
+ * @property {boolean} [hasComments]    Adapter has fetch_comments: shows the creator toggle and the post selector
  * @property {(s: Object) => Object[]} [statsRows]      Rows for the stat strip
  * @property {(item: Object) => string} [recentFallback]  Recent-feed line for disabled creators
  * @property {(ch: Object) => string} [gridClassFn]
@@ -477,7 +478,26 @@ function initChannelApp(cfg) {
     ].filter(([, val]) => val != null);
     return `<div class="mv-info-title">Details</div>
       ${v.description ? `<div class="mv-info-desc">${esc(v.description)}</div>` : ''}
-      ${rows.map(([l, val]) => _hgRow(l, val)).join('')}`;
+      ${rows.map(([l, val]) => _hgRow(l, val)).join('')}
+      ${cfg.hasComments && v.status !== 'deleted' ? _mvCommentsFor(v) : ''}`;
+  }
+
+  // Comments block: the per-post selector (follow creator / on / off), a
+  // Fetch now button, the last fetch time, and a host the viewer fills from
+  // the comments route (common.js _mvLoadComments).
+  function _mvCommentsFor(v) {
+    const id  = esc(v.video_id);
+    const sel = v.comments_enabled == null ? 'inherit' : v.comments_enabled ? 'on' : 'off';
+    const opt = (val, label) => `<option value="${val}"${sel === val ? ' selected' : ''}>${label}</option>`;
+    return `<div class="mv-info-title mv-cm-title">Comments</div>
+      <div class="mv-cm-ctl">
+        <select class="mv-cm-select" onchange="${P}SetPostComments('${id}', this.value)" title="Fetch comments for this post">
+          ${opt('inherit', `Follow ${CREATOR}`)}${opt('on', 'On')}${opt('off', 'Off')}
+        </select>
+        <button class="btn-sm" onclick="${P}FetchComments('${id}', this)">Fetch now</button>
+      </div>
+      ${v.comments_fetched_at ? _hgRow('Fetched', fmt.date(v.comments_fetched_at)) : ''}
+      <div class="mv-cm-list" data-comments-url="${API}/videos/${id}/comments"></div>`;
   }
 
   function _defaultVideoActionBtns(v) {
@@ -1860,6 +1880,44 @@ function initChannelApp(cfg) {
 
   // ── Tracking toggle ───────────────────────────────────────────────────────
 
+  X('SetComments', async (channelId, enabled) => {
+    const { ok, data } = await apiJSON(`${API}/channels/${channelId}/comments`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    });
+    if (!ok) { showToast(data.error || 'Could not update comments', { type: 'error' }); return; }
+    const ch = creators.find(c => c.channel_id === channelId);
+    if (ch) ch.comments_enabled = enabled ? 1 : 0;
+    if (modalCreatorId === channelId && modalCreator) {
+      modalCreator.comments_enabled = enabled ? 1 : 0;
+      _renderModalHeader(modalCreator);
+    }
+  });
+
+  X('SetPostComments', async (videoId, value) => {
+    const enabled = value === 'inherit' ? null : value === 'on';
+    const { ok, data } = await apiJSON(`${API}/videos/${encodeURIComponent(videoId)}/comments`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    });
+    if (!ok) { showToast(data.error || 'Could not update comments', { type: 'error' }); return; }
+    const v = _creatorState.videos.find(x => x.video_id === videoId);
+    if (v) v.comments_enabled = enabled == null ? null : enabled ? 1 : 0;
+  });
+
+  X('FetchComments', async (videoId, btn) => {
+    if (btn) btn.disabled = true;
+    const { ok, data } = await apiJSON(`${API}/videos/${encodeURIComponent(videoId)}/comments/fetch`, { method: 'POST' });
+    if (btn) btn.disabled = false;
+    if (!ok) { showToast(data.error || 'Could not queue the post', { type: 'error' }); return; }
+    const v = _creatorState.videos.find(x => x.video_id === videoId);
+    if (v) v.comments_enabled = 1;
+    const sel = /** @type {HTMLSelectElement|null} */ (document.querySelector('#mvInfo .mv-cm-select'));
+    if (sel) sel.value = 'on';
+    showToast(data.job_enabled ? 'Queued, comments arrive in a moment' : 'Queued; the Comments job is off (Settings > General > Jobs)',
+              { duration: 3500 });
+  });
+
   X('SetTracking', async (channelId, enabled) => {
     const { ok, data } = await apiJSON(`${API}/channels/${channelId}/tracking`, {
       method: 'PATCH',
@@ -2482,6 +2540,7 @@ function initChannelApp(cfg) {
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
               <span class="toggle-label">Track ${ITEMS}</span>
             </label>
+            ${_commentsToggleHtml(ch, '')}
           </div>
           <div class="modal-handle">
             <a href="${extUrl}" target="_blank" rel="noopener" class="tt-link">@${esc(ch.handle)}</a>${_oldNamesTag(ch)}
@@ -2570,12 +2629,24 @@ function initChannelApp(cfg) {
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
             <span class="toggle-label">Track</span>
           </label>
+          ${_commentsToggleHtml(ch, '')}
         </div>
         ${_noteFieldHtml(ch.comment, `${P}EditNote`, 4)}
         <div class="conn-square" id="${P}ModalConnections"></div>
       </div>`;
     _renderConnPanel();
     _markXtextClipped(_el('ModalHeader'));
+  }
+
+  // Creator-wide comments toggle (platforms with fetch_comments only); a post
+  // can still override it from the viewer's Comments block
+  function _commentsToggleHtml(ch, style) {
+    if (!cfg.hasComments) return '';
+    return `<label class="tracking-toggle" title="Save the comments of every post of this ${CREATOR}"${style ? ` style="${style}"` : ''}>
+      <input type="checkbox" ${ch.comments_enabled ? 'checked' : ''} onchange="${P}SetComments('${esc(ch.channel_id)}', this.checked)">
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span class="toggle-label">Comments</span>
+    </label>`;
   }
 
   // Note editor behind both the empty field's "Click to add a note" and the

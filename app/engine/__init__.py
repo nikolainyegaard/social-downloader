@@ -72,6 +72,11 @@ class ChannelAdapter:
     extra_settings: dict | None = None
     on_settings_changed: Callable | None = None     # (engine, changed_keys: list[str]) -> None
 
+    # Comment scraping (comments.py): returns {comment_id, parent_id, author,
+    # author_id, text, likes, created_at} dicts for one post; replies carry
+    # parent_id. Platforms without it never enter the comments queue.
+    fetch_comments: Callable | None = None          # (engine, video: dict, max_count: int) -> list[dict]
+
 
 class ChannelEngine:
     def __init__(self, adapter: ChannelAdapter):

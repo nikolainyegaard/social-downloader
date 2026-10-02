@@ -149,6 +149,7 @@ sys.stderr = _Tee(sys.__stderr__)
 
 _POLLING_ENDPOINTS = (
     '"GET /api/text-index/status HTTP',
+    '"GET /api/comments/status HTTP',
     '"GET /api/transcode/status HTTP',
     '"GET /api/tiktok/login/qr HTTP',
     '"GET /api/tiktok/screen HTTP',
@@ -412,6 +413,8 @@ if __name__ == "__main__":
     transcoder.start()
     import text_index
     text_index.start()
+    import comments
+    comments.start()
 
     print(f"{_ts()} Starting loop threads...")
     for _engine in ENGINES.values():

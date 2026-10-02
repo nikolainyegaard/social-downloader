@@ -287,6 +287,22 @@ def create_app() -> Flask:
     def text_index_rebuild():
         return jsonify({"ok": True, "reset": text_index.reset(failed_only=False)})
 
+    # Comment scraping job, app-wide like the text index
+    import comments
+
+    @app.route("/api/comments/status")
+    def comments_status():
+        return jsonify(comments.get_status())
+
+    @app.route("/api/comments/settings", methods=["PATCH"])
+    def comments_settings():
+        body = request.get_json(silent=True) or {}
+        return jsonify({"ok": True, "settings": comments.save_settings(body)})
+
+    @app.route("/api/comments/retry-failed", methods=["POST"])
+    def comments_retry():
+        return jsonify({"ok": True, "reset": comments.retry_failed()})
+
     @app.route("/api/jobs/photo-converter/status")
     def photo_converter_status():
         return jsonify(_photo_converter.get_state())

@@ -912,6 +912,7 @@ const tt = initChannelApp({
   profileUrl:        h => `https://www.tiktok.com/@${h}`,
   videoUrl:          (v, ch) => _ttVideoUrl(v, ch.handle),
   hasStories:        true,
+  hasComments:       true,
   fieldLabels: {
     username: 'Handle', handle: 'Handle', display_name: 'Display name',
     bio: 'Bio', description: 'Bio', bio_link: 'Bio link', avatar: 'Avatar',

@@ -532,6 +532,54 @@ def create_channel_blueprint(engine) -> Blueprint:
         db.set_channel_comment(channel_id, comment.strip())
         return jsonify({"ok": True})
 
+    @bp.route("/channels/<channel_id>/comments", methods=["PATCH"])
+    def set_channel_comments(channel_id: str):
+        if not adapter.fetch_comments:
+            return jsonify({"error": f"{adapter.label} has no comment scraping"}), 501
+        if not db.get_channel(channel_id):
+            return jsonify({"error": f"{noun} not found"}), 404
+        body    = request.get_json(silent=True) or {}
+        enabled = body.get("enabled")
+        if not isinstance(enabled, bool):
+            return jsonify({"error": "enabled must be a boolean"}), 400
+        db.set_channel_comments(channel_id, enabled)
+        import comments
+        comments.wake()
+        return jsonify({"ok": True})
+
+    @bp.route("/videos/<video_id>/comments", methods=["GET"])
+    def video_comments(video_id: str):
+        return jsonify(db.get_comments(video_id))
+
+    @bp.route("/videos/<video_id>/comments", methods=["PATCH"])
+    def set_video_comments(video_id: str):
+        """Per-post override: {enabled: true|false|null}, null follows the creator."""
+        if not adapter.fetch_comments:
+            return jsonify({"error": f"{adapter.label} has no comment scraping"}), 501
+        if not db.get_video(video_id):
+            return jsonify({"error": "post not found"}), 404
+        body    = request.get_json(silent=True) or {}
+        enabled = body.get("enabled")
+        if enabled is not None and not isinstance(enabled, bool):
+            return jsonify({"error": "enabled must be a boolean or null"}), 400
+        db.set_video_comments(video_id, enabled)
+        import comments
+        comments.wake()
+        return jsonify({"ok": True})
+
+    @bp.route("/videos/<video_id>/comments/fetch", methods=["POST"])
+    def fetch_video_comments(video_id: str):
+        """Fetch now: turns the post on and puts it at the front of the queue."""
+        if not adapter.fetch_comments:
+            return jsonify({"error": f"{adapter.label} has no comment scraping"}), 501
+        if not db.get_video(video_id):
+            return jsonify({"error": "post not found"}), 404
+        db.queue_video_comments(video_id)
+        import comments
+        comments.wake()
+        s = comments.get_settings()
+        return jsonify({"ok": True, "job_enabled": bool(s["enabled"] and not s["paused"])})
+
     @bp.route("/channels/<channel_id>/profile-history", methods=["GET"])
     def channel_profile_history(channel_id: str):
         return jsonify(db.get_profile_history(channel_id))

@@ -14,7 +14,7 @@ channels (engine columns + TikTok extras):
   sec_uid,                         TikTok's stable secondary ID
   account_status (active|banned), banned_at (COALESCE, never overwritten),
   privacy_status, viewer_relations, added_at, last_checked,
-  enabled, tracking_enabled, starred, bookmarked,
+  enabled, tracking_enabled, starred, bookmarked, comments_enabled,
   pinned_at,                       Quick Access pin; NULL = unpinned, set time orders the row
   last_video_at, next_check_at (NULL = due immediately), check_interval_secs,
   last_full_refresh_at,
@@ -29,6 +29,7 @@ videos:
   deletion_confirmed INTEGER NOT NULL DEFAULT 0,   TikTok model: 0 = first absence, 1 = confirmed
   text_indexed INTEGER NOT NULL DEFAULT 0,          OCR model version that indexed the media (stories too)
   false_positive_count, direct_added,
+  comments_enabled (NULL follows the channel), comments_fetched_at, comments_failed   comment scraping (comments.py)
   view/like/comment/share/save/repost counts, duration, width, height,
   music_title, music_artist, music_id, raw_video_data, ytdlp_data,
   stats_backfilled_at, stats_updated_at, stats_error_count, stats_last_error
@@ -36,8 +37,9 @@ videos:
 sounds:        sound_id TEXT PK, label, comment, added_at, last_checked, enabled,
                tracking_enabled, starred
 sound_videos:  sound_id FK, video_id FK, added_at; PK (sound_id, video_id)
-media_text:    id PK, item_type (video|story), item_id, channel_id, source (caption|image|frame),
+media_text:    id PK, item_type (video|story), item_id, channel_id, source (caption|image|frame|comment),
                start_ts, end_ts, text, confidence; media_text_fts is its FTS5 trigram index (see backend.md)
+comments:      comment_id PK, video_id, channel_id, parent_id, author, author_id, text, likes, created_at, fetched_at
 ```
 
 Indexes from `store.init_tables()`: `idx_sound_videos_sound`, `idx_videos_channel_id`, `idx_videos_status`, `idx_profile_history_channel_id`, `idx_videos_stats_backfilled_at`, `idx_channels_next_check_at`.
@@ -67,6 +69,7 @@ Indexes from `store.init_tables()`: `idx_sound_videos_sound`, `idx_videos_channe
 | Live stories | TikTokApi story/item_list | Same endpoint gallery-dl uses; needs logged-in cookies. Pagination keys differ from the other item_list endpoints: response carries `HasMoreAfter`/`MaxCursor` (not `hasMore`/`cursor`), the request cursor moves forward in time, and TikTok caps each page at ~3 items regardless of `count`. Reading `hasMore` here silently truncated stories to the first page |
 | Story download | yt-dlp on `/@handle/video/{id}` | yt-dlp fetches the page itself so the media URL is signed for its own request. Must be `/video/`, not `/story/`. Direct CDN GETs are the fallback and the path for photo stories |
 | Downloads | yt-dlp (video), requests (photos) | yt-dlp returns audio only for photo posts |
+| Comments | TikTokApi `/api/comment/list/` + `/api/comment/list/reply/` | `get_video_comments(api, video_id, max_count)` pages 20 at a time on the open session with a short random sleep between pages, then pulls the replies of every comment that has some; the adapter's `fetch_comments` runs it through `run_browser_job` so it shares the single browser turn (between users while a session runs). Only for posts opted in, see backend.md comments.py |
 
 `UserBannedException`: raised on TikTok `statusCode 10202`.
 

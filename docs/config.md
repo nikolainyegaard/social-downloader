@@ -62,6 +62,7 @@ data/
   transcode.json                AV1 transcode job settings (Settings > General > Jobs)
   transcode.db                  transcode queue + history; derived state, rebuilt by Backfill
   text_index.json               OCR text index job settings (Settings > General > Jobs)
+  comments.json                 comment scraping job settings (Settings > General > Jobs)
   oauth.json                    OAuth config (enabled, client_id, client_secret, discovery_url, lifetime)
   .secret_key                   auto-generated Flask session secret, first startup, never user-managed
 

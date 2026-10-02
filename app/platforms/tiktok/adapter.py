@@ -63,6 +63,11 @@ def _lookup_profile(handle: str) -> dict:
     }
 
 
+def _fetch_comments(engine, video: dict, max_count: int) -> list[dict]:
+    from platforms.tiktok.api import get_video_comments, run_browser_job
+    return run_browser_job(lambda api: get_video_comments(api, video["video_id"], max_count))
+
+
 def _process_session(engine, channels, log, set_current, stop_event,
                      set_sleep=None, on_large_deletion=None) -> int:
     from platforms.tiktok.api import browser_gate
@@ -140,4 +145,5 @@ tiktok_adapter = ChannelAdapter(
         "stats_refresh_days":          STATS_REFRESH_DAYS,
     },
     on_settings_changed=_on_settings_changed,
+    fetch_comments=_fetch_comments,
 )

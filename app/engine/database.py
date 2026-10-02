@@ -227,6 +227,24 @@ class ChannelDB:
                     INSERT INTO media_text_fts(media_text_fts, rowid, text) VALUES ('delete', old.id, old.text);
                     INSERT INTO media_text_fts(rowid, text) VALUES (new.id, new.text);
                 END;
+
+                -- Comments scraped for posts whose creator or post has the
+                -- comments toggle on (comments.py). Replies carry parent_id.
+                -- The text is mirrored into media_text (source 'comment')
+                -- so the search box finds it like captions and OCR text.
+                CREATE TABLE IF NOT EXISTS comments (
+                    comment_id TEXT PRIMARY KEY,
+                    video_id   TEXT NOT NULL,
+                    channel_id TEXT NOT NULL,
+                    parent_id  TEXT,
+                    author     TEXT,
+                    author_id  TEXT,
+                    text       TEXT NOT NULL,
+                    likes      INTEGER,
+                    created_at INTEGER,
+                    fetched_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_comments_video ON comments(video_id);
             """)
             needs_vacuum = self._migrate_db(conn)
             # Captions of every post not yet in media_text (first launch after
@@ -372,6 +390,13 @@ class ChannelDB:
             # negative = failed at that version (abs), see text_index.py
             "ALTER TABLE videos   ADD COLUMN text_indexed           INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE stories  ADD COLUMN text_indexed           INTEGER NOT NULL DEFAULT 0",
+            # Comment scraping (comments.py): the channel default, the per-post
+            # override (NULL follows the channel), when the post's comments were
+            # last fetched, and consecutive failures (3 parks it)
+            "ALTER TABLE channels ADD COLUMN comments_enabled       INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE videos   ADD COLUMN comments_enabled       INTEGER",
+            "ALTER TABLE videos   ADD COLUMN comments_fetched_at    INTEGER",
+            "ALTER TABLE videos   ADD COLUMN comments_failed        INTEGER NOT NULL DEFAULT 0",
         ]
         for sql in migrations:
             try:
@@ -446,6 +471,7 @@ class ChannelDB:
             conn.execute("DELETE FROM channel_connections WHERE ? IN (channel_a, channel_b)",
                          (channel_id,))
             conn.execute("DELETE FROM media_text WHERE channel_id = ?", (channel_id,))
+            conn.execute("DELETE FROM comments WHERE channel_id = ?", (channel_id,))
 
 
     def get_all_channels(self) -> list[dict]:
@@ -723,6 +749,12 @@ class ChannelDB:
                 "UPDATE channels SET comment = ? WHERE channel_id = ?",
                 (comment or None, channel_id)
             )
+
+
+    def set_channel_comments(self, channel_id: str, enabled: bool) -> None:
+        with self.get_db() as conn:
+            conn.execute("UPDATE channels SET comments_enabled = ? WHERE channel_id = ?",
+                         (int(enabled), channel_id))
 
 
     def get_profile_history(self, channel_id: str) -> list[dict]:
@@ -1644,6 +1676,9 @@ class ChannelDB:
             conn.execute(
                 "DELETE FROM media_text WHERE channel_id NOT IN (SELECT channel_id FROM channels)"
             )
+            conn.execute(
+                "DELETE FROM comments WHERE channel_id NOT IN (SELECT channel_id FROM channels)"
+            )
         return videos + history
 
 
@@ -1759,10 +1794,106 @@ class ChannelDB:
         return n
 
 
+    # ── Comments (comments.py) ────────────────────────────────────────────────
+
+    def set_video_comments(self, video_id: str, enabled: bool | None) -> None:
+        """Per-post override: True/False, or None to follow the channel."""
+        with self.get_db() as conn:
+            conn.execute("UPDATE videos SET comments_enabled = ? WHERE video_id = ?",
+                         (None if enabled is None else int(enabled), video_id))
+
+    def queue_video_comments(self, video_id: str) -> None:
+        """Fetch now: turns the post on and clears its stamp and failures."""
+        with self.get_db() as conn:
+            conn.execute("""UPDATE videos SET comments_enabled = 1, comments_fetched_at = NULL,
+                            comments_failed = 0 WHERE video_id = ?""", (video_id,))
+
+    _COMMENTS_WANTED = """
+        COALESCE(v.comments_enabled, c.comments_enabled) = 1
+        AND v.status != 'deleted' AND v.comments_failed < 3"""
+
+    def get_comments_pending(self, refresh_days: int, limit: int = 20) -> list[dict]:
+        """Posts whose comments are wanted and never fetched, plus posts younger
+        than refresh_days whose last fetch is over a day old. Newest first."""
+        now = int(time.time())
+        with self.get_db() as conn:
+            return [dict(r) for r in conn.execute(f"""
+                SELECT v.video_id, v.channel_id, v.upload_date, v.comments_fetched_at, c.handle
+                FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+                WHERE {self._COMMENTS_WANTED}
+                  AND (v.comments_fetched_at IS NULL
+                       OR (v.upload_date > ? AND v.comments_fetched_at < ?))
+                ORDER BY v.comments_fetched_at IS NOT NULL, v.upload_date DESC LIMIT ?
+            """, (now - refresh_days * 86400, now - 86400, limit)).fetchall()]
+
+    def comments_counts(self) -> dict:
+        with self.get_db() as conn:
+            r = conn.execute(f"""
+                SELECT SUM(v.comments_fetched_at IS NOT NULL)                         AS done,
+                       SUM(v.comments_failed >= 3)                                    AS failed,
+                       SUM(v.comments_fetched_at IS NULL AND v.comments_failed < 3)   AS pending
+                FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+                WHERE COALESCE(v.comments_enabled, c.comments_enabled) = 1 AND v.status != 'deleted'
+            """).fetchone()
+            out = {k: r[k] or 0 for k in ("pending", "done", "failed")}
+            out["comments"] = conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
+            return out
+
+    def replace_comments(self, video_id: str, channel_id: str, rows: list[dict]) -> None:
+        """Swap the post's comments and their search rows, stamp the fetch.
+        rows: {comment_id, parent_id, author, author_id, text, likes, created_at}."""
+        now = int(time.time())
+        with self.get_db() as conn:
+            conn.execute("DELETE FROM comments WHERE video_id = ?", (video_id,))
+            conn.executemany("""
+                INSERT INTO comments (comment_id, video_id, channel_id, parent_id, author, author_id,
+                                      text, likes, created_at, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [(r["comment_id"], video_id, channel_id, r.get("parent_id"), r.get("author"),
+                   r.get("author_id"), r["text"], r.get("likes"), r.get("created_at"), now)
+                  for r in rows])
+            conn.execute("DELETE FROM media_text WHERE item_type = 'video' AND item_id = ? AND source = 'comment'",
+                         (video_id,))
+            conn.executemany("""
+                INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                VALUES ('video', ?, ?, 'comment', ?)
+            """, [(video_id, channel_id, r["text"]) for r in rows if r["text"].strip()])
+            conn.execute("""UPDATE videos SET comments_fetched_at = ?, comments_failed = 0
+                            WHERE video_id = ?""", (now, video_id))
+
+    def mark_comments_failed(self, video_id: str) -> None:
+        with self.get_db() as conn:
+            conn.execute("UPDATE videos SET comments_failed = comments_failed + 1 WHERE video_id = ?",
+                         (video_id,))
+
+    def reset_comments_failed(self) -> int:
+        with self.get_db() as conn:
+            return conn.execute("UPDATE videos SET comments_failed = 0 WHERE comments_failed > 0").rowcount
+
+    def get_comments(self, video_id: str) -> list[dict]:
+        """Top-level comments by likes then age, each reply right after its parent."""
+        with self.get_db() as conn:
+            rows = [dict(r) for r in conn.execute(
+                "SELECT * FROM comments WHERE video_id = ? ORDER BY likes DESC, created_at", (video_id,))]
+        top     = [r for r in rows if not r["parent_id"]]
+        replies: dict[str, list[dict]] = {}
+        for r in rows:
+            if r["parent_id"]:
+                replies.setdefault(r["parent_id"], []).append(r)
+        out = []
+        for r in top:
+            out.append(r)
+            out.extend(sorted(replies.pop(r["comment_id"], []), key=lambda x: x["created_at"] or 0))
+        for orphans in replies.values():   # parent not fetched (capped page)
+            out.extend(orphans)
+        return out
+
+
     def delete_video(self, video_id: str) -> bool:
         with self.get_db() as conn:
             cur = conn.execute("DELETE FROM videos WHERE video_id = ?", (video_id,))
             conn.execute("DELETE FROM media_text WHERE item_type = 'video' AND item_id = ?", (video_id,))
+            conn.execute("DELETE FROM comments WHERE video_id = ?", (video_id,))
             return cur.rowcount > 0
 
 

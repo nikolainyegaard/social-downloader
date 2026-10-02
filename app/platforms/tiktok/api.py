@@ -984,6 +984,56 @@ async def get_user_stories(api, author_id: str) -> list[dict]:
     return items
 
 
+async def get_video_comments(api, video_id: str, max_count: int = 500) -> list[dict]:
+    """Page /api/comment/list/ for one post and /api/comment/list/reply/ for
+    every comment that has replies, on the open session. Stops at max_count
+    comments in total, has_more 0, or an empty page. A short random sleep
+    separates pages like the item_list paging does."""
+    import random
+
+    def _row(c: dict, parent: str | None) -> dict | None:
+        cid, text = str(c.get("cid") or ""), (c.get("text") or "").strip()
+        if not cid or not text:
+            return None
+        u = c.get("user") or {}
+        return {"comment_id": cid, "parent_id": parent,
+                "author": u.get("unique_id") or u.get("nickname"),
+                "author_id": str(u.get("uid") or "") or None, "text": text,
+                "likes": c.get("digg_count"), "created_at": c.get("create_time")}
+
+    async def _pages(url: str, params: dict) -> list[dict]:
+        out, cursor = [], 0
+        while len(rows) + len(out) < max_count:
+            data = await api.make_request(url=url, params={**params, "count": 20, "cursor": cursor})
+            if not data or data.get("status_code", data.get("statusCode", 0)) not in (0, None):
+                raise RuntimeError(f"comment list status {data.get('status_code') if data else None}")
+            page = data.get("comments") or []
+            if not page:
+                break
+            out.extend(page)
+            if not data.get("has_more"):
+                break
+            cursor = data.get("cursor") or cursor + len(page)
+            await asyncio.sleep(round(random.uniform(0.5, 1.5), 2))
+        return out
+
+    rows: list[dict] = []
+    tops = await _pages("https://www.tiktok.com/api/comment/list/", {"aweme_id": video_id})
+    for c in tops:
+        r = _row(c, None)
+        if r:
+            rows.append(r)
+    for c in tops:
+        if not c.get("reply_comment_total") or len(rows) >= max_count:
+            continue
+        for rc in await _pages("https://www.tiktok.com/api/comment/list/reply/",
+                               {"item_id": video_id, "comment_id": c["cid"]}):
+            r = _row(rc, str(c["cid"]))
+            if r:
+                rows.append(r)
+    return rows[:max_count]
+
+
 def parse_story_item(item: dict) -> dict | None:
     """Map a raw story item to the engine's story dict contract.
 

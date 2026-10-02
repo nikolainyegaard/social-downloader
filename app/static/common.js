@@ -475,6 +475,58 @@ const _GENERAL_JOBS_HTML = `
 
   <div class="job-card">
     <div class="job-card-hdr">
+      <div class="job-card-title">Comments</div>
+      <div class="job-card-btns">
+        <button class="btn-sm" id="cmPauseBtn" onclick="_cmPause()" style="min-width:80px">Pause</button>
+      </div>
+    </div>
+    <div class="job-card-desc">
+      Saves the comments of posts you opt in: the Comments toggle on a
+      creator covers every post, the selector in the post viewer covers one.
+      Comment text is searchable (Ctrl+K). Posts younger than the refresh
+      window are fetched again once a day. Platforms: <span id="cmPlatforms"></span>.
+    </div>
+    <label class="tracking-toggle" style="margin-top:14px">
+      <input type="checkbox" id="cmEnabled" onchange="_cmToggle('enabled', this)">
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span class="toggle-label">Fetch comments</span>
+    </label>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:14px">
+      <label class="settings-label">
+        <span>Refresh posts younger than</span>
+        <div class="loop-interval-field">
+          <input type="number" id="cmRefresh" min="0" max="365" class="loop-interval-input" onchange="_cmNum('refresh_days', this, 0)">
+          <span>days</span>
+        </div>
+      </label>
+      <label class="settings-label">
+        <span>Comments per post</span>
+        <div class="loop-interval-field">
+          <input type="number" id="cmMax" min="20" max="5000" class="loop-interval-input" onchange="_cmNum('max_per_post', this, 20)">
+          <span>max</span>
+        </div>
+      </label>
+      <label class="settings-label">
+        <span>Pause between posts</span>
+        <div class="loop-interval-field">
+          <input type="number" id="cmGap" min="1" max="600" class="loop-interval-input" onchange="_cmNum('gap_secs', this, 1)">
+          <span>s</span>
+        </div>
+      </label>
+    </div>
+    <div class="job-status" id="job-comments-status" style="display:none">
+      <div id="job-comments-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-comments-bar"></div></div></div>
+      <div class="job-status-text" id="job-comments-text"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;min-height:16px">
+      <span id="cmStats" style="font-size:12px;color:var(--muted)"></span>
+      <button class="btn-sm" id="cmRetryBtn" style="display:none" onclick="_cmRetryFailed()">Retry failed</button>
+    </div>
+    <div id="cmRecent" style="font-size:11px;color:var(--muted);line-height:1.7;margin-top:6px"></div>
+  </div>
+
+  <div class="job-card">
+    <div class="job-card-hdr">
       <div class="job-card-title">Convert photos to AVIF</div>
       <button class="btn-primary" id="job-avif-btn" onclick="triggerAvifJob()">Run</button>
     </div>
@@ -859,8 +911,108 @@ function _tiHide() {
   if (_tiTimer) { clearInterval(_tiTimer); _tiTimer = null; }
 }
 
+// ── Comments job ──────────────────────────────────────────────────────────────
+
+let _cmTimer  = null;
+let _cmPaused = false;
+let _cmSaveToast = null;
+const _cmWidget = _makeJobWidget('comments');
+
+async function _cmTick() {
+  const { ok, data } = await apiJSON('/api/comments/status');
+  if (!ok) return;
+  const s = data.settings || {};
+  const c = data.counts || {};
+  _cmPaused = !!s.paused;
+  const pauseBtn = document.getElementById('cmPauseBtn');
+  if (pauseBtn) _setText(pauseBtn, _cmPaused ? 'Resume' : 'Pause');
+  const total = (c.pending || 0) + (c.done || 0) + (c.failed || 0);
+  const cur = data.current;
+  if (cur) {
+    _cmWidget.update({
+      barPct: total ? Math.round(((c.done || 0) + (c.failed || 0)) / total * 100) : null,
+      label:  `${cur.platform} @${cur.handle} ${cur.video_id}`,
+    });
+  } else if (s.enabled && !s.paused && c.pending) {
+    _cmWidget.update({ barPct: null, label: 'Waiting for the next post…' });
+  } else {
+    _cmWidget.hide();
+  }
+  const plats = document.getElementById('cmPlatforms');
+  if (plats) _setText(plats, (data.platforms || []).map(id => PLATFORMS.find(p => p.id === id)?.label || id).join(', ') || 'none');
+  const stats = document.getElementById('cmStats');
+  if (stats) {
+    const parts = [`${(c.comments || 0).toLocaleString()} comments`, `${(c.done || 0).toLocaleString()} posts fetched`,
+                   `${(c.pending || 0).toLocaleString()} pending`];
+    if (c.failed) parts.push(`${c.failed.toLocaleString()} failed`);
+    if (data.posts_per_min) parts.push(`${data.posts_per_min} posts/min`);
+    _setText(stats, parts.join(' · '));
+  }
+  const retry = document.getElementById('cmRetryBtn');
+  if (retry) retry.style.display = c.failed ? '' : 'none';
+  const recent = document.getElementById('cmRecent');
+  if (recent) {
+    const html = (data.recent || []).map(r =>
+      `<div>${esc(r.platform)} @${esc(r.handle || '')} ${esc(r.video_id)}: ${r.error ? `<span style="color:var(--orange)">${esc(r.error)}</span>` : `${r.comments} comment${r.comments === 1 ? '' : 's'}`} (${r.secs}s)</div>`).join('');
+    if (recent.innerHTML !== html) recent.innerHTML = html;
+  }
+}
+
+async function _cmPatch(changes, { toast = true } = {}) {
+  let t = null;
+  if (toast) {
+    _cmSaveToast?.dismiss();
+    t = _cmSaveToast = showToast('Saving…', { spinner: true, duration: 0 });
+  }
+  const { ok, data } = await apiJSON('/api/comments/settings',
+                                     { method: 'PATCH', body: JSON.stringify(changes) });
+  if (t) {
+    if (ok) t.update('Saved', { duration: 2000 });
+    else t.update(data.error || 'Could not save comment settings', { type: 'error' });
+  } else if (!ok) {
+    showToast(data.error || 'Could not save comment settings', { type: 'error' });
+  }
+  return ok;
+}
+
+function _cmToggle(key, input) { _cmPatch({ [key]: input.checked }); }
+
+function _cmNum(key, input, min) {
+  const v = parseInt(input.value, 10);
+  if (!Number.isFinite(v) || v < min) return;
+  _cmPatch({ [key]: v });
+}
+
+async function _cmPause() {
+  if (await _cmPatch({ paused: !_cmPaused }, { toast: false })) _cmTick();
+}
+
+async function _cmRetryFailed() {
+  const { ok, data } = await apiJSON('/api/comments/retry-failed', { method: 'POST' });
+  if (ok) { showToast(`${data.reset} post(s) queued again.`, { type: 'success', duration: 3000 }); _cmTick(); }
+}
+
+async function _cmShow() {
+  const { ok, data } = await apiJSON('/api/comments/status');
+  if (ok) {
+    const s = data.settings || {};
+    const seed = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+    seed('cmEnabled', el => { el.checked = !!s.enabled; });
+    seed('cmRefresh', el => { el.value = String(s.refresh_days); });
+    seed('cmMax',     el => { el.value = String(s.max_per_post); });
+    seed('cmGap',     el => { el.value = String(s.gap_secs); });
+  }
+  if (!_cmTimer) _cmTimer = setInterval(_cmTick, 2000);
+  _cmTick();
+}
+
+function _cmHide() {
+  if (_cmTimer) { clearInterval(_cmTimer); _cmTimer = null; }
+}
+
 async function _gjShow() {
   _tiShow();
+  _cmShow();
   const { ok, data } = await apiJSON('/api/transcode/status');
   if (ok) {
     const s = data.settings || {};
@@ -883,6 +1035,7 @@ async function _gjShow() {
 
 function _gjHide() {
   _tiHide();
+  _cmHide();
   if (_gjTimer) { clearInterval(_gjTimer); _gjTimer = null; }
   // Finished jobs: clear their widgets so the pane opens clean next time.
   // Running jobs: keep the widget state; _gjShow resumes their poll.
@@ -1733,7 +1886,7 @@ async function _searchRun(q) {
 // FTS snippets arrive with <b> marks around the hits; escape everything else
 const _searchSnippet = s => esc(s).replace(/&lt;b&gt;/g, '<b>').replace(/&lt;\/b&gt;/g, '</b>');
 
-const _SEARCH_SOURCE = { caption: 'Caption', image: 'Image', frame: 'Frame', story: 'Story' };
+const _SEARCH_SOURCE = { caption: 'Caption', image: 'Image', frame: 'Frame', story: 'Story', comment: 'Comment' };
 
 function _searchRow(r) {
   const plat   = PLATFORMS.find(p => p.id === r.platform);
@@ -3284,6 +3437,21 @@ function mvCopyId() {
   showToast(`Copied ${id}`, { duration: 1500 });
 }
 
+// Comments block of the details panel: the engine's _mvInfoFor leaves a host
+// element carrying the comments URL; the rows load here so the pre-rendered
+// info HTML stays synchronous. Replies sit indented under their parent.
+async function _mvLoadComments(host) {
+  const url = host.getAttribute('data-comments-url');
+  const { ok, data } = await apiJSON(url);
+  if (!ok || host.getAttribute('data-comments-url') !== url) return;
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) { host.innerHTML = '<div class="mv-cm-empty">No comments saved</div>'; return; }
+  host.innerHTML = rows.map(c => `<div class="mv-cm${c.parent_id ? ' mv-cm-reply' : ''}">
+      <span class="mv-cm-hdr"><span class="mv-cm-author">${esc(c.author || '?')}</span>${c.created_at ? `<span class="mv-cm-when">${fmtDateShort(c.created_at)}</span>` : ''}${c.likes ? `<span class="mv-cm-likes">♥ ${fmtCount(c.likes)}</span>` : ''}</span>
+      <span class="mv-cm-text">${esc(c.text)}</span>
+    </div>`).join('');
+}
+
 function mvOpenLink() {
   const slide = _mvSlides[_mvIdx];
   const link  = (slide && typeof slide !== 'string') ? slide.link : null;
@@ -3460,8 +3628,11 @@ function _mvShowSlide(idx) {
   // Post details panel: slides opened from a video row carry pre-rendered
   // info HTML; stories and bare URL slides do not, hiding panel and button
   const info = (typeof slide !== 'string' && slide.info) || '';
-  document.getElementById('mvInfo').innerHTML = info;
+  const infoEl = document.getElementById('mvInfo');
+  infoEl.innerHTML = info;
   document.getElementById('mvModal').classList.toggle('mv-has-info', !!info);
+  const cmHost = infoEl.querySelector('[data-comments-url]');
+  if (cmHost) _mvLoadComments(cmHost);
   if (_storyMode) _storyBeginSlide(idx, isVid, vid);
   _mvSync();
 }
