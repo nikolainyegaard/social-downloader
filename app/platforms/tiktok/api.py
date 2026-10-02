@@ -1145,36 +1145,34 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
                     tops.setdefault(str(c.get("cid")), c)
         except Exception as exc:
             print(f"[comments] rehydration blob read failed on {video_id}: {exc}")
+        vp = tab.viewport_size or {"width": 1280, "height": 720}
         # The right column opens on its "You may like" tab for a session
         # TikTok does not trust; the comment panel only exists, and only
-        # requests pages, once the Comments tab is active. Pressing it when
-        # it is already active is harmless
+        # requests pages, once the Comments tab is active. The label is
+        # located anew on every attempt (ads above the tabs move it), as a
+        # Playwright locator so the click waits for the element to be
+        # visible and still, and lands as a real mouse click. The action
+        # bar's comment bubble reads "comments" too, hence the right-half
+        # filter. Pressed again while no comment request has arrived, since
+        # a click before the tab handlers mount changes nothing
         # ponytail: matched by the English label, like the reply controls
-        # A synthetic el.click() on the label does not switch the React tab,
-        # and the action bar's comment bubble also reads "comments"; so this
-        # takes the visible label in the right half of the viewport and
-        # presses it with a real mouse click at its centre
-        try:
-            # The tabs mount a moment after domcontentloaded; a click that
-            # lands before the handlers do changes nothing
-            await asyncio.sleep(random.uniform(0.5, 0.9))
-            spot = await tab.evaluate("""() => {
-                const cands = [...document.querySelectorAll('span, div, p, button, a')]
-                  .filter(e => !e.children.length && /^comments\b/i.test((e.textContent || '').trim()))
-                  .map(e => e.getBoundingClientRect())
-                  .filter(r => r.width > 0 && r.height > 0 && r.x > innerWidth / 2 && r.y < innerHeight);
-                if (!cands.length) return null;
-                const r = cands[0];
-                return [r.x + r.width / 2, r.y + r.height / 2];
-            }""")
-            if spot:
-                await tab.mouse.click(spot[0], spot[1])
-                await asyncio.sleep(random.uniform(1.0, 1.8))
-            else:
-                print(f"[comments] no Comments tab label found on {video_id}")
-        except Exception as exc:
-            print(f"[comments] comments tab press failed on {video_id}: {exc}")
-        vp = tab.viewport_size or {"width": 1280, "height": 720}
+        for attempt in range(5):
+            await asyncio.sleep(random.uniform(0.8, 1.4))
+            if state["responses"]:
+                break
+            try:
+                pressed = False
+                for loc in await tab.get_by_text(re.compile(r"^\s*Comments\b", re.I)).all():
+                    box = await loc.bounding_box()
+                    if not box or box["x"] <= vp["width"] / 2 or box["y"] >= vp["height"]:
+                        continue
+                    await loc.click(timeout=3000)
+                    pressed = True
+                    break
+                if not pressed and attempt == 4:
+                    print(f"[comments] no Comments tab label found on {video_id}")
+            except Exception as exc:
+                print(f"[comments] comments tab press failed on {video_id}: {exc}")
         # The comment panel is the right column with its own scroll box;
         # wheel events land under the cursor, so park it there
         await tab.mouse.move(int(vp["width"] * 0.8), int(vp["height"] * 0.6))
