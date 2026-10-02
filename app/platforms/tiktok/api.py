@@ -1084,12 +1084,15 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
     tops:    dict[str, dict]            = {}
     replies: dict[str, dict[str, dict]] = {}
     state = {"responses": 0, "exhausted": False}
+    other: set[str] = set()
 
     def _count() -> int:
         return len(tops) + sum(len(r) for r in replies.values())
 
     async def on_response(resp):
         if "/api/comment/list/" not in resp.url:
+            if "/api/" in resp.url:
+                other.add(resp.url.split("?")[0].split("tiktok.com")[-1])
             return
         try:
             data = await resp.json()
@@ -1115,6 +1118,33 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
         # Any handle resolves: TikTok redirects to the post's owner
         await tab.goto(f"https://www.tiktok.com/@{handle or 'tiktok'}/video/{video_id}",
                        wait_until="domcontentloaded")
+        # The page server-renders the first comments into its rehydration
+        # blob and only requests /api/comment/list/ for the pages after, so
+        # a short thread never makes a request at all. Read the blob the way
+        # _read_profile_blob_items does: every list of {cid, text} dicts
+        # anywhere under __DEFAULT_SCOPE__ is a comment page
+        try:
+            embedded = await tab.evaluate("""() => {
+                const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+                if (!el) return [];
+                const out = [];
+                const walk = v => {
+                    if (Array.isArray(v)) {
+                        if (v.length && v.every(x => x && typeof x === 'object' && 'cid' in x && 'text' in x)) out.push(...v);
+                        else v.forEach(walk);
+                    } else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+                };
+                try { walk(JSON.parse(el.textContent).__DEFAULT_SCOPE__ || {}); } catch (_) {}
+                return out;
+            }""")
+            for c in embedded or []:
+                parent = str(c.get("reply_id") or "0")
+                if parent != "0":
+                    replies.setdefault(parent, {}).setdefault(str(c.get("cid")), c)
+                else:
+                    tops.setdefault(str(c.get("cid")), c)
+        except Exception as exc:
+            print(f"[comments] rehydration blob read failed on {video_id}: {exc}")
         vp = tab.viewport_size or {"width": 1280, "height": 720}
         # The comment panel is the right column with its own scroll box;
         # wheel events land under the cursor, so park it there
@@ -1124,7 +1154,9 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
             await asyncio.sleep(random.uniform(1.2, 2.0))
             if state["responses"] == last:
                 idle += 1
-                if idle >= 5:
+                # A page still booting its JS takes longer to its first
+                # request than one that is merely done paging
+                if idle >= (8 if not state["responses"] and not tops else 5):
                     break
             else:
                 idle, last = 0, state["responses"]
@@ -1150,6 +1182,11 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
             await asyncio.sleep(random.uniform(1.0, 1.8))
     finally:
         tab.remove_listener("response", on_response)
+        final_url = tab.url
+        try:
+            final_title = await tab.title()
+        except Exception:
+            final_title = ""
         try:
             await tab.close()
         except Exception:
@@ -1168,7 +1205,8 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
         if parent not in tops:
             rows.extend(r for r in (_comment_row(rc, parent) for rc in rcs.values()) if r)
     if not rows and state["responses"] == 0:
-        raise RuntimeError(f"comment page for {video_id} made no comment requests (wall, removed post, or layout change)")
+        raise RuntimeError(f"comment page for {video_id} made no comment requests and embedded none"
+                           f" (landed on {final_url}, title {final_title!r}, api paths seen: {sorted(other) or 'none'})")
     return rows[:max_count]
 
 
