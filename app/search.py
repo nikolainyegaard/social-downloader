@@ -329,7 +329,7 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
         # source, ref and the regex happens one level up
         if match:
             ctes.append("""hits AS MATERIALIZED (
-                SELECT rowid AS id, rank, snippet(media_text_fts, 0, '<b>', '</b>', '…', 14) AS snippet
+                SELECT rowid AS id, rank, snippet(media_text_fts, 0, '<b>', '</b>', '…', 60) AS snippet
                 FROM media_text_fts WHERE media_text_fts MATCH ?)""")
             params.append(match)
         else:

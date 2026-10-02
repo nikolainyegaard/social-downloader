@@ -344,6 +344,17 @@ class ChannelDB:
                                   WHERE m.item_type = 'video' AND m.item_id = v.video_id
                                     AND m.source = 'caption')
             """)
+            # Same for comment text: an OCR run used to wipe a post's comment
+            # rows along with its image text, so posts indexed before that
+            # fix have comments the search cannot see
+            conn.execute("""
+                INSERT INTO media_text (item_type, item_id, channel_id, source, ref, text)
+                SELECT 'video', cm.video_id, cm.channel_id, 'comment', cm.comment_id, cm.text FROM comments cm
+                WHERE cm.text IS NOT NULL AND cm.text != ''
+                  AND NOT EXISTS (SELECT 1 FROM media_text m
+                                  WHERE m.item_type = 'video' AND m.item_id = cm.video_id
+                                    AND m.source = 'comment' AND m.ref = cm.comment_id)
+            """)
             # One-time backfill of the trigger-maintained sources for rows that
             # predate the triggers (channel fields, old values, descriptions,
             # sounds) and of the comment author rows. Gated by a settings key
