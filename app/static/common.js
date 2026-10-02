@@ -4,6 +4,11 @@
 // disabled platforms only appear in the Settings > General toggle list.
 const _ALL_PLATFORMS = window.__PLATFORMS__ || [];
 const PLATFORMS = _ALL_PLATFORMS.filter(p => p.enabled);
+// Load timeline: every request of this page load stays in the resource
+// timing buffer (default 250 would drop the avatars) and the platform apps
+// set marks as they render; _loadReport reads it all back
+performance.setResourceTimingBufferSize(4000);
+performance.mark('scripts');
 // Dropdown glyphs, declared up here because pane markup built at load time
 // (Settings > General) renders dropdowns through _diagPaneHtml
 const _caretIcon = `<svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
@@ -1232,6 +1237,113 @@ function _tiDiagRun() {
 }
 function _tiDiagCopy() { _platformDiagCopy('gdiag'); }
 
+// ── Load and startup reports (General > Diagnostics) ─────────────────────────
+// _loadReport describes this page load from the Resource Timing entries and
+// the marks the platform apps set (`{platform}:creators` when the first
+// channel list arrives, `{platform}:rendered` after the first grid paint).
+// After a fresh server start the report is posted once to the startup
+// report so the cold case is kept on disk with the server's own numbers.
+
+/** @type {[string, RegExp][]} */
+const _LOAD_KINDS = [
+  ['avatars',    /\/avatar(\?|$)/],
+  ['thumbnails', /\/thumbnail(\?|$)/],
+  ['api',        /^\/api\//],
+  ['assets',     /^\/(assets|static)\//],
+];
+
+function _loadReport() {
+  const nav = /** @type {PerformanceNavigationTiming|undefined} */ (performance.getEntriesByType('navigation')[0]);
+  /** @type {{e: PerformanceResourceTiming, path: string, _k?: string}[]} */
+  const res = /** @type {PerformanceResourceTiming[]} */ (performance.getEntriesByType('resource'))
+    .map(e => ({ e, path: e.name.replace(/^https?:\/\/[^/]+/, '') }))
+    .filter(r => r.path.startsWith('/api/') || r.path.startsWith('/assets/') || r.path.startsWith('/static/'));
+  const ms = v => `${Math.round(v)} ms`;
+  const kb = b => `${Math.round(b / 1024)} KB`;
+  const lines = [`Page load report ${new Date().toISOString()}   version ${window.__VERSION__ || 'dev'}   ${location.href}`];
+  if (nav) {
+    lines.push(`document: waiting ${ms(nav.responseStart - nav.requestStart)}, download ${ms(nav.responseEnd - nav.responseStart)}, `
+      + `DOM ready ${ms(nav.domContentLoadedEventEnd)}, load ${ms(nav.loadEventEnd)}, ${kb(nav.transferSize)}`);
+  }
+  lines.push('');
+  lines.push('marks (ms after navigation):');
+  for (const m of performance.getEntriesByType('mark')) lines.push(`  ${String(Math.round(m.startTime)).padStart(7)}  ${m.name}`);
+  lines.push('');
+  lines.push('by kind:');
+  for (const [kind, rx] of _LOAD_KINDS) {
+    const rows = res.filter(r => rx.test(r.path) && !r._k);
+    rows.forEach(r => { r._k = kind; });
+    if (!rows.length) continue;
+    const cached = rows.filter(r => r.e.transferSize === 0).length;
+    const total  = rows.reduce((s, r) => s + r.e.duration, 0);
+    const bytes  = rows.reduce((s, r) => s + r.e.transferSize, 0);
+    const last   = Math.max(...rows.map(r => r.e.responseEnd));
+    lines.push(`  ${kind.padEnd(10)} ${String(rows.length).padStart(4)} requests, ${cached} from cache, ${kb(bytes)}, ${ms(total)} summed, last done at ${ms(last)}`);
+  }
+  lines.push('');
+  lines.push('slowest requests (start, waiting, download, size, server steps):');
+  for (const r of res.slice().sort((a, b) => b.e.duration - a.e.duration).slice(0, 25)) {
+    const e = r.e;
+    const steps = (e.serverTiming || []).map(s => `${s.name} ${Math.round(s.duration)}ms`).join(', ');
+    lines.push(`  +${String(Math.round(e.startTime)).padStart(6)}  wait ${String(Math.round(e.responseStart - e.requestStart)).padStart(6)}  dl ${String(Math.round(e.responseEnd - e.responseStart)).padStart(5)}  `
+      + `${kb(e.transferSize).padStart(8)}  ${r.path}${steps ? `  (${steps})` : ''}`);
+  }
+  return lines.join('\n');
+}
+
+function _loadReportShow() {
+  document.getElementById('gdiagOutput').textContent = _loadReport();
+}
+
+async function _startupReportsLoad() {
+  const sel = document.getElementById('gdiagStartupSel');
+  if (!sel) return;
+  const { ok, data } = await apiJSON('/api/startup/reports');
+  if (!ok) return;
+  const rows = Array.isArray(data) ? data : [];
+  sel.innerHTML = rows.map(r =>
+    `<option value="${esc(r.name)}">${esc(r.name.replace('_', ' '))}  ${r.version ? esc(r.version) : ''}  ${r.usable_secs != null ? `usable in ${r.usable_secs} s` : 'no browser report'}${r.current ? '  (this start)' : ''}</option>`).join('')
+    || '<option value="">No startup reports yet</option>';
+}
+
+async function _startupReportShow() {
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('gdiagStartupSel'));
+  const out = document.getElementById('gdiagOutput');
+  if (!sel || !sel.value) return;
+  out.textContent = 'Loading…';
+  const { ok, data } = await apiJSON(`/api/startup/reports/${encodeURIComponent(sel.value)}`);
+  out.textContent = ok ? data.text : (data.error || 'Failed');
+}
+
+const _STARTUP_REPORT_HTML = `
+  <hr class="hr-divider">
+  <div class="settings-subtitle">Load and startup reports</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+    Page load describes the load of this tab: every request with its waiting and download time, size and the server's step breakdown.
+    Startup reports are kept per container start: the server's startup phases, the first request of each endpoint and, when a browser loaded the page within ten minutes of the start, its load timeline.
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <button class="btn-sm" onclick="_loadReportShow()">Page load report</button>
+    <select id="gdiagStartupSel" class="mv-cm-select" style="flex:1;min-width:220px"></select>
+    <button class="btn-sm" onclick="_startupReportShow()">Show</button>
+  </div>`;
+
+// Report the cold load once: the server start is stamped into the page, and
+// the first render mark of the active platform is the "usable" moment
+function _postStartupClientReport() {
+  const started = Number(window.__STARTED__ || 0);
+  if (!started || Date.now() / 1000 - started > 600) return;
+  const key = `startup-reported-${started}`;
+  try { if (localStorage.getItem(key)) return; } catch { /* no storage */ }
+  const marks = performance.getEntriesByType('mark').filter(m => m.name.endsWith(':rendered'));
+  const first = marks.length ? Math.round(Math.min(...marks.map(m => m.startTime))) : null;
+  apiJSON('/api/startup/client', { method: 'POST', body: JSON.stringify({
+    first_render_ms: first, usable_ms: Math.round(performance.now()), text: _loadReport(),
+  }) }).then(({ ok }) => { if (ok) { try { localStorage.setItem(key, '1'); } catch { /* no storage */ } } });
+}
+// Settle time so the first round of avatars and feeds is in the timeline
+window.addEventListener('load', () => setTimeout(_postStartupClientReport, 8000));
+
 // General > Diagnostics pane. Rendered at load like the other General panes;
 // anything it reads (PLATFORMS, the dropdown glyphs) must be declared above
 function _generalDiagHtml() {
@@ -1241,6 +1353,7 @@ function _generalDiagHtml() {
     placeholder: 'Post or story ID',
     runFn: '_tiDiagRun', copyFn: '_tiDiagCopy',
     actions: PLATFORMS.map(p => ({ value: p.id, label: p.label })),
+    trailingHtml: _STARTUP_REPORT_HTML,
   });
 }
 
@@ -1248,7 +1361,7 @@ _settingsRegister('general', 'General', [
   { id: 'platforms', label: 'Platforms', html: _generalPlatformsHtml() },
   { id: 'jobs',      label: 'Jobs',      html: _GENERAL_JOBS_HTML, onShow: _gjShow, onHide: _gjHide },
   { id: 'access',    label: 'Access',    html: _GENERAL_ACCESS_HTML, onShow: loadAuthSettings },
-  { id: 'diag',      label: 'Diagnostics', diagFill: true, html: _generalDiagHtml() },
+  { id: 'diag',      label: 'Diagnostics', diagFill: true, html: _generalDiagHtml(), onShow: _startupReportsLoad },
 ]);
 
 // ── Cookies panel (shared by cookies-based platforms) ─────────────────────────

@@ -94,6 +94,9 @@ Global:
 /api/comments/status              comment scraping: settings, platforms with a fetcher, counts, recent results
 /api/comments/settings            PATCH any comments.json key (max_per_post, max_per_check)
 /api/comments/retry-failed        POST: clear the failure count of parked posts
+/api/startup/reports              stored startup reports, newest first (name, version, started, usable_secs, current)
+/api/startup/reports/<name>       one report as text
+/api/startup/client               POST {first_render_ms, usable_ms, text}: the browser's load timeline, kept once per start
 /api/jobs/photo-converter/status|start    JPEG to AVIF conversion, all platforms
 /api/jobs/thumbnail-repair/status|start   undecodable thumbnails, all platforms
 /api/jobs/audio-cleanup/status|start      delete audio-only files, all platforms

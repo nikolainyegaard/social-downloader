@@ -76,6 +76,15 @@ Comment scraping, opt-in: `channels.comments_enabled` covers every post of a cre
 - `fetch_now(engine, video_id)` backs the viewer's Fetch now: turns the post on, clears its stamp and failures, and fetches in a thread through the adapter hook (TikTok: `run_browser_job`, its own turn or the live session between users). The manual override for a single post, the only path that may open a session for comments
 - Engine platforms get the same call in the generic tracker when their fetchers arrive; their post dicts would need to carry `comment_count` from the listing first
 
+## startup_report.py
+
+One JSON report per process start in `data/startup/` (last 20 kept), so a cold start can be read after the fact like a boot log. The Dockerfile CMD exports `CONTAINER_START_TS` before the dependency upgrade, so the report shows that step as a phase even though Python was not running yet.
+
+- `begin(name)` marks a startup phase in main.py (the previous one ends there); `listening(facts)` closes the phases, records platform and creator counts, and saves
+- `request_started` / `request_finished` are Flask hooks on the app: every `/api/` request slower than `SLOW_SECS` (1 s) logs a `[slow]` line with its duration, size and step breakdown; inside `WINDOW_SECS` (10 min) after start the first GET of each endpoint is stored with duration, bytes and steps; the first `/` marks `page_served_at`
+- `step(name)` is a context manager for handler steps; they land in a `Server-Timing` header (DevTools shows them, the browser report reads them) and in the stored request. The engine channel list wraps its queries and the media walk in it
+- `set_client(payload)` stores the browser's load timeline once per start and stamps `usable_at`; `list_reports()` and `render(name)` back the Diagnostics section
+
 ## photo_converter.py
 
 **`encode_avif(src, dst, crf) -> bool`**: FFmpeg `libaom-av1 -still-picture 1 -crf {crf} -b:v 0 -cpu-used 6`, writes `dst + ".tmp"` then renames. Always pass `-f avif` explicitly (see [gotchas.md](gotchas.md)). CRF: `CRF_PHOTO = 28`, `CRF_THUMB = 38`, `CRF_AVATAR = 30`. Startup thread has an 8 s delay so `init_db()` finishes first.

@@ -32,6 +32,7 @@ social-downloader/
 │   ├── transcoder.py         background AV1 transcode job: queue, worker, verification
 │   ├── text_index.py         background OCR job: media text into media_text for search
 │   ├── comments.py           comment scraping: opt-in per creator or post, fetched inside the creator check, mirrored into media_text
+│   ├── startup_report.py     cold-start report per container start: phases, first requests, browser load timeline
 │   ├── photo_converter.py    background AVIF conversion; encode_avif helper
 │   ├── thumbnailer.py        thumbnails, avatar/banner caching, thumbnail repair
 │   ├── web.py                Flask app; global routes; mounts platform blueprints

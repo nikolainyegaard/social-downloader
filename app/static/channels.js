@@ -1843,8 +1843,11 @@ function initChannelApp(cfg) {
     }
     _creatorsSig    = sig;
     _lastGridRender = Date.now();
+    const firstLoad = !creators.length;
+    if (firstLoad) performance.mark(`${cfg.id}:creators`);
     creators = data;
     renderCreators();
+    if (firstLoad) performance.mark(`${cfg.id}:rendered`);
     _renderQuickAccess();
     _qaMigrateLocal();
   });

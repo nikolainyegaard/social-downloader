@@ -20,7 +20,7 @@ except ImportError:
 
 import glob as _glob
 import shutil as _shutil
-from config import DATA_DIR, MEDIA_DIR, WEB_PORT
+from config import DATA_DIR, MEDIA_DIR, WEB_PORT, platform_enabled
 from platforms.tiktok.config import TIKTOK_DATA_DIR, STATS_REFRESH_DAYS
 from platforms.tiktok.migrate import migrate_legacy_tiktok_schema
 from platforms.tiktok.sounds import get_sound_loop
@@ -389,23 +389,30 @@ def _check_config() -> None:
 
 
 if __name__ == "__main__":
+    import startup_report
+    startup_report.begin("config and data layout checks")
     _check_config()
     _migrate_data_to_platform_dirs()
     print(f"{_ts()} Initialising databases...")
     # Fold-in migration must run before init_db creates the engine schema,
     # otherwise the users -> channels rename would collide with a fresh table.
+    startup_report.begin("legacy schema migration")
     migrate_legacy_tiktok_schema(ENGINES["tiktok"].db.DB_PATH)
     for _engine in ENGINES.values():
+        startup_report.begin(f"database init: {_engine.platform}")
         _engine.db.init_db()
         if _engine.adapter.init_db_extra:
             _engine.adapter.init_db_extra(_engine)
         _engine.loop.recover_state_from_db()
 
+    startup_report.begin("activity scores")
     for _engine in ENGINES.values():
         scheduling.recompute_activity_scores(_engine.db, *scheduling.get_check_intervals(_engine.db, _engine.platform))
     print(f"{_ts()} Startup: activity scores computed for all creators.")
 
+    startup_report.begin("flask app and blueprints")
     app = create_app()
+    startup_report.begin("job and loop threads")
 
     # Before the loop threads: downloads enqueue into the transcode queue, so
     # its table and recovery pass must exist first.
@@ -427,6 +434,11 @@ if __name__ == "__main__":
     start_backup_thread()
 
     print(f"{_ts()} Web UI available at http://0.0.0.0:{WEB_PORT}")
+    startup_report.listening({
+        "platforms": ",".join(e.platform for e in ENGINES.values() if platform_enabled(e.platform)),
+        "creators":  sum(len(e.db.get_all_channels()) for e in ENGINES.values()),
+        "gpu":       os.environ.get("TEXT_INDEX_GPU") == "1",
+    })
     try:
         app.run(host="0.0.0.0", port=WEB_PORT, debug=False, use_reloader=False)
     except KeyboardInterrupt:

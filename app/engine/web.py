@@ -316,14 +316,20 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     @bp.route("/channels", methods=["GET"])
     def list_channels():
-        channels      = db.get_all_channels()
-        all_stats     = db.get_all_video_stats()
-        all_ph_counts = db.get_all_profile_history_counts()
-        all_ph        = db.get_all_profile_history_for_search()
-        live_stories  = db.get_live_story_counts()          if adapter.has_stories else {}
-        unviewed_st   = db.get_unviewed_live_story_counts() if adapter.has_stories else {}
-        story_counts  = db.get_all_story_counts()           if adapter.has_stories else {}
-        media_sizes   = _media_sizes_by_handle()
+        from startup_report import step
+        with step("channels"):
+            channels      = db.get_all_channels()
+        with step("video stats"):
+            all_stats     = db.get_all_video_stats()
+        with step("profile history"):
+            all_ph_counts = db.get_all_profile_history_counts()
+            all_ph        = db.get_all_profile_history_for_search()
+        with step("stories"):
+            live_stories  = db.get_live_story_counts()          if adapter.has_stories else {}
+            unviewed_st   = db.get_unviewed_live_story_counts() if adapter.has_stories else {}
+            story_counts  = db.get_all_story_counts()           if adapter.has_stories else {}
+        with step("media sizes"):
+            media_sizes   = _media_sizes_by_handle()
         for ch in channels:
             cid   = ch["channel_id"]
             ch["media_size_bytes"]      = media_sizes.get(ch["handle"], 0)

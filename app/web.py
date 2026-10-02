@@ -78,6 +78,12 @@ def create_app() -> Flask:
     # All values captured at startup; restart required for config changes to apply.
     _PUBLIC_ENDPOINTS = {"auth.login", "auth.callback", "auth.logout"}
 
+    import startup_report
+
+    @app.before_request
+    def _time_request():
+        startup_report.request_started()
+
     @app.before_request
     def _require_auth():
         if not oauth_enabled or OAUTH_FORCE_DISABLE:
@@ -119,6 +125,10 @@ def create_app() -> Flask:
     )
 
     @app.after_request
+    def _request_report(response):
+        return startup_report.request_finished(response)
+
+    @app.after_request
     def _security_headers(response):
         response.headers.pop("X-Powered-By", None)
         response.headers["X-Frame-Options"] = "DENY"
@@ -158,7 +168,8 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
-        return render_template("index.html", version=APP_VERSION, platforms=_platform_list())
+        return render_template("index.html", version=APP_VERSION, platforms=_platform_list(),
+                               started=int(startup_report._report["container_start"] or startup_report._PROCESS_T0))
 
     # Platform enable/disable (Settings > General). Disabling takes effect
     # immediately: the scheduler and manual-run worker skip the platform, an
@@ -209,6 +220,24 @@ def create_app() -> Flask:
                 results.append(r)
         results.sort(key=lambda r: r["rank"])
         return jsonify({"results": results[:limit], "more": len(results) > limit})
+
+    @app.route("/api/startup/reports")
+    def startup_reports():
+        return jsonify(startup_report.list_reports())
+
+    @app.route("/api/startup/reports/<name>")
+    def startup_report_text(name):
+        text = startup_report.render(name)
+        if text is None:
+            return jsonify({"error": "no such report"}), 404
+        return jsonify({"text": text})
+
+    @app.route("/api/startup/client", methods=["POST"])
+    def startup_client_report():
+        body = request.get_json(silent=True) or {}
+        if not isinstance(body.get("text"), str) or len(body["text"]) > 200_000:
+            return jsonify({"error": "text required"}), 400
+        return jsonify({"ok": True, "stored": startup_report.set_client(body)})
 
     @app.route("/api/health")
     def health():
