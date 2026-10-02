@@ -4350,7 +4350,7 @@ function _commentsCell(v) {
   const found = v.comment_count  == null ? '–' : fmtCount(v.comment_count);
   const title = v.comment_count == null ? 'No comment count from the platform'
     : `${(v.comments_saved || 0).toLocaleString()} of ${v.comment_count.toLocaleString()} saved`;
-  return `<span title="${title}">${saved}<span style="color:var(--muted)"> / </span>${found}</span>`;
+  return `<span title="${title}">${saved}<span style="color:var(--muted)"> / ${found}</span></span>`;
 }
 
 function _mAppendVideos(cfg, vids, count) {
