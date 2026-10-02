@@ -156,9 +156,12 @@ def record(engine, video_id: str, channel_id: str, handle: str | None,
         _recent.appendleft(rec)
         _posts_done += 1
     msg = f"[comments] {engine.platform} @{handle} {video_id}: {line}"
-    print(f"[{_ts()}] {msg}")
+    # Both loggers the callers pass (the tracker's, the loop's own) already
+    # print to the run log; only a bare call prints here
     if log:
         log(f"  Comments {video_id}: {line}")
+    else:
+        print(f"[{_ts()}] {msg}")
 
 
 def fetch_now(engine, video_id: str) -> None:
@@ -167,23 +170,35 @@ def fetch_now(engine, video_id: str) -> None:
     v = engine.db.get_video(video_id)
     engine.db.queue_video_comments(video_id)
     s = get_settings()
+    handle = (engine.db.get_channel(v["channel_id"]) or {}).get("handle")
+    log = engine.loop._log   # the platform's loop panel, like a manual run
 
     def _run():
+        log(f"=== Comment fetch started: @{handle} {video_id} ===")
         t0 = time.time()
         try:
             rows = engine.adapter.fetch_comments(engine, v, int(s["max_per_post"]))
-            record(engine, video_id, v["channel_id"], None, v.get("comment_count"), rows, None,
-                   time.time() - t0)
+            record(engine, video_id, v["channel_id"], handle, v.get("comment_count"), rows, None,
+                   time.time() - t0, log)
         except Exception as e:
-            record(engine, video_id, v["channel_id"], None, v.get("comment_count"), None, e,
-                   time.time() - t0, count_failure=not is_empty_response(e))
+            record(engine, video_id, v["channel_id"], handle, v.get("comment_count"), None, e,
+                   time.time() - t0, log, count_failure=not is_empty_response(e))
+        log(f"=== Comment fetch complete: @{handle} {video_id} ===")
 
     threading.Thread(target=_run, daemon=True, name=f"comments-{video_id}").start()
 
 
 def retry_failed() -> int:
     from platforms.registry import ENGINES
-    return sum(e.db.reset_comments_failed() for e in ENGINES.values() if e.adapter.fetch_comments)
+    total = 0
+    for e in ENGINES.values():
+        if not e.adapter.fetch_comments:
+            continue
+        n = e.db.reset_comments_failed()
+        total += n
+        if n:
+            e.loop._log(f"Comments: {n} parked post(s) released, due on the next check of their creators")
+    return total
 
 
 def get_status() -> dict:

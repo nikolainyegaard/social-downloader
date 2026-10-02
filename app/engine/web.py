@@ -552,6 +552,9 @@ def create_channel_blueprint(engine) -> Blueprint:
         if not isinstance(enabled, bool):
             return jsonify({"error": "enabled must be a boolean"}), 400
         db.set_channel_comments(channel_id, enabled)
+        ch = db.get_channel(channel_id) or {}
+        loop._log(f"Comments {'enabled' if enabled else 'disabled'} for @{ch.get('handle')}: "
+                  + (f"{db.comments_wanted_count(channel_id)} post(s) opted in" if enabled else "posts follow their own switch only"))
         return jsonify({"ok": True})
 
     @bp.route("/videos/<video_id>/comments", methods=["GET"])
