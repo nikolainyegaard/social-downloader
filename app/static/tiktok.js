@@ -1236,6 +1236,7 @@ const SOUND_VCOLS = [
   { field: null,             label: 'Author' },
   { field: 'status',         label: 'Status' },
   { field: 'view_count',     label: 'Views' },
+  { field: 'comment_count',  label: 'Comments' },
   { field: 'upload_date',    label: 'Uploaded' },
   { field: 'download_date',  label: 'Saved' },
   { field: 'deleted_at',     label: 'Deleted' },

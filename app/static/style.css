@@ -1386,14 +1386,14 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 /* Shared column layout for header + rows */
 .vcols {
   display: grid;
-  grid-template-columns: 90px minmax(120px,1fr) 76px 70px 130px 130px 130px 32px;
+  grid-template-columns: 90px minmax(120px,1fr) 76px 70px 70px 130px 130px 130px 32px;
   gap: 10px;
   align-items: center;
 }
 /* Sound modal: extra Author column after Description */
 .sound-vcols {
   display: grid;
-  grid-template-columns: 90px minmax(120px,1fr) 110px 76px 70px 130px 130px 130px 32px;
+  grid-template-columns: 90px minmax(120px,1fr) 110px 76px 70px 70px 130px 130px 130px 32px;
   gap: 10px;
   align-items: center;
 }
@@ -1424,7 +1424,7 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 .sound-vcols .col-hdr:nth-child(n+3) { text-align: center; }
 .vcols       .col-hdr:nth-child(n+4), .vcols       .video-cell:nth-child(n+4),
 .sound-vcols .col-hdr:nth-child(n+5), .sound-vcols .video-cell:nth-child(n+5) { text-align: right; }
-/* Data cells (views, uploaded, saved, deleted) are mono values */
+/* Data cells (views, comments, uploaded, saved, deleted) are mono values */
 .vcols       .video-cell:nth-child(n+4),
 .sound-vcols .video-cell:nth-child(n+5) { font-size: 11px; }
 .author-chip {
@@ -2959,8 +2959,8 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 
   /* Fix 1fr column so max-content is identical in header and every row,
      then let min-width: max-content expand elements to full grid width */
-  .vcols       { grid-template-columns: 90px 120px 76px 70px 130px 130px 130px 32px; }
-  .sound-vcols { grid-template-columns: 90px 120px 110px 76px 70px 130px 130px 130px 32px; }
+  .vcols       { grid-template-columns: 90px 120px 76px 70px 70px 130px 130px 130px 32px; }
+  .sound-vcols { grid-template-columns: 90px 120px 110px 76px 70px 70px 130px 130px 130px 32px; }
   .video-row.vcols, .video-row.sound-vcols,
   .modal-video-list .video-list-hdr { min-width: max-content; }
 

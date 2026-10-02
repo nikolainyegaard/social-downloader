@@ -629,6 +629,7 @@ function initChannelApp(cfg) {
     { field: null,            label: cfg.titleColLabel || 'Title' },
     { field: 'status',        label: 'Status' },
     { field: 'view_count',    label: cfg.viewsLabel || 'Views' },
+    { field: 'comment_count', label: 'Comments' },
     { field: 'upload_date',   label: cfg.uploadDateLabel },
     { field: 'download_date', label: 'Saved' },
     { field: 'deleted_at',    label: 'Deleted' },

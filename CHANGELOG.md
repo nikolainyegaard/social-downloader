@@ -33,6 +33,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - docker-compose.yml has commented per-platform storage override lines: mount another disk over a platform's media subfolder to store that platform elsewhere, no app configuration needed (see README)
 
 ### Changed
+- The creator modal's post list has a Comments column (the platform's comment count, sortable; a dash when the platform did not report one)
 - The version number moved from the bottom of General > Platforms to the bottom left corner of the settings sidebar
 - Posts that were still live when a creator was banned now show an orange Banned status instead of the red Deleted one, so a banned creator's individually deleted posts stay distinguishable. Banned posts have their own filter in the creator modal and their own count on cards and in the About panel; the Deleted count no longer includes them
 - TikTok's Schedule settings pane renders from the shared schedule pane like the other platforms, picking up the shared field labels

@@ -4187,6 +4187,7 @@ function _mAppendVideos(cfg, vids, count) {
         <span class="vstatus ${statusCls}">${statusLabel}</span>${v.direct_added ? `<span class="vstatus direct" title="Added via direct URL; exempt from deletion checks">Direct</span>` : ''}
       </div>
       <div class="video-cell">${fmtCount(v.view_count)}</div>
+      <div class="video-cell">${fmtCount(v.comment_count)}</div>
       <div class="video-cell">${fmtUpload(v.upload_date)}</div>
       <div class="video-cell">${fmtDateShort(v.download_date)}</div>
       <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
