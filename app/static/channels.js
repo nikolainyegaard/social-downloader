@@ -64,6 +64,7 @@ function initChannelApp(cfg) {
   const P    = cfg.prefix;                 // 'tw' | 'ig' | 'yt'
   const API  = cfg.api;                    // '/api/twitter'
   const X    = (name, fn) => { window[P + name] = fn; return fn; };
+  _APPS[cfg.id] = { prefix: P, creators: () => creators };
 
   const CREATOR   = cfg.creatorNoun;       // 'account' | 'profile' | 'channel'
   const CREATORS  = cfg.creatorNounPlural;

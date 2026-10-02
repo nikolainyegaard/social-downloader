@@ -236,20 +236,36 @@ body {
 
 /* Advanced search dialog: header (query, order, help), chips of the parsed
    filters, hint, optional syntax table, and the result list filling the rest */
-.search-card { width: min(1100px, 96vw); height: min(90vh, 920px); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.confirm-card.search-card {   /* beats .confirm-card's own width, declared later in this file */
+  width: min(80vw, 1700px); height: min(45vw, 90vh); min-height: 420px;
+  padding: 14px; display: flex; flex-direction: column; gap: 10px;
+}
 .search-head { display: flex; gap: 8px; align-items: center; }
-.search-input { flex: 1; min-width: 0; height: 36px; font-size: 14px; }
-.search-sort { flex: 0 0 auto; width: auto; height: 36px; }
-#searchHelpBtn { height: 36px; min-width: 36px; font-weight: 700; }
+.search-box { position: relative; flex: 1; min-width: 0; }
+.search-input { width: 100%; height: 46px; font-size: 16px; padding: 0 14px; }
+.search-sort { flex: 0 0 auto; width: auto; height: 46px; }
+#searchHelpBtn { height: 46px; min-width: 46px; font-weight: 700; }
+/* Suggestions drop below the box, over the results */
+.search-suggest { position: absolute; left: 0; right: 0; top: 100%; z-index: 3; margin-top: 4px; background: var(--surface); box-shadow: var(--shadow-modal); max-height: 320px; }
+.search-suggest .cs-row.active { background: var(--raised); color: var(--text); }
+.search-suggest .cs-key { font-family: var(--mono, monospace); color: var(--accent); flex-shrink: 0; }
+/* Key buttons: each inserts its token at the caret and opens the suggestions */
+.search-keys { display: flex; flex-wrap: wrap; gap: 6px; }
+.search-key { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--raised); color: var(--text-dim); cursor: pointer; font-family: inherit; }
+.search-key code { font-family: var(--mono, monospace); color: var(--accent); margin-right: 4px; }
+@media (hover: hover) { .search-key:hover { color: var(--text); border-color: var(--accent); } }
+.search-chip { display: inline-flex; align-items: center; gap: 6px; }
+.search-chip button { all: unset; cursor: pointer; color: var(--muted); font-size: 12px; line-height: 1; }
+.search-chip button:hover { color: var(--red); }
 .search-hint { font-size: 11px; color: var(--muted); padding: 0 4px; }
 .search-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 0; }
 .search-chips:empty { display: none; }
 .search-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--raised); border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
 .search-chip.neg { text-decoration: line-through; }
 .search-chip.note { color: var(--orange); border-color: transparent; background: transparent; }
-.search-help { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--raised); max-height: 40%; overflow-y: auto; }
-.search-help code { font-family: var(--mono, monospace); color: var(--accent); white-space: nowrap; }
-.search-help span { color: var(--text-dim); }
+.search-help { display: grid; grid-template-columns: minmax(200px, max-content) minmax(0, 1fr); gap: 4px 20px; font-size: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--raised); max-height: 45%; overflow-y: auto; }
+.search-help code { font-family: var(--mono, monospace); color: var(--accent); }
+.search-help span { color: var(--text-dim); min-width: 0; }
 .search-results { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .sr-row {
   display: grid;
@@ -266,7 +282,7 @@ body {
 .sr-match { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; align-items: baseline; }
 .sr-more { color: var(--muted); font-size: 11px; }
 .sr-stats { color: var(--muted); font-size: 11px; white-space: nowrap; }
-@media (max-width: 640px) { .search-card { height: 96vh; } .search-head { flex-wrap: wrap; } .search-input { flex-basis: 100%; } }
+@media (max-width: 900px) { .confirm-card.search-card { width: 96vw; height: 92vh; } .search-head { flex-wrap: wrap; } .search-input { flex-basis: 100%; } .search-help { grid-template-columns: 1fr; } }
 @media (hover: hover) { .sr-row:hover { background: var(--raised); } }
 .sr-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sr-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }

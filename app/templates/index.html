@@ -70,12 +70,17 @@
 <dialog id="searchModal" class="media-modal dlg-dim" onclick="if(event.target===this)closeSearch()">
   <div class="media-modal-inner confirm-card search-card">
     <div class="search-head">
-      <input id="searchInput" class="modal-video-search search-input" type="search" placeholder="Search posts, stories, creators and comments…  from:handle  in:comment  type:photo  before:2026-01  likes:>1k" autocomplete="off" spellcheck="false" oninput="_searchOnInput(this.value)">
+      <div class="search-box">
+        <input id="searchInput" class="modal-video-search search-input" type="search" placeholder="Search posts, stories, creators and comments…" autocomplete="off" spellcheck="false"
+               oninput="_searchOnInput(this.value)" onkeydown="_searchKey(event)" onkeyup="_searchCaret()" onclick="_searchCaret()" onblur="setTimeout(_searchSuggestHide, 150)">
+        <div class="search-suggest confirm-suggest" id="searchSuggest" style="display:none"></div>
+      </div>
       <select id="searchSort" class="mv-cm-select search-sort" onchange="_searchSortChanged(this.value)" title="Order">
         <option value="">Best match</option><option value="date">Newest</option><option value="likes">Most liked</option><option value="views">Most viewed</option><option value="comments">Most commented</option>
       </select>
       <button class="btn-sm" id="searchHelpBtn" onclick="_searchHelpToggle()" title="Query syntax">?</button>
     </div>
+    <div class="search-keys" id="searchKeys"></div>
     <div class="search-chips" id="searchChips"></div>
     <div class="search-hint" id="searchHint">Type to search. Words match captions, comments, creator profiles and the text inside media.</div>
     <div class="search-help" id="searchHelp" style="display:none"></div>

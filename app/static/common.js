@@ -4,6 +4,10 @@
 // disabled platforms only appear in the Settings > General toggle list.
 const _ALL_PLATFORMS = window.__PLATFORMS__ || [];
 const PLATFORMS = _ALL_PLATFORMS.filter(p => p.enabled);
+// Platform apps register here (initChannelApp): prefix and a creators getter,
+// for app-wide code that needs them without knowing the per-platform names
+/** @type {Record<string, {prefix: string, creators: () => any[]}>} */
+const _APPS = {};
 // Load timeline: every request of this page load stays in the resource
 // timing buffer (default 250 would drop the avatars) and the platform apps
 // set marks as they render; _loadReport reads it all back
@@ -1989,6 +1993,7 @@ function openSearch() {
   const inp = /** @type {HTMLInputElement} */ (document.getElementById('searchInput'));
   inp.focus();
   inp.select();
+  _searchRenderKeys();
   if (!_searchHelp) apiJSON('/api/search?q=').then(({ ok, data }) => { if (ok) _searchHelp = data.help || []; });
 }
 
@@ -2054,22 +2059,186 @@ function _searchScrolled(el) {
   _searchRun(_searchState.q, true);
 }
 
-// Chips echo how the server read the query: one per filter value, struck
-// through when negated, orange for input it ignored
-function _searchChips(parsed) {
-  const out = [];
-  for (const [key, vals] of Object.entries(parsed.filters || {})) {
-    const neg = key.startsWith('-');
-    for (const v of vals) {
-      const text = Array.isArray(v) ? `${key.replace('-', '')}:${new Date(v[0] * 1000).toISOString().slice(0, 10)}`
-                 : typeof v === 'object' ? `${key}:${v}` : `${key.replace('-', '')}:${v}`;
-      out.push(`<span class="search-chip${neg ? ' neg' : ''}">${esc(String(text))}</span>`);
+// ── Query builder: key buttons, token suggestions, removable chips ────────────
+// The query stays plain text (what the server parses); the builder only
+// edits it. A key button inserts "key:" at the caret, the suggestion list
+// opens whenever the caret sits inside a key:value token and offers the
+// values that key takes (creators from the loaded platform apps for from:,
+// fixed lists for the rest), and the chips under the box are the query's
+// tokens, each with an × that removes it.
+
+const _SEARCH_KEYS = [
+  ['from',     'Creator',  'handle, current or previous'],
+  ['in',       'Source',   'where the text is: caption, comment, bio…'],
+  ['type',     'Type',     'video, photo, story, creator'],
+  ['status',   'Status',   'live, deleted, banned, missing, restored'],
+  ['is',       'Flag',     'starred, pinned, bookmarked, banned, tracked'],
+  ['has',      'Has',      'comments, file'],
+  ['platform', 'Platform', ''],
+  ['after',    'After',    'date'],
+  ['before',   'Before',   'date'],
+  ['likes',    'Likes',    '>1k'],
+  ['views',    'Views',    '>10k'],
+  ['comments', 'Comments', '>=10'],
+  ['re',       'Regex',    '/pattern/i'],
+  ['near',     'Near',     '"word word"~40'],
+];
+const _SEARCH_VALUES = {
+  in:       ['caption', 'description', 'sound', 'comment', 'author', 'comments', 'image', 'frame', 'ocr', 'handle', 'name', 'bio', 'link', 'old', 'creator', 'text'],
+  type:     ['video', 'photo', 'story', 'creator', 'post'],
+  status:   ['live', 'deleted', 'banned', 'missing', 'restored'],
+  is:       ['starred', 'pinned', 'bookmarked', 'banned', 'tracked'],
+  has:      ['comments', 'file'],
+  sort:     ['rank', 'date', 'likes', 'views', 'comments'],
+  likes:    ['>1k', '>10k', '>100k', '>1m'],
+  views:    ['>10k', '>100k', '>1m', '>10m'],
+  comments: ['>0', '>=10', '>=100', '>=1000'],
+  duration: ['<15', '<60', '>60', '>180'],
+};
+let _searchSugItems = [];
+let _searchSugIdx   = -1;
+
+function _searchRenderKeys() {
+  const host = document.getElementById('searchKeys');
+  if (!host || host.childElementCount) return;
+  host.innerHTML = _SEARCH_KEYS.map(([k, label, hint]) =>
+    `<button type="button" class="search-key" title="${esc(hint)}" onmousedown="event.preventDefault()" onclick="_searchInsertKey('${k}')"><code>${k}:</code>${esc(label)}</button>`).join('');
+}
+
+// The key:value token around the caret: [start, end, key, value]
+function _searchTokenAt(text, pos) {
+  let start = pos;
+  while (start > 0 && !/\s/.test(text[start - 1])) start--;
+  let end = pos;
+  // a quoted value may contain spaces: extend to the closing quote
+  const q = text.indexOf('"', start);
+  if (q !== -1 && q < pos && text.indexOf('"', q + 1) >= pos) end = text.indexOf('"', q + 1) + 1;
+  else while (end < text.length && !/\s/.test(text[end])) end++;
+  const tok = text.slice(start, end);
+  const m = tok.match(/^(-?)([a-z]+):(.*)$/i);
+  if (!m) return null;
+  return { start, end, neg: m[1], key: m[2].toLowerCase(), value: m[3] };
+}
+
+function _searchInsertKey(key) {
+  const inp = /** @type {HTMLInputElement} */ (document.getElementById('searchInput'));
+  const v = inp.value;
+  const before = v.slice(0, inp.selectionStart ?? v.length).replace(/\s+$/, '');
+  const after  = v.slice(inp.selectionEnd ?? v.length).replace(/^\s+/, '');
+  const ins = `${before ? before + ' ' : ''}${key}:`;
+  inp.value = ins + (after ? ' ' + after : '');
+  inp.focus();
+  inp.setSelectionRange(ins.length, ins.length);
+  _searchCaret();
+}
+
+// Values the token's key takes, filtered by what is typed so far
+function _searchSuggestions(tok) {
+  const typed = tok.value.replace(/^"/, '').toLowerCase();
+  if (tok.key === 'from') {
+    const out = [];
+    for (const p of PLATFORMS) {
+      const app = _APPS[p.id];
+      if (!app) continue;
+      for (const c of app.creators()) {
+        const h = (c.handle || '').toLowerCase(), d = (c.display_name || '').toLowerCase();
+        if (typed && !h.includes(typed) && !d.includes(typed)) continue;
+        out.push({ value: c.handle, label: '@' + c.handle, sub: `${c.display_name || ''} · ${p.label}`,
+                   avatar: c.avatar_cached ? `/api/${p.id}/channels/${encodeURIComponent(c.channel_id)}/avatar?size=thumb` : null });
+        if (out.length >= 10) return out;
+      }
     }
+    return out;
   }
-  if (parsed.regex) out.push(`<span class="search-chip">re:/${esc(parsed.regex.pattern)}/${esc(parsed.regex.flags)}</span>`);
-  if (parsed.near)  out.push(`<span class="search-chip">near: ${esc(parsed.near.words.join(' '))} ~${parsed.near.distance}</span>`);
+  if (tok.key === 'platform') return PLATFORMS.filter(p => p.id.includes(typed)).map(p => ({ value: p.id, label: p.label }));
+  if (['after', 'before', 'on'].includes(tok.key)) {
+    const d = new Date(), iso = x => x.toISOString().slice(0, 10);
+    const ago = n => { const t = new Date(d); t.setDate(t.getDate() - n); return iso(t); };
+    return [[iso(d), 'today'], [ago(7), 'a week ago'], [ago(30), '30 days ago'], [iso(d).slice(0, 7), 'this month'], [iso(d).slice(0, 4), 'this year']]
+      .filter(([v]) => v.startsWith(typed)).map(([value, label]) => ({ value, label: value, sub: label }));
+  }
+  const vals = _SEARCH_VALUES[tok.key] || [];
+  return vals.filter(v => v.includes(typed)).map(v => ({ value: v, label: v }));
+}
+
+function _searchCaret() {
+  const inp = /** @type {HTMLInputElement} */ (document.getElementById('searchInput'));
+  const tok = _searchTokenAt(inp.value, inp.selectionStart ?? inp.value.length);
+  if (!tok) { _searchSuggestHide(); return; }
+  _searchSugItems = _searchSuggestions(tok);
+  _searchSugIdx = _searchSugItems.length ? 0 : -1;
+  _searchSuggestRender();
+}
+
+function _searchSuggestRender() {
+  const sug = document.getElementById('searchSuggest');
+  if (!_searchSugItems.length) { sug.style.display = 'none'; return; }
+  sug.innerHTML = _searchSugItems.map((it, i) => `
+    <button type="button" class="cs-row${i === _searchSugIdx ? ' active' : ''}" onmousedown="event.preventDefault()" onclick="_searchPick(${i})">
+      <span class="cs-avatar">${it.avatar ? `<img src="${esc(it.avatar)}" loading="lazy" alt="" onerror="this.remove()">` : esc(String(it.label || it.value)[0] || '?')}</span>
+      <span class="cs-label">${esc(it.label || it.value)}</span>
+      ${it.sub ? `<span class="cs-sub">${esc(it.sub)}</span>` : ''}
+    </button>`).join('');
+  sug.style.display = '';
+  const active = sug.children[_searchSugIdx];
+  if (active) active.scrollIntoView({ block: 'nearest' });
+}
+
+function _searchSuggestHide() {
+  const sug = document.getElementById('searchSuggest');
+  if (sug) sug.style.display = 'none';
+  _searchSugItems = []; _searchSugIdx = -1;
+}
+
+// Replace the token's value with the pick (quoted when it has spaces), add
+// a space, and search
+function _searchPick(i) {
+  const it = _searchSugItems[i];
+  if (!it) return;
+  const inp = /** @type {HTMLInputElement} */ (document.getElementById('searchInput'));
+  const tok = _searchTokenAt(inp.value, inp.selectionStart ?? inp.value.length);
+  if (!tok) return;
+  const val = /\s/.test(it.value) ? `"${it.value}"` : it.value;
+  const token = `${tok.neg}${tok.key}:${val}`;
+  const after = inp.value.slice(tok.end).replace(/^\s+/, '');
+  inp.value = inp.value.slice(0, tok.start) + token + ' ' + after;
+  const pos = tok.start + token.length + 1;
+  inp.focus();
+  inp.setSelectionRange(pos, pos);
+  _searchSuggestHide();
+  _searchOnInput(inp.value);
+}
+
+function _searchKey(e) {
+  if (!_searchSugItems.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); _searchSugIdx = (_searchSugIdx + 1) % _searchSugItems.length; _searchSuggestRender(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); _searchSugIdx = (_searchSugIdx - 1 + _searchSugItems.length) % _searchSugItems.length; _searchSuggestRender(); }
+  else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); _searchPick(_searchSugIdx); }
+  else if (e.key === 'Escape') { e.stopPropagation(); _searchSuggestHide(); }
+}
+
+// Chips: the query's own key:value tokens (removable) plus the server's
+// notes about input it ignored
+function _searchTokens(q) {
+  const out = [];
+  const rx = /(-?[a-z]+:(?:"[^"]*"|\/(?:\\\/|[^\/])*\/[a-z]*|\S+))|("[^"]*")|(\S+)/gi;
+  let m;
+  while ((m = rx.exec(q))) out.push(m[0]);
+  return out;
+}
+
+function _searchChips(parsed) {
+  const q = _searchState.q;
+  const out = _searchTokens(q).filter(t => /^-?[a-z]+:/i.test(t) && t.match(/^-?([a-z]+):/i) && _SEARCH_KEYS.some(([k]) => k === t.match(/^-?([a-z]+):/i)[1].toLowerCase()) || /^-?(on|sort|duration):/i.test(t))
+    .map(t => `<span class="search-chip${t.startsWith('-') ? ' neg' : ''}">${esc(t)}<button type="button" title="Remove" onclick="_searchRemoveToken(this.parentElement.firstChild.textContent)">×</button></span>`);
   for (const n of parsed.notes || []) out.push(`<span class="search-chip note">${esc(n)}</span>`);
   return out.join('');
+}
+
+function _searchRemoveToken(tok) {
+  const inp = /** @type {HTMLInputElement} */ (document.getElementById('searchInput'));
+  inp.value = _searchTokens(inp.value).filter(t => t !== tok).join(' ');
+  _searchOnInput(inp.value);
 }
 
 // FTS snippets arrive with <b> marks around the hits; escape everything else
