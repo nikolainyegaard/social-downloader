@@ -1000,7 +1000,9 @@ async def get_video_comments(api, video_id: str, max_count: int = 500) -> list[d
             for key in ("origin_url", "crop_url"):
                 urls = ((img or {}).get(key) or {}).get("url_list") or []
                 if urls:
-                    return urls[0]
+                    # The same picture is listed as .image (whatever container
+                    # TikTok stored) and .jpeg; the JPEG is the safe download
+                    return next((u for u in urls if u.split("?")[0].endswith((".jpeg", ".jpg"))), urls[0])
         st = c.get("cmt_sticker_struct") or {}
         for kind in ("animated_url", "static_url"):
             for res in ("high_resolution_url", "mid_resolution_url", "low_resolution_url"):
