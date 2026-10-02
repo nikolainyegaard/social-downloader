@@ -443,7 +443,7 @@ function initChannelApp(cfg) {
     const id = esc(v.video_id);
     if (_isMulti(v)) return `${P}OpenCarousel('${id}')`;
     return _isImage(v)
-      ? `openImgModalUrl('${API}/videos/${id}/file')`
+      ? `${P}OpenImgPost('${id}')`
       : `${P}OpenVidModal('${id}')`;
   }
 
@@ -482,7 +482,7 @@ function initChannelApp(cfg) {
       ${cfg.hasComments && v.status !== 'deleted' ? _mvCommentsFor(v) : ''}`;
   }
 
-  // Comments block: the per-post selector (follow creator / on / off), a
+  // Comments block: the per-post selector (inherit / on / off), a
   // Fetch now button, the last fetch time, and a host the viewer fills from
   // the comments route (common.js _mvLoadComments).
   function _mvCommentsFor(v) {
@@ -492,7 +492,7 @@ function initChannelApp(cfg) {
     return `<div class="mv-info-title mv-cm-title">Comments</div>
       <div class="mv-cm-ctl">
         <select class="mv-cm-select" onchange="${P}SetPostComments('${id}', this.value)" title="Fetch comments for this post">
-          ${opt('inherit', `Follow ${CREATOR}`)}${opt('on', 'On')}${opt('off', 'Off')}
+          ${opt('inherit', 'Inherit')}${opt('on', 'On')}${opt('off', 'Off')}
         </select>
         <button class="btn-sm" onclick="${P}FetchComments('${id}', this)">Fetch now</button>
       </div>
@@ -565,6 +565,21 @@ function initChannelApp(cfg) {
       url:  `${API}/videos/${encodeURIComponent(videoId)}/file`,
       type: 'video',
       name: `${videoId}.${ext}`,
+      link: v ? _videoUrl(v) : null,
+      info: v ? _mvInfoFor(v) : null,
+      postId: videoId,
+    }]);
+  });
+
+  // Single-image posts go through the same viewer as videos so they get the
+  // details panel (and its comments block); the bare image modal stays for
+  // avatars and thumbnail previews only.
+  X('OpenImgPost', videoId => {
+    const v = _creatorState.videos.find(x => x.video_id === videoId);
+    openMediaViewer([{
+      url:  `${API}/videos/${encodeURIComponent(videoId)}/file`,
+      type: 'image',
+      name: `${videoId}.${(v && _mediaExt(v)) || 'avif'}`,
       link: v ? _videoUrl(v) : null,
       info: v ? _mvInfoFor(v) : null,
       postId: videoId,
@@ -715,7 +730,7 @@ function initChannelApp(cfg) {
     gridCellOnclick: v => _isMulti(v)
       ? window[`${P}OpenCarousel`](v.video_id)
       : _isImage(v)
-        ? openImgModalUrl(`${API}/videos/${encodeURIComponent(v.video_id)}/file`)
+        ? window[`${P}OpenImgPost`](v.video_id)
         : window[`${P}OpenVidModal`](v.video_id),
   };
 

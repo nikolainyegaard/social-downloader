@@ -1417,13 +1417,18 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 .col-hdr.sort-asc::after  { content: ' ↑'; }
 .col-hdr.sort-desc { color: var(--accent); }
 .col-hdr.sort-desc::after { content: ' ↓'; }
-/* Pill columns (status, author) centre; numeric and date columns right-align
+/* Pill columns (status, author) and the two counts centre; date columns right-align
    like a ledger, headers following their cells. The trailing actions cell is
    an inline flex box, so text-align never reaches it. */
 .vcols       .col-hdr:nth-child(n+3) { text-align: center; }
 .sound-vcols .col-hdr:nth-child(n+3) { text-align: center; }
 .vcols       .col-hdr:nth-child(n+4), .vcols       .video-cell:nth-child(n+4),
 .sound-vcols .col-hdr:nth-child(n+5), .sound-vcols .video-cell:nth-child(n+5) { text-align: right; }
+/* Views and Comments: short counts read better centred under their headers */
+.vcols       .col-hdr:nth-child(4), .vcols       .col-hdr:nth-child(5),
+.vcols       .video-cell:nth-child(4), .vcols       .video-cell:nth-child(5),
+.sound-vcols .col-hdr:nth-child(5), .sound-vcols .col-hdr:nth-child(6),
+.sound-vcols .video-cell:nth-child(5), .sound-vcols .video-cell:nth-child(6) { text-align: center; }
 /* Data cells (views, comments, uploaded, saved, deleted) are mono values */
 .vcols       .video-cell:nth-child(n+4),
 .sound-vcols .video-cell:nth-child(n+5) { font-size: 11px; }
