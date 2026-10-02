@@ -237,16 +237,25 @@ body {
 /* Advanced search dialog: header (query, order, help), chips of the parsed
    filters, hint, optional syntax table, and the result list filling the rest */
 .confirm-card.search-card {   /* beats .confirm-card's own width, declared later in this file */
-  width: min(80vw, 1700px); height: min(45vw, 90vh); min-height: 420px;
-  padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  width: 82vw; max-width: 1280px; height: 84vh;   /* the creator modal's footprint */
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 10px;
 }
 .search-head { display: flex; gap: 8px; align-items: center; }
 .search-box { position: relative; flex: 1; min-width: 0; }
-.search-input { width: 100%; height: 46px; font-size: 16px; padding: 0 14px; }
-.search-sort { flex: 0 0 auto; width: auto; height: 46px; }
+.search-input {
+  width: 100%; height: 46px; box-sizing: border-box; font-size: 16px; padding: 0 16px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text); font-family: inherit;
+}
+.search-input:focus { outline: none; border-color: var(--accent); }
+.search-head .search-sort {
+  flex: 0 0 auto; width: auto; height: 46px; font-size: 13px; padding: 0 12px; font-family: inherit;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-pill);
+}
 #searchHelpBtn { height: 46px; min-width: 46px; font-weight: 700; }
 /* Suggestions drop below the box, over the results */
-.search-suggest { position: absolute; left: 0; right: 0; top: 100%; z-index: 3; margin-top: 4px; background: var(--surface); box-shadow: var(--shadow-modal); max-height: 320px; }
+/* .search-box prefix: .confirm-suggest's translucent background is declared later in this file */
+.search-box .search-suggest { position: absolute; left: 0; right: 0; top: 100%; z-index: 3; margin-top: 4px; background: var(--surface); box-shadow: var(--shadow-modal); max-height: 320px; }
 .search-suggest .cs-row.active { background: var(--raised); color: var(--text); }
 .search-suggest .cs-key { font-family: var(--mono, monospace); color: var(--accent); flex-shrink: 0; }
 /* Key buttons: each inserts its token at the caret and opens the suggestions */
@@ -282,7 +291,7 @@ body {
 .sr-match { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; align-items: baseline; }
 .sr-more { color: var(--muted); font-size: 11px; }
 .sr-stats { color: var(--muted); font-size: 11px; white-space: nowrap; }
-@media (max-width: 900px) { .confirm-card.search-card { width: 96vw; height: 92vh; } .search-head { flex-wrap: wrap; } .search-input { flex-basis: 100%; } .search-help { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .confirm-card.search-card { width: 96vw; height: 92vh; } .search-head { flex-wrap: wrap; } .search-box { flex-basis: 100%; } .search-help { grid-template-columns: 1fr; } }
 @media (hover: hover) { .sr-row:hover { background: var(--raised); } }
 .sr-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sr-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }

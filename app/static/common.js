@@ -2097,6 +2097,7 @@ const _SEARCH_VALUES = {
 };
 let _searchSugItems = [];
 let _searchSugIdx   = -1;
+let _searchSugFor   = '';   // the token the list was built for; arrows must not rebuild it
 
 function _searchRenderKeys() {
   const host = document.getElementById('searchKeys');
@@ -2165,6 +2166,9 @@ function _searchCaret() {
   const inp = /** @type {HTMLInputElement} */ (document.getElementById('searchInput'));
   const tok = _searchTokenAt(inp.value, inp.selectionStart ?? inp.value.length);
   if (!tok) { _searchSuggestHide(); return; }
+  const key = `${tok.start}|${tok.neg}${tok.key}:${tok.value}`;
+  if (key === _searchSugFor && _searchSugItems.length) return;   // same token: keep the selection
+  _searchSugFor   = key;
   _searchSugItems = _searchSuggestions(tok);
   _searchSugIdx = _searchSugItems.length ? 0 : -1;
   _searchSuggestRender();
@@ -2187,7 +2191,7 @@ function _searchSuggestRender() {
 function _searchSuggestHide() {
   const sug = document.getElementById('searchSuggest');
   if (sug) sug.style.display = 'none';
-  _searchSugItems = []; _searchSugIdx = -1;
+  _searchSugItems = []; _searchSugIdx = -1; _searchSugFor = '';
 }
 
 // Replace the token's value with the pick (quoted when it has spaces), add

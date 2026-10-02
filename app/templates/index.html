@@ -71,11 +71,11 @@
   <div class="media-modal-inner confirm-card search-card">
     <div class="search-head">
       <div class="search-box">
-        <input id="searchInput" class="modal-video-search search-input" type="search" placeholder="Search posts, stories, creators and comments…" autocomplete="off" spellcheck="false"
+        <input id="searchInput" class="search-input" type="search" placeholder="Search posts, stories, creators and comments…" autocomplete="off" spellcheck="false"
                oninput="_searchOnInput(this.value)" onkeydown="_searchKey(event)" onkeyup="_searchCaret()" onclick="_searchCaret()" onblur="setTimeout(_searchSuggestHide, 150)">
         <div class="search-suggest confirm-suggest" id="searchSuggest" style="display:none"></div>
       </div>
-      <select id="searchSort" class="mv-cm-select search-sort" onchange="_searchSortChanged(this.value)" title="Order">
+      <select id="searchSort" class="search-sort" onchange="_searchSortChanged(this.value)" title="Order">
         <option value="">Best match</option><option value="date">Newest</option><option value="likes">Most liked</option><option value="views">Most viewed</option><option value="comments">Most commented</option>
       </select>
       <button class="btn-sm" id="searchHelpBtn" onclick="_searchHelpToggle()" title="Query syntax">?</button>
