@@ -1189,8 +1189,12 @@ class ChannelDB:
         with self.get_db() as conn:
             cols   = [r[1] for r in conn.execute("PRAGMA table_info(videos)")]
             select = ", ".join(c for c in cols if c not in self._VIDEO_LIST_EXCLUDE)
+            # comments_saved: rows in the comments table, next to the platform's
+            # comment_count, for the list's "saved / found" column
             return [dict(r) for r in conn.execute(
-                f"SELECT {select} FROM videos WHERE channel_id = ? ORDER BY upload_date DESC",
+                f"""SELECT {select},
+                           (SELECT COUNT(*) FROM comments cm WHERE cm.video_id = videos.video_id) AS comments_saved
+                    FROM videos WHERE channel_id = ? ORDER BY upload_date DESC""",
                 (channel_id,)
             ).fetchall()]
 

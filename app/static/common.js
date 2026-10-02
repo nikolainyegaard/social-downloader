@@ -4342,6 +4342,17 @@ function _mRenderList(cfg, { preserve = false } = {}) {
   _mAppendVideos(cfg, vids, target);
 }
 
+// Comments column: always "saved / found", so "0 / 23" reads as nothing
+// saved yet and "– / –" as no count from the platform (sound rows carry no
+// saved figure and show "– / 23"). Sorting stays on the platform count.
+function _commentsCell(v) {
+  const saved = v.comments_saved == null ? '–' : fmtCount(v.comments_saved);
+  const found = v.comment_count  == null ? '–' : fmtCount(v.comment_count);
+  const title = v.comment_count == null ? 'No comment count from the platform'
+    : `${(v.comments_saved || 0).toLocaleString()} of ${v.comment_count.toLocaleString()} saved`;
+  return `<span title="${title}">${saved}<span style="color:var(--muted)"> / </span>${found}</span>`;
+}
+
 function _mAppendVideos(cfg, vids, count) {
   if (cfg.mobileRows && _mIsMobile()) { _mAppendVideosMobile(cfg, vids, count); return; }
   const list     = document.getElementById(cfg.listElId);
@@ -4367,7 +4378,7 @@ function _mAppendVideos(cfg, vids, count) {
         <span class="vstatus ${statusCls}">${statusLabel}</span>${v.direct_added ? `<span class="vstatus direct" title="Added via direct URL; exempt from deletion checks">Direct</span>` : ''}
       </div>
       <div class="video-cell">${fmtCount(v.view_count)}</div>
-      <div class="video-cell">${fmtCount(v.comment_count)}</div>
+      <div class="video-cell">${_commentsCell(v)}</div>
       <div class="video-cell">${fmtUpload(v.upload_date)}</div>
       <div class="video-cell">${fmtDateShort(v.download_date)}</div>
       <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
