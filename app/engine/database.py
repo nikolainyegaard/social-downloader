@@ -1369,6 +1369,13 @@ class ChannelDB:
             ).fetchall()]
 
 
+    def get_all_stories(self) -> list[dict]:
+        """Every story row's id and file (the thumbnail backfill scan)."""
+        with self.get_db() as conn:
+            return [dict(r) for r in conn.execute(
+                "SELECT story_id, channel_id, file_path FROM stories"
+            ).fetchall()]
+
     def get_all_video_stats(self) -> dict:
         with self.get_db() as conn:
             rows = conn.execute("""

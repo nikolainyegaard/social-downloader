@@ -2355,13 +2355,15 @@ function _searchPostCard(r, open) {
       <span class="sr-cm-hdr">@${_searchMark(c.author || '?', marks) ?? esc(c.author || '?')}${c.author_name && c.author_name !== c.author ? `<span class="sr-label">${_searchMark(c.author_name, marks) ?? esc(c.author_name)}</span>` : ''}</span>
       <span class="sr-cm-text">${_searchMarked(c.comment || c.text, marks, c.source === 'comment' ? c.snippet : null)}</span>
     </div>`).join('');
-  const thumb = r.item_type === 'story'
-    ? (isImg ? `<img class="video-thumb" src="/api/${esc(r.platform)}/stories/${esc(r.item_id)}/file" loading="lazy" alt="" onerror="this.style.opacity='.15'">` : `<span class="video-thumb"></span>`)
-    : `<img class="video-thumb" src="/api/${esc(r.platform)}/videos/${esc(r.item_id)}/thumbnail" loading="lazy" alt="" onerror="this.style.opacity='.15'">`;
-  const play = r.item_type === 'story' || !r.has_file ? open
+  const thumb = `<img class="video-thumb" src="/api/${esc(r.platform)}/${r.item_type === 'story' ? 'stories' : 'videos'}/${esc(r.item_id)}/thumbnail" loading="lazy" alt="" onerror="this.style.opacity='.15'">`;
+  // The thumbnail plays in place: the viewer stacks over the search dialog
+  // and closing it lands back on the results. Only the card itself leaves
+  // the search for the creator modal.
+  const play = r.item_type === 'story' ? open
+    : !r.has_file ? `_searchOpen('${esc(r.platform)}',()=>${open})`
     : `_searchPlay('${esc(r.platform)}','${esc(r.item_id)}',${isImg})`;
   return `<div class="sr-card" role="button" tabindex="0" onclick="_searchOpen('${esc(r.platform)}',()=>${open})" onkeydown="if(event.key==='Enter')this.click()">
-    <span class="sr-thumb" title="${r.item_type === 'story' ? 'Open story' : isImg ? 'View photo' : 'Play video'}" onclick="event.stopPropagation();${r.item_type === 'story' ? `_searchOpen('${esc(r.platform)}',()=>${play})` : play}">
+    <span class="sr-thumb" title="${r.item_type === 'story' ? 'Open story' : isImg ? 'View photo' : 'Play video'}" onclick="event.stopPropagation();${play}">
       ${thumb}${r.duration ? `<span class="thumb-dur">${fmtDur(r.duration)}</span>` : ''}
     </span>
     <span class="sr-body">

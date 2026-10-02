@@ -437,7 +437,8 @@ def create_app() -> Flask:
     @app.route("/api/jobs/clear-thumbnails", methods=["POST"])
     def clear_thumbnails():
         deleted = 0
-        for thumbs_dir in _glob.glob(os.path.join(MEDIA_DIR, "*", "*", "thumbs")):
+        for thumbs_dir in _glob.glob(os.path.join(MEDIA_DIR, "*", "*", "thumbs")) \
+                        + _glob.glob(os.path.join(MEDIA_DIR, "*", "*", "stories", "thumbs")):
             if not os.path.isdir(thumbs_dir):
                 continue
             for fname in os.listdir(thumbs_dir):

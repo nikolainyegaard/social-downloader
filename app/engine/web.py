@@ -758,6 +758,16 @@ def create_channel_blueprint(engine) -> Blueprint:
         db.mark_story_viewed(story_id)
         return jsonify({"ok": True})
 
+    @bp.route("/stories/<story_id>/thumbnail", methods=["GET"])
+    def story_thumbnail(story_id: str):
+        story = db.get_story(story_id)
+        if not story or not story.get("file_path"):
+            return ("", 404)
+        avif = thumb_path_for(story_id, story["file_path"])
+        if os.path.exists(avif):
+            return send_file(avif, mimetype="image/avif")
+        return ("", 404)
+
     @bp.route("/stories/<story_id>/file", methods=["GET"])
     def story_file(story_id: str):
         story = db.get_story(story_id)

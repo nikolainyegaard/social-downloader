@@ -150,6 +150,7 @@ def redownload_story_row(db, row, log=print) -> bool:
         return False
     db.add_story(sid, row["channel_id"], "video", row.get("posted_at"),
                  row.get("expires_at"), path)
+    generate_thumbnail(sid, path)
     log(f"  recovered story {sid} (@{handle})")
     return True
 

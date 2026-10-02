@@ -53,6 +53,7 @@ Engine blueprint, shared by every platform ({p} = tiktok|youtube|twitter|instagr
 /api/{p}/channels/<id>/stories         saved stories (live flag from expires_at)
 /api/{p}/channels/<id>/stories/calendar  {YYYY-MM-DD: count}
 /api/{p}/videos/<id>/thumbnail|file    media serving (mimetype from extension)
+/api/{p}/stories/<id>/thumbnail|file   same for stories (thumbs live in stories/thumbs)
 /api/{p}/videos/<id>/files             multi-media post file list ({name, type, url})
 /api/{p}/videos/<id>/files/<n>         serve the nth sibling file
 /api/{p}/stories/<id>/file             serve a saved story

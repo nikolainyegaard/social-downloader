@@ -108,7 +108,7 @@ Text sources (`media_text.source`): creator rows (`item_type = 'channel'`: `hand
 
 **`repair_broken_thumbnails() -> dict`** / **`get_repair_state()`**: back the Fix broken thumbnails job. Scans every platform's `thumbs/*.avif` and regenerates undecodable ones. Two header-only detectors (no ffprobe): `_colr_reserved(path)` reads the `colr` nclx box for reserved CICP (0 and 3 only), `_avif_truncated(path)` walks top-level ISOBMFF boxes and flags files whose boxes do not cover the file size.
 
-The thumbnail backfill scan covers every engine DB in the registry.
+The thumbnail backfill scan covers every engine DB in the registry, stories included (`get_all_stories`; a story's thumb sits in `stories/thumbs` next to its file, generated right after the download by the generic and TikTok story paths, served by `/stories/<id>/thumbnail`). The repair job and the clear job glob `stories/thumbs` too; the orphan cleanup only looks at creator-level `thumbs`, since it checks ids against videos.
 
 ## engine/
 

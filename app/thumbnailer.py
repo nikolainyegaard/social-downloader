@@ -444,6 +444,8 @@ def backfill_thumbnails() -> None:
     from platforms.registry import ENGINES
     for _eng in ENGINES.values():
         all_videos.extend(_eng.db.get_all_videos())
+        # Stories keep their thumbs beside them in stories/thumbs
+        all_videos.extend({"video_id": s["story_id"], "file_path": s["file_path"]} for s in _eng.db.get_all_stories())
     total = len(all_videos)
 
     missing = [
@@ -603,6 +605,7 @@ def repair_broken_thumbnails() -> dict:
     thumbs: list[str] = []
     for p in ENGINES:
         thumbs += _glob.glob(os.path.join(MEDIA_DIR, p, "*", "thumbs", "*.avif"))
+        thumbs += _glob.glob(os.path.join(MEDIA_DIR, p, "*", "stories", "thumbs", "*.avif"))
 
     with _repair_lock:
         _repair_state.update({"running": True, "scanned": 0, "total": len(thumbs),

@@ -20,7 +20,7 @@ from scheduling import (
     channel_gap_secs, get_check_intervals, get_full_refresh_secs,
     set_channel_last_full, set_channel_next_check,
 )
-from thumbnailer import cache_avatar, cache_banner
+from thumbnailer import cache_avatar, cache_banner, generate_thumbnail
 
 _ABORT_AFTER_FAILURES = 3  # consecutive channel failures that abort the session (rate limit or auth wall)
 
@@ -133,6 +133,7 @@ def save_new_stories(db, platform: str, channel_id: str, handle: str,
             continue
         db.add_story(s["story_id"], channel_id, s.get("content_type", "video"),
                      s.get("posted_at"), s.get("expires_at"), path)
+        generate_thumbnail(s["story_id"], path)
         saved += 1
     if saved:
         log(f"  {saved} new {'story' if saved == 1 else 'stories'} saved")
