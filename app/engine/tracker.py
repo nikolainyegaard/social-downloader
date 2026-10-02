@@ -415,6 +415,9 @@ def process_single_channel(
         _n_counts = db.update_video_view_counts(_counts)
         if _n_counts:
             log(f"  Refreshed view counts: {_n_counts}")
+        _ccounts = {v: p["comment_count"] for v, p in remote_posts.items()
+                    if p.get("comment_count") is not None and v in known_ids}
+        db.update_video_view_counts(_ccounts, column="comment_count")
 
         # Posts recorded earlier whose media download failed (file_path NULL):
         # the listing just handed us fresh URLs, so download them again. Bounded
@@ -490,6 +493,34 @@ def process_single_channel(
         for vid_id in undeleted_ids:
             if db.revert_or_undelete_video(vid_id) == "undeleted":
                 log(f"  Undeleted: {vid_id}")
+
+        # ── Comments of opted-in posts whose count moved since the last fetch ─
+        # Same model as the TikTok tracker: the listing's counts decide, the
+        # adapter's fetch_comments does the request, comments.py keeps the
+        # books. After the downloads so new posts are in the table already.
+        if adapter.fetch_comments and not (stop_event and stop_event.is_set()):
+            import comments
+            _cc = {v: p.get("comment_count") for v, p in remote_posts.items()}
+            _due = comments.due_posts(engine, channel_id, _cc) if _cc else []
+            _wanted = db.comments_wanted_count(channel_id)
+            if _wanted:
+                _with = sum(1 for n in _cc.values() if n)
+                log(f"  Comments: {len(_cc)} post(s) listed, {_with} with comments, {len(_due)} due")
+            _max_per_post = int(comments.get_settings()["max_per_post"])
+            for _i, (_vid, _count) in enumerate(_due, 1):
+                if stop_event and stop_event.is_set():
+                    break
+                _stage(f"fetching comments {_i} of {len(_due)}")
+                _t0 = time.time()
+                try:
+                    _rows = adapter.fetch_comments(engine, {"video_id": _vid, "channel_id": channel_id}, _max_per_post)
+                except Exception as e:
+                    comments.record(engine, _vid, channel_id, handle, _count, None, e, time.time() - _t0, log,
+                                    count_failure=not comments.is_empty_response(e))
+                    if comments.is_empty_response(e):
+                        break
+                    continue
+                comments.record(engine, _vid, channel_id, handle, _count, _rows, None, time.time() - _t0, log)
 
         return "deletions" if (deleted_ids or deletion_spike) else "ok"
 

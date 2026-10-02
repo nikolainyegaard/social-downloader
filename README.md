@@ -8,7 +8,7 @@ Self-hosted social media archiver. Monitors creators across multiple platforms, 
 - Twitter/X: accounts (requires an uploaded cookies.txt from a logged-in account)
 - Instagram: profiles and stories (requires an uploaded cookies.txt from a logged-in browser session; posts need a HikerAPI key, see Configuration)
 - Instant text search across all platforms (header magnifier or Ctrl+K): post captions, plus the text inside photos, stories and video frames once the Index text in media job has run (Settings > General > Jobs; optional GPU, see Configuration)
-- Comment scraping, opt-in per creator or per post (TikTok): a Comments toggle on the creator, a selector and Fetch now in the post viewer. Comments are fetched during the normal creator check, only for posts whose comment count changed. Saved comments show in the viewer and are searchable
+- Comment scraping, opt-in per creator or per post (TikTok, and Instagram with a HikerAPI key): a Comments toggle on the creator, a selector and Fetch now in the post viewer. Comments are fetched during the normal creator check, only for posts whose comment count changed. Saved comments show in the viewer and are searchable
 
 ---
 

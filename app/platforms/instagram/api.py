@@ -109,11 +109,71 @@ def _hiker_iter_posts(user_id: str) -> Generator[tuple[dict, dict], None, None]:
                 "upload_date":  item.get("taken_at") or item.get("1ltaken_at"),
                 "duration":     item.get("video_duration") or item.get("1fvideo_duration"),
                 "view_count":   item.get("like_count"),
+                "comment_count": item.get("comment_count"),
                 "content_type": "video" if item.get("media_type") == 2 else "image",
             }, item
         page_id = data.get("next_page_id")
         if not items or not page_id:
             break
+
+
+_SHORTCODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+
+def shortcode_to_pk(code: str) -> int:
+    """A post's shortcode is its numeric media id in Instagram's base-64
+    alphabet, so the pk the comment endpoint wants needs no request."""
+    pk = 0
+    for ch in code:
+        pk = pk * 64 + _SHORTCODE_ALPHABET.index(ch)
+    return pk
+
+
+def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
+    """HikerAPI /v2/media/comments for one post, paged by page_id (one
+    request per page of about 20 top-level comments). Replies come only as
+    the preview children the page carries; full reply threads are a separate
+    endpoint per comment and are not fetched. Comment ids are the private
+    API pks, users carry username and full_name."""
+    if not HIKERAPI_KEY:
+        raise RuntimeError("HIKERAPI_KEY is not set; Instagram comments need HikerAPI")
+    pk = shortcode_to_pk(video["video_id"])
+
+    def _row(c: dict, parent: str | None) -> dict | None:
+        cid, text = str(c.get("pk") or c.get("id") or ""), (c.get("text") or "").strip()
+        if not cid or not text:
+            return None
+        u = c.get("user") or {}
+        return {"comment_id": cid, "parent_id": parent,
+                "author": u.get("username"), "author_name": u.get("full_name") or None,
+                "author_id": str(u.get("pk") or "") or None, "text": text,
+                "likes": c.get("comment_like_count"),
+                "created_at": c.get("created_at_utc") or c.get("created_at"), "image_url": None}
+
+    rows: list[dict] = []
+    page_id = None
+    while len(rows) < max_count:
+        params = {"id": pk}
+        if page_id:
+            params["page_id"] = page_id
+        data  = _hiker_get("/v2/media/comments", params)
+        resp  = data.get("response") if isinstance(data, dict) else data
+        items = (resp.get("items") or resp.get("comments") or []) if isinstance(resp, dict) else (resp or [])
+        if not items:
+            break
+        for c in items:
+            r = _row(c, None)
+            if r:
+                rows.append(r)
+            for child in c.get("preview_child_comments") or []:
+                cr = _row(child, r["comment_id"] if r else None)
+                if cr:
+                    rows.append(cr)
+        page_id = data.get("next_page_id") if isinstance(data, dict) else None
+        if not page_id:
+            break
+        time.sleep(1)
+    return rows[:max_count]
 
 
 def _web_api_get(url: str, params: dict, referer: str) -> dict:

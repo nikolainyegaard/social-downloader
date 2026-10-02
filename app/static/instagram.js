@@ -22,6 +22,7 @@ initChannelApp({
   profileUrl:        h => `https://www.instagram.com/${h}`,
   videoUrl:          v => `https://www.instagram.com/p/${v.video_id}/`,
   hasStories:        true,
+  hasComments:       true,
   settings: {
     account: {
       html: _cookiesPaneHtml('igCookie', {

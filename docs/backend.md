@@ -75,7 +75,7 @@ Comment scraping, opt-in: `channels.comments_enabled` covers every post of a cre
 - `record(engine, video_id, channel_id, handle, count, rows, error, secs, log)` stores a result through `replace_comments` (the post's `comments` rows and its `media_text` rows with `source = 'comment'` replaced in one transaction, stamped with the count) or a failure through `mark_comments_failed`, keeps the last 10 results for the panel, and logs one `[comments]` line to the run log and the loop log
 - Every comment action writes to the platform's loop log like a manual run: the check's evaluation and per-post lines through the tracker's logger, Fetch now with start and complete banners through `engine.loop._log`, Retry failed with the number of released posts per platform, and the creator toggle with the opted-in count
 - `fetch_now(engine, video_id)` backs the viewer's Fetch now: turns the post on, clears its stamp and failures, and fetches in a thread through the adapter hook (TikTok: `run_browser_job`, its own turn or the live session between users). The manual override for a single post, the only path that may open a session for comments
-- Engine platforms get the same call in the generic tracker when their fetchers arrive; their post dicts would need to carry `comment_count` from the listing first
+- The generic tracker runs the same stage at the end of a check (after the downloads, so new posts are in the table): listings may carry `comment_count` on their post dicts (Instagram's HikerAPI path does), `update_video_view_counts(counts, column='comment_count')` stores it, and `due_posts` compares it like the TikTok tracker does; the adapter's `fetch_comments` runs synchronously in the check
 
 ## startup_report.py
 
