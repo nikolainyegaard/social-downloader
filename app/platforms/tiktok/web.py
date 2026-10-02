@@ -976,6 +976,21 @@ def register_tiktok_routes(bp, engine) -> None:
                     info = ydl.sanitize_info(ydl.extract_info(inp, download=False))
                 return jsonify({"ok": True, "output": json.dumps(info, indent=2, default=str)})
 
+            elif source == "tiktokapi" and action == "video_comments":
+                m_vid    = re.search(r'/(?:video|photo)/(\d+)', inp)
+                video_id = m_vid.group(1) if m_vid else inp.rsplit(":", 1)[-1].strip()
+
+                async def _fetch_comments_adhoc(_api):
+                    return await _api.make_request(
+                        url="https://www.tiktok.com/api/comment/list/",
+                        params={"aweme_id": video_id, "count": 20, "cursor": 0},
+                    )
+
+                data = run_browser_job(_fetch_comments_adhoc)
+                if data is None:
+                    data = {"error": "TikTok returned no data (None)"}
+                return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
+
             elif source == "tiktokapi" and action == "user_info":
                 handle = inp.lstrip("@").strip()
 

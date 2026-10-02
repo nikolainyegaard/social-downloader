@@ -3402,7 +3402,8 @@ async function _mvLoadComments(host) {
   if (!rows.length) { host.innerHTML = '<div class="mv-cm-empty">No comments saved</div>'; return; }
   host.innerHTML = rows.map(c => `<div class="mv-cm${c.parent_id ? ' mv-cm-reply' : ''}">
       <span class="mv-cm-hdr"><span class="mv-cm-author">${esc(c.author || '?')}</span>${c.created_at ? `<span class="mv-cm-when">${fmtDateShort(c.created_at)}</span>` : ''}${c.likes ? `<span class="mv-cm-likes">♥ ${fmtCount(c.likes)}</span>` : ''}</span>
-      <span class="mv-cm-text">${esc(c.text)}</span>
+      ${c.text ? `<span class="mv-cm-text">${esc(c.text)}</span>` : ''}
+      ${c.image_path ? `<img class="mv-cm-img" src="${esc(url.replace(/\/videos\/.*$/, ''))}/comments/${esc(c.comment_id)}/image" loading="lazy" alt="" onclick="openImgModalUrl(this.src)">` : ''}
     </div>`).join('');
 }
 

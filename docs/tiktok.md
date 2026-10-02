@@ -40,7 +40,8 @@ sounds:        sound_id TEXT PK, label, comment, added_at, last_checked, enabled
 sound_videos:  sound_id FK, video_id FK, added_at; PK (sound_id, video_id)
 media_text:    id PK, item_type (video|story), item_id, channel_id, source (caption|image|frame|comment),
                start_ts, end_ts, text, confidence; media_text_fts is its FTS5 trigram index (see backend.md)
-comments:      comment_id PK, video_id, channel_id, parent_id, author, author_id, text, likes, created_at, fetched_at
+comments:      comment_id PK, video_id, channel_id, parent_id, author, author_id, text, likes, created_at, fetched_at,
+               image_path (picture comments, media/tiktok/@handle/comments/)
 ```
 
 Indexes from `store.init_tables()`: `idx_sound_videos_sound`, `idx_videos_channel_id`, `idx_videos_status`, `idx_profile_history_channel_id`, `idx_videos_stats_backfilled_at`, `idx_channels_next_check_at`.
@@ -70,7 +71,7 @@ Indexes from `store.init_tables()`: `idx_sound_videos_sound`, `idx_videos_channe
 | Live stories | TikTokApi story/item_list | Same endpoint gallery-dl uses; needs logged-in cookies. Pagination keys differ from the other item_list endpoints: response carries `HasMoreAfter`/`MaxCursor` (not `hasMore`/`cursor`), the request cursor moves forward in time, and TikTok caps each page at ~3 items regardless of `count`. Reading `hasMore` here silently truncated stories to the first page |
 | Story download | yt-dlp on `/@handle/video/{id}` | yt-dlp fetches the page itself so the media URL is signed for its own request. Must be `/video/`, not `/story/`. Direct CDN GETs are the fallback and the path for photo stories |
 | Downloads | yt-dlp (video), requests (photos) | yt-dlp returns audio only for photo posts |
-| Comments | TikTokApi `/api/comment/list/` + `/api/comment/list/reply/` | `get_video_comments(api, video_id, max_count)` pages 20 at a time on the open session with a short random sleep between pages, then pulls the replies of every comment that has some; the tracker calls it right after the stats upsert for the opted-in posts whose `commentCount` moved since their last fetch (`comments.due_posts`), on the session it already holds; the adapter's `fetch_comments` (viewer Fetch now) runs it through `run_browser_job` instead. See backend.md comments.py |
+| Comments | TikTokApi `/api/comment/list/` + `/api/comment/list/reply/` (Diagnostics: "Raw comment list" dumps the first page) | `get_video_comments(api, video_id, max_count)` pages 20 at a time on the open session with a short random sleep between pages, then pulls the replies of every comment that has some; the tracker calls it right after the stats upsert for the opted-in posts whose `commentCount` moved since their last fetch (`comments.due_posts`), on the session it already holds; the adapter's `fetch_comments` (viewer Fetch now) runs it through `run_browser_job` instead. See backend.md comments.py |
 
 `UserBannedException`: raised on TikTok `statusCode 10202`.
 

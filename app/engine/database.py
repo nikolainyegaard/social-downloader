@@ -242,7 +242,8 @@ class ChannelDB:
                     text       TEXT NOT NULL,
                     likes      INTEGER,
                     created_at INTEGER,
-                    fetched_at INTEGER NOT NULL
+                    fetched_at INTEGER NOT NULL,
+                    image_path TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_comments_video ON comments(video_id);
             """)
@@ -400,6 +401,8 @@ class ChannelDB:
             "ALTER TABLE videos   ADD COLUMN comments_fetched_at    INTEGER",
             "ALTER TABLE videos   ADD COLUMN comments_count_at_fetch INTEGER",
             "ALTER TABLE videos   ADD COLUMN comments_failed        INTEGER NOT NULL DEFAULT 0",
+            # Picture comments: the downloaded image (AVIF) next to the creator's media
+            "ALTER TABLE comments ADD COLUMN image_path             TEXT",
         ]
         for sql in migrations:
             try:
@@ -1854,16 +1857,17 @@ class ChannelDB:
                          count: int | None) -> None:
         """Swap the post's comments and their search rows, stamp the fetch with
         the platform's count at that moment. rows: {comment_id, parent_id,
-        author, author_id, text, likes, created_at}."""
+        author, author_id, text, likes, created_at, image_path?}."""
         now = int(time.time())
         with self.get_db() as conn:
             conn.execute("DELETE FROM comments WHERE video_id = ?", (video_id,))
             conn.executemany("""
                 INSERT INTO comments (comment_id, video_id, channel_id, parent_id, author, author_id,
-                                      text, likes, created_at, fetched_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      text, likes, created_at, fetched_at, image_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [(r["comment_id"], video_id, channel_id, r.get("parent_id"), r.get("author"),
-                   r.get("author_id"), r["text"], r.get("likes"), r.get("created_at"), now)
+                   r.get("author_id"), r["text"], r.get("likes"), r.get("created_at"), now,
+                   r.get("image_path"))
                   for r in rows])
             conn.execute("DELETE FROM media_text WHERE item_type = 'video' AND item_id = ? AND source = 'comment'",
                          (video_id,))
@@ -1882,6 +1886,11 @@ class ChannelDB:
     def reset_comments_failed(self) -> int:
         with self.get_db() as conn:
             return conn.execute("UPDATE videos SET comments_failed = 0 WHERE comments_failed > 0").rowcount
+
+    def get_comment(self, comment_id: str) -> dict | None:
+        with self.get_db() as conn:
+            r = conn.execute("SELECT * FROM comments WHERE comment_id = ?", (comment_id,)).fetchone()
+            return dict(r) if r else None
 
     def get_comments(self, video_id: str) -> list[dict]:
         """Top-level comments by likes then age, each reply right after its parent."""

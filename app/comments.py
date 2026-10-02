@@ -28,7 +28,7 @@ import threading
 import time
 from collections import deque
 
-from config import DATA_DIR, _ts
+from config import DATA_DIR, MEDIA_DIR, _ts
 
 _SETTINGS_PATH = os.path.join(DATA_DIR, "comments.json")
 
@@ -68,16 +68,61 @@ def due_posts(engine, channel_id: str, counts: dict[str, int | None]) -> list[tu
     return engine.db.get_comments_due(channel_id, counts)[:int(s["max_per_check"])]
 
 
+def _save_images(engine, handle: str, rows: list[dict]) -> int:
+    """Download the image of every picture comment (image_url, a CDN URL that
+    expires) to media/{platform}/@handle/comments/{comment_id}.avif and set
+    image_path. Already saved files are kept (a re-fetch replaces the rows,
+    not the files). Returns how many were fetched now."""
+    import requests
+    from downloader import _load_cookies
+    from photo_converter import encode_avif, CRF_PHOTO
+    todo = [r for r in rows if r.get("image_url")]
+    if not todo:
+        return 0
+    folder = os.path.join(MEDIA_DIR, engine.platform, f"@{handle}", "comments")
+    os.makedirs(folder, exist_ok=True)
+    cookies = proxies = None
+    if engine.platform == "tiktok":
+        from platforms.tiktok.config import COOKIES_PATH, get_proxy
+        cookies = _load_cookies(COOKIES_PATH) if os.path.exists(COOKIES_PATH) else None
+        proxy   = get_proxy()
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+    n = 0
+    for r in todo:
+        avif = os.path.join(folder, f"{r['comment_id']}.avif")
+        jpg  = os.path.join(folder, f"{r['comment_id']}.jpg")
+        if os.path.exists(avif):
+            r["image_path"] = avif
+            continue
+        try:
+            resp = requests.get(r["image_url"], cookies=cookies, proxies=proxies, timeout=30)
+            resp.raise_for_status()
+            with open(jpg, "wb") as f:
+                f.write(resp.content)
+            if encode_avif(jpg, avif, CRF_PHOTO):
+                os.remove(jpg)
+                r["image_path"] = avif
+            else:
+                r["image_path"] = jpg
+            n += 1
+        except Exception as e:
+            print(f"[{_ts()}] [comments] image of {r['comment_id']} failed: {type(e).__name__}: {e}")
+    return n
+
+
 def record(engine, video_id: str, channel_id: str, handle: str | None,
            count: int | None, rows: list[dict] | None, error: Exception | None,
            secs: float, log=None) -> None:
     """Store a fetch result (rows) or a failure (error) and log one line."""
     global _posts_done
+    if handle is None:
+        handle = (engine.db.get_channel(channel_id) or {}).get("handle")
     rec = {"platform": engine.platform, "video_id": video_id, "handle": handle,
            "comments": len(rows or []), "secs": round(secs, 1), "error": None}
     if error is None:
+        images = _save_images(engine, handle, rows or []) if handle else 0
         engine.db.replace_comments(video_id, channel_id, rows or [], count)
-        line = f"{len(rows or [])} comment(s) in {rec['secs']}s"
+        line = f"{len(rows or [])} comment(s) in {rec['secs']}s" + (f", {images} image(s)" if images else "")
     else:
         engine.db.mark_comments_failed(video_id)
         last = next((l for l in reversed(str(error).splitlines()) if l.strip()), "")

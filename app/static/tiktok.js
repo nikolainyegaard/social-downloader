@@ -1897,7 +1897,8 @@ const _DIAG_ACTIONS = {
                      { value: "item_list_by_id",     label: "item_list by channel_id:sec_uid" },
                      { value: "item_list_from_db",   label: "item_list from DB (mirrors the loop; paste @username)" },
                      { value: "user_stories",        label: "Live stories for a tracked user (paste @username)" },
-                     { value: "sound_raw",           label: "Sound raw API output (paste sound_id or URL)" }],
+                     { value: "sound_raw",           label: "Sound raw API output (paste sound_id or URL)" },
+                     { value: "video_comments",      label: "Raw comment list, first page (paste post ID or URL)" }],
 };
 
 function diagSourceChanged() {
@@ -1921,6 +1922,7 @@ function diagActionChanged() {
     'tiktokapi:item_list_from_db':      '@username (must exist in DB)',
     'tiktokapi:user_stories':           '@username of a tracked user',
     'tiktokapi:sound_raw':              'sound_id (numeric) or TikTok sound URL',
+    'tiktokapi:video_comments':         'post ID, handle:post ID, or TikTok URL',
   };
   document.getElementById('diagInput').placeholder =
     placeholders[`${source}:${action}`] || '';

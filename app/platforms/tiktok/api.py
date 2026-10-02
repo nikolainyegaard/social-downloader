@@ -991,15 +991,27 @@ async def get_video_comments(api, video_id: str, max_count: int = 500) -> list[d
     separates pages like the item_list paging does."""
     import random
 
+    def _image(c: dict) -> str | None:
+        # Picture comments carry image_list; each entry has origin_url (full
+        # size) and crop_url, both {url_list: [...]}. First full-size URL wins
+        for img in c.get("image_list") or []:
+            for key in ("origin_url", "crop_url"):
+                urls = ((img or {}).get(key) or {}).get("url_list") or []
+                if urls:
+                    return urls[0]
+        return None
+
     def _row(c: dict, parent: str | None) -> dict | None:
         cid, text = str(c.get("cid") or ""), (c.get("text") or "").strip()
-        if not cid or not text:
+        image = _image(c)
+        if not cid or not (text or image):
             return None
         u = c.get("user") or {}
         return {"comment_id": cid, "parent_id": parent,
                 "author": u.get("unique_id") or u.get("nickname"),
                 "author_id": str(u.get("uid") or "") or None, "text": text,
-                "likes": c.get("digg_count"), "created_at": c.get("create_time")}
+                "likes": c.get("digg_count"), "created_at": c.get("create_time"),
+                "image_url": image}
 
     async def _pages(url: str, params: dict) -> list[dict]:
         out, cursor = [], 0

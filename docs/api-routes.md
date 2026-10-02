@@ -41,6 +41,7 @@ Engine blueprint, shared by every platform ({p} = tiktok|youtube|twitter|instagr
 /api/{p}/videos/<id>/comments          GET saved comments (replies after their parent); PATCH {enabled: bool|null}
                                        sets the per-post override, null follows the creator
 /api/{p}/videos/<id>/comments/fetch    POST: turn the post on and fetch its comments now, in the background
+/api/{p}/comments/<id>/image           the saved image of a picture comment
 /api/{p}/channels/<id>/profile-history change history
 /api/{p}/channels/<id>/stats-history   daily snapshots (followers, following, posts, saved), oldest first
 /api/{p}/channels/<id>/connections     GET list, POST {handle} links, DELETE /<other_id> unlinks

@@ -549,6 +549,15 @@ def create_channel_blueprint(engine) -> Blueprint:
     def video_comments(video_id: str):
         return jsonify(db.get_comments(video_id))
 
+    @bp.route("/comments/<comment_id>/image", methods=["GET"])
+    def comment_image(comment_id: str):
+        c = db.get_comment(comment_id)
+        path = c and c.get("image_path")
+        if not path or not os.path.exists(path):
+            return ("", 404)
+        mime = "image/avif" if path.endswith(".avif") else "image/jpeg"
+        return send_file(path, mimetype=mime, max_age=86400)
+
     @bp.route("/videos/<video_id>/comments", methods=["PATCH"])
     def set_video_comments(video_id: str):
         """Per-post override: {enabled: true|false|null}, null follows the creator."""
