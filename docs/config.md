@@ -64,6 +64,7 @@ data/
   text_index.json               OCR text index job settings (Settings > General > Jobs)
   comments.json                 comment scraping settings: per-post and per-check caps (Settings > General > Jobs)
   startup/                      one JSON startup report per container start, last 20 (Settings > General > Diagnostics)
+  {platform}/media_sizes.json   last media walk: bytes per @handle and file counts, served at startup until the next walk
   oauth.json                    OAuth config (enabled, client_id, client_secret, discovery_url, lifetime)
   .secret_key                   auto-generated Flask session secret, first startup, never user-managed
 

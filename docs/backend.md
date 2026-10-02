@@ -154,6 +154,8 @@ Reschedule pattern: `reschedule_loop()` sets a flag and fires the trigger event;
 
 `create_channel_blueprint(engine)`: every `/api/{platform}/*` route plus the adapter's extras. See [api-routes.md](api-routes.md).
 
+The channel list serves `get_channel_list()`, the channel rows without `raw_channel_data` (the platform's profile JSON, never read by the UI and most of the payload with hundreds of creators). Media sizes never block a request: a daemon thread per platform walks `media/{platform}` at startup and every 15 minutes, buckets bytes per @handle plus the video and photo file counts, and writes the map to `data/{platform}/media_sizes.json`, which the blueprint loads at creation so a restart serves the last known sizes at once. Until a walk has ever landed, the list and stats report `media_size_bytes` as null.
+
 ## web.py
 
 Global Flask app. Registers one blueprint per platform from `ENGINES` via `engine.create_blueprint()`; TikTok's extras land on its engine blueprint through the adapter.

@@ -925,7 +925,7 @@ const tt = initChannelApp({
     { label: 'Photos',        value: (s.photo_count   || 0).toLocaleString() },
     { label: 'Deleted',       value: (s.deleted_count || 0).toLocaleString() },
     { label: 'Latest saved',  value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '–' },
-    { label: 'Storage',       value: _fmtBytes(s.media_size_bytes || 0) },
+    { label: 'Storage',       value: s.media_size_bytes == null ? '…' : _fmtBytes(s.media_size_bytes) },
   ],
   extraFilterGroups: [{
     key: 'priv', label: 'Privacy', dropdown: true,

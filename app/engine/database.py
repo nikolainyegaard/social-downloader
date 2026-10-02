@@ -486,6 +486,19 @@ class ChannelDB:
                 "SELECT * FROM channels WHERE enabled = 1 ORDER BY handle"
             ).fetchall()]
 
+    # The platform's raw profile JSON is kept for debugging and never read by
+    # the UI; with hundreds of creators it was most of the channel list payload
+    _CHANNEL_LIST_EXCLUDE = ("raw_channel_data",)
+
+    def get_channel_list(self) -> list[dict]:
+        """get_all_channels without the blob columns, for the list route."""
+        with self.get_db() as conn:
+            cols   = [r[1] for r in conn.execute("PRAGMA table_info(channels)")]
+            select = ", ".join(c for c in cols if c not in self._CHANNEL_LIST_EXCLUDE)
+            return [dict(r) for r in conn.execute(
+                f"SELECT {select} FROM channels WHERE enabled = 1 ORDER BY handle"
+            ).fetchall()]
+
 
     def get_channel(self, channel_id: str) -> dict | None:
         with self.get_db() as conn:

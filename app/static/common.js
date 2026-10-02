@@ -9,6 +9,44 @@ const PLATFORMS = _ALL_PLATFORMS.filter(p => p.enabled);
 // set marks as they render; _loadReport reads it all back
 performance.setResourceTimingBufferSize(4000);
 performance.mark('scripts');
+
+// ── Boot order ────────────────────────────────────────────────────────────────
+// Every platform app registers its boot (the requests its front page needs)
+// here instead of firing at script load. The active tab boots at once; the
+// others wait until it has rendered, then boot one at a time, so the visible
+// page never queues behind four hidden platforms. Switching to a tab that
+// has not booted yet boots it immediately. Non-urgent work (stats, queues,
+// the migration warning) goes through _idle, after the first paint.
+/** @type {Record<string, () => Promise<void>>} */
+const _bootPending = {};
+const _bootDone    = new Set();
+let _bootActive    = Promise.resolve();
+
+const _idle = fn => ('requestIdleCallback' in window
+  ? requestIdleCallback(() => fn(), { timeout: 4000 })
+  : setTimeout(fn, 300));
+
+function _bootRun(id) {
+  const fn = _bootPending[id];
+  if (!fn) return Promise.resolve();
+  delete _bootPending[id];
+  _bootDone.add(id);
+  return fn().catch(() => {});
+}
+
+function _bootPlatform(id, fn) {
+  _bootPending[id] = fn;
+  if (id === _activePlatform) {
+    _bootActive = _bootRun(id);
+    // The rest, in tab order, after the visible one has landed
+    _bootActive.then(() => _idle(async () => {
+      for (const p of PLATFORMS) if (_bootPending[p.id]) await _bootRun(p.id);
+    }));
+  }
+}
+
+const _bootHasRun = id => _bootDone.has(id);
+window.addEventListener('platformswitch', () => { if (_bootPending[_activePlatform]) _bootRun(_activePlatform); });
 // Dropdown glyphs, declared up here because pane markup built at load time
 // (Settings > General) renders dropdowns through _diagPaneHtml
 const _caretIcon = `<svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
@@ -1267,7 +1305,10 @@ function _loadReport() {
   }
   lines.push('');
   lines.push('marks (ms after navigation):');
-  for (const m of performance.getEntriesByType('mark')) lines.push(`  ${String(Math.round(m.startTime)).padStart(7)}  ${m.name}`);
+  // Browser extensions leave marks of their own in the same buffer; ours are
+  // 'scripts' and '{platform}:…'
+  for (const m of performance.getEntriesByType('mark').filter(m => m.name === 'scripts' || m.name.includes(':')))
+    lines.push(`  ${String(Math.round(m.startTime)).padStart(7)}  ${m.name}`);
   lines.push('');
   lines.push('by kind:');
   for (const [kind, rx] of _LOAD_KINDS) {
@@ -1693,7 +1734,9 @@ checkHealth();
 
 // ── Migration warning ─────────────────────────────────────────────────────────
 
-(async function checkMigrationStatus() {
+// Scans every post's path, seconds on a cold start: nothing on the page
+// depends on it, so it runs well after the first paint
+setTimeout(async function checkMigrationStatus() {
   try {
     const { ok, data } = await apiJSON('/api/migrate/preview');
     if (!ok || !data.total_legacy) return;
@@ -1707,7 +1750,7 @@ checkHealth();
       }
     );
   } catch (_) {}
-})();
+}, 20000);
 
 // ── Back to top ───────────────────────────────────────────────────────────────
 

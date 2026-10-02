@@ -745,7 +745,7 @@ function initChannelApp(cfg) {
     { label: 'Photo files',         value: (s.media_photo_files || 0).toLocaleString() },
     { label: 'Deleted',             value: (s.deleted_count || 0).toLocaleString() },
     { label: 'Latest saved',        value: s.latest_download ? fmt.rel(new Date(s.latest_download * 1000).toISOString()) : '–' },
-    { label: 'Storage',             value: _fmtBytes(s.media_size_bytes || 0) },
+    { label: 'Storage',             value: s.media_size_bytes == null ? '…' : _fmtBytes(s.media_size_bytes) },
   ]);
 
   function renderStats(s) {
@@ -1655,7 +1655,7 @@ function initChannelApp(cfg) {
     { label: 'Added',   value: fmtDateOnly(ch.added_at) },
     { label: 'Checked', value: ch.last_checked ? fmt.rel(new Date(ch.last_checked * 1000).toISOString()) : 'never' },
     { label: 'Saved',   value: ch.last_saved   ? fmt.rel(new Date(ch.last_saved   * 1000).toISOString()) : 'never' },
-    { label: 'Storage', value: _fmtBytes(ch.media_size_bytes || 0) },
+    { label: 'Storage', value: ch.media_size_bytes == null ? '…' : _fmtBytes(ch.media_size_bytes) },
   ];
 
   // Keyed card elements: one persistent node per creator, rebuilt only when
@@ -1722,7 +1722,7 @@ function initChannelApp(cfg) {
 
     const icon = `<div class="avatar-wrap${ch.live_stories ? ' story-ring' + (ch.unviewed_stories ? '' : ' story-seen') : ''}"${ch.live_stories ? ` title="${ch.live_stories} live ${ch.live_stories === 1 ? 'story' : 'stories'}${ch.unviewed_stories ? '' : ', viewed'}" data-action="stories" data-id="${esc(ch.channel_id)}"` : ''}>`
       + `<span class="avatar-letter">${esc((ch.handle || '?')[0])}</span>`
-      + `${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" alt="" onerror="this.style.display='none'" ${ch.live_stories ? '' : `data-action="avatar" data-id="${esc(ch.channel_id)}"`}>` : ''}</div>`;
+      + `${ch.avatar_cached ? `<img class="user-avatar" src="${API}/channels/${esc(ch.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.style.display='none'" ${ch.live_stories ? '' : `data-action="avatar" data-id="${esc(ch.channel_id)}"`}>` : ''}</div>`;
 
     const stats = (ch.subscriber_count != null ? _statChip(cfg.subLabelCard, (ch.subscriber_count || 0).toLocaleString()) : '')
       + _statChip('saved', ch.video_total || 0)
@@ -3268,13 +3268,13 @@ function initChannelApp(cfg) {
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
-  loadCreators();
-  loadStatus();
-  loadStats();
-  loadRecent();
-  loadQueue();
-  loadAddHistory(true);
-  _syncEvents();
+  // Front page first: cards, loop status and the feed. Stats (the storage
+  // figures), the add queue and the add history follow in idle time.
+  _bootPlatform(cfg.id, async () => {
+    await Promise.all([loadCreators(), loadStatus(), loadRecent()]);
+    _syncEvents();
+    _idle(() => { loadStats(); loadQueue(); loadAddHistory(true); });
+  });
 
   _attachEdgeFade(_el('Controls'));
   EXTRA_VIEWS.forEach(v => _attachEdgeFade(_el(`Controls_${v.key}`)));
@@ -3284,9 +3284,10 @@ function initChannelApp(cfg) {
   // as pushed snapshots, creators / stats / recent (and platform extras) as
   // 'changed' refetches. The polls below only cover hidden tabs and the
   // no-EventSource fallback.
-  setInterval(() => { if (!_es) loadStatus(); }, 15000);
-  setInterval(() => { if (!_es) loadQueue();  }, 15000);
-  setInterval(() => { if (!_es) { loadCreators(); loadStats(); loadRecent(); } }, 60000);
+  const _polls = () => !_es && _bootHasRun(cfg.id);
+  setInterval(() => { if (_polls()) loadStatus(); }, 15000);
+  setInterval(() => { if (_polls()) loadQueue();  }, 15000);
+  setInterval(() => { if (_polls()) { loadCreators(); loadStats(); loadRecent(); } }, 60000);
   setInterval(_tickActivityBar, 1000);
   // Relative timestamps ("3m ago" on cards and feed rows) still need a
   // clock: patch cards in place once a minute, no fetch; the feed re-render

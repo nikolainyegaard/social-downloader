@@ -18,7 +18,7 @@ import time
 import traceback
 from flask import Blueprint, Response, jsonify, request, send_file
 
-from config import DATA_DIR, MEDIA_DIR
+from config import DATA_DIR, MEDIA_DIR, _ts
 from thumbnailer import thumb_path_for
 import transcoder as _transcoder
 
@@ -318,7 +318,7 @@ def create_channel_blueprint(engine) -> Blueprint:
     def list_channels():
         from startup_report import step
         with step("channels"):
-            channels      = db.get_all_channels()
+            channels      = db.get_channel_list()
         with step("video stats"):
             all_stats     = db.get_all_video_stats()
         with step("profile history"):
@@ -330,9 +330,12 @@ def create_channel_blueprint(engine) -> Blueprint:
             story_counts  = db.get_all_story_counts()           if adapter.has_stories else {}
         with step("media sizes"):
             media_sizes   = _media_sizes_by_handle()
+        sizes_known = _media_size_cache["ts"] > 0
         for ch in channels:
             cid   = ch["channel_id"]
-            ch["media_size_bytes"]      = media_sizes.get(ch["handle"], 0)
+            # None until the first walk has finished (a cold start): the card
+            # chip stays empty instead of claiming 0 B
+            ch["media_size_bytes"]      = media_sizes.get(ch["handle"], 0) if sizes_known else None
             stats = all_stats.get(cid, {})
             ch["live_stories"]          = live_stories.get(cid, 0)
             ch["unviewed_stories"]      = unviewed_st.get(cid, 0)
@@ -802,48 +805,73 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     # ── Stats and recent activity ─────────────────────────────────────────────
 
-    # Walking a large media library takes a moment, so one walk buckets every
-    # file under its @handle folder and the result is cached for 15 minutes
-    # (stats poll every 60 s, the channel list every 15 s). Both the aggregate
-    # size and the per-creator card sizes are served from this one map.
+    # Walking a large media library takes seconds on a cold disk, so no
+    # request ever does it: a background thread walks at startup and every 15
+    # minutes, bucketing every file under its @handle folder, and the result
+    # is written to data/{platform}/media_sizes.json so a restart serves the
+    # last known sizes at once. Both the aggregate size and the per-creator
+    # card sizes come from this one map; ts stays 0 until a walk has landed
+    # (fresh install) and the routes report the sizes as unknown meanwhile.
     _media_size_cache = {"ts": 0.0, "by_handle": {}, "total": 0, "video_files": 0, "photo_files": 0}
+    _media_size_path  = os.path.join(DATA_DIR, platform, "media_sizes.json")
+    try:
+        with open(_media_size_path, encoding="utf-8") as _f:
+            _media_size_cache.update(_json.load(_f))
+    except (OSError, ValueError):
+        pass
+
+    def _walk_media_sizes() -> None:
+        by_handle: dict = {}
+        video_files = photo_files = 0
+        root = os.path.join(MEDIA_DIR, platform)
+        for dirpath, _dirs, files in os.walk(root):
+            top = os.path.relpath(dirpath, root).split(os.sep)[0]
+            if not top.startswith("@"):
+                continue
+            handle    = top[1:]
+            is_thumbs = os.path.basename(dirpath) == "thumbs"
+            for name in files:
+                try:
+                    by_handle[handle] = by_handle.get(handle, 0) + os.path.getsize(os.path.join(dirpath, name))
+                except OSError:
+                    continue
+                if is_thumbs:
+                    continue                 # thumbnails size storage but are not saved media
+                ext = os.path.splitext(name)[1].lower()
+                if ext in _PHOTO_EXTS:
+                    photo_files += 1
+                elif ext in _VIDEO_EXTS:
+                    video_files += 1
+        _media_size_cache.update(ts=time.time(), by_handle=by_handle, total=sum(by_handle.values()),
+                                 video_files=video_files, photo_files=photo_files)
+        try:
+            os.makedirs(os.path.dirname(_media_size_path), exist_ok=True)
+            with open(_media_size_path + ".tmp", "w", encoding="utf-8") as f:
+                _json.dump(_media_size_cache, f)
+            os.replace(_media_size_path + ".tmp", _media_size_path)
+        except OSError:
+            pass
+
+    def _media_size_thread() -> None:
+        while True:
+            try:
+                _walk_media_sizes()
+            except Exception as e:
+                print(f"[{_ts()}] [{platform}] media size walk failed: {e}")
+            time.sleep(900)
+
+    threading.Thread(target=_media_size_thread, daemon=True, name=f"{adapter.prefix}-media-sizes").start()
 
     def _media_sizes_by_handle() -> dict:
-        now = time.time()
-        if now - _media_size_cache["ts"] > 900:
-            by_handle: dict = {}
-            video_files = photo_files = 0
-            root = os.path.join(MEDIA_DIR, platform)
-            for dirpath, _dirs, files in os.walk(root):
-                top = os.path.relpath(dirpath, root).split(os.sep)[0]
-                if not top.startswith("@"):
-                    continue
-                handle    = top[1:]
-                is_thumbs = os.path.basename(dirpath) == "thumbs"
-                for name in files:
-                    try:
-                        by_handle[handle] = by_handle.get(handle, 0) + os.path.getsize(os.path.join(dirpath, name))
-                    except OSError:
-                        continue
-                    if is_thumbs:
-                        continue                 # thumbnails size storage but are not saved media
-                    ext = os.path.splitext(name)[1].lower()
-                    if ext in _PHOTO_EXTS:
-                        photo_files += 1
-                    elif ext in _VIDEO_EXTS:
-                        video_files += 1
-            _media_size_cache.update(ts=now, by_handle=by_handle, total=sum(by_handle.values()),
-                                     video_files=video_files, photo_files=photo_files)
         return _media_size_cache["by_handle"]
 
-    def _media_size_bytes() -> int:
-        _media_sizes_by_handle()  # refresh the cache if stale
-        return _media_size_cache["total"]
+    def _media_size_bytes() -> int | None:
+        return _media_size_cache["total"] if _media_size_cache["ts"] > 0 else None
 
     @bp.route("/stats", methods=["GET"])
     def get_aggregate_stats():
         stats = db.get_aggregate_stats()
-        stats["media_size_bytes"]  = _media_size_bytes()  # refreshes the cache
+        stats["media_size_bytes"]  = _media_size_bytes()  # None until the first walk
         stats["media_video_files"] = _media_size_cache["video_files"]
         stats["media_photo_files"] = _media_size_cache["photo_files"]
         return jsonify(stats)
