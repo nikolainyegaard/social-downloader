@@ -2659,6 +2659,9 @@ body:has(dialog[open]) .app .job-bar-fill.indeterminate {
 .snav-label, .settings-nav-group { transition: opacity var(--dur-fast) var(--ease); }
 .settings-modal.nav-collapsed .snav-label,
 .settings-modal.nav-collapsed .settings-nav-group { opacity: 0; }
+/* Version in the rail's bottom-left corner; fades with the labels when collapsed */
+.settings-nav-version { margin-top: auto; padding: 8px 12px 0; white-space: nowrap; transition: opacity var(--dur-fast) var(--ease); }
+.settings-modal.nav-collapsed .settings-nav-version { opacity: 0; }
 
 /* Scrim behind the mobile overlay nav; inert on desktop */
 .settings-nav-scrim { display: none; }

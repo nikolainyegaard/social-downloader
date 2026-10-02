@@ -147,7 +147,8 @@ function _settingsRenderNav() {
     <div class="settings-nav-group">App</div>
     ${general.map(item).join('')}
     ${platforms.length ? '<div class="settings-nav-group">Platforms</div>' : ''}
-    ${platforms.map(item).join('')}`;
+    ${platforms.map(item).join('')}
+    <div class="settings-nav-version version-tag" title="Social Downloader v${esc(window.__VERSION__ || 'dev')}">v${esc(window.__VERSION__ || 'dev')}</div>`;
 }
 
 // Build (once) and return the pane element for a nav target.
@@ -262,9 +263,7 @@ function _generalPlatformsHtml() {
           <span class="toggle-label">${esc(p.label)}</span>
         </label>`).join('')}
     </div>
-    <p class="settings-note">Changes apply immediately; the page reloads to update the tabs.</p>
-    <hr class="hr-divider">
-    <p class="settings-note" style="margin-bottom:0">Social Downloader <span class="version-tag">v${esc(window.__VERSION__ || 'dev')}</span></p>`;
+    <p class="settings-note">Changes apply immediately; the page reloads to update the tabs.</p>`;
 }
 
 async function _platformToggle(id, input) {
