@@ -1155,6 +1155,9 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
         # takes the visible label in the right half of the viewport and
         # presses it with a real mouse click at its centre
         try:
+            # The tabs mount a moment after domcontentloaded; a click that
+            # lands before the handlers do changes nothing
+            await asyncio.sleep(random.uniform(0.5, 0.9))
             spot = await tab.evaluate("""() => {
                 const cands = [...document.querySelectorAll('span, div, p, button, a')]
                   .filter(e => !e.children.length && /^comments\b/i.test((e.textContent || '').trim()))
