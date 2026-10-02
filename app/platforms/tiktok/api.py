@@ -984,45 +984,53 @@ async def get_user_stories(api, author_id: str) -> list[dict]:
     return items
 
 
-async def get_video_comments(api, video_id: str, max_count: int = 500) -> list[dict]:
-    """Page /api/comment/list/ for one post and /api/comment/list/reply/ for
-    every comment that has replies, on the open session. Stops at max_count
-    comments in total, has_more 0, or an empty page. A short random sleep
-    separates pages like the item_list paging does."""
-    import random
+def _comment_image(c: dict) -> str | None:
+    # Photo comments carry image_list, each entry with origin_url (full
+    # size) and crop_url, both {url_list: [...]}. Sticker comments (the
+    # common kind) carry cmt_sticker_struct instead, whose animated_url
+    # and static_url hold {high|mid|low}_resolution_url, animated WebP
+    for img in c.get("image_list") or []:
+        for key in ("origin_url", "crop_url"):
+            urls = ((img or {}).get(key) or {}).get("url_list") or []
+            if urls:
+                # The same picture is listed as .image (whatever container
+                # TikTok stored) and .jpeg; the JPEG is the safe download
+                return next((u for u in urls if u.split("?")[0].endswith((".jpeg", ".jpg"))), urls[0])
+    st = c.get("cmt_sticker_struct") or {}
+    for kind in ("animated_url", "static_url"):
+        for res in ("high_resolution_url", "mid_resolution_url", "low_resolution_url"):
+            urls = ((st.get(kind) or {}).get(res) or {}).get("url_list") or []
+            if urls:
+                return urls[0]
+    return None
 
-    def _image(c: dict) -> str | None:
-        # Photo comments carry image_list, each entry with origin_url (full
-        # size) and crop_url, both {url_list: [...]}. Sticker comments (the
-        # common kind) carry cmt_sticker_struct instead, whose animated_url
-        # and static_url hold {high|mid|low}_resolution_url, animated WebP
-        for img in c.get("image_list") or []:
-            for key in ("origin_url", "crop_url"):
-                urls = ((img or {}).get(key) or {}).get("url_list") or []
-                if urls:
-                    # The same picture is listed as .image (whatever container
-                    # TikTok stored) and .jpeg; the JPEG is the safe download
-                    return next((u for u in urls if u.split("?")[0].endswith((".jpeg", ".jpg"))), urls[0])
-        st = c.get("cmt_sticker_struct") or {}
-        for kind in ("animated_url", "static_url"):
-            for res in ("high_resolution_url", "mid_resolution_url", "low_resolution_url"):
-                urls = ((st.get(kind) or {}).get(res) or {}).get("url_list") or []
-                if urls:
-                    return urls[0]
+
+def _comment_row(c: dict, parent: str | None) -> dict | None:
+    cid, text = str(c.get("cid") or ""), (c.get("text") or "").strip()
+    image = _comment_image(c)
+    if not cid or not (text or image):
         return None
+    u = c.get("user") or {}
+    return {"comment_id": cid, "parent_id": parent,
+            "author": u.get("unique_id") or u.get("nickname"),
+            "author_name": u.get("nickname") or None,
+            "author_id": str(u.get("uid") or "") or None, "text": text,
+            "likes": c.get("digg_count"), "created_at": c.get("create_time"),
+            "image_url": image}
 
-    def _row(c: dict, parent: str | None) -> dict | None:
-        cid, text = str(c.get("cid") or ""), (c.get("text") or "").strip()
-        image = _image(c)
-        if not cid or not (text or image):
-            return None
-        u = c.get("user") or {}
-        return {"comment_id": cid, "parent_id": parent,
-                "author": u.get("unique_id") or u.get("nickname"),
-                "author_name": u.get("nickname") or None,
-                "author_id": str(u.get("uid") or "") or None, "text": text,
-                "likes": c.get("digg_count"), "created_at": c.get("create_time"),
-                "image_url": image}
+
+async def get_video_comments(api, video_id: str, max_count: int = 500,
+                             handle: str | None = None) -> list[dict]:
+    """Comments of one post. First through the API on the open session
+    (/api/comment/list/ paged 20 at a time, then /api/comment/list/reply/
+    for every comment with replies, a short random sleep between pages).
+    The moment TikTok answers a constructed request with an empty body the
+    session is being scored as a bot, and every later constructed call in
+    this session would fail the same way, so the fetch switches to
+    _sniff_video_comments for this post and all that follow on the session."""
+    if getattr(api, "_comments_sniff", False):
+        return await _sniff_video_comments(api, video_id, handle, max_count)
+    from TikTokApi.exceptions import EmptyResponseException
 
     async def _pages(url: str, params: dict) -> list[dict]:
         out, cursor = [], 0
@@ -1041,19 +1049,126 @@ async def get_video_comments(api, video_id: str, max_count: int = 500) -> list[d
         return out
 
     rows: list[dict] = []
-    tops = await _pages("https://www.tiktok.com/api/comment/list/", {"aweme_id": video_id})
-    for c in tops:
-        r = _row(c, None)
-        if r:
-            rows.append(r)
-    for c in tops:
-        if not c.get("reply_comment_total") or len(rows) >= max_count:
-            continue
-        for rc in await _pages("https://www.tiktok.com/api/comment/list/reply/",
-                               {"item_id": video_id, "comment_id": c["cid"]}):
-            r = _row(rc, str(c["cid"]))
+    try:
+        tops = await _pages("https://www.tiktok.com/api/comment/list/", {"aweme_id": video_id})
+        for c in tops:
+            r = _comment_row(c, None)
             if r:
                 rows.append(r)
+        for c in tops:
+            if not c.get("reply_comment_total") or len(rows) >= max_count:
+                continue
+            for rc in await _pages("https://www.tiktok.com/api/comment/list/reply/",
+                                   {"item_id": video_id, "comment_id": c["cid"]}):
+                r = _comment_row(rc, str(c["cid"]))
+                if r:
+                    rows.append(r)
+    except EmptyResponseException:
+        print(f"[comments] empty response on {video_id}: switching this session to page sniffing")
+        api._comments_sniff = True
+        return await _sniff_video_comments(api, video_id, handle, max_count)
+    return rows[:max_count]
+
+
+async def _sniff_video_comments(api, video_id: str, handle: str | None,
+                                max_count: int = 500) -> list[dict]:
+    """Comments the way a person reads them: open the post page in its own
+    tab and capture the /api/comment/list/ responses the page's frontend
+    requests on its own, scrolling the comment panel for more pages and
+    pressing every "View replies" control for the reply pages. No request
+    is constructed, the page signs everything itself, which is what still
+    works when constructed calls come back empty (same idea as
+    _sniff_item_list). Slower than the API path: one page load plus a few
+    seconds of scrolling per post."""
+    from urllib.parse import urlparse, parse_qs
+    tops:    dict[str, dict]            = {}
+    replies: dict[str, dict[str, dict]] = {}
+    state = {"responses": 0, "exhausted": False}
+
+    def _count() -> int:
+        return len(tops) + sum(len(r) for r in replies.values())
+
+    async def on_response(resp):
+        if "/api/comment/list/" not in resp.url:
+            return
+        try:
+            data = await resp.json()
+        except Exception:
+            return
+        if not isinstance(data, dict) or data.get("status_code", data.get("statusCode", 0)) not in (0, None):
+            return
+        state["responses"] += 1
+        page = data.get("comments") or []
+        if "/reply/" in resp.url:
+            parent = parse_qs(urlparse(resp.url).query).get("comment_id", [""])[0]
+            for c in page:
+                replies.setdefault(parent, {}).setdefault(str(c.get("cid")), c)
+            return
+        for c in page:
+            tops.setdefault(str(c.get("cid")), c)
+        if not page or not data.get("has_more"):
+            state["exhausted"] = True
+
+    tab = await api.sessions[0].page.context.new_page()
+    tab.on("response", on_response)
+    try:
+        # Any handle resolves: TikTok redirects to the post's owner
+        await tab.goto(f"https://www.tiktok.com/@{handle or 'tiktok'}/video/{video_id}",
+                       wait_until="domcontentloaded")
+        vp = tab.viewport_size or {"width": 1280, "height": 720}
+        # The comment panel is the right column with its own scroll box;
+        # wheel events land under the cursor, so park it there
+        await tab.mouse.move(int(vp["width"] * 0.8), int(vp["height"] * 0.6))
+        idle, last = 0, -1
+        for _ in range(200):
+            await asyncio.sleep(random.uniform(1.2, 2.0))
+            if state["responses"] == last:
+                idle += 1
+                if idle >= 5:
+                    break
+            else:
+                idle, last = 0, state["responses"]
+            if state["exhausted"] or _count() >= max_count:
+                break
+            await tab.mouse.wheel(0, random.randint(600, 1200))
+        # Replies load only on demand: press the first unexpanded "View N
+        # replies" / "View more replies" control, wait for its page, repeat.
+        # ponytail: matches the English UI text; a session in another
+        # language fetches top-level comments only
+        for _ in range(80):
+            if _count() >= max_count:
+                break
+            clicked = await tab.evaluate("""() => {
+                const el = [...document.querySelectorAll('p, span, div, button')]
+                  .find(e => !e.children.length && /^view\b.*repl/i.test((e.textContent || '').trim()));
+                if (!el) return 0;
+                el.click();
+                return 1;
+            }""")
+            if not clicked:
+                break
+            await asyncio.sleep(random.uniform(1.0, 1.8))
+    finally:
+        tab.remove_listener("response", on_response)
+        try:
+            await tab.close()
+        except Exception:
+            pass
+
+    rows: list[dict] = []
+    for cid, c in tops.items():
+        r = _comment_row(c, None)
+        if r:
+            rows.append(r)
+        for rc in replies.get(cid, {}).values():
+            r = _comment_row(rc, cid)
+            if r:
+                rows.append(r)
+    for parent, rcs in replies.items():
+        if parent not in tops:
+            rows.extend(r for r in (_comment_row(rc, parent) for rc in rcs.values()) if r)
+    if not rows and state["responses"] == 0:
+        raise RuntimeError(f"comment page for {video_id} made no comment requests (wall, removed post, or layout change)")
     return rows[:max_count]
 
 

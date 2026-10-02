@@ -65,7 +65,8 @@ def _lookup_profile(handle: str) -> dict:
 
 def _fetch_comments(engine, video: dict, max_count: int) -> list[dict]:
     from platforms.tiktok.api import get_video_comments, run_browser_job
-    return run_browser_job(lambda api: get_video_comments(api, video["video_id"], max_count))
+    handle = (engine.db.get_channel(video["channel_id"]) or {}).get("handle")
+    return run_browser_job(lambda api: get_video_comments(api, video["video_id"], max_count, handle))
 
 
 def _process_session(engine, channels, log, set_current, stop_event,

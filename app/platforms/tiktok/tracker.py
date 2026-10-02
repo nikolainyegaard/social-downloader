@@ -809,7 +809,7 @@ async def process_single_user(
                 _stage(f"fetching comments {_i} of {len(_due)}")
                 _t0 = time.time()
                 try:
-                    _rows = await get_video_comments(api, _vid, _max_per_post)
+                    _rows = await get_video_comments(api, _vid, _max_per_post, user["handle"])
                 except Exception as e:
                     if _is_bot_error(e):
                         raise _restart_error(e) from e

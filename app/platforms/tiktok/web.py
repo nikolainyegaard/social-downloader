@@ -1050,6 +1050,15 @@ def register_tiktok_routes(bp, engine) -> None:
                     data = {"error": "TikTok returned no data (None)"}
                 return jsonify({"ok": True, "output": json.dumps(data, indent=2, default=str)})
 
+            elif source == "tiktokapi" and action == "video_comments_page":
+                from platforms.tiktok.api import _sniff_video_comments
+                m_vid    = re.search(r'/(?:video|photo)/(\d+)', inp)
+                video_id = m_vid.group(1) if m_vid else inp.rsplit(":", 1)[-1].strip()
+                m_h      = re.search(r'@([^/\s:]+)', inp)
+                handle   = m_h.group(1) if m_h else None
+                rows = run_browser_job(lambda _api: _sniff_video_comments(_api, video_id, handle, 500))
+                return jsonify({"ok": True, "output": json.dumps({"count": len(rows), "rows": rows}, indent=2, default=str)})
+
             elif source == "tiktokapi" and action == "user_info":
                 handle = inp.lstrip("@").strip()
 
