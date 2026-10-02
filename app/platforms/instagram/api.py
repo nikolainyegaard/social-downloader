@@ -156,7 +156,16 @@ def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
         params = {"id": pk}
         if page_id:
             params["page_id"] = page_id
-        data  = _hiker_get("/v2/media/comments", params)
+        try:
+            data = _hiker_get("/v2/media/comments", params)
+        except RuntimeError as e:
+            # Instagram counts hidden, restricted and deleted comments, but
+            # lists none of them; HikerAPI then answers 404 "Entries not
+            # found" on every comment endpoint. That is an empty result, not
+            # a failure worth a strike
+            if "HTTP 404" in str(e):
+                break
+            raise
         resp  = data.get("response") if isinstance(data, dict) else data
         items = (resp.get("items") or resp.get("comments") or []) if isinstance(resp, dict) else (resp or [])
         if not items:

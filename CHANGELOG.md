@@ -71,6 +71,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Fixed
 - Instagram comments: posts with more than one page of comments failed with HikerAPI 404 `Entries not found`, because the last page still carries a `next_page_id`; paging now stops on `has_more_comments`
+- Instagram comments: a post whose counted comments are all hidden or deleted (HikerAPI 404 `Entries not found` on the first page) is stored as zero comments instead of a failure strike
 - Running the OCR text index on a post no longer removed its saved comments from the search index
 - When TikTok answers the comment endpoint with empty responses, the check stops fetching comments instead of failing every remaining post and parking them; those posts stay due. Every check now logs how many posts were listed, had comments and were due, and Fetch now, Retry failed and the creator's Comments toggle write to the loop log like manual runs do
 - The loop log and status panel update live again: the request timing added for the startup report was asking the live event stream for its length, which stalled the stream before its first byte, so pages only updated on refresh
