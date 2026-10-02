@@ -1150,16 +1150,25 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
         # requests pages, once the Comments tab is active. Pressing it when
         # it is already active is harmless
         # ponytail: matched by the English label, like the reply controls
+        # A synthetic el.click() on the label does not switch the React tab,
+        # and the action bar's comment bubble also reads "comments"; so this
+        # takes the visible label in the right half of the viewport and
+        # presses it with a real mouse click at its centre
         try:
-            pressed = await tab.evaluate("""() => {
-                const el = [...document.querySelectorAll('span, div, p, button, a')]
-                  .find(e => !e.children.length && /^comments\b/i.test((e.textContent || '').trim()));
-                if (!el) return 0;
-                el.click();
-                return 1;
+            spot = await tab.evaluate("""() => {
+                const cands = [...document.querySelectorAll('span, div, p, button, a')]
+                  .filter(e => !e.children.length && /^comments\b/i.test((e.textContent || '').trim()))
+                  .map(e => e.getBoundingClientRect())
+                  .filter(r => r.width > 0 && r.height > 0 && r.x > innerWidth / 2 && r.y < innerHeight);
+                if (!cands.length) return null;
+                const r = cands[0];
+                return [r.x + r.width / 2, r.y + r.height / 2];
             }""")
-            if pressed:
+            if spot:
+                await tab.mouse.click(spot[0], spot[1])
                 await asyncio.sleep(random.uniform(1.0, 1.8))
+            else:
+                print(f"[comments] no Comments tab label found on {video_id}")
         except Exception as exc:
             print(f"[comments] comments tab press failed on {video_id}: {exc}")
         vp = tab.viewport_size or {"width": 1280, "height": 720}
