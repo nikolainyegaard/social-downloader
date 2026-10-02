@@ -561,7 +561,7 @@ def create_channel_blueprint(engine) -> Blueprint:
         path = c and c.get("image_path")
         if not path or not os.path.exists(path):
             return ("", 404)
-        mime = "image/avif" if path.endswith(".avif") else "image/jpeg"
+        mime = {"avif": "image/avif", "webp": "image/webp"}.get(path.rsplit(".", 1)[-1], "image/jpeg")
         return send_file(path, mimetype=mime, max_age=86400)
 
     @bp.route("/videos/<video_id>/comments", methods=["PATCH"])

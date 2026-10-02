@@ -992,11 +992,19 @@ async def get_video_comments(api, video_id: str, max_count: int = 500) -> list[d
     import random
 
     def _image(c: dict) -> str | None:
-        # Picture comments carry image_list; each entry has origin_url (full
-        # size) and crop_url, both {url_list: [...]}. First full-size URL wins
+        # Photo comments carry image_list, each entry with origin_url (full
+        # size) and crop_url, both {url_list: [...]}. Sticker comments (the
+        # common kind) carry cmt_sticker_struct instead, whose animated_url
+        # and static_url hold {high|mid|low}_resolution_url, animated WebP
         for img in c.get("image_list") or []:
             for key in ("origin_url", "crop_url"):
                 urls = ((img or {}).get(key) or {}).get("url_list") or []
+                if urls:
+                    return urls[0]
+        st = c.get("cmt_sticker_struct") or {}
+        for kind in ("animated_url", "static_url"):
+            for res in ("high_resolution_url", "mid_resolution_url", "low_resolution_url"):
+                urls = ((st.get(kind) or {}).get(res) or {}).get("url_list") or []
                 if urls:
                     return urls[0]
         return None

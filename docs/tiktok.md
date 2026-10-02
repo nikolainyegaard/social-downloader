@@ -41,7 +41,7 @@ sound_videos:  sound_id FK, video_id FK, added_at; PK (sound_id, video_id)
 media_text:    id PK, item_type (video|story), item_id, channel_id, source (caption|image|frame|comment),
                start_ts, end_ts, text, confidence; media_text_fts is its FTS5 trigram index (see backend.md)
 comments:      comment_id PK, video_id, channel_id, parent_id, author, author_id, text, likes, created_at, fetched_at,
-               image_path (picture comments, media/tiktok/@handle/comments/)
+               image_path (photo and sticker comments, media/tiktok/@handle/comments/, .avif or animated .webp)
 ```
 
 Indexes from `store.init_tables()`: `idx_sound_videos_sound`, `idx_videos_channel_id`, `idx_videos_status`, `idx_profile_history_channel_id`, `idx_videos_stats_backfilled_at`, `idx_channels_next_check_at`.

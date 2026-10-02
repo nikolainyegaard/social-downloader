@@ -89,21 +89,29 @@ def _save_images(engine, handle: str, rows: list[dict]) -> int:
         proxies = {"http": proxy, "https": proxy} if proxy else None
     n = 0
     for r in todo:
-        avif = os.path.join(folder, f"{r['comment_id']}.avif")
-        jpg  = os.path.join(folder, f"{r['comment_id']}.jpg")
-        if os.path.exists(avif):
-            r["image_path"] = avif
+        base = os.path.join(folder, str(r["comment_id"]))
+        have = next((base + ext for ext in (".avif", ".webp", ".jpg") if os.path.exists(base + ext)), None)
+        if have:
+            r["image_path"] = have
             continue
         try:
             resp = requests.get(r["image_url"], cookies=cookies, proxies=proxies, timeout=30)
             resp.raise_for_status()
-            with open(jpg, "wb") as f:
-                f.write(resp.content)
-            if encode_avif(jpg, avif, CRF_PHOTO):
-                os.remove(jpg)
-                r["image_path"] = avif
+            # Stickers are animated WebP (.awebp URLs, image/webp): kept as
+            # is, browsers animate them and ffmpeg cannot. Photos go to AVIF
+            # like photo posts
+            if "webp" in resp.headers.get("Content-Type", "") or ".awebp" in r["image_url"].split("?")[0]:
+                with open(base + ".webp", "wb") as f:
+                    f.write(resp.content)
+                r["image_path"] = base + ".webp"
             else:
-                r["image_path"] = jpg
+                with open(base + ".jpg", "wb") as f:
+                    f.write(resp.content)
+                if encode_avif(base + ".jpg", base + ".avif", CRF_PHOTO):
+                    os.remove(base + ".jpg")
+                    r["image_path"] = base + ".avif"
+                else:
+                    r["image_path"] = base + ".jpg"
             n += 1
         except Exception as e:
             print(f"[{_ts()}] [comments] image of {r['comment_id']} failed: {type(e).__name__}: {e}")
