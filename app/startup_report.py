@@ -121,6 +121,12 @@ def request_finished(response):
     if steps:
         response.headers["Server-Timing"] = ", ".join(
             f'{n.replace(" ", "_")};dur={ms}' for n, ms in steps)
+    # A streamed response (the SSE events route, a generator that never ends)
+    # must not be asked for its length: Werkzeug would consume the generator
+    # into a list to count it and the request would hang before its first
+    # byte. Streams are left out of the report altogether
+    if not response.is_sequence:
+        return response
     size = response.calculate_content_length() or 0
     if not request.path.startswith("/api/") and request.path != "/":
         return response

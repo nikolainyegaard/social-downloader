@@ -66,6 +66,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The legend under each Stats graph reads "Date" with a short date and "Value" (the card title already names the metric), with a fixed slot for the date so nothing shifts or overflows while sweeping the cursor
 
 ### Fixed
+- The loop log and status panel update live again: the request timing added for the startup report was asking the live event stream for its length, which stalled the stream before its first byte, so pages only updated on refresh
 - Single-image posts open in the media viewer with the details panel, like videos and carousels, instead of the bare image popup
 - Diagnostics panes built from the shared pane (General, Twitter, Instagram, OnlyFans) now scroll their output instead of growing past the bottom of the modal
 - A creator banned while a post was still awaiting its second deletion check no longer shows a Missing counter on the card: the ban confirms pending deletions, for new bans and existing ones
