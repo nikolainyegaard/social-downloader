@@ -70,6 +70,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The legend under each Stats graph reads "Date" with a short date and "Value" (the card title already names the metric), with a fixed slot for the date so nothing shifts or overflows while sweeping the cursor
 
 ### Fixed
+- Instagram comments: posts with more than one page of comments failed with HikerAPI 404 `Entries not found`, because the last page still carries a `next_page_id`; paging now stops on `has_more_comments`
 - Running the OCR text index on a post no longer removed its saved comments from the search index
 - When TikTok answers the comment endpoint with empty responses, the check stops fetching comments instead of failing every remaining post and parking them; those posts stay due. Every check now logs how many posts were listed, had comments and were due, and Fetch now, Retry failed and the creator's Comments toggle write to the loop log like manual runs do
 - The loop log and status panel update live again: the request timing added for the startup report was asking the live event stream for its length, which stalled the stream before its first byte, so pages only updated on refresh

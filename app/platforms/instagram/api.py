@@ -169,8 +169,10 @@ def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
                 cr = _row(child, r["comment_id"] if r else None)
                 if cr:
                     rows.append(cr)
+        # HikerAPI returns a next_page_id even on the last page; following
+        # it answers 404 "Entries not found", so has_more_comments decides
         page_id = data.get("next_page_id") if isinstance(data, dict) else None
-        if not page_id:
+        if not page_id or not (isinstance(resp, dict) and resp.get("has_more_comments")):
             break
         time.sleep(1)
     return rows[:max_count]
