@@ -71,6 +71,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 
 ### Fixed
 - Running the OCR text index on a post no longer removed its saved comments from the search index
+- When TikTok answers the comment endpoint with empty responses, the check stops fetching comments instead of failing every remaining post and parking them; those posts stay due. Every check now logs how many posts were listed, had comments and were due
 - The loop log and status panel update live again: the request timing added for the startup report was asking the live event stream for its length, which stalled the stream before its first byte, so pages only updated on refresh
 - Single-image posts open in the media viewer with the details panel, like videos and carousels, instead of the bare image popup
 - Diagnostics panes built from the shared pane (General, Twitter, Instagram, OnlyFans) now scroll their output instead of growing past the bottom of the modal

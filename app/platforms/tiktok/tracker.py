@@ -788,12 +788,19 @@ async def process_single_user(
         # ── Comments of opted-in posts whose count moved since the last fetch ─
         # The listing's commentCount decides: no change, no request. Runs on
         # this session, capped per check (comments.py), stop honoured per post.
-        if item_list_map and not (stop_event and stop_event.is_set()):
+        if not (stop_event and stop_event.is_set()):
             import comments
             from platforms.registry import ENGINES
             _eng = ENGINES["tiktok"]
-            _due = comments.due_posts(_eng, channel_id,
-                                      {vid: d.get("comment_count") for vid, d in item_list_map.items()})
+            _counts = {vid: d.get("comment_count") for vid, d in item_list_map.items()}
+            _due = comments.due_posts(_eng, channel_id, _counts) if _counts else []
+            _wanted = _eng.db.comments_wanted_count(channel_id)
+            if _wanted and not item_list_map:
+                log("  Comments skipped: no post listing this check (the sniff and the item_list fallback both failed)")
+            elif _wanted:
+                _with = sum(1 for n in _counts.values() if n)
+                log(f"  Comments: {len(_counts)} post(s) listed, {_with} with comments, {len(_due)} due"
+                    + (f" (capped at {len(_due)})" if _due and len(_due) == int(comments.get_settings()['max_per_check']) else ""))
             _max_per_post = int(comments.get_settings()["max_per_post"])
             for _i, (_vid, _count) in enumerate(_due, 1):
                 if stop_event and stop_event.is_set():
@@ -805,6 +812,14 @@ async def process_single_user(
                 except Exception as e:
                     if _is_bot_error(e):
                         raise _restart_error(e) from e
+                    if comments.is_empty_response(e):
+                        # The endpoint is refusing this session for now: every
+                        # further post would fail the same way and burn its
+                        # three strikes. Leave them due and stop for this check
+                        comments.record(_eng, _vid, channel_id, user["handle"], _count, None, e,
+                                        time.time() - _t0, log, count_failure=False)
+                        log(f"  Comments: TikTok is returning empty responses, {len(_due) - _i} post(s) left for the next check")
+                        break
                     comments.record(_eng, _vid, channel_id, user["handle"], _count, None, e,
                                     time.time() - _t0, log)
                     continue

@@ -118,10 +118,25 @@ def _save_images(engine, handle: str, rows: list[dict]) -> int:
     return n
 
 
+def is_empty_response(error: Exception) -> bool:
+    """TikTok answering a constructed endpoint with an empty body: the
+    endpoint is refusing the session right now (rate limit, bot score), not a
+    problem with the post. Such a failure must not count toward parking the
+    post, and the caller should stop fetching for this check."""
+    try:
+        from TikTokApi.exceptions import EmptyResponseException
+        if isinstance(error, EmptyResponseException):
+            return True
+    except ImportError:
+        pass
+    return "empty response" in str(error).lower()
+
+
 def record(engine, video_id: str, channel_id: str, handle: str | None,
            count: int | None, rows: list[dict] | None, error: Exception | None,
-           secs: float, log=None) -> None:
-    """Store a fetch result (rows) or a failure (error) and log one line."""
+           secs: float, log=None, count_failure: bool = True) -> None:
+    """Store a fetch result (rows) or a failure (error) and log one line.
+    count_failure=False keeps the post due (a refusal, not a post problem)."""
     global _posts_done
     if handle is None:
         handle = (engine.db.get_channel(channel_id) or {}).get("handle")
@@ -132,7 +147,8 @@ def record(engine, video_id: str, channel_id: str, handle: str | None,
         engine.db.replace_comments(video_id, channel_id, rows or [], count)
         line = f"{len(rows or [])} comment(s) in {rec['secs']}s" + (f", {images} image(s)" if images else "")
     else:
-        engine.db.mark_comments_failed(video_id)
+        if count_failure:
+            engine.db.mark_comments_failed(video_id)
         last = next((l for l in reversed(str(error).splitlines()) if l.strip()), "")
         rec["error"] = f"{type(error).__name__}: {last.strip()[:200]}"
         line = f"failed: {rec['error']}"
@@ -160,7 +176,7 @@ def fetch_now(engine, video_id: str) -> None:
                    time.time() - t0)
         except Exception as e:
             record(engine, video_id, v["channel_id"], None, v.get("comment_count"), None, e,
-                   time.time() - t0)
+                   time.time() - t0, count_failure=not is_empty_response(e))
 
     threading.Thread(target=_run, daemon=True, name=f"comments-{video_id}").start()
 

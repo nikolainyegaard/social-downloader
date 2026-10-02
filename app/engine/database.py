@@ -1917,6 +1917,13 @@ class ChannelDB:
         COALESCE(v.comments_enabled, c.comments_enabled) = 1
         AND v.status != 'deleted' AND v.comments_failed < 3"""
 
+    def comments_wanted_count(self, channel_id: str) -> int:
+        """How many of the creator's posts are opted in (for the check's log line)."""
+        with self.get_db() as conn:
+            return conn.execute(f"""
+                SELECT COUNT(*) FROM videos v JOIN channels c ON c.channel_id = v.channel_id
+                WHERE v.channel_id = ? AND {self._COMMENTS_WANTED}""", (channel_id,)).fetchone()[0]
+
     def get_comments_due(self, channel_id: str, counts: dict) -> list[tuple[str, int]]:
         """From a listing's {video_id: comment_count}: the opted-in posts whose
         count differs from the one stamped at their last fetch (NULL = never
