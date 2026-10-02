@@ -38,9 +38,10 @@ videos:
 sounds:        sound_id TEXT PK, label, comment, added_at, last_checked, enabled,
                tracking_enabled, starred
 sound_videos:  sound_id FK, video_id FK, added_at; PK (sound_id, video_id)
-media_text:    id PK, item_type (video|story), item_id, channel_id, source (caption|image|frame|comment),
-               start_ts, end_ts, text, confidence; media_text_fts is its FTS5 trigram index (see backend.md)
-comments:      comment_id PK, video_id, channel_id, parent_id, author, author_id, text, likes, created_at, fetched_at,
+media_text:    id PK, item_type (video|story|channel), item_id, channel_id, source (caption, description, sound, image,
+               frame, comment, comment_author, comment_author_name, handle, display_name, bio, bio_link, old_*),
+               start_ts, end_ts, text, confidence, ref; media_text_fts is its FTS5 trigram index (see backend.md search.py)
+comments:      comment_id PK, video_id, channel_id, parent_id, author, author_name, author_id, text, likes, created_at, fetched_at,
                image_path (photo and sticker comments, media/tiktok/@handle/comments/, .avif or animated .webp)
 ```
 

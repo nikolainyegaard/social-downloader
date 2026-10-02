@@ -81,8 +81,9 @@ Adapter extras:
 
 Global:
 /api/health                       unauthenticated health check
-/api/search                       ?q=&limit=&platform=: instant text search over every enabled platform's
-                                  media_text index (captions, OCR text), merged by FTS rank; `more` flags a cap hit
+/api/search                       ?q=&limit=&offset=&platform=: advanced search (search.py grammar) over every enabled
+                                  platform, pages merged by the sort key; returns results (items with their matched
+                                  text rows), more, parsed (how the query was read, with notes) and help (the syntax table)
 /api/transcode/status             AV1 transcode job: settings, current file, counts, recent results
 /api/transcode/settings           PATCH any transcode.json key (enabled, paused, min_size_mb, ...)
 /api/transcode/backfill           POST: scan the library and queue qualifying files (409 while scanning)

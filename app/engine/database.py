@@ -218,7 +218,8 @@ class ChannelDB:
                     start_ts   REAL,
                     end_ts     REAL,
                     text       TEXT NOT NULL,
-                    confidence REAL
+                    confidence REAL,
+                    ref        TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_media_text_item ON media_text(item_type, item_id);
                 CREATE VIRTUAL TABLE IF NOT EXISTS media_text_fts USING fts5(
@@ -250,11 +251,88 @@ class ChannelDB:
                     likes      INTEGER,
                     created_at INTEGER,
                     fetched_at INTEGER NOT NULL,
-                    image_path TEXT
+                    image_path TEXT,
+                    author_name TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_comments_video ON comments(video_id);
+
+
             """)
             needs_vacuum = self._migrate_db(conn)
+            # After the migrations: the trigger bodies name columns an older
+            # database only has once _migrate_db added them
+            conn.executescript("""
+                -- Creator and post text mirrored into media_text by triggers,
+                -- so every writer (engine, TikTok store, migrations) keeps the
+                -- search index current without knowing about it. Sources:
+                -- channel: handle, display_name, bio, bio_link, and old_* from
+                -- profile_history; video: caption, description (when it is
+                -- not the caption again), sound. OCR and comment rows are
+                -- written by their own code paths.
+                CREATE TRIGGER IF NOT EXISTS channels_text_ai AFTER INSERT ON channels BEGIN
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'channel', new.channel_id, new.channel_id, 'handle', new.handle WHERE COALESCE(new.handle, '') != '';
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'channel', new.channel_id, new.channel_id, 'display_name', new.display_name WHERE COALESCE(new.display_name, '') != '';
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'channel', new.channel_id, new.channel_id, 'bio', new.description WHERE COALESCE(new.description, '') != '';
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'channel', new.channel_id, new.channel_id, 'bio_link', new.bio_link WHERE COALESCE(new.bio_link, '') != '';
+                END;
+                CREATE TRIGGER IF NOT EXISTS channels_text_au AFTER UPDATE OF handle, display_name, description, bio_link ON channels BEGIN
+                    DELETE FROM media_text WHERE item_type = 'channel' AND item_id = new.channel_id
+                      AND source IN ('handle', 'display_name', 'bio', 'bio_link');
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'channel', new.channel_id, new.channel_id, 'handle', new.handle WHERE COALESCE(new.handle, '') != '';
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'channel', new.channel_id, new.channel_id, 'display_name', new.display_name WHERE COALESCE(new.display_name, '') != '';
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'channel', new.channel_id, new.channel_id, 'bio', new.description WHERE COALESCE(new.description, '') != '';
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'channel', new.channel_id, new.channel_id, 'bio_link', new.bio_link WHERE COALESCE(new.bio_link, '') != '';
+                END;
+                CREATE TRIGGER IF NOT EXISTS channels_text_ad AFTER DELETE ON channels BEGIN
+                    DELETE FROM media_text WHERE channel_id = old.channel_id;
+                END;
+                CREATE TRIGGER IF NOT EXISTS profile_history_text_ai AFTER INSERT ON profile_history
+                WHEN COALESCE(new.old_value, '') != '' AND new.field IN ('handle', 'display_name', 'description', 'bio_link') BEGIN
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, ref, text)
+                    VALUES ('channel', new.channel_id, new.channel_id,
+                            'old_' || CASE new.field WHEN 'description' THEN 'bio' ELSE new.field END,
+                            new.id, new.old_value);
+                END;
+                CREATE TRIGGER IF NOT EXISTS profile_history_text_ad AFTER DELETE ON profile_history BEGIN
+                    DELETE FROM media_text WHERE item_type = 'channel' AND ref = CAST(old.id AS TEXT) AND source LIKE 'old_%';
+                END;
+                CREATE TRIGGER IF NOT EXISTS videos_text_ai AFTER INSERT ON videos BEGIN
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'video', new.video_id, new.channel_id, 'caption', new.title WHERE COALESCE(new.title, '') != '';
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'video', new.video_id, new.channel_id, 'description', new.description
+                    WHERE COALESCE(new.description, '') != '' AND new.description != COALESCE(new.title, '');
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'video', new.video_id, new.channel_id, 'sound', TRIM(COALESCE(new.music_title, '') || ' ' || COALESCE(new.music_artist, ''))
+                    WHERE COALESCE(new.music_title, '') != '' OR COALESCE(new.music_artist, '') != '';
+                END;
+                CREATE TRIGGER IF NOT EXISTS videos_text_au AFTER UPDATE OF title, description, music_title, music_artist ON videos BEGIN
+                    DELETE FROM media_text WHERE item_type = 'video' AND item_id = new.video_id
+                      AND source IN ('caption', 'description', 'sound');
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'video', new.video_id, new.channel_id, 'caption', new.title WHERE COALESCE(new.title, '') != '';
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'video', new.video_id, new.channel_id, 'description', new.description
+                    WHERE COALESCE(new.description, '') != '' AND new.description != COALESCE(new.title, '');
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'video', new.video_id, new.channel_id, 'sound', TRIM(COALESCE(new.music_title, '') || ' ' || COALESCE(new.music_artist, ''))
+                    WHERE COALESCE(new.music_title, '') != '' OR COALESCE(new.music_artist, '') != '';
+                END;
+                CREATE TRIGGER IF NOT EXISTS videos_text_ad AFTER DELETE ON videos BEGIN
+                    DELETE FROM media_text WHERE item_type = 'video' AND item_id = old.video_id;
+                END;
+                CREATE TRIGGER IF NOT EXISTS stories_text_ad AFTER DELETE ON stories BEGIN
+                    DELETE FROM media_text WHERE item_type = 'story' AND item_id = old.story_id;
+                END;
+            """)
             # Captions of every post not yet in media_text (first launch after
             # the search feature, and any row added by a path that bypassed
             # add_video); idempotent through the NOT EXISTS
@@ -266,6 +344,45 @@ class ChannelDB:
                                   WHERE m.item_type = 'video' AND m.item_id = v.video_id
                                     AND m.source = 'caption')
             """)
+            # One-time backfill of the trigger-maintained sources for rows that
+            # predate the triggers (channel fields, old values, descriptions,
+            # sounds) and of the comment author rows. Gated by a settings key
+            if not conn.execute("SELECT 1 FROM settings WHERE key = 'media_text_sources_v2'").fetchone():
+                conn.execute("DELETE FROM media_text WHERE item_type = 'channel'")
+                conn.execute("""
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'channel', channel_id, channel_id, 'handle', handle FROM channels WHERE COALESCE(handle, '') != ''
+                    UNION ALL
+                    SELECT 'channel', channel_id, channel_id, 'display_name', display_name FROM channels WHERE COALESCE(display_name, '') != ''
+                    UNION ALL
+                    SELECT 'channel', channel_id, channel_id, 'bio', description FROM channels WHERE COALESCE(description, '') != ''
+                    UNION ALL
+                    SELECT 'channel', channel_id, channel_id, 'bio_link', bio_link FROM channels WHERE COALESCE(bio_link, '') != ''
+                """)
+                conn.execute("""
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, ref, text)
+                    SELECT 'channel', ph.channel_id, ph.channel_id,
+                           'old_' || CASE ph.field WHEN 'description' THEN 'bio' ELSE ph.field END, ph.id, ph.old_value
+                    FROM profile_history ph JOIN channels c ON c.channel_id = ph.channel_id
+                    WHERE COALESCE(ph.old_value, '') != '' AND ph.field IN ('handle', 'display_name', 'description', 'bio_link')
+                """)
+                conn.execute("DELETE FROM media_text WHERE item_type = 'video' AND source IN ('description', 'sound', 'comment_author', 'comment_author_name')")
+                conn.execute("""
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
+                    SELECT 'video', video_id, channel_id, 'description', description FROM videos
+                    WHERE COALESCE(description, '') != '' AND description != COALESCE(title, '')
+                    UNION ALL
+                    SELECT 'video', video_id, channel_id, 'sound', TRIM(COALESCE(music_title, '') || ' ' || COALESCE(music_artist, '')) FROM videos
+                    WHERE COALESCE(music_title, '') != '' OR COALESCE(music_artist, '') != ''
+                """)
+                conn.execute("""
+                    INSERT INTO media_text (item_type, item_id, channel_id, source, ref, text)
+                    SELECT 'video', video_id, channel_id, 'comment_author', comment_id, author FROM comments WHERE COALESCE(author, '') != ''
+                    UNION ALL
+                    SELECT 'video', video_id, channel_id, 'comment_author_name', comment_id, author_name FROM comments WHERE COALESCE(author_name, '') != ''
+                """)
+                conn.execute("UPDATE media_text SET ref = (SELECT comment_id FROM comments cm WHERE cm.video_id = media_text.item_id AND cm.text = media_text.text LIMIT 1) WHERE source = 'comment' AND ref IS NULL")
+                conn.execute("INSERT INTO settings (key, value) VALUES ('media_text_sources_v2', '1')")
             # One-time backfill: seed the add history from already tracked
             # channels so the panel starts populated instead of empty. A no-op
             # once add_queue has any rows.
@@ -410,6 +527,11 @@ class ChannelDB:
             "ALTER TABLE videos   ADD COLUMN comments_failed        INTEGER NOT NULL DEFAULT 0",
             # Picture comments: the downloaded image (AVIF) next to the creator's media
             "ALTER TABLE comments ADD COLUMN image_path             TEXT",
+            # Comment author's display name (author holds the handle)
+            "ALTER TABLE comments ADD COLUMN author_name            TEXT",
+            # What a media_text row points at inside its item: a comment id or
+            # a profile_history id, so the UI can open the exact thing
+            "ALTER TABLE media_text ADD COLUMN ref                  TEXT",
         ]
         for sql in migrations:
             try:
@@ -1006,11 +1128,6 @@ class ChannelDB:
                     (video_id, channel_id, title, upload_date, view_count, duration, content_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (video_id, channel_id, title, upload_date, view_count, duration, content_type or "video"))
-            if title and conn.execute("SELECT changes()").fetchone()[0]:
-                conn.execute("""
-                    INSERT INTO media_text (item_type, item_id, channel_id, source, text)
-                    VALUES ('video', ?, ?, 'caption', ?)
-                """, (video_id, channel_id, title))
 
 
     def update_video_downloaded(self, video_id: str, file_path: str, ytdlp_data_json: str | None = None) -> None:
@@ -1712,49 +1829,6 @@ class ChannelDB:
         return videos + history
 
 
-    # ── Text search ───────────────────────────────────────────────────────────
-
-    @staticmethod
-    def fts_query(q: str) -> str:
-        """User text to an FTS5 MATCH expression: each whitespace word becomes a
-        quoted phrase (no operator syntax leaks through), implicitly ANDed.
-        Words under 3 characters cannot match a trigram index and are dropped;
-        returns '' when nothing usable remains."""
-        words = [w.replace('"', '""') for w in q.split() if len(w) >= 3]
-        return " ".join(f'"{w}"' for w in words)
-
-    def search_text(self, q: str, limit: int = 50, offset: int = 0,
-                    channel_id: str | None = None) -> list[dict]:
-        """Full-text search over media_text, best match first. Each hit carries
-        the item's channel and date plus an FTS snippet with <b> marks."""
-        match = self.fts_query(q)
-        if not match:
-            return []
-        where = "AND m.channel_id = ?" if channel_id else ""
-        params: list = [match] + ([channel_id] if channel_id else []) + [limit, offset]
-        with self.get_db() as conn:
-            rows = conn.execute(f"""
-                SELECT m.id, m.item_type, m.item_id, m.channel_id, m.source,
-                       m.start_ts, m.end_ts, m.text, m.confidence,
-                       snippet(media_text_fts, 0, '<b>', '</b>', '…', 14) AS snippet,
-                       bm25(media_text_fts) AS rank,
-                       c.handle, c.display_name,
-                       COALESCE(v.upload_date, s.posted_at) AS ts,
-                       v.status, v.deleted_reason,
-                       COALESCE(v.content_type, s.content_type) AS content_type,
-                       COALESCE(v.file_path, s.file_path) IS NOT NULL AS has_file
-                FROM media_text_fts
-                JOIN media_text m ON m.id = media_text_fts.rowid
-                JOIN channels c   ON c.channel_id = m.channel_id
-                LEFT JOIN videos  v ON m.item_type = 'video' AND v.video_id = m.item_id
-                LEFT JOIN stories s ON m.item_type = 'story' AND s.story_id = m.item_id
-                WHERE media_text_fts MATCH ? {where}
-                ORDER BY rank
-                LIMIT ? OFFSET ?
-            """, params).fetchall()
-        return [dict(r) for r in rows]
-
-
     # ── Text index job (text_index.py) ────────────────────────────────────────
 
     def get_text_index_pending(self, version: int, limit: int = 50) -> list[dict]:
@@ -1801,12 +1875,12 @@ class ChannelDB:
 
     def replace_media_text(self, item_type: str, item_id: str, channel_id: str,
                            rows: list[tuple]) -> None:
-        """Replace the OCR rows of one item (caption rows stay). rows are
-        (source, start_ts, end_ts, text, confidence) tuples."""
+        """Replace the OCR rows of one item (every other source stays). rows
+        are (source, start_ts, end_ts, text, confidence) tuples."""
         with self.get_db() as conn:
             conn.execute("""
                 DELETE FROM media_text
-                WHERE item_type = ? AND item_id = ? AND source != 'caption'
+                WHERE item_type = ? AND item_id = ? AND source IN ('image', 'frame')
             """, (item_type, item_id))
             conn.executemany("""
                 INSERT INTO media_text (item_type, item_id, channel_id, source, start_ts, end_ts, text, confidence)
@@ -1887,18 +1961,24 @@ class ChannelDB:
             conn.execute("DELETE FROM comments WHERE video_id = ?", (video_id,))
             conn.executemany("""
                 INSERT INTO comments (comment_id, video_id, channel_id, parent_id, author, author_id,
-                                      text, likes, created_at, fetched_at, image_path)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      text, likes, created_at, fetched_at, image_path, author_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [(r["comment_id"], video_id, channel_id, r.get("parent_id"), r.get("author"),
                    r.get("author_id"), r["text"], r.get("likes"), r.get("created_at"), now,
-                   r.get("image_path"))
+                   r.get("image_path"), r.get("author_name"))
                   for r in rows])
-            conn.execute("DELETE FROM media_text WHERE item_type = 'video' AND item_id = ? AND source = 'comment'",
-                         (video_id,))
+            conn.execute("""DELETE FROM media_text WHERE item_type = 'video' AND item_id = ?
+                            AND source IN ('comment', 'comment_author', 'comment_author_name')""", (video_id,))
+            text_rows = []
+            for r in rows:
+                for source, text in (("comment", r["text"]), ("comment_author", r.get("author")),
+                                     ("comment_author_name", r.get("author_name"))):
+                    if text and text.strip():
+                        text_rows.append((video_id, channel_id, source, r["comment_id"], text))
             conn.executemany("""
-                INSERT INTO media_text (item_type, item_id, channel_id, source, text)
-                VALUES ('video', ?, ?, 'comment', ?)
-            """, [(video_id, channel_id, r["text"]) for r in rows if r["text"].strip()])
+                INSERT INTO media_text (item_type, item_id, channel_id, source, ref, text)
+                VALUES ('video', ?, ?, ?, ?, ?)
+            """, text_rows)
             conn.execute("""UPDATE videos SET comments_fetched_at = ?, comments_count_at_fetch = ?,
                             comments_failed = 0 WHERE video_id = ?""", (now, count, video_id))
 

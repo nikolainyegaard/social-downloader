@@ -1019,6 +1019,7 @@ async def get_video_comments(api, video_id: str, max_count: int = 500) -> list[d
         u = c.get("user") or {}
         return {"comment_id": cid, "parent_id": parent,
                 "author": u.get("unique_id") or u.get("nickname"),
+                "author_name": u.get("nickname") or None,
                 "author_id": str(u.get("uid") or "") or None, "text": text,
                 "likes": c.get("digg_count"), "created_at": c.get("create_time"),
                 "image_url": image}

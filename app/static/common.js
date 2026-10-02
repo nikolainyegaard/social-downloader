@@ -1980,12 +1980,16 @@ function _hostToasts() {
 
 let _searchTimer = null;
 let _searchSeq   = 0;
+let _searchSort  = '';        // the order picked in the header, appended as sort: unless the query has one
+let _searchState = { q: '', offset: 0, more: false, loading: false };
+let _searchHelp  = null;      // syntax table from the API, fetched once
 
 function openSearch() {
   _dlgOpen('searchModal');
-  const inp = document.getElementById('searchInput');
+  const inp = /** @type {HTMLInputElement} */ (document.getElementById('searchInput'));
   inp.focus();
   inp.select();
+  if (!_searchHelp) apiJSON('/api/search?q=').then(({ ok, data }) => { if (ok) _searchHelp = data.help || []; });
 }
 
 function closeSearch() {
@@ -1994,48 +1998,112 @@ function closeSearch() {
 
 function _searchOnInput(q) {
   clearTimeout(_searchTimer);
-  _searchTimer = setTimeout(() => _searchRun(q.trim()), 150);
+  _searchTimer = setTimeout(() => _searchRun(q.trim()), 200);
 }
 
-async function _searchRun(q) {
-  const hint = document.getElementById('searchHint');
-  const list = document.getElementById('searchResults');
-  if (q.length < 3) {
-    hint.textContent = 'Type at least 3 characters';
-    list.innerHTML = '';
+function _searchSortChanged(v) {
+  _searchSort = v;
+  _searchRun(_searchState.q);
+}
+
+function _searchHelpToggle() {
+  const el = document.getElementById('searchHelp');
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  el.innerHTML = (_searchHelp || []).map(([k, d]) => `<code>${esc(k)}</code><span>${esc(d)}</span>`).join('')
+    || '<span>Loading…</span>';
+  el.style.display = '';
+}
+
+// The sort picker is a convenience for the sort: token; a typed sort: wins
+function _searchQuery(q) {
+  return (_searchSort && !/\bsort:/.test(q)) ? `${q} sort:${_searchSort}` : q;
+}
+
+async function _searchRun(q, append = false) {
+  const hint  = document.getElementById('searchHint');
+  const list  = document.getElementById('searchResults');
+  const chips = document.getElementById('searchChips');
+  if (!append) { _searchState = { q, offset: 0, more: false, loading: false }; }
+  if (!q) {
+    hint.textContent = 'Type to search. Words match captions, comments, creator profiles and the text inside media.';
+    list.innerHTML = ''; chips.innerHTML = '';
     return;
   }
   const seq = ++_searchSeq;
-  const { ok, data } = await apiJSON(`/api/search?q=${encodeURIComponent(q)}&limit=50`);
+  _searchState.loading = true;
+  const url = `/api/search?q=${encodeURIComponent(_searchQuery(q))}&limit=50&offset=${_searchState.offset}`;
+  const { ok, data } = await apiJSON(url);
   if (seq !== _searchSeq) return;  // a newer query already landed
-  if (!ok) { hint.textContent = 'Search failed'; return; }
+  _searchState.loading = false;
+  if (!ok) { hint.textContent = data.error || 'Search failed'; return; }
   const rows = data.results || [];
-  hint.textContent = !rows.length ? 'No matches'
-    : data.more ? '50+ matches, showing the best 50. Add a word to narrow it down'
-    : `${rows.length} ${rows.length === 1 ? 'match' : 'matches'}`;
-  list.innerHTML = rows.map(_searchRow).join('');
+  _searchState.more   = !!data.more;
+  _searchState.offset += rows.length;
+  chips.innerHTML = _searchChips(data.parsed || {});
+  const total = _searchState.offset;
+  hint.textContent = !total ? 'No matches'
+    : data.more ? `${total}+ matches, scroll for more`
+    : `${total} ${total === 1 ? 'match' : 'matches'}`;
+  const html = rows.map(_searchRow).join('');
+  if (append) list.insertAdjacentHTML('beforeend', html); else { list.innerHTML = html; list.scrollTop = 0; }
+}
+
+function _searchScrolled(el) {
+  if (!_searchState.more || _searchState.loading) return;
+  if (el.scrollTop + el.clientHeight < el.scrollHeight - 300) return;
+  _searchRun(_searchState.q, true);
+}
+
+// Chips echo how the server read the query: one per filter value, struck
+// through when negated, orange for input it ignored
+function _searchChips(parsed) {
+  const out = [];
+  for (const [key, vals] of Object.entries(parsed.filters || {})) {
+    const neg = key.startsWith('-');
+    for (const v of vals) {
+      const text = Array.isArray(v) ? `${key.replace('-', '')}:${new Date(v[0] * 1000).toISOString().slice(0, 10)}`
+                 : typeof v === 'object' ? `${key}:${v}` : `${key.replace('-', '')}:${v}`;
+      out.push(`<span class="search-chip${neg ? ' neg' : ''}">${esc(String(text))}</span>`);
+    }
+  }
+  if (parsed.regex) out.push(`<span class="search-chip">re:/${esc(parsed.regex.pattern)}/${esc(parsed.regex.flags)}</span>`);
+  if (parsed.near)  out.push(`<span class="search-chip">near: ${esc(parsed.near.words.join(' '))} ~${parsed.near.distance}</span>`);
+  for (const n of parsed.notes || []) out.push(`<span class="search-chip note">${esc(n)}</span>`);
+  return out.join('');
 }
 
 // FTS snippets arrive with <b> marks around the hits; escape everything else
 const _searchSnippet = s => esc(s).replace(/&lt;b&gt;/g, '<b>').replace(/&lt;\/b&gt;/g, '</b>');
 
-const _SEARCH_SOURCE = { caption: 'Caption', image: 'Image', frame: 'Frame', story: 'Story', comment: 'Comment' };
+const _SEARCH_SOURCE = {
+  caption: 'Caption', description: 'Description', sound: 'Sound', image: 'Image', frame: 'Frame',
+  comment: 'Comment', comment_author: 'Comment by', comment_author_name: 'Commenter name',
+  handle: 'Handle', display_name: 'Name', bio: 'Bio', bio_link: 'Bio link',
+  old_handle: 'Old handle', old_display_name: 'Old name', old_bio: 'Old bio', old_bio_link: 'Old link',
+};
 
 function _searchRow(r) {
-  const plat   = PLATFORMS.find(p => p.id === r.platform);
-  const where  = r.item_type === 'story' ? (r.source === 'frame' ? `Story ${fmtDur(r.start_ts || 0)}` : 'Story')
-               : r.source === 'frame'    ? `Frame ${fmtDur(r.start_ts || 0)}`
-               : r.source === 'image' && r.start_ts ? `Image ${r.start_ts}`
-               :                           (_SEARCH_SOURCE[r.source] || r.source);
-  const open   = r.item_type === 'story'
-    ? `${r.prefix}OpenStory('${esc(r.channel_id)}','${esc(r.item_id)}')`
-    : `${r.prefix}OpenModalAndHighlight('${esc(r.channel_id)}','${esc(r.item_id)}')`;
-  return `<div class="sr-row" role="button" tabindex="0" onclick="_searchOpen('${esc(r.platform)}',()=>${open})">
+  const plat  = PLATFORMS.find(p => p.id === r.platform);
+  const kind  = r.item_type === 'channel' ? 'Creator' : r.item_type === 'story' ? 'Story'
+              : (r.content_type === 'photo' || r.content_type === 'image') ? 'Photo' : 'Video';
+  const open  = r.item_type === 'story'   ? `${r.prefix}OpenStory('${esc(r.channel_id)}','${esc(r.item_id)}')`
+              : r.item_type === 'channel' ? `${r.prefix}OpenModal('${esc(r.channel_id)}')`
+              : `${r.prefix}OpenModalAndHighlight('${esc(r.channel_id)}','${esc(r.item_id)}')`;
+  const stats = r.item_type === 'channel' ? (r.views != null ? `${fmtCount(r.views)} followers` : '')
+              : [r.likes != null ? `${fmtCount(r.likes)} likes` : '', r.comment_count != null ? `${fmtCount(r.comment_count)} comments` : '']
+                  .filter(Boolean).join(' · ');
+  const matches = (r.matches || []).slice(0, 4).map(m =>
+    `<span class="sr-match"><span class="sr-where">${esc(_SEARCH_SOURCE[m.source] || m.source)}</span><span class="sr-snippet">${_searchSnippet(m.snippet || '')}</span></span>`).join('')
+    + ((r.matches || []).length > 4 ? `<span class="sr-more">+${r.matches.length - 4} more</span>` : '');
+  const status = r.item_type !== 'channel' && r.status === 'deleted'
+    ? `<span class="sr-kind" style="color:var(--${r.deleted_reason === 'user_banned' ? 'orange' : 'red'})">${r.deleted_reason === 'user_banned' ? 'Banned' : 'Deleted'}</span>` : '';
+  return `<div class="sr-row" role="button" tabindex="0" onclick="_searchOpen('${esc(r.platform)}',()=>${open})" onkeydown="if(event.key==='Enter')this.click()">
     <span class="snav-badge" title="${esc(plat?.label || r.platform)}">${esc((plat?.label || r.platform)[0])}</span>
     <span class="rf-avatar-wrap"><img class="rf-avatar" src="/api/${esc(r.platform)}/channels/${esc(r.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>
     <span class="sr-body">
-      <span class="sr-top"><span class="rf-name">@${esc(r.handle)}</span><span class="sr-where">${where}</span></span>
-      <span class="sr-snippet">${_searchSnippet(r.snippet || r.text || '')}</span>
+      <span class="sr-top"><span class="rf-name">@${esc(r.handle)}</span>${r.display_name && r.display_name !== r.handle ? `<span class="sr-label">${esc(r.display_name)}</span>` : ''}<span class="sr-kind">${kind}</span>${status}${stats ? `<span class="sr-stats">${stats}</span>` : ''}</span>
+      ${r.label && !(r.matches || []).some(m => m.source === 'caption' || m.source === 'bio') ? `<span class="sr-label">${esc(r.label)}</span>` : ''}
+      ${matches}
     </span>
     <span class="rf-time">${r.ts ? fmtDateShort(r.ts) : ''}</span>
   </div>`;

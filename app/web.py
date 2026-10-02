@@ -201,25 +201,31 @@ def create_app() -> Flask:
 
     @app.route("/api/search")
     def global_search():
-        """Instant text search across every enabled platform's media_text
-        index (captions now, OCR text once the index job has run). Fans out
-        to each platform DB and merges by FTS rank; paging is not offered
-        across platforms, so a capped result set says "more" instead."""
-        q     = (request.args.get("q") or "").strip()
-        limit = max(1, min(int(request.args.get("limit", 50)), 200))
-        only  = request.args.get("platform")
-        if len(q) < 3:
-            return jsonify({"results": [], "more": False})
+        """Advanced search (search.py): the query grammar runs against every
+        enabled platform DB (or platform:x), each returning its own sorted
+        page of offset+limit rows; the pages merge by the sort key here and
+        the slice [offset, offset+limit) goes out, so paging works across
+        platforms at the cost of some over-fetch on deep pages."""
+        import search
+        q      = (request.args.get("q") or "").strip()
+        limit  = max(1, min(int(request.args.get("limit", 50)), 200))
+        offset = max(0, int(request.args.get("offset", 0)))
+        parsed = search.parse(q)
+        only   = request.args.get("platform") or (parsed["filters"].get("platform") or [None])[0]
+        empty  = {"results": [], "more": False, "parsed": parsed, "help": search.HELP}
+        if not q:
+            return jsonify(empty)
         results = []
         for e in ENGINES.values():
             if not platform_enabled(e.platform) or (only and e.platform != only):
                 continue
-            for r in e.db.search_text(q, limit + 1):
+            for r in search.run(e.db, parsed, limit=limit + offset + 1, offset=0):
                 r["platform"] = e.platform
                 r["prefix"]   = e.adapter.prefix
                 results.append(r)
-        results.sort(key=lambda r: r["rank"])
-        return jsonify({"results": results[:limit], "more": len(results) > limit})
+        results.sort(key=search.sort_key(parsed))
+        page = results[offset:offset + limit]
+        return jsonify({**empty, "results": page, "more": len(results) > offset + limit})
 
     @app.route("/api/startup/reports")
     def startup_reports():

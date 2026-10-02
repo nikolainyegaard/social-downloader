@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Added
+- Advanced search: the magnifier (Ctrl+K) opens a full-size search with a filter grammar. Free words and "phrases" match the text index with typo tolerance, `-word` excludes, `OR` joins; `from:handle` (current or previous), `platform:`, `in:` picks the text source (caption, description, sound, image, frame, comment, comment author handle or name, creator handle, display name, bio, bio link, and their previous values), `type:video|photo|story|creator`, `status:`, `is:starred|pinned|bookmarked|banned|tracked`, `has:comments|file`, `before:` `after:` `on:` dates, `likes:` `views:` `comments:` `duration:` with comparisons, `re:/pattern/i`, `near:"a b"~40`, `sort:`. A `?` button lists the syntax, chips show how the query was read, results page as you scroll, and each hit lists which sources matched. Creator profiles (handle, name, bio, link, old values), post descriptions and sounds and comment authors are now part of the index
 - Browse TikTok (Settings > TikTok > Account): opens the app's own TikTok session for two minutes, so a captcha or verification wall can be solved in the browser view without a loop running; press again to extend, End browsing to stop. Loops wait until it ends
 - Startup and page load reports (Settings > General > Diagnostics): every container start writes a report with its startup phases, including the dependency upgrade that runs before the app, the first request of each endpoint with its duration, size and step breakdown, and the browser's load timeline when the page was opened within ten minutes of the start. Page load report describes the current tab's load the same way. API requests slower than a second are logged with their breakdown
 - Text search across every platform: the magnifier in the header (or Ctrl+K) searches post captions as you type, with the matching words highlighted, and opens the post from the result. Captions of existing posts are indexed on the first start
@@ -69,6 +70,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The legend under each Stats graph reads "Date" with a short date and "Value" (the card title already names the metric), with a fixed slot for the date so nothing shifts or overflows while sweeping the cursor
 
 ### Fixed
+- Running the OCR text index on a post no longer removed its saved comments from the search index
 - The loop log and status panel update live again: the request timing added for the startup report was asking the live event stream for its length, which stalled the stream before its first byte, so pages only updated on refresh
 - Single-image posts open in the media viewer with the details panel, like videos and carousels, instead of the bare image popup
 - Diagnostics panes built from the shared pane (General, Twitter, Instagram, OnlyFans) now scroll their output instead of growing past the bottom of the modal
