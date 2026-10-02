@@ -827,7 +827,7 @@ async function _tiTick() {
   if (msg) {
     const text = data.message
       || (data.gpu_requested && data.provider && !data.provider.startsWith('CUDA')
-          ? `GPU requested but onnxruntime loaded ${data.provider}; build the image with OCR_GPU=1 and give the container a GPU` : '');
+          ? `GPU requested but onnxruntime loaded ${data.provider}; the amd64 image is needed, with the GPU passed to the container` : '');
     _setText(msg, text);
     msg.style.display = text ? '' : 'none';
   }

@@ -19,7 +19,7 @@
 | `HIKERAPI_KEY` | | Instagram: HikerAPI access key. When set, profile lookup and post listing go through HikerAPI and post media downloads straight from the CDN; stories and avatars stay on the cookies.txt session |
 | `OAUTH_FORCE_DISABLE` | `false` | `true` bypasses auth enforcement without editing oauth.json; use when locked out |
 | `TEXT_INDEX_GPU_MEM_GB` | `2` | Cap on the GPU memory the OCR text index may hold (onnxruntime arena limit); the CUDA context and cuDNN workspaces add a few hundred MB on top |
-| `TEXT_INDEX_GPU` | `0` | `1` runs the OCR text index on the GPU (CUDA onnxruntime); needs an image built with `--build-arg OCR_GPU=1` and a GPU passed to the container |
+| `TEXT_INDEX_GPU` | `0` | `1` runs the OCR text index on the GPU (CUDA onnxruntime); the amd64 image carries the CUDA runtime, so it only needs a GPU passed to the container |
 | `TRANSCODE_FFMPEG` | `/opt/ffmpeg/ffmpeg` if present, else `ffmpeg` | ffmpeg binary the AV1 transcode job uses (needs SVT-AV1 and libvmaf) |
 
 Per-platform scheduling vars, `{P}` = `TIKTOK`, `YOUTUBE`, `INSTAGRAM`, `TWITTER`, `ONLYFANS`:

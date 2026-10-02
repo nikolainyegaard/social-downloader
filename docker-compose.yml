@@ -34,7 +34,7 @@ services:
       # WEB_PORT: "5000"         # change if needed (also update the ports below)
       # MEDIA_DIR: /app/media  # override media storage path inside the container
       # HIKERAPI_KEY: ""        # Instagram: HikerAPI access key for profile lookup and post listing (https://hikerapi.com)
-      # TEXT_INDEX_GPU: "1"     # OCR text index on the GPU; needs an image built with --build-arg OCR_GPU=1 and gpus: all below
+      # TEXT_INDEX_GPU: "1"     # OCR text index on the GPU (amd64 image); needs gpus: all below and the NVIDIA container toolkit
       # TEXT_INDEX_GPU_MEM_GB: "2"  # GPU memory the OCR may hold, leave room for whatever else shares the card
 
       # OAuth is configured via Settings > Authentication in the UI, not here.

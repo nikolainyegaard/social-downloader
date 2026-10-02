@@ -21,9 +21,9 @@ max_video_secs are marked done with no rows: long-form content is out of
 scope and would dominate the frame budget.
 
 Hardware: onnxruntime on CPU by default. TEXT_INDEX_GPU=1 asks RapidOCR for
-the CUDA provider (needs the image built with OCR_GPU=1 and the container
-given a GPU); the status reports which provider actually loaded, so a GPU
-build that silently fell back to CPU is visible in the panel. The worker
+the CUDA provider (the amd64 image carries the runtime; the container needs
+a GPU passed in); the status reports which provider actually loaded, so a
+host that silently fell back to CPU is visible in the panel. The worker
 thread and its ffmpeg children run at nice 19.
 """
 
