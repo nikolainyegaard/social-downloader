@@ -1985,7 +1985,7 @@ function _hostToasts() {
 let _searchTimer = null;
 let _searchSeq   = 0;
 let _searchSort  = '';        // the order picked in the header, appended as sort: unless the query has one
-let _searchState = { q: '', offset: 0, more: false, loading: false };
+let _searchState = { q: '', offset: 0, more: false, loading: false, marks: /** @type {RegExp[]} */ ([]) };
 let _searchHelp  = null;      // syntax table from the API, fetched once
 
 function openSearch() {
@@ -2028,7 +2028,7 @@ async function _searchRun(q, append = false) {
   const hint  = document.getElementById('searchHint');
   const list  = document.getElementById('searchResults');
   const chips = document.getElementById('searchChips');
-  if (!append) { _searchState = { q, offset: 0, more: false, loading: false }; }
+  if (!append) { _searchState = { q, offset: 0, more: false, loading: false, marks: [] }; }
   if (!q) {
     hint.textContent = 'Type to search. Words match captions, comments, creator profiles and the text inside media.';
     list.innerHTML = ''; chips.innerHTML = '';
@@ -2045,6 +2045,7 @@ async function _searchRun(q, append = false) {
   _searchState.more   = !!data.more;
   _searchState.offset += rows.length;
   chips.innerHTML = _searchChips(data.parsed || {});
+  _searchState.marks = _searchMarks(data.parsed || {});
   const total = _searchState.offset;
   hint.textContent = !total ? 'No matches'
     : data.more ? `${total}+ matches, scroll for more`
@@ -2255,31 +2256,141 @@ const _SEARCH_SOURCE = {
   old_handle: 'Old handle', old_display_name: 'Old name', old_bio: 'Old bio', old_bio_link: 'Old link',
 };
 
-function _searchRow(r) {
-  const plat  = PLATFORMS.find(p => p.id === r.platform);
-  const kind  = r.item_type === 'channel' ? 'Creator' : r.item_type === 'story' ? 'Story'
-              : (r.content_type === 'photo' || r.content_type === 'image') ? 'Photo' : 'Video';
-  const open  = r.item_type === 'story'   ? `${r.prefix}OpenStory('${esc(r.channel_id)}','${esc(r.item_id)}')`
-              : r.item_type === 'channel' ? `${r.prefix}OpenModal('${esc(r.channel_id)}')`
-              : `${r.prefix}OpenModalAndHighlight('${esc(r.channel_id)}','${esc(r.item_id)}')`;
-  const stats = r.item_type === 'channel' ? (r.views != null ? `${fmtCount(r.views)} followers` : '')
-              : [r.likes != null ? `${fmtCount(r.likes)} likes` : '', r.comment_count != null ? `${fmtCount(r.comment_count)} comments` : '']
-                  .filter(Boolean).join(' · ');
-  const matches = (r.matches || []).slice(0, 4).map(m =>
-    `<span class="sr-match"><span class="sr-where">${esc(_SEARCH_SOURCE[m.source] || m.source)}</span><span class="sr-snippet">${_searchSnippet(m.snippet || '')}</span></span>`).join('')
-    + ((r.matches || []).length > 4 ? `<span class="sr-more">+${r.matches.length - 4} more</span>` : '');
+// ── Result cards ──────────────────────────────────────────────────────────────
+// Three shapes: a creator card (handle, name, bio with the hits marked), a
+// post card (thumbnail that plays the media, creator, caption, the other
+// matched texts), and under a post card one sub-card per matched comment
+// with the whole comment. Highlighting runs client-side over the full text
+// the server sends with each match, so every occurrence lights up, not the
+// one window the FTS snippet picked.
+
+function _searchMarks(parsed) {
+  const words = (parsed.text || []).filter(t => t !== 'OR' && !t.neg).map(t => t.term)
+    .concat(parsed.near ? parsed.near.words : []);
+  const marks = words.filter(w => w.length >= 3).map(w => new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'));
+  if (parsed.regex) {
+    try { marks.push(new RegExp(parsed.regex.pattern, 'g' + (parsed.regex.flags.includes('i') ? 'i' : ''))); } catch (_) { /* server already dropped it */ }
+  }
+  return marks;
+}
+
+// Escaped text with <b> around every mark hit; null when nothing hit, so the
+// caller can fall back to the FTS snippet (trigram matches survive typos)
+function _searchMark(text, marks) {
+  if (!text) return '';
+  const spans = [];
+  for (const re of marks) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (!m[0].length) { re.lastIndex++; continue; }
+      spans.push([m.index, m.index + m[0].length]);
+    }
+  }
+  if (!spans.length) return null;
+  spans.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const sp of spans) {
+    if (merged.length && sp[0] <= merged[merged.length - 1][1]) merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], sp[1]);
+    else merged.push(sp);
+  }
+  let out = '', pos = 0;
+  for (const [a, b] of merged) { out += esc(text.slice(pos, a)) + '<b>' + esc(text.slice(a, b)) + '</b>'; pos = b; }
+  return out + esc(text.slice(pos));
+}
+
+const _searchMarked = (text, marks, snippet) => _searchMark(text, marks) ?? (snippet ? _searchSnippet(snippet) : esc(text || ''));
+
+function _searchTop(r, kind) {
+  const plat   = PLATFORMS.find(p => p.id === r.platform);
+  const marks  = _searchState.marks || [];
+  const stats  = r.item_type === 'channel' ? (r.views != null ? `${fmtCount(r.views)} followers` : '')
+               : [r.likes != null ? `${fmtCount(r.likes)} likes` : '', r.comment_count != null ? `${fmtCount(r.comment_count)} comments` : '']
+                   .filter(Boolean).join(' · ');
   const status = r.item_type !== 'channel' && r.status === 'deleted'
     ? `<span class="sr-kind" style="color:var(--${r.deleted_reason === 'user_banned' ? 'orange' : 'red'})">${r.deleted_reason === 'user_banned' ? 'Banned' : 'Deleted'}</span>` : '';
-  return `<div class="sr-row" role="button" tabindex="0" onclick="_searchOpen('${esc(r.platform)}',()=>${open})" onkeydown="if(event.key==='Enter')this.click()">
-    <span class="snav-badge" title="${esc(plat?.label || r.platform)}">${esc((plat?.label || r.platform)[0])}</span>
-    <span class="rf-avatar-wrap"><img class="rf-avatar" src="/api/${esc(r.platform)}/channels/${esc(r.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>
-    <span class="sr-body">
-      <span class="sr-top"><span class="rf-name">@${esc(r.handle)}</span>${r.display_name && r.display_name !== r.handle ? `<span class="sr-label">${esc(r.display_name)}</span>` : ''}<span class="sr-kind">${kind}</span>${status}${stats ? `<span class="sr-stats">${stats}</span>` : ''}</span>
-      ${r.label && !(r.matches || []).some(m => m.source === 'caption' || m.source === 'bio') ? `<span class="sr-label">${esc(r.label)}</span>` : ''}
-      ${matches}
-    </span>
+  const avatar = r.item_type === 'channel' ? ''
+    : `<span class="rf-avatar-wrap"><img class="rf-avatar" src="/api/${esc(r.platform)}/channels/${esc(r.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>`;
+  return `<span class="sr-top">
+    <span class="snav-badge" title="${esc(plat?.label || r.platform)}">${esc((plat?.label || r.platform)[0])}</span>${avatar}
+    <span class="rf-name">@${_searchMark(r.handle, marks) ?? esc(r.handle)}</span>
+    ${r.display_name && r.display_name !== r.handle ? `<span class="sr-label">${_searchMark(r.display_name, marks) ?? esc(r.display_name)}</span>` : ''}
+    <span class="sr-kind">${kind}</span>${status}${stats ? `<span class="sr-stats">${stats}</span>` : ''}
     <span class="rf-time">${r.ts ? fmtDateShort(r.ts) : ''}</span>
+  </span>`;
+}
+
+const _searchLine = (m, marks, cls = 'sr-text') =>
+  `<span class="sr-match"><span class="sr-where">${esc(_SEARCH_SOURCE[m.source] || m.source)}</span><span class="${cls}">${_searchMarked(m.text, marks, m.snippet)}</span></span>`;
+
+function _searchCreatorCard(r, open) {
+  const marks   = _searchState.marks || [];
+  const matches = r.matches || [];
+  const bio     = matches.find(m => m.source === 'bio');
+  const rest    = matches.filter(m => !['handle', 'display_name', 'bio'].includes(m.source));
+  return `<div class="sr-card sr-creator" role="button" tabindex="0" onclick="_searchOpen('${esc(r.platform)}',()=>${open})" onkeydown="if(event.key==='Enter')this.click()">
+    <span class="sr-avatar"><img src="/api/${esc(r.platform)}/channels/${esc(r.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>
+    <span class="sr-body">
+      ${_searchTop(r, 'Creator')}
+      ${r.label ? `<span class="sr-bio">${bio ? _searchMarked(r.label, marks, bio.snippet) : esc(r.label)}</span>` : ''}
+      ${rest.map(m => _searchLine(m, marks)).join('')}
+    </span>
   </div>`;
+}
+
+function _searchPostCard(r, open) {
+  const marks   = _searchState.marks || [];
+  const matches = r.matches || [];
+  const isImg   = r.content_type === 'photo' || r.content_type === 'image';
+  const kind    = r.item_type === 'story' ? 'Story' : isImg ? 'Photo' : 'Video';
+  const caption = matches.find(m => m.source === 'caption');
+  const texts   = matches.filter(m => !['caption', 'comment', 'comment_author', 'comment_author_name'].includes(m.source));
+  // One sub-card per comment, however many of its fields matched
+  const byRef = new Map();
+  for (const m of matches) {
+    if (!m.comment && m.source !== 'comment') continue;
+    if (!byRef.has(m.ref)) byRef.set(m.ref, m);
+  }
+  const comments = [...byRef.values()].map(c => `<div class="sr-comment">
+      <span class="sr-cm-hdr">@${_searchMark(c.author || '?', marks) ?? esc(c.author || '?')}${c.author_name && c.author_name !== c.author ? `<span class="sr-label">${_searchMark(c.author_name, marks) ?? esc(c.author_name)}</span>` : ''}</span>
+      <span class="sr-cm-text">${_searchMarked(c.comment || c.text, marks, c.source === 'comment' ? c.snippet : null)}</span>
+    </div>`).join('');
+  const thumb = r.item_type === 'story'
+    ? (isImg ? `<img class="video-thumb" src="/api/${esc(r.platform)}/stories/${esc(r.item_id)}/file" loading="lazy" alt="" onerror="this.style.opacity='.15'">` : `<span class="video-thumb"></span>`)
+    : `<img class="video-thumb" src="/api/${esc(r.platform)}/videos/${esc(r.item_id)}/thumbnail" loading="lazy" alt="" onerror="this.style.opacity='.15'">`;
+  const play = r.item_type === 'story' || !r.has_file ? open
+    : `_searchPlay('${esc(r.platform)}','${esc(r.item_id)}',${isImg})`;
+  return `<div class="sr-card" role="button" tabindex="0" onclick="_searchOpen('${esc(r.platform)}',()=>${open})" onkeydown="if(event.key==='Enter')this.click()">
+    <span class="sr-thumb" title="${r.item_type === 'story' ? 'Open story' : isImg ? 'View photo' : 'Play video'}" onclick="event.stopPropagation();${r.item_type === 'story' ? `_searchOpen('${esc(r.platform)}',()=>${play})` : play}">
+      ${thumb}${r.duration ? `<span class="thumb-dur">${fmtDur(r.duration)}</span>` : ''}
+    </span>
+    <span class="sr-body">
+      ${_searchTop(r, kind)}
+      ${r.label ? `<span class="sr-caption">${caption ? _searchMarked(r.label, marks, caption.snippet) : esc(r.label)}</span>` : ''}
+      ${texts.map(m => _searchLine(m, marks)).join('')}
+      ${comments}
+    </span>
+  </div>`;
+}
+
+function _searchRow(r) {
+  const open = r.item_type === 'story'   ? `${r.prefix}OpenStory('${esc(r.channel_id)}','${esc(r.item_id)}')`
+             : r.item_type === 'channel' ? `${r.prefix}OpenModal('${esc(r.channel_id)}')`
+             : `${r.prefix}OpenModalAndHighlight('${esc(r.channel_id)}','${esc(r.item_id)}')`;
+  return r.item_type === 'channel' ? _searchCreatorCard(r, open) : _searchPostCard(r, open);
+}
+
+// Thumbnail click: the media straight into the viewer, without opening the
+// creator modal first. Carousels come from /files, anything else is /file.
+// ponytail: no original-post link on these slides (needs the platform
+// app's videoUrl and the creator), add when someone misses the button
+async function _searchPlay(platform, id, isImg) {
+  const api = `/api/${platform}/videos/${encodeURIComponent(id)}`;
+  const { ok, data } = await apiJSON(`${api}/files`);
+  const slides = ok && data.files && data.files.length
+    ? data.files.map(f => ({ ...f, postId: id }))
+    : [{ url: `${api}/file`, type: isImg ? 'image' : 'video', name: `${id}.${isImg ? 'avif' : 'mp4'}`, postId: id }];
+  openMediaViewer(slides);
 }
 
 function _searchOpen(platform, fn) {

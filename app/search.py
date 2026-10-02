@@ -339,10 +339,16 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
             agg_where.append("m.text REGEXP ?"); params.append(regex["pattern"] + "\x00" + regex["flags"])
         if sources:
             agg_where.append("m.source IN (" + ",".join("?" * len(sources)) + ")"); params += sources
+        # Each match carries the whole text so the dialog can highlight
+        # every occurrence (the FTS snippet shows one), and a comment match
+        # brings its comment along for the sub-card
         ctes.append(f"""agg AS (
             SELECT m.item_type, m.item_id, MIN(h.rank) AS rank, COUNT(*) AS n,
-                   json_group_array(json_object('source', m.source, 'ref', m.ref, 'snippet', h.snippet)) AS matches
+                   json_group_array(json_object('source', m.source, 'ref', m.ref, 'snippet', h.snippet, 'text', m.text,
+                                                'author', cm.author, 'author_name', cm.author_name, 'comment', cm.text)) AS matches
             FROM hits h JOIN media_text m ON m.id = h.id
+            LEFT JOIN comments cm ON m.source IN ('comment', 'comment_author', 'comment_author_name')
+                                 AND cm.video_id = m.item_id AND cm.comment_id = m.ref
             {'WHERE ' + ' AND '.join(agg_where) if agg_where else ''}
             GROUP BY m.item_type, m.item_id)""")
     if neg:
