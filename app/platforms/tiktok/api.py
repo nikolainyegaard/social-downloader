@@ -1145,6 +1145,23 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
                     tops.setdefault(str(c.get("cid")), c)
         except Exception as exc:
             print(f"[comments] rehydration blob read failed on {video_id}: {exc}")
+        # The right column opens on its "You may like" tab for a session
+        # TikTok does not trust; the comment panel only exists, and only
+        # requests pages, once the Comments tab is active. Pressing it when
+        # it is already active is harmless
+        # ponytail: matched by the English label, like the reply controls
+        try:
+            pressed = await tab.evaluate("""() => {
+                const el = [...document.querySelectorAll('span, div, p, button, a')]
+                  .find(e => !e.children.length && /^comments\b/i.test((e.textContent || '').trim()));
+                if (!el) return 0;
+                el.click();
+                return 1;
+            }""")
+            if pressed:
+                await asyncio.sleep(random.uniform(1.0, 1.8))
+        except Exception as exc:
+            print(f"[comments] comments tab press failed on {video_id}: {exc}")
         vp = tab.viewport_size or {"width": 1280, "height": 720}
         # The comment panel is the right column with its own scroll box;
         # wheel events land under the cursor, so park it there
