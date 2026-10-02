@@ -104,6 +104,43 @@ function ttViewerClose() {
   _dlgClose('ttViewer');
 }
 
+// ── Browsing session ──────────────────────────────────────────────────────────
+// POST /browse opens the app's TikTok session for the viewer and holds it;
+// the countdown is polled while a session is up and shown in the Account
+// pane and in the viewer's status line.
+let _browseTimer = null;
+
+async function ttBrowseStart() {
+  const btn = document.getElementById('ttBrowseBtn');
+  if (btn) btn.disabled = true;
+  const { ok, data } = await apiJSON('/api/tiktok/browse', { method: 'POST', body: JSON.stringify({ secs: 120 }) });
+  if (btn) btn.disabled = false;
+  if (!ok) { showToast(data.error || 'Could not start a browsing session', { type: 'error' }); return; }
+  showToast(data.extended ? 'Browsing extended by 2 minutes' : 'Opening TikTok, the view appears in a few seconds', { duration: 3000 });
+  _browsePoll();
+  if (!_viewerOn) ttViewerOpen();
+}
+
+async function ttBrowseEnd() {
+  await apiJSON('/api/tiktok/browse', { method: 'DELETE' });
+  _browsePoll();
+}
+
+async function _browsePoll() {
+  clearTimeout(_browseTimer);
+  const { ok, data } = await apiJSON('/api/tiktok/browse');
+  if (!ok) return;
+  const status = document.getElementById('ttBrowseStatus');
+  const endBtn = document.getElementById('ttBrowseEndBtn');
+  const text   = data.active ? `Browsing, ${Math.floor(data.remaining / 60)}:${String(data.remaining % 60).padStart(2, '0')} left`
+               : data.error  ? `Last browsing session failed: ${data.error}` : '';
+  if (status) _setText(status, text);
+  if (endBtn) endBtn.style.display = data.active ? '' : 'none';
+  const vstatus = document.getElementById('ttViewerStatus');
+  if (_viewerOn && vstatus && data.active) _setText(vstatus, text);
+  if (data.active) _browseTimer = setTimeout(_browsePoll, 2000);
+}
+
 function _viewerNextFrame() {
   if (!_viewerOn) return;
   const img    = document.getElementById('ttViewerImg');
@@ -112,12 +149,12 @@ function _viewerNextFrame() {
   next.onload = () => {
     if (!_viewerOn) return;
     img.src = next.src;
-    status.textContent = '';
+    if (!_browseTimer) status.textContent = '';
     setTimeout(_viewerNextFrame, 300);
   };
   next.onerror = () => {
     if (!_viewerOn) return;
-    status.textContent = 'No live session running. Start a QR login or trigger a check, then it appears here.';
+    status.textContent = 'No live session running. Browse TikTok (Settings > TikTok > Account), start a QR login, or trigger a check, then it appears here.';
     setTimeout(_viewerNextFrame, 1500);
   };
   next.src = '/api/tiktok/screen?t=' + Date.now();
@@ -640,11 +677,18 @@ const _TT_SETTINGS_ACCOUNT_HTML = `
   <div class="settings-group">
     <span class="settings-label">Live browser view</span>
     <div class="settings-note">
-      Opens a live view of the app's TikTok browser so you can solve a captcha or
-      verification wall by hand. The view is black unless a session is running:
-      start a QR login or trigger a check first, then watch and interact here.
+      A live view of the app's TikTok browser so you can solve a captcha or
+      verification wall by hand. The view shows whatever session is running: a
+      loop, a QR login, or a browsing session you start here, which opens
+      tiktok.com on the app's own profile and holds it for two minutes (press
+      again to extend). Loops wait until it ends.
     </div>
-    <button class="btn-sm" id="ttViewerBtn" onclick="ttViewerOpen()">Open browser view</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn-sm" id="ttBrowseBtn" onclick="ttBrowseStart()">Browse TikTok</button>
+      <button class="btn-sm" id="ttViewerBtn" onclick="ttViewerOpen()">Open browser view</button>
+      <button class="btn-sm" id="ttBrowseEndBtn" onclick="ttBrowseEnd()" style="display:none">End browsing</button>
+      <span class="settings-note" id="ttBrowseStatus" style="margin:0"></span>
+    </div>
   </div>`;
 
 // Schedule pane: the shared _schedulePaneHtml renders it; these opts add the
@@ -981,7 +1025,7 @@ const tt = initChannelApp({
   ],
   onStatus:          _ttOnStatus,
   settings: {
-    account:  { html: _TT_SETTINGS_ACCOUNT_HTML,  onShow: () => loadCookies() },
+    account:  { html: _TT_SETTINGS_ACCOUNT_HTML,  onShow: () => { loadCookies(); _browsePoll(); } },
     schedule: { opts: _TT_SCHEDULE_OPTS },
     network:  { html: _TT_SETTINGS_NETWORK_HTML,  onShow: () => ttProxyLoad() },
     jobs:     { html: _TT_SETTINGS_JOBS_HTML, onShow: _ttJobsShow, onHide: _ttJobsHide },

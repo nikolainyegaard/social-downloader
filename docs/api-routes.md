@@ -18,6 +18,8 @@ TikTok extras on its engine blueprint:
 /api/tiktok/login/session         DELETE resets: removes browser profile + cookies.txt (409 while in use)
 /api/tiktok/screen                GET one JPEG frame of the headed display (503 when headless)
 /api/tiktok/screen/input          POST {events:[{type,x,y}]}, replayed via xdotool
+/api/tiktok/browse                GET {active, remaining, error}; POST {secs} opens the app's TikTok session for the viewer and holds it
+                                  (default 120 s, max 600, extends a running one; 409 while a loop has the browser); DELETE ends it
 /api/tiktok/proxy                 GET/PATCH {url, enabled}: the proxy all TikTok traffic uses
 /api/tiktok/proxy/wireguard       GET/POST private_key, address, public_key, endpoint (composes wg0.conf), DELETE
 /api/tiktok/proxy/gluetun/restart POST: restart the gluetun container via the Docker socket (503 without it)

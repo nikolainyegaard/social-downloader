@@ -153,6 +153,7 @@ _POLLING_ENDPOINTS = (
     '"GET /api/transcode/status HTTP',
     '"GET /api/tiktok/login/qr HTTP',
     '"GET /api/tiktok/screen HTTP',
+    '"GET /api/tiktok/browse HTTP',
     '"POST /api/tiktok/screen/input HTTP',
     '"GET /api/tiktok/status HTTP',
     '"GET /api/tiktok/queue HTTP',

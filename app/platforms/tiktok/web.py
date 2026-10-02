@@ -20,7 +20,7 @@ import traceback
 import zipfile
 from flask import jsonify, request, send_file, Response
 
-from config import DATA_DIR
+from config import DATA_DIR, _ts
 from platforms.tiktok.config import get_cookies_flat, COOKIES_PATH
 from platforms.tiktok.api import get_video_details, run_browser_job
 from platforms.tiktok.store import TikTokStore
@@ -338,6 +338,65 @@ def register_tiktok_routes(bp, engine) -> None:
         if not isinstance(events, list):
             return jsonify({"error": "events must be a list"}), 400
         browser_screen.send_input(events)
+        return jsonify({"ok": True})
+
+    # ── Free browsing: a session held open for the viewer ─────────────────────
+    # The viewer only shows something while a session is live, so solving a
+    # captcha outside a loop meant racing the tracker. This opens the normal
+    # session (persistent profile, tiktok.com loaded) on the single browser
+    # turn and holds it for a while so the viewer can be used in peace; the
+    # loops wait for the turn like they do for any other browser task.
+    _browse = {"ends_at": 0.0, "stop": threading.Event(), "thread": None, "error": None}
+    _BROWSE_MAX = 600
+
+    def _browse_active() -> bool:
+        t = _browse["thread"]
+        return bool(t and t.is_alive())
+
+    def _browse_run():
+        from platforms.tiktok.api import run_browser_job
+
+        async def _job(_api):
+            # create_tiktok_session already opened tiktok.com and warmed up;
+            # just keep the session alive until the time runs out
+            while time.time() < _browse["ends_at"] and not _browse["stop"].is_set():
+                await asyncio.sleep(1)
+
+        try:
+            run_browser_job(_job)
+        except Exception as e:
+            _browse["error"] = f"{type(e).__name__}: {e}"
+            print(f"[{_ts()}] [tiktok] browse session failed: {_browse['error']}")
+
+    @bp.route("/browse", methods=["GET"])
+    def tiktok_browse_status():
+        return jsonify({"active": _browse_active(),
+                        "remaining": max(0, int(_browse["ends_at"] - time.time())) if _browse_active() else 0,
+                        "error": _browse["error"]})
+
+    @bp.route("/browse", methods=["POST"])
+    def tiktok_browse_start():
+        """Start a browsing session for {secs} seconds (default 120, max 600),
+        or extend the running one. 409 while a loop holds the browser: the
+        viewer already shows that session."""
+        from platforms.tiktok.api import browser_gate
+        secs = max(10, min(int((request.get_json(silent=True) or {}).get("secs") or 120), _BROWSE_MAX))
+        if _browse_active():
+            _browse["ends_at"] = time.time() + secs
+            return jsonify({"ok": True, "remaining": secs, "extended": True})
+        if browser_gate.turn.locked():
+            return jsonify({"error": "A loop is using the browser right now; the viewer already shows it"}), 409
+        if not browser_screen.available():
+            return jsonify({"error": "No display: the browser runs headless here"}), 503
+        _browse.update(ends_at=time.time() + secs, error=None)
+        _browse["stop"].clear()
+        _browse["thread"] = threading.Thread(target=_browse_run, daemon=True, name="tt-browse")
+        _browse["thread"].start()
+        return jsonify({"ok": True, "remaining": secs})
+
+    @bp.route("/browse", methods=["DELETE"])
+    def tiktok_browse_stop():
+        _browse["stop"].set()
         return jsonify({"ok": True})
 
     # Stats backfill state
