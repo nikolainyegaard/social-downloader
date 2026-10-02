@@ -69,6 +69,11 @@ class TikTokStore:
                 CREATE INDEX IF NOT EXISTS idx_sound_videos_sound
                     ON sound_videos(sound_id);
 
+                -- The feed's per-row sound lookup goes by video_id; the primary
+                -- key starts with sound_id, so without this it scanned the table
+                CREATE INDEX IF NOT EXISTS idx_sound_videos_video
+                    ON sound_videos(video_id);
+
                 CREATE INDEX IF NOT EXISTS idx_videos_channel_id
                     ON videos(channel_id);
 

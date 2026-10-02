@@ -34,6 +34,8 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - docker-compose.yml has commented per-platform storage override lines: mount another disk over a platform's media subfolder to store that platform elsewhere, no app configuration needed (see README)
 
 ### Changed
+- Reloads paint instantly: each platform keeps its last channel list and feed page in the browser and shows them before the fresh data arrives, and the post lists of pinned creators are fetched in the background so their modal opens from memory
+- The activity feed query is indexed; on a large TikTok database it took close to two seconds per page
 - Faster page load: the visible platform's cards, loop status and feed are requested first and the other platforms load one at a time after it has rendered; stats, the add queue and the migration check follow after the first paint. The channel list no longer carries each creator's raw profile JSON, and the media folder walk behind the storage figures runs in the background and is remembered across restarts instead of blocking the first page after a container start
 - The creator modal's post list has a Comments column (the platform's comment count, sortable; a dash when the platform did not report one); Views and Comments are centred
 - The version number moved from the bottom of General > Platforms to the bottom left corner of the settings sidebar

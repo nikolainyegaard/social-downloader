@@ -1004,7 +1004,19 @@ function initChannelApp(cfg) {
     // sentinel fetch is the one that knows whether anything older is left
     _rf.hasMore = tail.length ? _rf.hasMore : data.has_more;
     _renderFeed();
+    if (key === 'all|0|0') _snapSet(`${cfg.id}:recent`, { items: data.items, hasMore: data.has_more });
   });
+
+  // Snapshot: the previous load's first feed page (unfiltered), painted
+  // before the fetch; loadRecent stitches or replaces it like any stale page
+  function _restoreRecentSnapshot() {
+    const snap = _snapGet(`${cfg.id}:recent`);
+    if (!snap || !Array.isArray(snap.items) || !snap.items.length || _rfKey() !== 'all|0|0') return;
+    _rf.sig     = JSON.stringify(snap.items);
+    _rf.items   = snap.items;
+    _rf.hasMore = !!snap.hasMore;
+    _renderFeed();
+  }
 
   // ── Loop status ───────────────────────────────────────────────────────────
 
@@ -1824,6 +1836,7 @@ function initChannelApp(cfg) {
 
   let _creatorsSig    = null;
   let _lastGridRender = 0;
+  let _creatorsFresh  = false;   // a server payload has landed (a snapshot does not count)
   const loadCreators = X('LoadCreators', async () => {
     const { ok, data } = await apiJSON(`${API}/channels`);
     if (!ok) {
@@ -1836,21 +1849,55 @@ function initChannelApp(cfg) {
       return;
     }
     const sig = JSON.stringify(data);
+    const firstLoad = !_creatorsFresh;
+    _creatorsFresh = true;
+    if (firstLoad) performance.mark(`${cfg.id}:creators`);
     if (sig === _creatorsSig) {
-      // Unchanged data: keep the relative timestamps current, touch nothing else
+      // Unchanged data (or the snapshot was already current): keep the
+      // relative timestamps current, touch nothing else
+      if (firstLoad) performance.mark(`${cfg.id}:rendered`);
       if (Date.now() - _lastGridRender >= 60000) { _lastGridRender = Date.now(); _patchCardTimes(); }
+      _prefetchPinnedVideos();
       return;
     }
     _creatorsSig    = sig;
     _lastGridRender = Date.now();
-    const firstLoad = !creators.length;
-    if (firstLoad) performance.mark(`${cfg.id}:creators`);
     creators = data;
     renderCreators();
     if (firstLoad) performance.mark(`${cfg.id}:rendered`);
     _renderQuickAccess();
     _qaMigrateLocal();
+    _snapSet(`${cfg.id}:creators`, data);
+    _prefetchPinnedVideos();
   });
+
+  // Snapshot: the previous load's channel list, painted before the fetch
+  function _restoreCreatorsSnapshot() {
+    const snap = _snapGet(`${cfg.id}:creators`);
+    if (!Array.isArray(snap) || !snap.length) return;
+    _creatorsSig    = JSON.stringify(snap);
+    _lastGridRender = Date.now();
+    creators = snap;
+    renderCreators();
+    _renderQuickAccess();
+    performance.mark(`${cfg.id}:snapshot`);
+  }
+
+  // Pinned creators' post lists, fetched in idle time so their modal opens
+  // from memory (the fresh fetch still runs behind it). Refetched only when
+  // the creator's row says its posts changed, so a loop writing elsewhere
+  // costs nothing here. Capped at 10 pinned creators
+  const _videosPrefetch = {};   // channel_id -> {sig, data}
+  function _prefetchPinnedVideos() {
+    _idle(async () => {
+      for (const c of _qaPinned().slice(0, 10)) {
+        const sig = [c.video_total, c.video_deleted, c.video_banned, c.last_saved, c.last_checked].join('|');
+        if (_videosPrefetch[c.channel_id]?.sig === sig) continue;
+        const { ok, data } = await apiJSON(`${API}/channels/${c.channel_id}/videos`);
+        if (ok) _videosPrefetch[c.channel_id] = { sig, data };
+      }
+    });
+  }
 
   X('GetCreators', () => creators);
 
@@ -2438,13 +2485,22 @@ function initChannelApp(cfg) {
   }
 
   async function _loadModalVideos(channelId) {
+    const pre = _videosPrefetch[channelId];
+    if (pre && !modalPendingHighlight) {
+      _setModalVideos(pre.data);
+      _mRenderToolbar(MODAL_CFG, _creatorState.videos);
+      if (_mIsMediaView(_creatorState.view)) _mRenderList(MODAL_CFG);
+    }
     const { ok, data } = await apiJSON(`${API}/channels/${channelId}/videos`);
     if (modalCreatorId !== channelId) return;
     if (!ok) {
+      if (pre) return;   // the prefetched list stays up
       _el('ModalVideoList').innerHTML =
         `<div class="vlist-empty">Could not load ${ITEMS}. Close and reopen to retry.</div>`;
       return;
     }
+    if (pre && JSON.stringify(data) === _modalVidsSig && !modalPendingHighlight) return;
+    if (pre) _videosPrefetch[channelId] = { sig: pre.sig, data };
     _setModalVideos(data);
 
     if (modalPendingHighlight) {
@@ -3270,6 +3326,8 @@ function initChannelApp(cfg) {
 
   // Front page first: cards, loop status and the feed. Stats (the storage
   // figures), the add queue and the add history follow in idle time.
+  _restoreCreatorsSnapshot();
+  _restoreRecentSnapshot();
   _bootPlatform(cfg.id, async () => {
     await Promise.all([loadCreators(), loadStatus(), loadRecent()]);
     _syncEvents();

@@ -156,6 +156,13 @@ class ChannelDB:
                 CREATE INDEX IF NOT EXISTS idx_videos_status
                     ON videos(status);
 
+                -- The activity feed orders each source by its event time and
+                -- pages with LIMIT/OFFSET; without these every page sorted the
+                -- whole table (seconds on 70k posts)
+                CREATE INDEX IF NOT EXISTS idx_videos_download_date ON videos(download_date);
+                CREATE INDEX IF NOT EXISTS idx_videos_deleted_at ON videos(deleted_at);
+                CREATE INDEX IF NOT EXISTS idx_stories_saved_at ON stories(saved_at);
+                CREATE INDEX IF NOT EXISTS idx_profile_history_changed_at ON profile_history(changed_at);
                 CREATE INDEX IF NOT EXISTS idx_profile_history_channel_id
                     ON profile_history(channel_id);
 

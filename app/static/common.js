@@ -46,6 +46,25 @@ function _bootPlatform(id, fn) {
 }
 
 const _bootHasRun = id => _bootDone.has(id);
+
+// ── Snapshots ─────────────────────────────────────────────────────────────────
+// The last channel list and feed page of each platform, kept in localStorage
+// and rendered before the first fetch, so a reload paints at once and the
+// fresh data replaces it when it lands. Keyed by build: a payload shape
+// change never meets old data, and other builds' keys are swept on load.
+const _SNAP_PREFIX = `snap:${window.__VERSION__ || 'dev'}:`;
+function _snapGet(key) {
+  try { const v = localStorage.getItem(_SNAP_PREFIX + key); return v ? JSON.parse(v) : null; }
+  catch { return null; }
+}
+function _snapSet(key, data) {
+  try { localStorage.setItem(_SNAP_PREFIX + key, JSON.stringify(data)); }
+  catch { /* quota or no storage: the next load fetches as before */ }
+}
+try {
+  for (const k of Object.keys(localStorage))
+    if (k.startsWith('snap:') && !k.startsWith(_SNAP_PREFIX)) localStorage.removeItem(k);
+} catch { /* no storage */ }
 window.addEventListener('platformswitch', () => { if (_bootPending[_activePlatform]) _bootRun(_activePlatform); });
 // Dropdown glyphs, declared up here because pane markup built at load time
 // (Settings > General) renders dropdowns through _diagPaneHtml
@@ -1378,8 +1397,12 @@ function _postStartupClientReport() {
   try { if (localStorage.getItem(key)) return; } catch { /* no storage */ }
   const marks = performance.getEntriesByType('mark').filter(m => m.name.endsWith(':rendered'));
   const first = marks.length ? Math.round(Math.min(...marks.map(m => m.startTime))) : null;
+  // Usable: the last platform rendered, or the last API response when none did
+  const api   = /** @type {PerformanceResourceTiming[]} */ (performance.getEntriesByType('resource')).filter(e => e.name.includes('/api/'));
+  const last  = marks.length ? Math.max(...marks.map(m => m.startTime))
+              : api.length   ? Math.max(...api.map(e => e.responseEnd)) : performance.now();
   apiJSON('/api/startup/client', { method: 'POST', body: JSON.stringify({
-    first_render_ms: first, usable_ms: Math.round(performance.now()), text: _loadReport(),
+    first_render_ms: first, usable_ms: Math.round(last), text: _loadReport(),
   }) }).then(({ ok }) => { if (ok) { try { localStorage.setItem(key, '1'); } catch { /* no storage */ } } });
 }
 // Settle time so the first round of avatars and feeds is in the timeline
