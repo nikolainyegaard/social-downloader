@@ -1259,18 +1259,20 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
         except Exception:
             pass
 
+    # Top-level first, then every reply under its parent; a cid seen in
+    # both lists (the blob files replies by reply_id, a list page may carry
+    # the same comment) is kept once, as whatever came first
     rows: list[dict] = []
+    seen: set[str] = set()
     for cid, c in tops.items():
         r = _comment_row(c, None)
-        if r:
-            rows.append(r)
-        for rc in replies.get(cid, {}).values():
-            r = _comment_row(rc, cid)
-            if r:
-                rows.append(r)
+        if r and cid not in seen:
+            rows.append(r); seen.add(cid)
     for parent, rcs in replies.items():
-        if parent not in tops:
-            rows.extend(r for r in (_comment_row(rc, parent) for rc in rcs.values()) if r)
+        for rcid, rc in rcs.items():
+            r = _comment_row(rc, parent)
+            if r and rcid not in seen:
+                rows.append(r); seen.add(rcid)
     if not rows and state["responses"] == 0:
         raise RuntimeError(f"comment page for {video_id} gave an empty response: no comment requests and none embedded"
                            f" (landed on {final_url}, title {final_title!r}, api paths seen: {sorted(other) or 'none'})")

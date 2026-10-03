@@ -1984,10 +1984,15 @@ class ChannelDB:
         the platform's count at that moment. rows: {comment_id, parent_id,
         author, author_id, text, likes, created_at, image_path?}."""
         now = int(time.time())
+        # One row per id: a fetcher can hand the same comment twice (the
+        # page blob and a list page, a reply under two parents), and a
+        # duplicate must not fail the whole creator check
+        seen: set[str] = set()
+        rows = [r for r in rows if not (r["comment_id"] in seen or seen.add(r["comment_id"]))]
         with self.get_db() as conn:
             conn.execute("DELETE FROM comments WHERE video_id = ?", (video_id,))
             conn.executemany("""
-                INSERT INTO comments (comment_id, video_id, channel_id, parent_id, author, author_id,
+                INSERT OR REPLACE INTO comments (comment_id, video_id, channel_id, parent_id, author, author_id,
                                       text, likes, created_at, fetched_at, image_path, author_name)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [(r["comment_id"], video_id, channel_id, r.get("parent_id"), r.get("author"),
