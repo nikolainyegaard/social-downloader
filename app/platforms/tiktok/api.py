@@ -165,10 +165,14 @@ def _profile_context_factory():
         context = await playwright.chromium.launch_persistent_context(
             profile,
             # Headed on a display, otherwise Chrome's new headless mode via
-            # arg with the Playwright flag off (TikTokApi's own handling)
+            # arg with the Playwright flag off (TikTokApi's own handling).
+            # Headed, the window fills the 1920x1080 display and the page
+            # uses the window size (no fixed viewport), so the browser view
+            # shows a full screen instead of a 1280x720 page in a corner
             headless=False,
-            args=[] if _headed() else ["--headless=new"],
+            args=_WINDOW_ARGS if _headed() else ["--headless=new"],
             executable_path=CHROME_EXECUTABLE,
+            **({"no_viewport": True} if _headed() else {}),
             **({"proxy": {"server": proxy}} if proxy else {}),
         )
         context.on("close", lambda _ctx: release())
@@ -207,6 +211,11 @@ def _clear_stale_singleton(profile: str) -> None:
             os.remove(os.path.join(profile, name))
         except OSError:
             pass
+
+
+# Headed Chrome window geometry: the whole Xvfb display (screen.py captures
+# 1920x1080), so the viewer shows a full screen and sniffs see a desktop layout
+_WINDOW_ARGS = ["--window-size=1920,1080", "--window-position=0,0"]
 
 
 def _headed() -> bool:
@@ -335,9 +344,15 @@ async def create_tiktok_session(api, ms_token: str | None = None,
     else:
         kwargs["executable_path"] = CHROME_EXECUTABLE
         kwargs["headless"] = not _headed()
+        if _headed():
+            # Same full-display window as the persistent factory above.
+            # Headless keeps override_browser_args None so the library adds
+            # --headless=new itself
+            kwargs["override_browser_args"] = _WINDOW_ARGS
+            kwargs["context_options"] = {"no_viewport": True}
         proxy = get_proxy()
         if proxy:
-            kwargs["context_options"] = {"proxy": {"server": proxy}}
+            kwargs.setdefault("context_options", {})["proxy"] = {"server": proxy}
     if _patchright_active():
         kwargs["page_factory"] = _plain_page
     kwargs.update(overrides)
@@ -1155,7 +1170,9 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
                     tops.setdefault(str(c.get("cid")), c)
         except Exception as exc:
             print(f"[comments] rehydration blob read failed on {video_id}: {exc}")
-        vp = tab.viewport_size or {"width": 1280, "height": 720}
+        # No fixed viewport in headed mode (the page fills the window), so
+        # viewport_size is None there; ask the page for its width
+        vp = tab.viewport_size or {"width": await tab.evaluate("innerWidth"), "height": await tab.evaluate("innerHeight")}
         # The right column opens on its "You may like" tab for a session
         # TikTok does not trust; the comment panel only exists, and only
         # requests pages, once the Comments tab is active. The label is

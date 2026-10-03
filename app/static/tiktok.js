@@ -149,6 +149,8 @@ function _viewerNextFrame() {
   if (!_viewerOn) return;
   const img   = /** @type {HTMLImageElement} */ (document.getElementById('ttViewerImg'));
   const empty = document.getElementById('ttViewerEmpty');
+  // load does not fire for a multipart stream in every browser, so the hint
+  // hides when the stream is requested and only an error brings it back
   img.onload  = () => { empty.hidden = true; };
   img.onerror = () => {
     if (!_viewerOn) return;
@@ -156,6 +158,7 @@ function _viewerNextFrame() {
     img.onerror = null;
     setTimeout(_viewerNextFrame, 1500);
   };
+  empty.hidden = true;
   img.src = '/api/tiktok/screen/stream?t=' + Date.now();
 }
 

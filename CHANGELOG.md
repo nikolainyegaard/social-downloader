@@ -43,6 +43,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ### Changed
 - Browser view runs at 10 frames a second as one MJPEG stream instead of about three polled snapshots
 - Browser view sits in a framed card like the other dialogs: title, status line and close button in a header, the display in a 16:9 stage below, centred and sized to the screen
+- The headed TikTok browser fills its 1920x1080 display instead of a 1280x720 page in the corner, so the browser view shows a full screen; the view is wider (up to 92vw) and the no-session hint no longer overlays a live stream
 - Comment fetch log lines carry their position in the check, `[12/151] Comments ...`, like the download lines
 - Reloads paint instantly: each platform keeps its last channel list and feed page in the browser and shows them before the fresh data arrives, and the post lists of pinned creators are fetched in the background so their modal opens from memory
 - The activity feed query is indexed; on a large TikTok database it took close to two seconds per page
