@@ -77,6 +77,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ### Fixed
 - TikTok comments read off the post page did not expand reply threads, so replies were missing on that path; the "View N replies" controls are now clicked for real, and a control that moved while the panel re-rendered is looked up again instead of ending the pass
 - TikTok comments: when the post page lands elsewhere or shows no comments, the session is being refused and the check stops there instead of parking every remaining post; a short pause now separates the page loads
+- TikTok comments: the page reader no longer sits at the end of a long thread for minutes; it stops after a few scrolls that bring no new comment, even when the panel keeps answering
 - Search: playing a post from a result thumbnail keeps the search open underneath, so closing the viewer returns to the results; story thumbnails open the story viewer the same way
 - Instagram comments: posts with more than one page of comments failed with HikerAPI 404 `Entries not found`, because the last page still carries a `next_page_id`; paging now stops on `has_more_comments`
 - Search: comments indexed before the OCR fix in this release had lost their text rows and never matched; the missing rows are rebuilt from the comments table at startup

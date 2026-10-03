@@ -1186,17 +1186,22 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
         # The comment panel is the right column with its own scroll box;
         # wheel events land under the cursor, so park it there
         await tab.mouse.move(int(vp["width"] * 0.8), int(vp["height"] * 0.6))
+        # Progress is new comments, not responses: at the end of a long
+        # thread the panel keeps answering every scroll with a page that
+        # has has_more set and nothing new in it, which looked like
+        # progress and kept this loop wheeling for minutes
         idle, last = 0, -1
         for _ in range(200):
             await asyncio.sleep(random.uniform(1.2, 2.0))
-            if state["responses"] == last:
+            progress = (state["responses"] > 0, _count())
+            if progress == last:
                 idle += 1
                 # A page still booting its JS takes longer to its first
                 # request than one that is merely done paging
                 if idle >= (8 if not state["responses"] and not tops else 5):
                     break
             else:
-                idle, last = 0, state["responses"]
+                idle, last = 0, progress
             if state["exhausted"] or _count() >= max_count:
                 break
             await tab.mouse.wheel(0, random.randint(600, 1200))
