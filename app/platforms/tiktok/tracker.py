@@ -238,6 +238,10 @@ async def _check_user_stories(user: dict, api, username: str,
     return len(items)
 
 
+class _CachedListing(Exception):
+    """Control flow: the run reads the listing cache instead of yt-dlp."""
+
+
 async def process_single_user(
     user: dict,
     api,
@@ -249,9 +253,19 @@ async def process_single_user(
     logd: Callable[[str], None] = print,
     set_current_user: Callable[[str | None], None] | None = None,
     stop_event: threading.Event | None = None,
+    use_cache: bool = True,
 ) -> bool:
-    """Process a single user. Returns True if the profile fetch succeeded, False if it failed."""
+    """Process a single user. Returns True if the profile fetch succeeded, False if it failed.
+
+    mode is "quick" or "full", optionally with a "-nocache" suffix. A manual
+    run (use_cache, the default) within LISTING_CACHE_HOURS of a complete
+    full listing lists only the newest posts, takes the rest from
+    listing_cache for the comment stage and skips yt-dlp and deletion
+    detection; scheduled sessions pass use_cache=False."""
+    import listing_cache
     channel_id = user["channel_id"]
+    mode, _cache_ok = listing_cache.split_mode(mode)
+    use_cache = use_cache and _cache_ok
 
     if set_current_user:
         set_current_user(user["handle"])
@@ -432,10 +446,18 @@ async def process_single_user(
         # too. Launch it now so it runs in a thread alongside the browser stats
         # fetch below instead of adding to the wall-clock; awaited before the
         # diff. Cancelled on the inaccessible-private early return.
-        _ydlp_task = asyncio.create_task(
-            asyncio.to_thread(get_user_videos, channel_id,
-                              sec_uid=sec_uid, cookies_path=COOKIES_PATH)
-        )
+        cached = listing_cache.load("tiktok", channel_id) if use_cache else None
+        if cached:
+            log(f"  Listing from cache ({listing_cache.age(cached)} old): newest posts only, no deletion check;"
+                f" {'Full' if mode == 'full' else 'Quick'} (no cache) relists")
+            from platforms.registry import ENGINES
+            ENGINES["tiktok"].loop.mark_listing_cached(channel_id)
+            _ydlp_task = None
+        else:
+            _ydlp_task = asyncio.create_task(
+                asyncio.to_thread(get_user_videos, channel_id,
+                                  sec_uid=sec_uid, cookies_path=COOKIES_PATH)
+            )
 
         # ── Stats enrichment: sniff item_list off the profile page ───────────
         # Drive the user's profile page in a fresh tab and capture the
@@ -455,7 +477,7 @@ async def process_single_user(
         _profile_video_count = info.get("video_count") if info else None
 
         if sec_uid:
-            _max_count = 30 if mode == "quick" else 2000
+            _max_count = 30 if (mode == "quick" or cached) else 2000
             item_list_videos: list = []
             _listing_ok = False
             try:
@@ -496,6 +518,13 @@ async def process_single_user(
 
             if _listing_ok:
                 item_list_map = {v["video_id"]: v for v in item_list_videos}
+                if mode == "full" and not cached and not (stop_event and stop_event.is_set()):
+                    listing_cache.save("tiktok", channel_id, item_list_map)
+        # Posts the cached listing knows and this run did not list: their
+        # comment counts feed the comment stage, nothing else (stats were
+        # stored when the cache was written, and a cached id must never
+        # count as present for the deletion or undeletion diffs)
+        _cached_posts = {v: d for v, d in (cached or {}).get("posts", {}).items() if v not in item_list_map}
 
         # For 10222 accounts: recover username, display name, bio, and avatar from
         # item_list author data. Follower/video counts remain unavailable.
@@ -552,11 +581,12 @@ async def process_single_user(
         # previously-downloaded videos still runs.
         if not item_list_map and is_private is True and info:
             if not _followed:
-                _ydlp_task.cancel()
-                try:
-                    await _ydlp_task
-                except BaseException:
-                    pass
+                if _ydlp_task is not None:
+                    _ydlp_task.cancel()
+                    try:
+                        await _ydlp_task
+                    except BaseException:
+                        pass
                 log(f"  Private account, cannot be accessed")
                 store.update_privacy_status(channel_id, "private_blocked")
                 return _profile_ok, _deletion_detected
@@ -574,10 +604,15 @@ async def process_single_user(
         # here is the current-video set the diff below trusts.
         _ydlp_ok = False
         try:
+            if _ydlp_task is None:
+                log(f"  {_npost(len(item_list_map))} listed, {len(_cached_posts)} more from cache")
+                raise _CachedListing()
             ydlp_videos = await _ydlp_task
             ydlp_map = {v["video_id"]: v for v in ydlp_videos}
             _ydlp_ok = True
             log(f"  {_npost(len(ydlp_map))} found")
+        except _CachedListing:
+            pass
         except Exception as e:
             logd(f"  [{channel_id}] yt-dlp listing failed: {e}")
             if ("does not have any videos" in str(e)
@@ -793,7 +828,7 @@ async def process_single_user(
             import comments
             from platforms.registry import ENGINES
             _eng = ENGINES["tiktok"]
-            _counts = {vid: d.get("comment_count") for vid, d in item_list_map.items()}
+            _counts = {vid: d.get("comment_count") for vid, d in {**_cached_posts, **item_list_map}.items()}
             _due = comments.due_posts(_eng, channel_id, _counts) if _counts else []
             _wanted = _eng.db.comments_wanted_count(channel_id)
             if _wanted and not item_list_map:
@@ -851,7 +886,7 @@ async def _drain_manual_runs_inline(engine, api, cookies, log, logd, set_current
         if entry is None:
             return drained
         user, profile_only, mode = entry
-        kind  = "profile" if profile_only else mode
+        kind  = "profile" if profile_only else mode.replace("-nocache", " (no cache)")
         error = None
         log(f"=== Manual {kind} run (inserted): @{user['handle']} ===")
         try:
@@ -1053,6 +1088,7 @@ async def process_user_session(
                         logd=logd,
                         set_current_user=set_current_user,
                         stop_event=stop_event,
+                        use_cache=False,
                     )
                     _deletion_detected = _result[1] if isinstance(_result, tuple) else False
                     _large_deletion    = _result[2] if isinstance(_result, tuple) and len(_result) > 2 else False

@@ -98,7 +98,7 @@ function initChannelApp(cfg) {
           ${_bookmarkBtn(ch)}
           <button id="${P}ModalRunQuickBtn" class="btn-run" ${runDisabled} title="Quick check: the newest posts only, no deletion detection" onclick="${P}RunCreatorQuick('${esc(ch.channel_id)}')">${_refreshIcon} Quick</button>
           <button id="${P}ModalRunFullBtn" class="btn-run" ${runDisabled} title="Full check: the whole catalog, detects deletions" onclick="${P}RunCreator('${esc(ch.channel_id)}')">${_refreshIcon} Full</button>
-          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'${ch.pinned_at ? 'Remove from Quick access' : 'Add to Quick access'}',onclick:()=>${P}TogglePinModal('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>`;
+          <button class="btn-menu" onclick="event.stopPropagation();_openCardMenu(this,[{label:'Run profile',onclick:()=>${P}RunCreatorProfile('${esc(ch.channel_id)}')},{label:'Quick (no cache)',onclick:()=>${P}RunCreatorQuickNoCache('${esc(ch.channel_id)}')},{label:'Full (no cache)',onclick:()=>${P}RunCreatorFullNoCache('${esc(ch.channel_id)}')},{label:'Edit note',onclick:()=>${P}EditNote()},{label:'${ch.pinned_at ? 'Remove from Quick access' : 'Add to Quick access'}',onclick:()=>${P}TogglePinModal('${esc(ch.channel_id)}')},{label:'Remove',danger:true,onclick:()=>{${P}CloseModal();${P}RemoveCreator('${esc(ch.channel_id)}','@${esc(ch.handle)}')}}])">${_dotsIcon}</button>`;
   const _bookmarkBtn = ch => `<button class="btn-bookmark${ch.bookmarked ? ' bookmarked' : ''}"
       data-action="bookmark" data-id="${esc(ch.channel_id)}"
       aria-pressed="${ch.bookmarked ? 'true' : 'false'}" title="${ch.bookmarked ? (ch.starred ? `Starred ${CREATORS} stay bookmarked` : 'Remove bookmark') : 'Bookmark'}">${ch.bookmarked ? _bmFilled : _bmOutline}</button>`;
@@ -333,6 +333,8 @@ function initChannelApp(cfg) {
     full:     d => window[`${P}RunCreator`](d.id),
     menu:     (d, el) => _openCardMenu(el, [
       { label: 'Run profile', onclick: () => window[`${P}RunCreatorProfile`](d.id) },
+      { label: 'Quick (no cache)', onclick: () => window[`${P}RunCreatorQuickNoCache`](d.id) },
+      { label: 'Full (no cache)', onclick: () => window[`${P}RunCreatorFullNoCache`](d.id) },
       { label: 'Remove', danger: true, onclick: () => window[`${P}RemoveCreator`](d.id, `@${d.handle}`) },
     ]),
   });
@@ -1904,6 +1906,10 @@ function initChannelApp(cfg) {
 
   X('RunCreator',        id => _creatorRun(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, () => { renderCreators(); updateRunStates(); }, 'full'));
   X('RunCreatorQuick',   id => _creatorRun(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, () => { renderCreators(); updateRunStates(); }, 'quick'));
+  // The (no cache) variants relist the whole catalog even when a full
+  // listing from the last few hours is cached (see listing_cache.py)
+  X('RunCreatorQuickNoCache', id => _creatorRun(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, () => { renderCreators(); updateRunStates(); }, 'quick-nocache'));
+  X('RunCreatorFullNoCache',  id => _creatorRun(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, () => { renderCreators(); updateRunStates(); }, 'full-nocache'));
   X('RunCreatorProfile', id => _creatorRunProfile(`${API}/channels`, id, () => runQueue, q => { runQueue = q; }, renderCreators));
   X('RemoveCreator',     (id, label) => _creatorRemove(`${API}/channels`, id, label, loadCreators));
 

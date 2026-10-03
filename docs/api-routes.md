@@ -36,7 +36,7 @@ Engine blueprint, shared by every platform ({p} = tiktok|youtube|twitter|instagr
 /api/{p}/add-history/<id>              DELETE discards a resolved entry (409 while pending)
 /api/{p}/channels/<id>                 DELETE removes the creator
 /api/{p}/channels/<id>/videos          list for the detail modal
-/api/{p}/channels/<id>/run             manual run; ?mode=quick|full (default full)
+/api/{p}/channels/<id>/run             manual run; ?mode=quick|full|quick-nocache|full-nocache (default full; the -nocache variants ignore the listing cache)
 /api/{p}/channels/<id>/run-profile     profile-only run
 /api/{p}/channels/<id>/tracking|star|bookmark|pin|comment   PATCH toggles and notes
 /api/{p}/channels/<id>/comments        PATCH {enabled}: scrape comments of every post (501 without fetch_comments)

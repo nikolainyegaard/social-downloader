@@ -314,6 +314,8 @@ def process_single_channel(
         set_current(handle)
 
     try:
+        import listing_cache
+        mode, use_cache = listing_cache.split_mode(mode)
         suffix = " (profile only)" if profile_only else (" (quick)" if mode == "quick" else "")
         log(f"Processing @{handle}{suffix}")
         _stage("fetching profile")
@@ -374,6 +376,15 @@ def process_single_channel(
             # The limit reaches adapters whose fetch is eager (OnlyFans pages the
             # whole archive before yielding); lazy generators may ignore it since
             # the break below already stops their pagination.
+            # A manual full run within LISTING_CACHE_HOURS of a complete full
+            # listing lists like a quick one and takes the rest of the
+            # catalog's comment counts from the cache; deletion detection
+            # needs a real full listing, so it is skipped on that run
+            cached = listing_cache.load(engine.platform, channel_id) if (use_cache and mode == "full") else None
+            if cached:
+                log(f"  Listing from cache ({listing_cache.age(cached)} old): newest {noun}s only, no deletion check; Full (no cache) relists")
+                engine.loop.mark_listing_cached(channel_id)
+                mode = "quick"
             _limit = adapter.quick_limit if mode == "quick" else None
             for post_dict, raw_post in adapter.iter_posts(channel_id, limit=_limit):
                 if stop_event and stop_event.is_set():
@@ -389,6 +400,9 @@ def process_single_channel(
         except Exception as e:
             log(f"  {noun.capitalize()} fetch failed: {e}")
             return "failed"
+        if mode == "full":
+            listing_cache.save(engine.platform, channel_id, remote_posts)
+        _cached_posts = {v: d for v, d in (cached or {}).get("posts", {}).items() if v not in remote_posts}
 
         remote_ids = set(remote_posts)
         known_ids, active_ids, pending_ids = db.get_video_id_sets(channel_id)
@@ -501,7 +515,7 @@ def process_single_channel(
         # books. After the downloads so new posts are in the table already.
         if adapter.fetch_comments and not (stop_event and stop_event.is_set()):
             import comments
-            _cc = {v: p.get("comment_count") for v, p in remote_posts.items()}
+            _cc = {v: p.get("comment_count") for v, p in {**_cached_posts, **remote_posts}.items()}
             _due = comments.due_posts(engine, channel_id, _cc) if _cc else []
             _wanted = db.comments_wanted_count(channel_id)
             if _wanted:

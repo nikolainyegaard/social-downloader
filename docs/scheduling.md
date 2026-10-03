@@ -18,6 +18,8 @@ Opted-in posts get their comments fetched inside the creator check, after the st
 
 ## Quick/full cadence
 
+Manual runs within `LISTING_CACHE_HOURS` (default 6) of a complete full listing reuse it (listing_cache.py): newest posts only, comment counts for the rest from the cache, no deletion check. The three-dot menu's Quick (no cache) and Full (no cache) bypass it; scheduled sessions never use it. See backend.md listing_cache.py.
+
 Scheduled sessions run a quick check per creator (newest posts only, no deletion detection) unless the last full check is older than `full_refresh_days` (default 7), which triggers a full deletion-detecting check and stamps `last_full_refresh_at`. Manual Full runs stamp it too. TikTok uses explicit daily batches (`refresh_batch`, `full_refresh_pending`); engine platforms gate per creator on `last_full_refresh_at`, which staggers naturally.
 
 ## Session resilience (engine tracker)

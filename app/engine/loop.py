@@ -87,6 +87,7 @@ class ChannelLoop:
         # session itself drains the pending deque between creators (see the
         # trackers) and the worker stands down.
         self._run_pending: deque = deque()   # (channel_id, profile_only, mode)
+        self._cached_runs: set = set()       # channel_ids whose current manual run used the listing cache
         self._run_signal = threading.Event()
         self._run_state_lock = threading.Lock()
         self._run_state: dict = {"current": None, "queue": []}
@@ -362,18 +363,27 @@ class ChannelLoop:
             with self._run_state_lock:
                 self._run_state["current"] = None
 
+    def mark_listing_cached(self, channel_id: str) -> None:
+        """The tracker read the listing cache for this run: it did no deletion
+        check, so it must not count as the channel's last full check."""
+        with self._run_state_lock:
+            self._cached_runs.add(channel_id)
+
     def finish_manual_run(self, channel: dict, profile_only: bool, mode: str, error=None) -> None:
         """Bookkeeping after a manual run claimed via pop_manual_run: schedule
         the channel's next check (successful runs only) and clear the current
         marker."""
         channel_id = channel["channel_id"]
+        with self._run_state_lock:
+            was_cached = channel_id in self._cached_runs
+            self._cached_runs.discard(channel_id)
         try:
             if error is None:
                 from scheduling import get_check_intervals, set_channel_last_full, set_channel_next_check
                 _high, _active, _ = get_check_intervals(self.db, self.engine.platform)
                 _interval = channel.get("check_interval_secs") or (_high if channel.get("starred") else _active)
                 set_channel_next_check(self.db, channel_id, int(time.time()) + _interval)
-                if not profile_only and mode == "full":
+                if not profile_only and mode.startswith("full") and not was_cached:
                     set_channel_last_full(self.db, channel_id, int(time.time()))
                     with self.db.get_db() as conn:
                         conn.execute("UPDATE channels SET full_refresh_pending = 0 WHERE channel_id = ?",
@@ -405,7 +415,7 @@ class ChannelLoop:
                     continue
                 channel, profile_only, mode = entry
                 label = f"@{channel['handle']}"
-                kind  = "profile" if profile_only else mode
+                kind  = "profile" if profile_only else mode.replace("-nocache", " (no cache)")
                 error = None
                 self._log(f"=== Manual {kind} run started: {label} ===")
                 try:

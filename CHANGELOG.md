@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Added
+- Listing cache: a manual Quick or Full run within six hours (`LISTING_CACHE_HOURS`) of a complete full listing no longer relists the whole catalog; it lists the newest posts, continues the comment backlog from the cached counts and skips the deletion check. Quick (no cache) and Full (no cache) in the three-dot menu force a relist; scheduled checks are unchanged
 - Search results are cards, one per hit: a creator card with handle, name and bio for a profile hit, a post card with a thumbnail that plays the media in place, the creator and the caption for a caption or OCR hit, and for comment hits the post once with every matching comment nested under it in the result order, grouped before paging. Every occurrence of the search words is highlighted in the full text, not the one excerpt the index picked
 - Story thumbnails: generated after every story download and by the thumbnail backfill, served at `/api/{p}/stories/<id>/thumbnail`; the repair and clear jobs cover them
 - Search: `type:comment` keeps only comment hits. `creator:` is the account whose page the item is on and `author:` the commenter, so `creator:nasa author:me type:comment` lists my comments under nasa's posts, `creator:nasa type:comment` every comment on nasa's posts, and `type:comment` alone every comment; text, `in:`, `likes:`, `-word` and sorting apply to the comment

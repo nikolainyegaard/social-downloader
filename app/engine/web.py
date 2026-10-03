@@ -469,8 +469,8 @@ def create_channel_blueprint(engine) -> Blueprint:
         if not db.get_channel(channel_id):
             return jsonify({"error": f"{noun} not found"}), 404
         mode = request.args.get("mode", "full")
-        if mode not in ("quick", "full"):
-            return jsonify({"error": "mode must be quick or full"}), 400
+        if mode not in ("quick", "full", "quick-nocache", "full-nocache"):
+            return jsonify({"error": "mode must be quick, full, quick-nocache or full-nocache"}), 400
         if not loop.enqueue_channel_run(channel_id, mode=mode):
             return jsonify({"error": "Already queued or running"}), 409
         return jsonify({"ok": True})

@@ -11,6 +11,7 @@
 | `THUMBNAIL_WORKERS` | `min(cpu//4, 4)` | Parallel thumbnail workers |
 | `THUMBNAIL_USE_GPU` | `0` | `1` enables NVDEC decode in ffmpeg |
 | `APP_VERSION` | `dev` | Injected at build time via the `BUILD_VERSION` ARG |
+| `LISTING_CACHE_HOURS` | `6` | How long a manual run may reuse a creator's last complete post listing instead of relisting (see backend.md listing_cache.py) |
 | `ms_token` | | TikTok: fallback msToken when no cookies.txt |
 | `TIKTOK_PROXY` | | Seeds the TikTok proxy setting and enables routing until the UI writes its own |
 | `TIKTOK_SOUND_LOOP_INTERVAL_MINUTES` | `60` | Sound loop interval |
@@ -46,6 +47,7 @@ data/
   {platform}/                   one dir per platform
     {platform}.db
     loop_state.json             session scheduler state
+    listing_cache/{id}.json     last complete post listing per creator (manual runs reuse it for LISTING_CACHE_HOURS)
     cookies.txt + cookies.timestamp   tiktok, twitter, instagram, onlyfans (auth.json content for OnlyFans)
     avatars/{id}.avif           plus {id}_{ts}.avif archives and thumbs/{id}.avif lazy small variants
     banners/{id}.avif           youtube, onlyfans
