@@ -2257,10 +2257,10 @@ const _SEARCH_SOURCE = {
 };
 
 // ── Result cards ──────────────────────────────────────────────────────────────
-// Three shapes: a creator card (handle, name, bio with the hits marked), a
-// post card (thumbnail that plays the media, creator, caption, the other
-// matched texts), and under a post card one sub-card per matched comment
-// with the whole comment. Highlighting runs client-side over the full text
+// Every hit is rendered as the thing that matched: a creator card (handle,
+// name, bio with the hits marked), a post card (thumbnail that plays the
+// media, creator, caption, the other matched texts), or a comment card (the
+// whole comment, with the post it sits on). Highlighting runs client-side over the full text
 // the server sends with each match, so every occurrence lights up, not the
 // one window the FTS snippet picked.
 
@@ -2309,7 +2309,8 @@ function _searchTop(r, kind) {
                    .filter(Boolean).join(' · ');
   const status = r.item_type !== 'channel' && r.status === 'deleted'
     ? `<span class="sr-kind" style="color:var(--${r.deleted_reason === 'user_banned' ? 'orange' : 'red'})">${r.deleted_reason === 'user_banned' ? 'Banned' : 'Deleted'}</span>` : '';
-  const avatar = r.item_type === 'channel' ? ''
+  // A commenter has no cached avatar; the creator's shows only when they are the commenter
+  const avatar = r.item_type === 'channel' || (r.item_type === 'comment' && r.handle !== r.post_handle) ? ''
     : `<span class="rf-avatar-wrap"><img class="rf-avatar" src="/api/${esc(r.platform)}/channels/${esc(r.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>`;
   return `<span class="sr-top">
     <span class="snav-badge" title="${esc(plat?.label || r.platform)}">${esc((plat?.label || r.platform)[0])}</span>${avatar}
@@ -2345,16 +2346,6 @@ function _searchPostCard(r, open) {
   const kind    = r.item_type === 'story' ? 'Story' : isImg ? 'Photo' : 'Video';
   const caption = matches.find(m => m.source === 'caption');
   const texts   = matches.filter(m => !['caption', 'comment', 'comment_author', 'comment_author_name'].includes(m.source));
-  // One sub-card per comment, however many of its fields matched
-  const byRef = new Map();
-  for (const m of matches) {
-    if (!m.comment && m.source !== 'comment') continue;
-    if (!byRef.has(m.ref)) byRef.set(m.ref, m);
-  }
-  const comments = [...byRef.values()].map(c => `<div class="sr-comment">
-      <span class="sr-cm-hdr">@${_searchMark(c.author || '?', marks) ?? esc(c.author || '?')}${c.author_name && c.author_name !== c.author ? `<span class="sr-label">${_searchMark(c.author_name, marks) ?? esc(c.author_name)}</span>` : ''}</span>
-      <span class="sr-cm-text">${_searchMarked(c.comment || c.text, marks, c.source === 'comment' ? c.snippet : null)}</span>
-    </div>`).join('');
   const thumb = `<img class="video-thumb" src="/api/${esc(r.platform)}/${r.item_type === 'story' ? 'stories' : 'videos'}/${esc(r.item_id)}/thumbnail" loading="lazy" alt="" onerror="this.style.opacity='.15'">`;
   // The thumbnail plays in place: the viewer stacks over the search dialog
   // and closing it lands back on the results. Only the card itself leaves
@@ -2370,13 +2361,12 @@ function _searchPostCard(r, open) {
       ${_searchTop(r, kind)}
       ${r.label ? `<span class="sr-caption">${caption ? _searchMarked(r.label, marks, caption.snippet) : esc(r.label)}</span>` : ''}
       ${texts.map(m => _searchLine(m, marks)).join('')}
-      ${comments}
     </span>
   </div>`;
 }
 
-// type:comment result: the comment itself, with the post it sits on as a
-// footer; the thumbnail and the card both open that post
+// A comment hit: the comment itself, with the post it sits on as a footer;
+// the thumbnail and the card both open that post
 function _searchCommentCard(r, open) {
   const marks = _searchState.marks || [];
   const own   = (r.matches || []).find(m => m.source === 'comment');

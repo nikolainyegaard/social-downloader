@@ -26,7 +26,7 @@ from datetime import datetime
 SOURCES = {
     "caption": "video", "description": "video", "sound": "video",
     "image": "both", "frame": "both",
-    "comment": "video", "comment_author": "video", "comment_author_name": "video",
+    "comment": "comment", "comment_author": "comment", "comment_author_name": "comment",
     "handle": "channel", "display_name": "channel", "bio": "channel", "bio_link": "channel",
     "old_handle": "channel", "old_display_name": "channel", "old_bio": "channel", "old_bio_link": "channel",
 }
@@ -255,9 +255,13 @@ _BRANCHES = {
 
 
 def _branches(parsed: dict) -> set[str]:
+    """Every hit is reported as the thing that matched: a comment hit is a
+    comment result (with its post), a caption or OCR hit a post, a bio hit a
+    creator. Comments only join a search that has text to match, or that
+    asks for them with type:comment, so a bare filter query lists posts."""
     types = set(parsed["filters"].get("type", []))
     if not types:
-        return {"video", "story", "channel"}
+        return {"video", "story", "channel", "comment"}
     out = set()
     if types & {"video", "photo", "post"}:
         out.add("video")
@@ -359,16 +363,14 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
             agg_where.append("m.source IN (" + ",".join("?" * len(sources)) + ")"); agg_params += sources
         params += agg_params
         # Each match carries the whole text so the dialog can highlight
-        # every occurrence (the FTS snippet shows one), and a comment match
-        # brings its comment along for the sub-card
+        # every occurrence (the FTS snippet shows one). Comment rows are
+        # left to cagg: a comment hit is its own result, not the post's
         ctes.append(f"""agg AS (
             SELECT m.item_type, m.item_id, MIN(h.rank) AS rank, COUNT(*) AS n,
-                   json_group_array(json_object('source', m.source, 'ref', m.ref, 'snippet', h.snippet, 'text', m.text,
-                                                'author', cm.author, 'author_name', cm.author_name, 'comment', cm.text)) AS matches
+                   json_group_array(json_object('source', m.source, 'ref', m.ref, 'snippet', h.snippet, 'text', m.text)) AS matches
             FROM hits h JOIN media_text m ON m.id = h.id
-            LEFT JOIN comments cm ON m.source IN ('comment', 'comment_author', 'comment_author_name')
-                                 AND cm.video_id = m.item_id AND cm.comment_id = m.ref
-            {'WHERE ' + ' AND '.join(agg_where) if agg_where else ''}
+            WHERE m.source NOT IN ('comment', 'comment_author', 'comment_author_name')
+            {'AND ' + ' AND '.join(agg_where) if agg_where else ''}
             GROUP BY m.item_type, m.item_id)""")
         if "comment" in _branches(parsed):
             # The same hits grouped per comment for the comment branch
@@ -390,10 +392,10 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
     for branch in ("video", "story", "channel", "comment"):
         if branch not in _branches(parsed):
             continue
-        if sources and branch == "comment" and not any(s.startswith("comment") for s in sources):
-            continue
-        if sources and branch != "comment" and not any(SOURCES.get(s) in ("both", branch) for s in sources):
+        if sources and not any(SOURCES.get(s) in ("both", branch) for s in sources):
             continue   # the requested sources never belong to this item type
+        if branch == "comment" and not (match or regex) and "comment" not in parsed["filters"].get("type", []):
+            continue   # comments only come with text to match, or on request
         bp: list = []
         w = _where(parsed, branch, bp)
         if not (match or regex):
@@ -451,7 +453,7 @@ HELP = [
     ("from:handle", "one creator, current or previous handle"),
     ("platform:tiktok", "one platform"),
     ("in:caption,comment", "text source: caption, description, sound, image, frame, comment, author, handle, name, bio, link, old, creator, comments, ocr, text"),
-    ("type:video|photo|story|creator|comment", "item kind; type:comment lists comments themselves, from: is then the commenter"),
+    ("type:video|photo|story|creator|comment", "item kind; a comment hit is always its own result with its post, type:comment keeps only those, from: is then the commenter"),
     ("status:live|deleted|banned|missing|restored", "post state"),
     ("is:starred|pinned|bookmarked|banned|tracked", "creator flags"),
     ("has:comments|file", "saved comments, a saved file"),
