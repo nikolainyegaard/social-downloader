@@ -2072,7 +2072,7 @@ const _SEARCH_KEYS = [
   ['creator',  'Creator',  'whose page it is on, current or previous handle'],
   ['author',   'Commenter', 'who wrote the comment'],
   ['in',       'Source',   'where the text is: caption, comment, bio…'],
-  ['type',     'Type',     'video, photo, story, creator, comment'],
+  ['type',     'Type',     'video, photo, story, creator, comment, reply, toplevel'],
   ['status',   'Status',   'live, deleted, banned, missing, restored'],
   ['is',       'Flag',     'starred, pinned, bookmarked, banned, tracked'],
   ['has',      'Has',      'comments, file'],
@@ -2087,7 +2087,7 @@ const _SEARCH_KEYS = [
 ];
 const _SEARCH_VALUES = {
   in:       ['caption', 'description', 'sound', 'comment', 'author', 'comments', 'image', 'frame', 'ocr', 'handle', 'name', 'bio', 'link', 'old', 'creator', 'text'],
-  type:     ['video', 'photo', 'story', 'creator', 'comment', 'post'],
+  type:     ['video', 'photo', 'story', 'creator', 'comment', 'reply', 'toplevel', 'post'],
   status:   ['live', 'deleted', 'banned', 'missing', 'restored'],
   is:       ['starred', 'pinned', 'bookmarked', 'banned', 'tracked'],
   has:      ['comments', 'file'],
@@ -4233,8 +4233,8 @@ function _mFiltered(cfg, skipSearch = false) {
   let vids = cfg.st.videos;
   if (cfg.st.filter.size)     vids = vids.filter(v => cfg.st.filter.has(_STATUS_FILTER_KEY[_statusKey(v)]));
   if (cfg.st.typeFilter.size) vids = vids.filter(v => cfg.st.typeFilter.has(v.type));
-  if (!skipSearch && cfg.st.search) {
-    const q = cfg.st.search.toLowerCase();
+  if (!skipSearch && cfg.st.search.trim()) {
+    const q = cfg.st.search.trim().toLowerCase();   // exact substring, spaces included
     vids = vids.filter(v =>
       (v.video_id          || '').toLowerCase().includes(q) ||
       (v.description       || '').toLowerCase().includes(q) ||

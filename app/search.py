@@ -40,7 +40,8 @@ SOURCE_ALIASES = {
 KEYS = {"creator", "from", "author", "platform", "in", "type", "status", "is", "has", "before", "after", "on",
         "likes", "views", "comments", "duration", "sort", "re", "near"}
 SORTS = {"rank", "date", "likes", "views", "comments"}
-TYPES = {"video", "photo", "post", "story", "creator", "comment"}
+TYPES = {"video", "photo", "post", "story", "creator", "comment", "reply", "toplevel"}
+COMMENT_TYPES = {"comment", "reply", "toplevel"}
 STATUSES = {"live", "deleted", "banned", "missing", "restored"}
 FLAGS_IS = {"starred", "pinned", "bookmarked", "banned", "tracked"}
 FLAGS_HAS = {"comments", "file"}
@@ -291,7 +292,7 @@ def _branches(parsed: dict) -> set[str]:
         out.add("story")
     if "creator" in types:
         out.add("channel")
-    if "comment" in types:
+    if types & COMMENT_TYPES:
         out.add("comment")
     return out
 
@@ -305,6 +306,13 @@ def _where(parsed: dict, branch: str, params: list) -> list[str]:
         w.append("i.content_type IN ('photo', 'image')")
     elif branch == "video" and types == {"video"}:
         w.append("i.content_type NOT IN ('photo', 'image')")
+    # type:reply / type:toplevel narrow the comment branch to replies or to
+    # comments that are not replies; type:comment is both
+    if branch == "comment" and "comment" not in types and types & {"reply", "toplevel"} != {"reply", "toplevel"}:
+        if "reply" in types:
+            w.append("EXISTS (SELECT 1 FROM comments cc WHERE cc.comment_id = i.item_id AND cc.parent_id IS NOT NULL)")
+        elif "toplevel" in types:
+            w.append("EXISTS (SELECT 1 FROM comments cc WHERE cc.comment_id = i.item_id AND cc.parent_id IS NULL)")
     # creator: is the account whose page the item sits on (for a comment,
     # the post's creator); author: is the commenter, so it only ever
     # matches comments
@@ -425,7 +433,7 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
             continue
         if sources and not any(SOURCES.get(s) in ("both", branch) for s in sources):
             continue   # the requested sources never belong to this item type
-        if branch == "comment" and not (match or regex) and "comment" not in parsed["filters"].get("type", []) \
+        if branch == "comment" and not (match or regex) and not (set(parsed["filters"].get("type", [])) & COMMENT_TYPES) \
                 and not parsed["filters"].get("author"):
             continue   # comments only come with text to match, or on request (type:comment, author:)
         bp: list = []
@@ -493,7 +501,7 @@ HELP = [
     ("author:handle", "the commenter; creator:nasa author:me type:comment is my comments under nasa's posts"),
     ("platform:tiktok", "one platform"),
     ("in:caption,comment", "text source: caption, description, sound, image, frame, comment, author, handle, name, bio, link, old, creator, comments, ocr, text"),
-    ("type:video|photo|story|creator|comment", "item kind; a comment hit is always its own result with its post, type:comment keeps only those"),
+    ("type:video|photo|story|creator|comment|reply|toplevel", "item kind; a comment hit is always its own result with its post, type:comment keeps only those, reply or toplevel only replies or only comments that are not replies"),
     ("status:live|deleted|banned|missing|restored", "post state"),
     ("is:starred|pinned|bookmarked|banned|tracked", "creator flags"),
     ("has:comments|file", "saved comments, a saved file"),

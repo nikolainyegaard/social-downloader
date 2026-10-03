@@ -2350,7 +2350,7 @@ function initChannelApp(cfg) {
   function _modalViewCount(view) {
     if (view === 'history') {
       const shown = _phistFiltered().length;
-      if (_creatorState.search) {
+      if (_creatorState.search.trim()) {
         const total = _phistFiltered(true).length;
         return `${shown.toLocaleString()} of ${total.toLocaleString()} changes`;
       }
@@ -2794,7 +2794,9 @@ function initChannelApp(cfg) {
     else _mRenderList(MODAL_CFG);
   });
   X('OnModalSearch', val => {
-    _creatorState.search = val.trim();
+    // Raw, not trimmed: the toolbar re-renders the input from this value on
+    // every keystroke, so a trimmed copy swallowed the space you just typed
+    _creatorState.search = val;
     _mRenderToolbar(MODAL_CFG, _creatorState.videos);
     if (_creatorState.view === 'history') _renderPhistPanel();
     else _mRenderList(MODAL_CFG);
@@ -3103,7 +3105,7 @@ function initChannelApp(cfg) {
       ? phistData.filter(e => phistField.has(e.field))
       : phistData;
     if (!skipSearch && _creatorState.search) {
-      const q = _creatorState.search.toLowerCase();
+      const q = _creatorState.search.trim().toLowerCase();
       const newValMap = _phistNewValMap();
       entries = entries.filter(e =>
         (FIELD_LABELS[e.field] || e.field).toLowerCase().includes(q) ||

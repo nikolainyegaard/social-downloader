@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Added
+- Search: `type:reply` and `type:toplevel` narrow comment results to replies or to comments that are not replies
 - Listing cache: a manual Quick or Full run within six hours (`LISTING_CACHE_HOURS`) of a complete full listing no longer relists the whole catalog; it lists the newest posts, continues the comment backlog from the cached counts and skips the deletion check. Quick (no cache) and Full (no cache) in the three-dot menu force a relist; scheduled checks are unchanged
 - Search results are cards, one per hit: a creator card with handle, name and bio for a profile hit, a post card with a thumbnail that plays the media in place, the creator and the caption for a caption or OCR hit, and for comment hits the post once with every matching comment nested under it in the result order, grouped before paging. Every occurrence of the search words is highlighted in the full text, not the one excerpt the index picked
 - Story thumbnails: generated after every story download and by the thumbnail backfill, served at `/api/{p}/stories/<id>/thumbnail`; the repair and clear jobs cover them
@@ -79,6 +80,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The legend under each Stats graph reads "Date" with a short date and "Value" (the card title already names the metric), with a fixed slot for the date so nothing shifts or overflows while sweeping the cursor
 
 ### Fixed
+- The creator modal's search field dropped the space you typed, so multi-word searches were impossible; it matches the exact text you type, spaces included
 - The page is served with no-store, so a reload after a deploy always picks up the new build's scripts; a cached page kept browsers on the previous build's immutable assets
 - TikTok comments read off the post page did not expand reply threads, so replies were missing on that path; the "View N replies" controls are now clicked for real, and a control that moved while the panel re-rendered is looked up again instead of ending the pass
 - TikTok comments: when the post page lands elsewhere or shows no comments, the session is being refused and the check stops there instead of parking every remaining post; a short pause now separates the page loads
