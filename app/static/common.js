@@ -2071,7 +2071,7 @@ function _searchScrolled(el) {
 const _SEARCH_KEYS = [
   ['from',     'Creator',  'handle, current or previous'],
   ['in',       'Source',   'where the text is: caption, comment, bio…'],
-  ['type',     'Type',     'video, photo, story, creator'],
+  ['type',     'Type',     'video, photo, story, creator, comment'],
   ['status',   'Status',   'live, deleted, banned, missing, restored'],
   ['is',       'Flag',     'starred, pinned, bookmarked, banned, tracked'],
   ['has',      'Has',      'comments, file'],
@@ -2086,7 +2086,7 @@ const _SEARCH_KEYS = [
 ];
 const _SEARCH_VALUES = {
   in:       ['caption', 'description', 'sound', 'comment', 'author', 'comments', 'image', 'frame', 'ocr', 'handle', 'name', 'bio', 'link', 'old', 'creator', 'text'],
-  type:     ['video', 'photo', 'story', 'creator', 'post'],
+  type:     ['video', 'photo', 'story', 'creator', 'comment', 'post'],
   status:   ['live', 'deleted', 'banned', 'missing', 'restored'],
   is:       ['starred', 'pinned', 'bookmarked', 'banned', 'tracked'],
   has:      ['comments', 'file'],
@@ -2375,11 +2375,30 @@ function _searchPostCard(r, open) {
   </div>`;
 }
 
+// type:comment result: the comment itself, with the post it sits on as a
+// footer; the thumbnail and the card both open that post
+function _searchCommentCard(r, open) {
+  const marks = _searchState.marks || [];
+  const own   = (r.matches || []).find(m => m.source === 'comment');
+  return `<div class="sr-card" role="button" tabindex="0" onclick="_searchOpen('${esc(r.platform)}',()=>${open})" onkeydown="if(event.key==='Enter')this.click()">
+    <span class="sr-thumb" title="Open post">
+      <img class="video-thumb" src="/api/${esc(r.platform)}/videos/${esc(r.post_id)}/thumbnail" loading="lazy" alt="" onerror="this.style.opacity='.15'">
+    </span>
+    <span class="sr-body">
+      ${_searchTop(r, 'Comment')}
+      <span class="sr-cm-text">${_searchMarked(r.label, marks, own ? own.snippet : null)}</span>
+      ${r.post_handle ? `<span class="sr-on">on @${esc(r.post_handle)}${r.post_label ? ` · ${esc(r.post_label)}` : ''}</span>` : ''}
+    </span>
+  </div>`;
+}
+
 function _searchRow(r) {
   const open = r.item_type === 'story'   ? `${r.prefix}OpenStory('${esc(r.channel_id)}','${esc(r.item_id)}')`
              : r.item_type === 'channel' ? `${r.prefix}OpenModal('${esc(r.channel_id)}')`
-             : `${r.prefix}OpenModalAndHighlight('${esc(r.channel_id)}','${esc(r.item_id)}')`;
-  return r.item_type === 'channel' ? _searchCreatorCard(r, open) : _searchPostCard(r, open);
+             : `${r.prefix}OpenModalAndHighlight('${esc(r.channel_id)}','${esc(r.post_id || r.item_id)}')`;
+  return r.item_type === 'channel' ? _searchCreatorCard(r, open)
+       : r.item_type === 'comment' ? _searchCommentCard(r, open)
+       : _searchPostCard(r, open);
 }
 
 // Thumbnail click: the media straight into the viewer, without opening the

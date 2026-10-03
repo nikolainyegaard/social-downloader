@@ -40,7 +40,7 @@ SOURCE_ALIASES = {
 KEYS = {"from", "platform", "in", "type", "status", "is", "has", "before", "after", "on",
         "likes", "views", "comments", "duration", "sort", "re", "near"}
 SORTS = {"rank", "date", "likes", "views", "comments"}
-TYPES = {"video", "photo", "post", "story", "creator"}
+TYPES = {"video", "photo", "post", "story", "creator", "comment"}
 STATUSES = {"live", "deleted", "banned", "missing", "restored"}
 FLAGS_IS = {"starred", "pinned", "bookmarked", "banned", "tracked"}
 FLAGS_HAS = {"comments", "file"}
@@ -214,7 +214,8 @@ def fts_match(parsed: dict) -> str | None:
 
 _ITEM_COLS = """item_type, item_id, channel_id, handle, display_name, ts, status, deleted_reason,
                 content_type, has_file, likes, views, comment_count, duration, comments_saved,
-                starred, pinned, bookmarked, account_status, tracking_enabled, label"""
+                starred, pinned, bookmarked, account_status, tracking_enabled, label,
+                post_id, post_handle, post_label"""
 
 _BRANCHES = {
     "video": """SELECT 'video' AS item_type, v.video_id AS item_id, v.channel_id, c.handle, c.display_name,
@@ -223,22 +224,33 @@ _BRANCHES = {
                        v.comment_count, v.duration,
                        (SELECT COUNT(*) FROM comments cm WHERE cm.video_id = v.video_id) AS comments_saved,
                        c.starred, c.pinned_at IS NOT NULL AS pinned, c.bookmarked, c.account_status,
-                       c.tracking_enabled, v.title AS label
+                       c.tracking_enabled, v.title AS label, NULL AS post_id, NULL AS post_handle, NULL AS post_label
                 FROM videos v JOIN channels c ON c.channel_id = v.channel_id""",
     "story": """SELECT 'story' AS item_type, s.story_id AS item_id, s.channel_id, c.handle, c.display_name,
                        s.posted_at AS ts, 'up' AS status, NULL AS deleted_reason, s.content_type,
                        s.file_path IS NOT NULL AS has_file, NULL AS likes, NULL AS views, NULL AS comment_count,
                        NULL AS duration, 0 AS comments_saved,
                        c.starred, c.pinned_at IS NOT NULL AS pinned, c.bookmarked, c.account_status,
-                       c.tracking_enabled, NULL AS label
+                       c.tracking_enabled, NULL AS label, NULL AS post_id, NULL AS post_handle, NULL AS post_label
                 FROM stories s JOIN channels c ON c.channel_id = s.channel_id""",
     "channel": """SELECT 'channel' AS item_type, c.channel_id AS item_id, c.channel_id, c.handle, c.display_name,
                        c.added_at AS ts, 'up' AS status, NULL AS deleted_reason, 'creator' AS content_type,
                        c.avatar_cached AS has_file, NULL AS likes, c.subscriber_count AS views, NULL AS comment_count,
                        NULL AS duration, 0 AS comments_saved,
                        c.starred, c.pinned_at IS NOT NULL AS pinned, c.bookmarked, c.account_status,
-                       c.tracking_enabled, c.description AS label
+                       c.tracking_enabled, c.description AS label, NULL AS post_id, NULL AS post_handle, NULL AS post_label
                 FROM channels c WHERE c.enabled = 1""",
+    # type:comment makes the comment the result: handle and name are the
+    # commenter's, ts and likes the comment's, label its text, and the post
+    # it sits on rides along in post_id, post_handle and post_label
+    "comment": """SELECT 'comment' AS item_type, cm.comment_id AS item_id, cm.channel_id, cm.author AS handle,
+                       cm.author_name AS display_name, cm.created_at AS ts, 'up' AS status, NULL AS deleted_reason,
+                       'comment' AS content_type, 0 AS has_file, cm.likes, NULL AS views, NULL AS comment_count,
+                       NULL AS duration, 0 AS comments_saved,
+                       c.starred, c.pinned_at IS NOT NULL AS pinned, c.bookmarked, c.account_status,
+                       c.tracking_enabled, cm.text AS label, cm.video_id AS post_id, c.handle AS post_handle, v.title AS post_label
+                FROM comments cm JOIN channels c ON c.channel_id = cm.channel_id
+                                 LEFT JOIN videos v ON v.video_id = cm.video_id""",
 }
 
 
@@ -253,6 +265,8 @@ def _branches(parsed: dict) -> set[str]:
         out.add("story")
     if "creator" in types:
         out.add("channel")
+    if "comment" in types:
+        out.add("comment")
     return out
 
 
@@ -266,6 +280,9 @@ def _where(parsed: dict, branch: str, params: list) -> list[str]:
     elif branch == "video" and types == {"video"}:
         w.append("i.content_type NOT IN ('photo', 'image')")
     for h in f.get("from", []):
+        if branch == "comment":
+            w.append("i.handle = ? COLLATE NOCASE"); params.append(h)   # the commenter
+            continue
         w.append("""(i.handle = ? COLLATE NOCASE OR i.channel_id IN (
                         SELECT channel_id FROM profile_history WHERE field = 'handle' AND old_value = ? COLLATE NOCASE))""")
         params += [h, h]
@@ -299,7 +316,7 @@ def _where(parsed: dict, branch: str, params: list) -> list[str]:
         w.append("i.ts >= ? AND i.ts < ?"); params += [start, end]
     for key, col in (("likes", "i.likes"), ("views", "i.views"), ("comments", "i.comment_count"), ("duration", "i.duration")):
         for op, num in f.get(key, []):
-            if branch != "video":
+            if branch != "video" and not (branch == "comment" and key == "likes"):
                 w.append("1 = 0")
             else:
                 w.append(f"{col} {op} ?"); params.append(num)
@@ -334,11 +351,13 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
             params.append(match)
         else:
             ctes.append("hits AS MATERIALIZED (SELECT id, 0 AS rank, substr(text, 1, 160) AS snippet FROM media_text)")
-        agg_where = []
+        agg_where: list[str] = []
+        agg_params: list = []
         if regex:
-            agg_where.append("m.text REGEXP ?"); params.append(regex["pattern"] + "\x00" + regex["flags"])
+            agg_where.append("m.text REGEXP ?"); agg_params.append(regex["pattern"] + "\x00" + regex["flags"])
         if sources:
-            agg_where.append("m.source IN (" + ",".join("?" * len(sources)) + ")"); params += sources
+            agg_where.append("m.source IN (" + ",".join("?" * len(sources)) + ")"); agg_params += sources
+        params += agg_params
         # Each match carries the whole text so the dialog can highlight
         # every occurrence (the FTS snippet shows one), and a comment match
         # brings its comment along for the sub-card
@@ -351,6 +370,16 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
                                  AND cm.video_id = m.item_id AND cm.comment_id = m.ref
             {'WHERE ' + ' AND '.join(agg_where) if agg_where else ''}
             GROUP BY m.item_type, m.item_id)""")
+        if "comment" in _branches(parsed):
+            # The same hits grouped per comment for the comment branch
+            ctes.append(f"""cagg AS (
+                SELECT m.ref AS comment_id, MIN(h.rank) AS rank, COUNT(*) AS n,
+                       json_group_array(json_object('source', m.source, 'ref', m.ref, 'snippet', h.snippet, 'text', m.text)) AS matches
+                FROM hits h JOIN media_text m ON m.id = h.id
+                WHERE m.source IN ('comment', 'comment_author', 'comment_author_name')
+                {'AND ' + ' AND '.join(agg_where) if agg_where else ''}
+                GROUP BY m.ref)""")
+            params += agg_params
     if neg:
         neg_match = " OR ".join(_fts_term(t) for t in neg)
         ctes.append("""excl AS MATERIALIZED (
@@ -358,16 +387,27 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
             WHERE m.id IN (SELECT rowid FROM media_text_fts WHERE media_text_fts MATCH ?))""")
         params.append(neg_match)
     parts = []
-    for branch in ("video", "story", "channel"):
+    for branch in ("video", "story", "channel", "comment"):
         if branch not in _branches(parsed):
             continue
-        if sources and not any(SOURCES.get(s) in ("both", branch) for s in sources):
+        if sources and branch == "comment" and not any(s.startswith("comment") for s in sources):
+            continue
+        if sources and branch != "comment" and not any(SOURCES.get(s) in ("both", branch) for s in sources):
             continue   # the requested sources never belong to this item type
         bp: list = []
         w = _where(parsed, branch, bp)
-        join = "JOIN agg a ON a.item_type = i.item_type AND a.item_id = i.item_id" if (match or regex) else ""
+        if not (match or regex):
+            join = ""
+        elif branch == "comment":
+            join = "JOIN cagg a ON a.comment_id = i.item_id"
+        else:
+            join = "JOIN agg a ON a.item_type = i.item_type AND a.item_id = i.item_id"
         sel_rank = "a.rank, a.n, a.matches" if join else "0 AS rank, 0 AS n, NULL AS matches"
-        if neg:
+        if neg and branch == "comment":
+            w.append("""NOT EXISTS (SELECT 1 FROM media_text m WHERE m.source = 'comment' AND m.ref = i.item_id
+                                    AND m.id IN (SELECT rowid FROM media_text_fts WHERE media_text_fts MATCH ?))""")
+            bp.append(neg_match)
+        elif neg:
             w.append("NOT EXISTS (SELECT 1 FROM excl e WHERE e.item_type = i.item_type AND e.item_id = i.item_id)")
         parts.append(f"""SELECT i.*, {sel_rank} FROM ({_BRANCHES[branch]}) i {join}
                          {'WHERE ' + ' AND '.join(w) if w else ''}""")
@@ -411,7 +451,7 @@ HELP = [
     ("from:handle", "one creator, current or previous handle"),
     ("platform:tiktok", "one platform"),
     ("in:caption,comment", "text source: caption, description, sound, image, frame, comment, author, handle, name, bio, link, old, creator, comments, ocr, text"),
-    ("type:video|photo|story|creator", "item kind"),
+    ("type:video|photo|story|creator|comment", "item kind; type:comment lists comments themselves, from: is then the commenter"),
     ("status:live|deleted|banned|missing|restored", "post state"),
     ("is:starred|pinned|bookmarked|banned|tracked", "creator flags"),
     ("has:comments|file", "saved comments, a saved file"),
