@@ -1115,9 +1115,19 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
     tab = await api.sessions[0].page.context.new_page()
     tab.on("response", on_response)
     try:
+        # A breath between posts; thirty page loads back to back is what
+        # gets the session served the degraded page below
+        await asyncio.sleep(random.uniform(1.5, 3.0))
         # Any handle resolves: TikTok redirects to the post's owner
         await tab.goto(f"https://www.tiktok.com/@{handle or 'tiktok'}/video/{video_id}",
                        wait_until="domcontentloaded")
+        if video_id not in tab.url:
+            # TikTok sent the session somewhere else (the profile, another
+            # post): it is refusing post pages for now, and every further
+            # post this check would land the same way. The "empty response"
+            # wording is what comments.is_empty_response keys on, so the
+            # tracker stops the stage instead of burning strikes
+            raise RuntimeError(f"comment page for {video_id} gave an empty response: TikTok redirected to {tab.url}")
         # The page server-renders the first comments into its rehydration
         # blob and only requests /api/comment/list/ for the pages after, so
         # a short thread never makes a request at all. Read the blob the way
@@ -1197,7 +1207,8 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
         # reads "Hide replies", so it drops out of the match on its own
         # ponytail: matches the English UI text; a session in another
         # language fetches top-level comments only
-        reply_re = re.compile(r"^\s*View\b.*repl", re.I)
+        # The label is "Show 1 reply" / "Show N replies" (older layouts said View)
+        reply_re = re.compile(r"^\s*(Show|View)\b.*repl", re.I)
         for _ in range(80):
             if _count() >= max_count:
                 break
@@ -1250,7 +1261,7 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
         if parent not in tops:
             rows.extend(r for r in (_comment_row(rc, parent) for rc in rcs.values()) if r)
     if not rows and state["responses"] == 0:
-        raise RuntimeError(f"comment page for {video_id} made no comment requests and embedded none"
+        raise RuntimeError(f"comment page for {video_id} gave an empty response: no comment requests and none embedded"
                            f" (landed on {final_url}, title {final_title!r}, api paths seen: {sorted(other) or 'none'})")
     return rows[:max_count]
 
