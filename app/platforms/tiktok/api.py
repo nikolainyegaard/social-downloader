@@ -1214,15 +1214,21 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
         # language fetches top-level comments only
         # The label is "View 1 reply" / "View N replies" / "View more replies"
         reply_re = re.compile(r"^\s*(View|Show)\b.*repl", re.I)
-        misses = 0
-        for _ in range(80):
+        # The scroll above ended at the bottom of the thread, so most
+        # controls now sit above the viewport: Playwright's click scrolls
+        # the panel to the element itself, so the only filter is the right
+        # half (the action bar's comment bubble reads "comments" too). When
+        # none is left in the DOM, sweep back up a few screens in case the
+        # panel only renders the rows near the view, then stop
+        misses = sweeps = 0
+        for _ in range(200):
             if _count() >= max_count or misses >= 3:
                 break
             pressed = False
             try:
                 for loc in await tab.get_by_text(reply_re).all():
                     box = await loc.bounding_box()
-                    if not box or box["x"] <= vp["width"] / 2 or box["y"] >= vp["height"] or box["y"] < 0:
+                    if not box or box["x"] <= vp["width"] / 2:
                         continue
                     before = state["responses"]
                     await loc.click(timeout=3000)
@@ -1241,12 +1247,11 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
                 continue
             misses = 0
             if not pressed:
-                # Nothing unexpanded on screen: scroll the panel on, a
-                # further thread may sit below the fold
-                await tab.mouse.wheel(0, random.randint(500, 900))
-                await asyncio.sleep(random.uniform(0.8, 1.2))
-                if not await tab.get_by_text(reply_re).count():
+                if sweeps >= 6:
                     break
+                sweeps += 1
+                await tab.mouse.wheel(0, -random.randint(700, 1100))
+                await asyncio.sleep(random.uniform(0.6, 0.9))
     finally:
         tab.remove_listener("response", on_response)
         final_url = tab.url
