@@ -91,6 +91,7 @@ let _viewerOn = false;
 let _viewerQueue = [];
 let _viewerFlushTimer = null;
 let _viewerDown = false;
+let _viewerHintTimer = null;
 
 function ttViewerOpen() {
   // The frame stream must stop on every close path, including native Escape
@@ -149,21 +150,25 @@ function _viewerNextFrame() {
   if (!_viewerOn) return;
   const img   = /** @type {HTMLImageElement} */ (document.getElementById('ttViewerImg'));
   const empty = document.getElementById('ttViewerEmpty');
-  // load does not fire for a multipart stream in every browser, so the hint
-  // hides when the stream is requested and only an error brings it back
-  img.onload  = () => { empty.hidden = true; };
+  // Firefox fires neither load nor a reliable error for a multipart stream,
+  // so the hint follows the evidence instead: a frame has arrived when the
+  // image has a natural width. Checked on a timer while the viewer is open
   img.onerror = () => {
     if (!_viewerOn) return;
-    empty.hidden = false;   // the stage shows the no-session hint; the header status stays for the browse countdown
     img.onerror = null;
     setTimeout(_viewerNextFrame, 1500);
   };
-  empty.hidden = true;
   img.src = '/api/tiktok/screen/stream?t=' + Date.now();
+  clearInterval(_viewerHintTimer);
+  _viewerHintTimer = setInterval(() => {
+    if (!_viewerOn) { clearInterval(_viewerHintTimer); return; }
+    empty.hidden = img.naturalWidth > 0;
+  }, 500);
 }
 
 function _viewerStop() {
   const img = /** @type {HTMLImageElement} */ (document.getElementById('ttViewerImg'));
+  clearInterval(_viewerHintTimer);
   img.onload = img.onerror = null;
   img.removeAttribute('src');   // closes the stream so ffmpeg stops
 }
