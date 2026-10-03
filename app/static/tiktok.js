@@ -94,7 +94,7 @@ let _viewerDown = false;
 
 function ttViewerOpen() {
   // The frame stream must stop on every close path, including native Escape
-  _dlgWire('ttViewer', () => { _viewerOn = false; _viewerDown = false; });
+  _dlgWire('ttViewer', () => { _viewerOn = false; _viewerDown = false; _viewerStop(); });
   _dlgOpen('ttViewer');
   _viewerOn = true;
   _viewerNextFrame();
@@ -141,23 +141,28 @@ async function _browsePoll() {
   if (data.active) _browseTimer = setTimeout(_browsePoll, 2000);
 }
 
+// The display arrives as one MJPEG stream the <img> renders at the capture
+// rate (screen.py stream_frames). A stream error means no display or the
+// server closed it: show the hint and retry with a single frame poll until
+// the stream answers again.
 function _viewerNextFrame() {
   if (!_viewerOn) return;
-  const img    = document.getElementById('ttViewerImg');
+  const img    = /** @type {HTMLImageElement} */ (document.getElementById('ttViewerImg'));
   const status = document.getElementById('ttViewerStatus');
-  const next = new Image();
-  next.onload = () => {
-    if (!_viewerOn) return;
-    img.src = next.src;
-    if (!_browseTimer) status.textContent = '';
-    setTimeout(_viewerNextFrame, 300);
-  };
-  next.onerror = () => {
+  img.onload  = () => { if (!_browseTimer) status.textContent = ''; };
+  img.onerror = () => {
     if (!_viewerOn) return;
     status.textContent = 'No live session running. Browse TikTok (Settings > TikTok > Account), start a QR login, or trigger a check, then it appears here.';
+    img.onerror = null;
     setTimeout(_viewerNextFrame, 1500);
   };
-  next.src = '/api/tiktok/screen?t=' + Date.now();
+  img.src = '/api/tiktok/screen/stream?t=' + Date.now();
+}
+
+function _viewerStop() {
+  const img = /** @type {HTMLImageElement} */ (document.getElementById('ttViewerImg'));
+  img.onload = img.onerror = null;
+  img.removeAttribute('src');   // closes the stream so ffmpeg stops
 }
 
 function _viewerCoords(ev) {

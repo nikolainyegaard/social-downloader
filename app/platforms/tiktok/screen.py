@@ -48,6 +48,40 @@ def grab_frame() -> bytes | None:
     return proc.stdout or None
 
 
+STREAM_FPS = 10
+
+
+def stream_frames(fps: int = STREAM_FPS):
+    """JPEG frames of the display from one long-lived ffmpeg x11grab process,
+    for a multipart stream: one process at a steady rate instead of one
+    spawn per frame, which is what capped the viewer at about 3 Hz. The
+    MJPEG byte stream is split on the JPEG start and end markers. Closing
+    the generator (the client went away) kills ffmpeg."""
+    proc = subprocess.Popen(
+        ["ffmpeg", "-loglevel", "error", "-f", "x11grab", "-framerate", str(fps),
+         "-video_size", f"{SCREEN_W}x{SCREEN_H}", "-i", _display(),
+         "-q:v", "6", "-f", "mjpeg", "-"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
+    buf = b""
+    try:
+        while True:
+            chunk = proc.stdout.read(65536)
+            if not chunk:
+                break
+            buf += chunk
+            while True:
+                start = buf.find(b"\xff\xd8")
+                end   = buf.find(b"\xff\xd9", start + 2) if start != -1 else -1
+                if start == -1 or end == -1:
+                    break
+                yield buf[start:end + 2]
+                buf = buf[end + 2:]
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)
+
+
 def _build_xdotool_args(events: list[dict]) -> list[str]:
     """Turn a list of pointer events into one xdotool argument vector.
 

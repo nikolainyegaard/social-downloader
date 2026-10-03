@@ -41,6 +41,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - docker-compose.yml has commented per-platform storage override lines: mount another disk over a platform's media subfolder to store that platform elsewhere, no app configuration needed (see README)
 
 ### Changed
+- Browser view runs at 10 frames a second as one MJPEG stream instead of about three polled snapshots
 - Comment fetch log lines carry their position in the check, `[12/151] Comments ...`, like the download lines
 - Reloads paint instantly: each platform keeps its last channel list and feed page in the browser and shows them before the fresh data arrives, and the post lists of pinned creators are fetched in the background so their modal opens from memory
 - The activity feed query is indexed; on a large TikTok database it took close to two seconds per page

@@ -17,6 +17,7 @@ TikTok extras on its engine blueprint:
 /api/tiktok/login/qr              POST starts the QR flow, GET polls (status, QR data URL, message)
 /api/tiktok/login/session         DELETE resets: removes browser profile + cookies.txt (409 while in use)
 /api/tiktok/screen                GET one JPEG frame of the headed display (503 when headless)
+/api/tiktok/screen/stream         GET multipart/x-mixed-replace MJPEG of the display at 10 fps from one ffmpeg process
 /api/tiktok/screen/input          POST {events:[{type,x,y}]}, replayed via xdotool
 /api/tiktok/browse                GET {active, remaining, error}; POST {secs} opens the app's TikTok session for the viewer and holds it
                                   (default 120 s, max 600, extends a running one; 409 while a loop has the browser); DELETE ends it

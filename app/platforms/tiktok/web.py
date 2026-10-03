@@ -332,6 +332,20 @@ def register_tiktok_routes(bp, engine) -> None:
         return Response(frame, mimetype="image/jpeg",
                         headers={"Cache-Control": "no-store"})
 
+    @bp.route("/screen/stream", methods=["GET"])
+    def tiktok_screen_stream():
+        """multipart/x-mixed-replace MJPEG of the headed display; an <img>
+        renders it at the capture rate with no polling."""
+        if not browser_screen.available():
+            return jsonify({"error": "No display: the browser runs headless here"}), 503
+
+        def _gen():
+            for frame in browser_screen.stream_frames():
+                yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                       + str(len(frame)).encode() + b"\r\n\r\n" + frame + b"\r\n")
+        return Response(_gen(), mimetype="multipart/x-mixed-replace; boundary=frame",
+                        headers={"Cache-Control": "no-store"})
+
     @bp.route("/screen/input", methods=["POST"])
     def tiktok_screen_input():
         events = (request.get_json(silent=True) or {}).get("events", [])
