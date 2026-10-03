@@ -4,7 +4,7 @@ import hashlib
 import os
 from datetime import timedelta
 
-from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, abort, session, url_for
+from flask import make_response, Flask, jsonify, redirect, render_template, request, send_from_directory, abort, session, url_for
 from config import APP_VERSION
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
@@ -168,8 +168,15 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
-        return render_template("index.html", version=APP_VERSION, platforms=_platform_list(),
-                               started=int(startup_report._report["container_start"] or startup_report._PROCESS_T0))
+        # The page names the hashed asset URLs of this build, and those files
+        # are cached as immutable, so a cached copy of the page keeps a
+        # browser on the previous build's scripts indefinitely (seen as the
+        # old viewer polling after a deploy). Never cache the page itself
+        resp = make_response(render_template(
+            "index.html", version=APP_VERSION, platforms=_platform_list(),
+            started=int(startup_report._report["container_start"] or startup_report._PROCESS_T0)))
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     # Platform enable/disable (Settings > General). Disabling takes effect
     # immediately: the scheduler and manual-run worker skip the platform, an

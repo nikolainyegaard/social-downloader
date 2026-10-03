@@ -129,3 +129,7 @@ The scan (`_scan_groups`) fetches `_GROUP_SCAN = 2500` raw rows at a time and ke
 Feed pagination (`get_activity_feed`): the `before` cursor is an event timestamp, and a group's timestamp is its newest row, so a page fetched below the cursor would re-emit the rest of an already-shown group as a duplicate. Grouped sources therefore query with a 5-minute lookback past the cursor (any run crossing the cursor glues to at least one row in that band) and drop every group whose newest row is at or above it. `has_more` is true while any source has unscanned rows left.
 
 For the offset-paginated history lists, `offset` is a raw-row offset, not a group offset; the frontend advances by `rows_consumed` and stitches boundary groups client-side. `scripts/test_scan_groups.py` is the runnable check for the scan and cursor-drop rules.
+
+## Cached page, stale build
+
+Static assets are served under content-hashed URLs with `Cache-Control: immutable` for a year, and `index.html` names the current build's URLs. If the page itself gets cached, the browser keeps loading the previous build's scripts from its own cache after a deploy, with no request ever reaching the server to notice (seen as the TikTok viewer still polling single frames after the stream shipped). `/` is therefore served with `Cache-Control: no-store`. A browser still showing old behaviour after a deploy is a hard reload away.
