@@ -517,11 +517,11 @@ def process_single_channel(
                     _rows = adapter.fetch_comments(engine, {"video_id": _vid, "channel_id": channel_id}, _max_per_post)
                 except Exception as e:
                     comments.record(engine, _vid, channel_id, handle, _count, None, e, time.time() - _t0, log,
-                                    count_failure=not comments.is_empty_response(e))
+                                    count_failure=not comments.is_empty_response(e), progress=f"[{_i}/{len(_due)}] ")
                     if comments.is_empty_response(e):
                         break
                     continue
-                comments.record(engine, _vid, channel_id, handle, _count, _rows, None, time.time() - _t0, log)
+                comments.record(engine, _vid, channel_id, handle, _count, _rows, None, time.time() - _t0, log, progress=f"[{_i}/{len(_due)}] ")
 
         return "deletions" if (deleted_ids or deletion_spike) else "ok"
 

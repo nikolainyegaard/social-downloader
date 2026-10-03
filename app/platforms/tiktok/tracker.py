@@ -818,14 +818,14 @@ async def process_single_user(
                         # further post would fail the same way and burn its
                         # three strikes. Leave them due and stop for this check
                         comments.record(_eng, _vid, channel_id, user["handle"], _count, None, e,
-                                        time.time() - _t0, log, count_failure=False)
+                                        time.time() - _t0, log, count_failure=False, progress=f"[{_i}/{len(_due)}] ")
                         log(f"  Comments: TikTok is returning empty responses, {len(_due) - _i} post(s) left for the next check")
                         break
                     comments.record(_eng, _vid, channel_id, user["handle"], _count, None, e,
-                                    time.time() - _t0, log)
+                                    time.time() - _t0, log, progress=f"[{_i}/{len(_due)}] ")
                     continue
                 comments.record(_eng, _vid, channel_id, user["handle"], _count, _rows, None,
-                                time.time() - _t0, log)
+                                time.time() - _t0, log, progress=f"[{_i}/{len(_due)}] ")
 
 
         return _profile_ok, _deletion_detected, _large_deletion_spike

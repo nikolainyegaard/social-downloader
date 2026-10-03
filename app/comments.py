@@ -134,7 +134,7 @@ def is_empty_response(error: Exception) -> bool:
 
 def record(engine, video_id: str, channel_id: str, handle: str | None,
            count: int | None, rows: list[dict] | None, error: Exception | None,
-           secs: float, log=None, count_failure: bool = True) -> None:
+           secs: float, log=None, count_failure: bool = True, progress: str = "") -> None:
     """Store a fetch result (rows) or a failure (error) and log one line.
     count_failure=False keeps the post due (a refusal, not a post problem)."""
     global _posts_done
@@ -159,7 +159,7 @@ def record(engine, video_id: str, channel_id: str, handle: str | None,
     # Both loggers the callers pass (the tracker's, the loop's own) already
     # print to the run log; only a bare call prints here
     if log:
-        log(f"  Comments {video_id}: {line}")
+        log(f"  {progress}Comments {video_id}: {line}")
     else:
         print(f"[{_ts()}] {msg}")
 
