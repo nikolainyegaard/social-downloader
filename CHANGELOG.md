@@ -75,6 +75,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The legend under each Stats graph reads "Date" with a short date and "Value" (the card title already names the metric), with a fixed slot for the date so nothing shifts or overflows while sweeping the cursor
 
 ### Fixed
+- TikTok comments read off the post page did not expand reply threads, so replies were missing on that path; the View replies controls are now clicked for real
 - Search: playing a post from a result thumbnail keeps the search open underneath, so closing the viewer returns to the results; story thumbnails open the story viewer the same way
 - Instagram comments: posts with more than one page of comments failed with HikerAPI 404 `Entries not found`, because the last page still carries a `next_page_id`; paging now stops on `has_more_comments`
 - Search: comments indexed before the OCR fix in this release had lost their text rows and never matched; the missing rows are rebuilt from the comments table at startup

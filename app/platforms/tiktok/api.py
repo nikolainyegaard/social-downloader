@@ -1191,22 +1191,40 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
                 break
             await tab.mouse.wheel(0, random.randint(600, 1200))
         # Replies load only on demand: press the first unexpanded "View N
-        # replies" / "View more replies" control, wait for its page, repeat.
+        # replies" / "View more replies" control in the panel with a real
+        # mouse click (a scripted click does nothing, as with the tab),
+        # wait for its reply page, repeat. An expanded thread's control
+        # reads "Hide replies", so it drops out of the match on its own
         # ponytail: matches the English UI text; a session in another
         # language fetches top-level comments only
+        reply_re = re.compile(r"^\s*View\b.*repl", re.I)
         for _ in range(80):
             if _count() >= max_count:
                 break
-            clicked = await tab.evaluate("""() => {
-                const el = [...document.querySelectorAll('p, span, div, button')]
-                  .find(e => !e.children.length && /^view\b.*repl/i.test((e.textContent || '').trim()));
-                if (!el) return 0;
-                el.click();
-                return 1;
-            }""")
-            if not clicked:
+            pressed = False
+            try:
+                for loc in await tab.get_by_text(reply_re).all():
+                    box = await loc.bounding_box()
+                    if not box or box["x"] <= vp["width"] / 2 or box["y"] >= vp["height"] or box["y"] < 0:
+                        continue
+                    before = state["responses"]
+                    await loc.click(timeout=3000)
+                    pressed = True
+                    for _w in range(10):
+                        await asyncio.sleep(random.uniform(0.3, 0.5))
+                        if state["responses"] > before:
+                            break
+                    break
+            except Exception as exc:
+                print(f"[comments] reply control press failed on {video_id}: {exc}")
                 break
-            await asyncio.sleep(random.uniform(1.0, 1.8))
+            if not pressed:
+                # Nothing unexpanded on screen: scroll the panel on, a
+                # further thread may sit below the fold
+                await tab.mouse.wheel(0, random.randint(500, 900))
+                await asyncio.sleep(random.uniform(0.8, 1.2))
+                if not await tab.get_by_text(reply_re).count():
+                    break
     finally:
         tab.remove_listener("response", on_response)
         final_url = tab.url
