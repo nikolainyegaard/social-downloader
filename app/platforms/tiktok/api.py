@@ -1207,10 +1207,11 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
         # reads "Hide replies", so it drops out of the match on its own
         # ponytail: matches the English UI text; a session in another
         # language fetches top-level comments only
-        # The label is "Show 1 reply" / "Show N replies" (older layouts said View)
-        reply_re = re.compile(r"^\s*(Show|View)\b.*repl", re.I)
+        # The label is "View 1 reply" / "View N replies" / "View more replies"
+        reply_re = re.compile(r"^\s*(View|Show)\b.*repl", re.I)
+        misses = 0
         for _ in range(80):
-            if _count() >= max_count:
+            if _count() >= max_count or misses >= 3:
                 break
             pressed = False
             try:
@@ -1227,8 +1228,13 @@ async def _sniff_video_comments(api, video_id: str, handle: str | None,
                             break
                     break
             except Exception as exc:
-                print(f"[comments] reply control press failed on {video_id}: {exc}")
-                break
+                # The panel re-renders after every expansion, so a control
+                # located a moment ago can be detached by the time of the
+                # click; look again rather than give up on the thread list
+                misses += 1
+                print(f"[comments] reply control press failed on {video_id} ({misses}/3): {exc}")
+                continue
+            misses = 0
             if not pressed:
                 # Nothing unexpanded on screen: scroll the panel on, a
                 # further thread may sit below the fold
