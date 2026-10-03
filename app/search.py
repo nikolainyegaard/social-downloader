@@ -37,7 +37,7 @@ SOURCE_ALIASES = {
     "creator": ["handle", "display_name", "bio", "bio_link", "old_handle", "old_display_name", "old_bio", "old_bio_link"],
     "comments": ["comment", "comment_author", "comment_author_name"],
 }
-KEYS = {"from", "platform", "in", "type", "status", "is", "has", "before", "after", "on",
+KEYS = {"creator", "from", "author", "platform", "in", "type", "status", "is", "has", "before", "after", "on",
         "likes", "views", "comments", "duration", "sort", "re", "near"}
 SORTS = {"rank", "date", "likes", "views", "comments"}
 TYPES = {"video", "photo", "post", "story", "creator", "comment"}
@@ -114,6 +114,8 @@ def parse(q: str) -> dict:
         key, _, val = body.partition(":")
         if _ and key.lower() in KEYS and val:
             key = key.lower()
+            if key == "from":
+                key = "creator"   # the older spelling
             if val.startswith('"') and val.endswith('"') and len(val) >= 2:
                 val = val[1:-1]
             if key == "re":
@@ -161,7 +163,7 @@ def parse(q: str) -> dict:
                     continue
                 out["filters"].setdefault(key, []).append(num)
             else:
-                v = val.lower().lstrip("@") if key == "from" else val.lower()
+                v = val.lower().lstrip("@") if key in ("creator", "author") else val.lower()
                 checks = {"type": TYPES, "status": STATUSES, "is": FLAGS_IS, "has": FLAGS_HAS}
                 if key in checks and v not in checks[key]:
                     out["notes"].append(f"{key}: unknown '{v}', use {', '.join(sorted(checks[key]))}")
@@ -240,18 +242,38 @@ _BRANCHES = {
                        c.starred, c.pinned_at IS NOT NULL AS pinned, c.bookmarked, c.account_status,
                        c.tracking_enabled, c.description AS label, NULL AS post_id, NULL AS post_handle, NULL AS post_label
                 FROM channels c WHERE c.enabled = 1""",
-    # type:comment makes the comment the result: handle and name are the
-    # commenter's, ts and likes the comment's, label its text, and the post
-    # it sits on rides along in post_id, post_handle and post_label
+    # One row per comment, filtered and sorted as a comment: handle and
+    # name are the commenter's, ts and likes the comment's, label its text.
+    # The post it sits on rides along (post_*), and run() folds the rows of
+    # one post into a single result afterwards (see _COMMENT_GROUP)
     "comment": """SELECT 'comment' AS item_type, cm.comment_id AS item_id, cm.channel_id, cm.author AS handle,
                        cm.author_name AS display_name, cm.created_at AS ts, 'up' AS status, NULL AS deleted_reason,
                        'comment' AS content_type, 0 AS has_file, cm.likes, NULL AS views, NULL AS comment_count,
                        NULL AS duration, 0 AS comments_saved,
                        c.starred, c.pinned_at IS NOT NULL AS pinned, c.bookmarked, c.account_status,
-                       c.tracking_enabled, cm.text AS label, cm.video_id AS post_id, c.handle AS post_handle, v.title AS post_label
+                       c.tracking_enabled, cm.text AS label, cm.video_id AS post_id, c.handle AS post_handle, v.title AS post_label,
+                       c.display_name AS post_display_name, v.file_path IS NOT NULL AS post_has_file,
+                       v.content_type AS post_content_type, v.duration AS post_duration
                 FROM comments cm JOIN channels c ON c.channel_id = cm.channel_id
                                  LEFT JOIN videos v ON v.video_id = cm.video_id""",
 }
+
+# The comment rows of one post become one result before paging: the post
+# as the item (creator, caption, media), its matching comments in the sort
+# order as a JSON array in matches, and the group sorted by its best
+# member (lowest rank, newest, most liked, whichever the sort uses).
+# json_group_array keeps the order of the ordered subquery it reads
+_COMMENT_GROUP = """SELECT 'comment' AS item_type, g.post_id AS item_id, g.channel_id, g.post_handle AS handle,
+                           g.post_display_name AS display_name, MAX(g.ts) AS ts, 'up' AS status, NULL AS deleted_reason,
+                           g.post_content_type AS content_type, g.post_has_file AS has_file, MAX(g.likes) AS likes,
+                           NULL AS views, NULL AS comment_count, g.post_duration AS duration, COUNT(*) AS comments_saved,
+                           g.starred, g.pinned, g.bookmarked, g.account_status, g.tracking_enabled,
+                           g.post_label AS label, g.post_id, g.post_handle, g.post_label,
+                           MIN(g.rank) AS rank, COUNT(*) AS n,
+                           json_group_array(json_object('comment_id', g.item_id, 'handle', g.handle,
+                                                        'display_name', g.display_name, 'ts', g.ts, 'likes', g.likes,
+                                                        'text', g.label, 'matches', json(g.matches))) AS matches
+                    FROM ({inner}) g GROUP BY g.post_id"""
 
 
 def _branches(parsed: dict) -> set[str]:
@@ -283,16 +305,25 @@ def _where(parsed: dict, branch: str, params: list) -> list[str]:
         w.append("i.content_type IN ('photo', 'image')")
     elif branch == "video" and types == {"video"}:
         w.append("i.content_type NOT IN ('photo', 'image')")
-    for h in f.get("from", []):
-        if branch == "comment":
-            w.append("i.handle = ? COLLATE NOCASE"); params.append(h)   # the commenter
-            continue
-        w.append("""(i.handle = ? COLLATE NOCASE OR i.channel_id IN (
+    # creator: is the account whose page the item sits on (for a comment,
+    # the post's creator); author: is the commenter, so it only ever
+    # matches comments
+    creator = "i.post_handle" if branch == "comment" else "i.handle"
+    for h in f.get("creator", []):
+        w.append(f"""({creator} = ? COLLATE NOCASE OR i.channel_id IN (
                         SELECT channel_id FROM profile_history WHERE field = 'handle' AND old_value = ? COLLATE NOCASE))""")
         params += [h, h]
-    for h in f.get("-from", []):
-        w.append("NOT (i.handle = ? COLLATE NOCASE)")
+    for h in f.get("-creator", []):
+        w.append(f"NOT ({creator} = ? COLLATE NOCASE)")
         params.append(h)
+    for h in f.get("author", []):
+        if branch != "comment":
+            w.append("1 = 0")
+        else:
+            w.append("i.handle = ? COLLATE NOCASE"); params.append(h)
+    for h in f.get("-author", []):
+        if branch == "comment":
+            w.append("NOT (i.handle = ? COLLATE NOCASE)"); params.append(h)
     for st in f.get("status", []):
         if branch != "video":
             w.append("1 = 0" if st != "live" else "1 = 1")
@@ -394,8 +425,9 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
             continue
         if sources and not any(SOURCES.get(s) in ("both", branch) for s in sources):
             continue   # the requested sources never belong to this item type
-        if branch == "comment" and not (match or regex) and "comment" not in parsed["filters"].get("type", []):
-            continue   # comments only come with text to match, or on request
+        if branch == "comment" and not (match or regex) and "comment" not in parsed["filters"].get("type", []) \
+                and not parsed["filters"].get("author"):
+            continue   # comments only come with text to match, or on request (type:comment, author:)
         bp: list = []
         w = _where(parsed, branch, bp)
         if not (match or regex):
@@ -411,8 +443,11 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
             bp.append(neg_match)
         elif neg:
             w.append("NOT EXISTS (SELECT 1 FROM excl e WHERE e.item_type = i.item_type AND e.item_id = i.item_id)")
-        parts.append(f"""SELECT i.*, {sel_rank} FROM ({_BRANCHES[branch]}) i {join}
-                         {'WHERE ' + ' AND '.join(w) if w else ''}""")
+        part = f"""SELECT i.*, {sel_rank} FROM ({_BRANCHES[branch]}) i {join}
+                   {'WHERE ' + ' AND '.join(w) if w else ''}"""
+        if branch == "comment":
+            part = _COMMENT_GROUP.format(inner=part + f" ORDER BY {_ORDER[parsed['sort']]}")
+        parts.append(part)
         params += bp
     if not parts:
         return []
@@ -432,6 +467,10 @@ def run(db, parsed: dict, limit: int = 50, offset: int = 0) -> list[dict]:
         rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
         r["matches"] = json.loads(r["matches"]) if r.get("matches") else []
+        if r["item_type"] == "comment":
+            # The group's comments; each carries its own matches list
+            r["comments"] = [{**c, "matches": c.get("matches") or []} for c in r["matches"]]
+            r["matches"]  = [m for c in r["comments"] for m in c["matches"]]
     return rows
 
 
@@ -450,10 +489,11 @@ HELP = [
     ("words, \"a phrase\"", "match the text index; typos tolerated through trigrams; 3 characters minimum"),
     ("-word", "exclude items that contain the word anywhere"),
     ("a OR b", "either term"),
-    ("from:handle", "one creator, current or previous handle"),
+    ("creator:handle", "the account whose page it is on, current or previous handle (from: still works)"),
+    ("author:handle", "the commenter; creator:nasa author:me type:comment is my comments under nasa's posts"),
     ("platform:tiktok", "one platform"),
     ("in:caption,comment", "text source: caption, description, sound, image, frame, comment, author, handle, name, bio, link, old, creator, comments, ocr, text"),
-    ("type:video|photo|story|creator|comment", "item kind; a comment hit is always its own result with its post, type:comment keeps only those, from: is then the commenter"),
+    ("type:video|photo|story|creator|comment", "item kind; a comment hit is always its own result with its post, type:comment keeps only those"),
     ("status:live|deleted|banned|missing|restored", "post state"),
     ("is:starred|pinned|bookmarked|banned|tracked", "creator flags"),
     ("has:comments|file", "saved comments, a saved file"),
@@ -469,12 +509,12 @@ if __name__ == "__main__":
     p = parse('cat "red sunset" -dog OR bird from:@Alice in:caption,author type:photo before:2026-03 likes:>1k re:/s[ou]n/i near:"beach sand"~3 sort:likes http://x.y 12')
     assert [t if t == "OR" else (t["term"], t["phrase"], t["neg"]) for t in p["text"]] == \
         [("cat", False, False), ("red sunset", True, False), ("dog", False, True), "OR", ("bird", False, False), ("http://x.y", False, False)], p["text"]
-    assert p["filters"]["from"] == ["alice"] and p["filters"]["in"] == ["caption", "comment_author", "comment_author_name"]
+    assert p["filters"]["creator"] == ["alice"] and p["filters"]["in"] == ["caption", "comment_author", "comment_author_name"]
     assert p["filters"]["type"] == ["photo"] and p["filters"]["likes"] == [(">", 1000.0)] and p["sort"] == "likes"
     assert p["regex"] == {"pattern": "s[ou]n", "flags": "i"} and p["near"] == {"words": ["beach", "sand"], "distance": 3}
     assert p["filters"]["before"][0][0] == int(datetime(2026, 3, 1).timestamp())
     assert any("12" in n for n in p["notes"])
     assert fts_match(p) == '"cat" AND "red sunset" AND "bird" AND "http://x.y" AND NEAR("beach" "sand", 3)', fts_match(p)
     assert fts_match(parse("cat OR dog bird")) == '("cat" OR "dog") AND "bird"'
-    assert parse("hello")["sort"] == "rank" and parse("from:x")["sort"] == "date"
+    assert parse("hello")["sort"] == "rank" and parse("creator:x")["sort"] == "date" and parse("author:@Y")["filters"]["author"] == ["y"]
     print("parse ok")

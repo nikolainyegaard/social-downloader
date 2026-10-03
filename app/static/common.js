@@ -2069,7 +2069,8 @@ function _searchScrolled(el) {
 // tokens, each with an × that removes it.
 
 const _SEARCH_KEYS = [
-  ['from',     'Creator',  'handle, current or previous'],
+  ['creator',  'Creator',  'whose page it is on, current or previous handle'],
+  ['author',   'Commenter', 'who wrote the comment'],
   ['in',       'Source',   'where the text is: caption, comment, bio…'],
   ['type',     'Type',     'video, photo, story, creator, comment'],
   ['status',   'Status',   'live, deleted, banned, missing, restored'],
@@ -2137,7 +2138,7 @@ function _searchInsertKey(key) {
 // Values the token's key takes, filtered by what is typed so far
 function _searchSuggestions(tok) {
   const typed = tok.value.replace(/^"/, '').toLowerCase();
-  if (tok.key === 'from') {
+  if (tok.key === 'creator' || tok.key === 'from') {
     const out = [];
     for (const p of PLATFORMS) {
       const app = _APPS[p.id];
@@ -2259,14 +2260,16 @@ const _SEARCH_SOURCE = {
 // ── Result cards ──────────────────────────────────────────────────────────────
 // Every hit is rendered as the thing that matched: a creator card (handle,
 // name, bio with the hits marked), a post card (thumbnail that plays the
-// media, creator, caption, the other matched texts), or a comment card (the
-// whole comment, with the post it sits on). Highlighting runs client-side over the full text
+// media, creator, caption, the other matched texts), or for comment hits
+// the post once with its matching comments nested under it, each the whole
+// comment, in the result order. Highlighting runs client-side over the full text
 // the server sends with each match, so every occurrence lights up, not the
 // one window the FTS snippet picked.
 
 function _searchMarks(parsed) {
   const words = (parsed.text || []).filter(t => t !== 'OR' && !t.neg).map(t => t.term)
-    .concat(parsed.near ? parsed.near.words : []);
+    .concat(parsed.near ? parsed.near.words : [])
+    .concat((parsed.filters || {}).author || []);   // the commenter's handle lights up under the post
   const marks = words.filter(w => w.length >= 3).map(w => new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'));
   if (parsed.regex) {
     try { marks.push(new RegExp(parsed.regex.pattern, 'g' + (parsed.regex.flags.includes('i') ? 'i' : ''))); } catch (_) { /* server already dropped it */ }
@@ -2305,12 +2308,12 @@ function _searchTop(r, kind) {
   const plat   = PLATFORMS.find(p => p.id === r.platform);
   const marks  = _searchState.marks || [];
   const stats  = r.item_type === 'channel' ? (r.views != null ? `${fmtCount(r.views)} followers` : '')
+               : r.item_type === 'comment' ? `${r.comments_saved} matching comment${r.comments_saved === 1 ? '' : 's'}`
                : [r.likes != null ? `${fmtCount(r.likes)} likes` : '', r.comment_count != null ? `${fmtCount(r.comment_count)} comments` : '']
                    .filter(Boolean).join(' · ');
   const status = r.item_type !== 'channel' && r.status === 'deleted'
     ? `<span class="sr-kind" style="color:var(--${r.deleted_reason === 'user_banned' ? 'orange' : 'red'})">${r.deleted_reason === 'user_banned' ? 'Banned' : 'Deleted'}</span>` : '';
-  // A commenter has no cached avatar; the creator's shows only when they are the commenter
-  const avatar = r.item_type === 'channel' || (r.item_type === 'comment' && r.handle !== r.post_handle) ? ''
+  const avatar = r.item_type === 'channel' ? ''
     : `<span class="rf-avatar-wrap"><img class="rf-avatar" src="/api/${esc(r.platform)}/channels/${esc(r.channel_id)}/avatar?size=thumb" loading="lazy" alt="" onerror="this.remove()"></span>`;
   return `<span class="sr-top">
     <span class="snav-badge" title="${esc(plat?.label || r.platform)}">${esc((plat?.label || r.platform)[0])}</span>${avatar}
@@ -2343,7 +2346,7 @@ function _searchPostCard(r, open) {
   const marks   = _searchState.marks || [];
   const matches = r.matches || [];
   const isImg   = r.content_type === 'photo' || r.content_type === 'image';
-  const kind    = r.item_type === 'story' ? 'Story' : isImg ? 'Photo' : 'Video';
+  const kind    = r.item_type === 'story' ? 'Story' : r.item_type === 'comment' ? 'Comments' : isImg ? 'Photo' : 'Video';
   const caption = matches.find(m => m.source === 'caption');
   const texts   = matches.filter(m => !['caption', 'comment', 'comment_author', 'comment_author_name'].includes(m.source));
   const thumb = `<img class="video-thumb" src="/api/${esc(r.platform)}/${r.item_type === 'story' ? 'stories' : 'videos'}/${esc(r.item_id)}/thumbnail" loading="lazy" alt="" onerror="this.style.opacity='.15'">`;
@@ -2361,34 +2364,25 @@ function _searchPostCard(r, open) {
       ${_searchTop(r, kind)}
       ${r.label ? `<span class="sr-caption">${caption ? _searchMarked(r.label, marks, caption.snippet) : esc(r.label)}</span>` : ''}
       ${texts.map(m => _searchLine(m, marks)).join('')}
+      ${(r.comments || []).map(c => _searchCommentSub(c, marks)).join('')}
     </span>
   </div>`;
 }
 
-// A comment hit: the comment itself, with the post it sits on as a footer;
-// the thumbnail and the card both open that post
-function _searchCommentCard(r, open) {
-  const marks = _searchState.marks || [];
-  const own   = (r.matches || []).find(m => m.source === 'comment');
-  return `<div class="sr-card" role="button" tabindex="0" onclick="_searchOpen('${esc(r.platform)}',()=>${open})" onkeydown="if(event.key==='Enter')this.click()">
-    <span class="sr-thumb" title="Open post">
-      <img class="video-thumb" src="/api/${esc(r.platform)}/videos/${esc(r.post_id)}/thumbnail" loading="lazy" alt="" onerror="this.style.opacity='.15'">
-    </span>
-    <span class="sr-body">
-      ${_searchTop(r, 'Comment')}
-      <span class="sr-cm-text">${_searchMarked(r.label, marks, own ? own.snippet : null)}</span>
-      ${r.post_handle ? `<span class="sr-on">on @${esc(r.post_handle)}${r.post_label ? ` · ${esc(r.post_label)}` : ''}</span>` : ''}
-    </span>
+// One matching comment under its post, in the result's sort order
+function _searchCommentSub(c, marks) {
+  const own = (c.matches || []).find(m => m.source === 'comment');
+  return `<div class="sr-comment">
+    <span class="sr-cm-hdr">@${_searchMark(c.handle || '?', marks) ?? esc(c.handle || '?')}${c.display_name && c.display_name !== c.handle ? `<span class="sr-label">${_searchMark(c.display_name, marks) ?? esc(c.display_name)}</span>` : ''}${c.likes ? `<span class="sr-stats">♥ ${fmtCount(c.likes)}</span>` : ''}<span class="rf-time">${c.ts ? fmtDateShort(c.ts) : ''}</span></span>
+    <span class="sr-cm-text">${_searchMarked(c.text, marks, own ? own.snippet : null)}</span>
   </div>`;
 }
 
 function _searchRow(r) {
   const open = r.item_type === 'story'   ? `${r.prefix}OpenStory('${esc(r.channel_id)}','${esc(r.item_id)}')`
              : r.item_type === 'channel' ? `${r.prefix}OpenModal('${esc(r.channel_id)}')`
-             : `${r.prefix}OpenModalAndHighlight('${esc(r.channel_id)}','${esc(r.post_id || r.item_id)}')`;
-  return r.item_type === 'channel' ? _searchCreatorCard(r, open)
-       : r.item_type === 'comment' ? _searchCommentCard(r, open)
-       : _searchPostCard(r, open);
+             : `${r.prefix}OpenModalAndHighlight('${esc(r.channel_id)}','${esc(r.item_id)}')`;
+  return r.item_type === 'channel' ? _searchCreatorCard(r, open) : _searchPostCard(r, open);
 }
 
 // Thumbnail click: the media straight into the viewer, without opening the
