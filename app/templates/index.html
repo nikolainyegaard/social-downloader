@@ -129,12 +129,17 @@
 </dialog>
 
 <!-- TikTok live browser viewer: streams display frames, forwards mouse input -->
-<dialog id="ttViewer" class="media-modal" onclick="if(event.target===this)ttViewerClose()">
-  <div class="media-modal-inner">
-    <button class="modal-close lg" onclick="ttViewerClose()" aria-label="Close"><svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    <div id="ttViewerStatus" class="settings-note" style="color:#fff;margin-bottom:6px"></div>
-    <img id="ttViewerImg" src="" alt="TikTok browser" draggable="false"
-         style="cursor:crosshair;touch-action:none;user-select:none">
+<dialog id="ttViewer" class="media-modal dlg-dim" onclick="if(event.target===this)ttViewerClose()">
+  <div class="media-modal-inner confirm-card viewer-card">
+    <div class="viewer-head">
+      <span class="confirm-title">Browser view</span>
+      <span class="viewer-status" id="ttViewerStatus"></span>
+      <button class="modal-close" onclick="ttViewerClose()" aria-label="Close"><svg class="ic" viewBox="4.8 4.8 14.4 14.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="viewer-stage">
+      <img id="ttViewerImg" src="" alt="TikTok browser" draggable="false">
+      <div class="viewer-empty" id="ttViewerEmpty" hidden>No live session running. Browse TikTok (Settings &gt; TikTok &gt; Account), start a QR login, or trigger a check, then it appears here.</div>
+    </div>
   </div>
 </dialog>
 

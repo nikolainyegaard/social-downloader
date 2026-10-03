@@ -147,12 +147,12 @@ async function _browsePoll() {
 // the stream answers again.
 function _viewerNextFrame() {
   if (!_viewerOn) return;
-  const img    = /** @type {HTMLImageElement} */ (document.getElementById('ttViewerImg'));
-  const status = document.getElementById('ttViewerStatus');
-  img.onload  = () => { if (!_browseTimer) status.textContent = ''; };
+  const img   = /** @type {HTMLImageElement} */ (document.getElementById('ttViewerImg'));
+  const empty = document.getElementById('ttViewerEmpty');
+  img.onload  = () => { empty.hidden = true; };
   img.onerror = () => {
     if (!_viewerOn) return;
-    status.textContent = 'No live session running. Browse TikTok (Settings > TikTok > Account), start a QR login, or trigger a check, then it appears here.';
+    empty.hidden = false;   // the stage shows the no-session hint; the header status stays for the browse countdown
     img.onerror = null;
     setTimeout(_viewerNextFrame, 1500);
   };
