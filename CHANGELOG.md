@@ -80,6 +80,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The legend under each Stats graph reads "Date" with a short date and "Value" (the card title already names the metric), with a fixed slot for the date so nothing shifts or overflows while sweeping the cursor
 
 ### Fixed
+- Search: a hit inside a commenter's handle rendered with spaces around the highlighted part
 - The creator modal's search field dropped the space you typed, so multi-word searches were impossible; it matches the exact text you type, spaces included
 - The page is served with no-store, so a reload after a deploy always picks up the new build's scripts; a cached page kept browsers on the previous build's immutable assets
 - TikTok comments read off the post page did not expand reply threads, so replies were missing on that path; the "View N replies" controls are now clicked for real, and a control that moved while the panel re-rendered is looked up again instead of ending the pass

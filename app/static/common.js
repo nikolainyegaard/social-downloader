@@ -2373,7 +2373,7 @@ function _searchPostCard(r, open) {
 function _searchCommentSub(c, marks) {
   const own = (c.matches || []).find(m => m.source === 'comment');
   return `<div class="sr-comment">
-    <span class="sr-cm-hdr">@${_searchMark(c.handle || '?', marks) ?? esc(c.handle || '?')}${c.display_name && c.display_name !== c.handle ? `<span class="sr-label">${_searchMark(c.display_name, marks) ?? esc(c.display_name)}</span>` : ''}${c.likes ? `<span class="sr-stats">♥ ${fmtCount(c.likes)}</span>` : ''}<span class="rf-time">${c.ts ? fmtDateShort(c.ts) : ''}</span></span>
+    <span class="sr-cm-hdr"><span>@${_searchMark(c.handle || '?', marks) ?? esc(c.handle || '?')}</span>${c.display_name && c.display_name !== c.handle ? `<span class="sr-label">${_searchMark(c.display_name, marks) ?? esc(c.display_name)}</span>` : ''}${c.likes ? `<span class="sr-stats">♥ ${fmtCount(c.likes)}</span>` : ''}<span class="rf-time">${c.ts ? fmtDateShort(c.ts) : ''}</span></span>
     <span class="sr-cm-text">${_searchMarked(c.text, marks, own ? own.snippet : null)}</span>
   </div>`;
 }
