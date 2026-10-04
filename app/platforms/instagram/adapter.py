@@ -101,7 +101,10 @@ instagram_adapter = ChannelAdapter(
     iter_posts=api.iter_profile_posts,
     # Comments need HikerAPI; without a key the hook stays off and the engine
     # routes answer 501 instead of parking every opted-in post
-    fetch_comments=(lambda engine, video, n: api.fetch_comments(video, n)) if api.HIKERAPI_KEY else None,
+    # The listing's comment_count tells the fetcher when replies are still
+    # missing; the tracker passes only ids, so read it off the row
+    fetch_comments=(lambda engine, video, n: api.fetch_comments(
+        {**(engine.db.get_video(video["video_id"]) or {}), **video}, n)) if api.HIKERAPI_KEY else None,
     download_item=_download_item,
     register_extra_routes=_register_extra_routes,
 )

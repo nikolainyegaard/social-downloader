@@ -130,11 +130,18 @@ def shortcode_to_pk(code: str) -> int:
 
 
 def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
-    """HikerAPI /v2/media/comments for one post, paged by page_id (one
-    request per page of about 20 top-level comments). Replies come only as
-    the preview children the page carries; full reply threads are a separate
-    endpoint per comment and are not fetched. Comment ids are the private
-    API pks, users carry username and full_name."""
+    """HikerAPI comments for one post. Top-level comments come from
+    /v2/media/comments paged by next_page_id: the page's has_more_comments
+    flag is false on every page (verified on a 115-comment post that paged
+    four times), so paging follows next_page_id until it is absent, a page
+    brings nothing new, or HikerAPI answers 404 (its end-of-thread answer).
+    Replies: the pages carry a few preview_child_comments at best, and no
+    reply counts, so when the listing's comment_count says comments are
+    still missing, /v2/media/comments/replies is asked once per top-level
+    comment, in order, until the count is reached or every thread has been
+    asked. That costs one request per top-level comment on threaded posts
+    and nothing on posts whose comments are all top-level. Comment ids are
+    the private API pks, users carry username and full_name."""
     if not HIKERAPI_KEY:
         raise RuntimeError("HIKERAPI_KEY is not set; Instagram comments need HikerAPI")
     pk = shortcode_to_pk(video["video_id"])
@@ -150,7 +157,8 @@ def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
                 "likes": c.get("comment_like_count"),
                 "created_at": c.get("created_at_utc") or c.get("created_at"), "image_url": None}
 
-    rows: list[dict] = []
+    rows: dict[str, dict] = {}   # comment id -> row, insertion ordered, one per id
+    tops: list[str] = []
     page_id = None
     while len(rows) < max_count:
         params = {"id": pk}
@@ -159,32 +167,50 @@ def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
         try:
             data = _hiker_get("/v2/media/comments", params)
         except RuntimeError as e:
-            # Instagram counts hidden, restricted and deleted comments, but
-            # lists none of them; HikerAPI then answers 404 "Entries not
-            # found" on every comment endpoint. That is an empty result, not
-            # a failure worth a strike
+            # First page: Instagram counts hidden, restricted and deleted
+            # comments but lists none of them, and HikerAPI answers 404
+            # "Entries not found" for the empty list. Later pages: 404 is
+            # the end of the thread. Neither is a failure worth a strike
             if "HTTP 404" in str(e):
                 break
             raise
         resp  = data.get("response") if isinstance(data, dict) else data
         items = (resp.get("items") or resp.get("comments") or []) if isinstance(resp, dict) else (resp or [])
-        if not items:
-            break
+        new = 0
         for c in items:
             r = _row(c, None)
-            if r:
-                rows.append(r)
+            if r and r["comment_id"] not in rows:
+                rows[r["comment_id"]] = r
+                tops.append(r["comment_id"])
+                new += 1
             for child in c.get("preview_child_comments") or []:
                 cr = _row(child, r["comment_id"] if r else None)
-                if cr:
-                    rows.append(cr)
-        # HikerAPI returns a next_page_id even on the last page; following
-        # it answers 404 "Entries not found", so has_more_comments decides
+                if cr and cr["comment_id"] not in rows:
+                    rows[cr["comment_id"]] = cr
         page_id = data.get("next_page_id") if isinstance(data, dict) else None
-        if not page_id or not (isinstance(resp, dict) and resp.get("has_more_comments")):
+        if not page_id or not new:
             break
         time.sleep(1)
-    return rows[:max_count]
+
+    expected = video.get("comment_count")
+    if tops and (expected is None or len(rows) < expected):
+        for cid in tops:
+            if len(rows) >= max_count or (expected is not None and len(rows) >= expected):
+                break
+            try:
+                rep = _hiker_get("/v2/media/comments/replies", {"media_id": pk, "comment_id": cid})
+            except RuntimeError as e:
+                if "HTTP 404" in str(e):
+                    continue
+                raise
+            for child in (rep.get("child_comments") or []) if isinstance(rep, dict) else []:
+                cr = _row(child, cid)
+                if cr and cr["comment_id"] not in rows:
+                    rows[cr["comment_id"]] = cr
+            # ponytail: has_more_tail_child_comments is not followed (no cursor
+            # field seen in responses); threads longer than one page lose their tail
+            time.sleep(0.4)
+    return list(rows.values())[:max_count]
 
 
 def _web_api_get(url: str, params: dict, referer: str) -> dict:
