@@ -564,6 +564,13 @@ const _GENERAL_JOBS_HTML = `
           <span>max</span>
         </div>
       </label>
+      <label class="settings-label" title="Instagram: each reply thread asked costs one HikerAPI request. Threads with preview replies are asked first.">
+        <span>Reply threads per post</span>
+        <div class="loop-interval-field">
+          <input type="number" id="cmReplies" min="0" max="500" class="loop-interval-input" onchange="_cmNum('max_reply_lookups', this, 0)">
+          <span>max</span>
+        </div>
+      </label>
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;min-height:16px">
       <span id="cmStats" style="font-size:12px;color:var(--muted)"></span>
@@ -1021,6 +1028,7 @@ async function _cmShow() {
     const seed = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
     seed('cmPerCheck', el => { el.value = String(s.max_per_check); });
     seed('cmMax',      el => { el.value = String(s.max_per_post); });
+    seed('cmReplies',  el => { el.value = String(s.max_reply_lookups); });
   }
   if (!_cmTimer) _cmTimer = setInterval(_cmTick, 2000);
   _cmTick();

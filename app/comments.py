@@ -35,6 +35,7 @@ _SETTINGS_PATH = os.path.join(DATA_DIR, "comments.json")
 _DEFAULT_SETTINGS = {
     "max_per_post":  500,   # comments kept per post, replies included
     "max_per_check": 20,    # posts fetched per creator check; the rest wait for the next one
+    "max_reply_lookups": 10,  # reply threads asked per post (Instagram: one HikerAPI request each)
 }
 
 _state_lock = threading.Lock()
@@ -122,7 +123,11 @@ def is_empty_response(error: Exception) -> bool:
     """TikTok answering a constructed endpoint with an empty body: the
     endpoint is refusing the session right now (rate limit, bot score), not a
     problem with the post. Such a failure must not count toward parking the
-    post, and the caller should stop fetching for this check."""
+    post, and the caller should stop fetching for this check. HikerAPI's
+    402 InsufficientFunds is the same shape: every further post fails the
+    same way until the balance is topped up, so it ends the stage too."""
+    if "HTTP 402" in str(error):
+        return True
     try:
         from TikTokApi.exceptions import EmptyResponseException
         if isinstance(error, EmptyResponseException):

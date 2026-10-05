@@ -7,6 +7,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 ## [Unreleased]
 
 ### Added
+- Comments: Reply threads per post (Settings > General > Jobs, default 10) caps how many Instagram reply threads a post fetch asks HikerAPI for, one request each, threads with preview replies first. The count Instagram reports includes comments nobody can list, so without the cap every thread of every threaded post was asked and a catalog pass cost thousands of requests. A HikerAPI 402 (balance empty) ends the comment stage instead of striking every remaining post
 - Search: `type:reply` and `type:toplevel` narrow comment results to replies or to comments that are not replies
 - Listing cache: a manual Quick or Full run within six hours (`LISTING_CACHE_HOURS`) of a complete full listing no longer relists the whole catalog; it lists the newest posts, continues the comment backlog from the cached counts and skips the deletion check. Quick (no cache) and Full (no cache) in the three-dot menu force a relist; scheduled checks are unchanged
 - Search results are cards, one per hit: a creator card with handle, name and bio for a profile hit, a post card with a thumbnail that plays the media in place, the creator and the caption for a caption or OCR hit, and for comment hits the post once with every matching comment nested under it in the result order, grouped before paging. Every occurrence of the search words is highlighted in the full text, not the one excerpt the index picked

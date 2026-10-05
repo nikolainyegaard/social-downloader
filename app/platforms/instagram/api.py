@@ -129,7 +129,7 @@ def shortcode_to_pk(code: str) -> int:
     return pk
 
 
-def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
+def fetch_comments(video: dict, max_count: int = 500, max_reply_lookups: int = 10) -> list[dict]:
     """HikerAPI comments for one post. Top-level comments come from
     /v2/media/comments paged by next_page_id: the page's has_more_comments
     flag is false on every page (verified on a 115-comment post that paged
@@ -137,11 +137,14 @@ def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
     brings nothing new, or HikerAPI answers 404 (its end-of-thread answer).
     Replies: the pages carry a few preview_child_comments at best, and no
     reply counts, so when the listing's comment_count says comments are
-    still missing, /v2/media/comments/replies is asked once per top-level
-    comment, in order, until the count is reached or every thread has been
-    asked. That costs one request per top-level comment on threaded posts
-    and nothing on posts whose comments are all top-level. Comment ids are
-    the private API pks, users carry username and full_name."""
+    still missing, /v2/media/comments/replies is asked for at most
+    max_reply_lookups top-level comments, the ones that came with preview
+    replies first (known threads), then the rest in order, until the count
+    is reached. One request per thread asked; the cap is the credit budget
+    (a 115-comment post with 42 top-level comments otherwise costs 46
+    requests, and Instagram's count includes unlistable comments, so the
+    count is often never reached). Comment ids are the private API pks,
+    users carry username and full_name."""
     if not HIKERAPI_KEY:
         raise RuntimeError("HIKERAPI_KEY is not set; Instagram comments need HikerAPI")
     pk = shortcode_to_pk(video["video_id"])
@@ -159,6 +162,7 @@ def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
 
     rows: dict[str, dict] = {}   # comment id -> row, insertion ordered, one per id
     tops: list[str] = []
+    previewed: set[str] = set()
     page_id = None
     while len(rows) < max_count:
         params = {"id": pk}
@@ -187,6 +191,7 @@ def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
                 cr = _row(child, r["comment_id"] if r else None)
                 if cr and cr["comment_id"] not in rows:
                     rows[cr["comment_id"]] = cr
+                    previewed.add(cr["parent_id"])
         page_id = data.get("next_page_id") if isinstance(data, dict) else None
         if not page_id or not new:
             break
@@ -194,7 +199,8 @@ def fetch_comments(video: dict, max_count: int = 500) -> list[dict]:
 
     expected = video.get("comment_count")
     if tops and (expected is None or len(rows) < expected):
-        for cid in tops:
+        tops.sort(key=lambda cid: cid not in previewed)   # stable: previewed threads first
+        for cid in tops[:max(0, int(max_reply_lookups))]:
             if len(rows) >= max_count or (expected is not None and len(rows) >= expected):
                 break
             try:

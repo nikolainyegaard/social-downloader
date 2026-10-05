@@ -97,7 +97,7 @@ Global:
 /api/text-index/rebuild           POST: requeue every indexed item
 /api/text-index/diagnose          POST {platform, item_id}: dry-run OCR of one post or story with a verbose text report
 /api/comments/status              comment scraping: settings, platforms with a fetcher, counts, recent results
-/api/comments/settings            PATCH any comments.json key (max_per_post, max_per_check)
+/api/comments/settings            PATCH any comments.json key (max_per_post, max_per_check, max_reply_lookups)
 /api/comments/retry-failed        POST: clear the failure count of parked posts
 /api/startup/reports              stored startup reports, newest first (name, version, started, usable_secs, current)
 /api/startup/reports/<name>       one report as text

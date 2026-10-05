@@ -104,7 +104,8 @@ instagram_adapter = ChannelAdapter(
     # The listing's comment_count tells the fetcher when replies are still
     # missing; the tracker passes only ids, so read it off the row
     fetch_comments=(lambda engine, video, n: api.fetch_comments(
-        {**(engine.db.get_video(video["video_id"]) or {}), **video}, n)) if api.HIKERAPI_KEY else None,
+        {**(engine.db.get_video(video["video_id"]) or {}), **video}, n,
+        int(__import__("comments").get_settings()["max_reply_lookups"]))) if api.HIKERAPI_KEY else None,
     download_item=_download_item,
     register_extra_routes=_register_extra_routes,
 )
