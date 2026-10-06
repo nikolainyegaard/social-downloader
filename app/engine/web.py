@@ -113,6 +113,8 @@ def create_channel_blueprint(engine) -> Blueprint:
             return "bot detection"
         if "not found" in t or "404" in t or "does not exist" in t:
             return "not found"
+        if "banned" in t or "removed" in t or "restricted" in t:
+            return "banned"
         return "error"
 
     def _process_add(handle: str) -> None:
@@ -120,10 +122,13 @@ def create_channel_blueprint(engine) -> Blueprint:
         try:
             info = adapter.lookup_profile(handle)
         except Exception as e:
+            kind = _classify_error(str(e))
             # The exception chain carries the real cause (e.g. instaloader masks
-            # a 403 on graphql/query as "Profile does not exist")
-            loop._log(f"Add lookup failed for {handle}: {e}\n{traceback.format_exc().rstrip()}")
-            db.add_queue_resolve(handle, "error", _classify_error(str(e)), f"Lookup error: {e}")
+            # a 403 on graphql/query as "Profile does not exist"), so unknown
+            # errors log it; a classified outcome is the platform's answer
+            tb = "" if kind != "error" else f"\n{traceback.format_exc().rstrip()}"
+            loop._log(f"Add lookup failed for {handle}: {e}{tb}")
+            db.add_queue_resolve(handle, "error", kind, f"Lookup error: {e}")
             return
 
         channel_id = info.get("channel_id")

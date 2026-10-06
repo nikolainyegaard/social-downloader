@@ -81,6 +81,7 @@ Forked from [tiktok-downloader](https://github.com/nikolainyegaard/tiktok-downlo
 - The legend under each Stats graph reads "Date" with a short date and "Value" (the card title already names the metric), with a fixed slot for the date so nothing shifts or overflows while sweeping the cursor
 
 ### Fixed
+- Adding a banned, removed or restricted TikTok account shows "banned" in the add history instead of a generic error, and the log no longer dumps a traceback for it
 - Instagram comments fetched a fraction of a post's thread (15 of 115): the comment pages report no more comments on every page, so paging stopped after the first; paging now follows the next page token, and reply threads are fetched when the post's count says comments are still missing
 - Search: a hit inside a commenter's handle rendered with spaces around the highlighted part
 - The creator modal's search field dropped the space you typed, so multi-word searches were impossible; it matches the exact text you type, spaces included

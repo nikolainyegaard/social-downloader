@@ -447,8 +447,8 @@ def _raise_for_user_status(data: dict, ident: str) -> None:
     _sc = data.get("statusCode")
     if _sc in (10202, 10221, 10223, 10225):
         raise UserBannedException(
-            f"TikTok returned statusCode {_sc} for {ident} "
-            f"-- account is banned, removed, restricted, or FTC-restricted"
+            f"TikTok returned statusCode {_sc} for {ident}: "
+            f"account is banned, removed, restricted, or FTC-restricted"
         )
     if _sc == 10222:
         _rel = int(data.get("userInfo", {}).get("user", {}).get("relation") or 0)
