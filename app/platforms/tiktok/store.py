@@ -104,12 +104,51 @@ class TikTokStore:
     def remove_sound(self, sound_id: str) -> None:
         with self.db.get_db() as conn:
             conn.execute("DELETE FROM sounds WHERE sound_id = ?", (sound_id,))
+            conn.execute("DELETE FROM sound_videos WHERE sound_id = ?", (sound_id,))
+
+    def prune_sound_links(self) -> None:
+        """Drop sound_videos rows whose video or sound is gone, and author
+        stubs (enabled = 0) left without a single post."""
+        with self.db.get_db() as conn:
+            conn.execute("DELETE FROM sound_videos WHERE video_id NOT IN (SELECT video_id FROM videos) "
+                         "OR sound_id NOT IN (SELECT sound_id FROM sounds)")
+            conn.execute("DELETE FROM channels WHERE enabled = 0 "
+                         "AND channel_id NOT IN (SELECT DISTINCT channel_id FROM videos WHERE channel_id IS NOT NULL)")
+
+    def get_channel_sound_video_ids(self, channel_id: str) -> set:
+        """This author's posts that a tracked sound links: the engine's
+        linked_video_ids hook, so removing the author keeps them."""
+        with self.db.get_db() as conn:
+            return {r[0] for r in conn.execute("""
+                SELECT DISTINCT v.video_id FROM videos v
+                JOIN sound_videos sv ON sv.video_id = v.video_id
+                JOIN sounds s        ON s.sound_id  = sv.sound_id
+                WHERE v.channel_id = ?
+            """, (channel_id,)).fetchall()}
+
+    def get_sound_video_split(self, sound_id: str) -> tuple[list[dict], list[dict]]:
+        """(exclusive, linked) rows of a sound for its removal: exclusive
+        posts belong to an untracked author and to no other sound, linked
+        posts belong to a tracked creator. Posts another sound also links
+        are neither; they simply stay."""
+        with self.db.get_db() as conn:
+            rows = [dict(r) for r in conn.execute("""
+                SELECT v.video_id, v.file_path, COALESCE(c.enabled, 0) AS author_enabled,
+                       (SELECT COUNT(*) FROM sound_videos o WHERE o.video_id = v.video_id AND o.sound_id != sv.sound_id) AS others
+                FROM videos v
+                JOIN sound_videos sv ON sv.video_id = v.video_id
+                LEFT JOIN channels c ON c.channel_id = v.channel_id
+                WHERE sv.sound_id = ?
+            """, (sound_id,)).fetchall()]
+        exclusive = [r for r in rows if not r["author_enabled"] and not r["others"]]
+        linked    = [r for r in rows if r["author_enabled"]]
+        return exclusive, linked
 
     def get_all_sounds(self) -> list[dict]:
         with self.db.get_db() as conn:
             rows = conn.execute("""
                 SELECT s.*,
-                       COUNT(sv.video_id)                                              AS video_count,
+                       COUNT(v.video_id)                                               AS video_count,
                        SUM(CASE WHEN v.status = 'deleted'
                                  AND COALESCE(v.deleted_reason, '') != 'user_banned' THEN 1 ELSE 0 END) AS video_deleted,
                        SUM(CASE WHEN v.status = 'deleted' AND v.deleted_reason = 'user_banned' THEN 1 ELSE 0 END) AS video_banned,

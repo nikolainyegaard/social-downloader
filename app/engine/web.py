@@ -19,6 +19,7 @@ import traceback
 from flask import Blueprint, Response, jsonify, request, send_file
 
 from config import DATA_DIR, MEDIA_DIR, _ts
+from downloader import remove_video_files, video_bytes
 from thumbnailer import thumb_path_for
 import transcoder as _transcoder
 
@@ -414,9 +415,12 @@ def create_channel_blueprint(engine) -> Blueprint:
 
     @bp.route("/channels/<channel_id>", methods=["DELETE"])
     def remove_channel(channel_id: str):
-        # ?delete_media=1 also deletes the creator's media folder from disk.
-        # Default (no flag) keeps the files, matching the historical behaviour.
-        delete_media = request.args.get("delete_media") == "1"
+        # ?delete_media=1 also deletes the creator's media from disk (default
+        # keeps the files). Posts something else tracked keeps alive (the
+        # adapter's linked_video_ids, TikTok sounds) survive and the row is
+        # demoted to an enabled = 0 stub, unless ?delete_linked=1
+        delete_media  = request.args.get("delete_media") == "1"
+        delete_linked = request.args.get("delete_linked") == "1"
         ch = db.get_channel(channel_id)
         if not ch:
             return jsonify({"error": "Not found"}), 404
@@ -430,8 +434,18 @@ def create_channel_blueprint(engine) -> Blueprint:
                 time.sleep(0.25)
             if loop.is_checking(channel_id, ch.get("handle")):
                 return jsonify({"error": f"Stopping the check on @{ch['handle']}; try again in a moment"}), 409
+        linked = adapter.linked_video_ids(engine, channel_id) if adapter.linked_video_ids and not delete_linked else set()
+        if linked:
+            for v in db.get_videos_for_channel(channel_id):
+                if v["video_id"] in linked:
+                    continue
+                db.delete_video(v["video_id"])
+                if delete_media:
+                    remove_video_files(v)
+            db.demote_channel(channel_id)
+            return jsonify({"ok": True, "kept": len(linked)})
         db.remove_channel(channel_id)
-        if delete_media and ch and ch.get("handle"):
+        if delete_media and ch.get("handle"):
             shutil.rmtree(os.path.join(MEDIA_DIR, platform, f"@{ch['handle']}"), ignore_errors=True)
         return jsonify({"ok": True})
 
@@ -439,10 +453,14 @@ def create_channel_blueprint(engine) -> Blueprint:
     def channel_storage(channel_id: str):
         """Size and individual photo/video file counts of this creator's media
         folder, computed on demand (only when the modal opens, so no cost on
-        the channel list)."""
+        the channel list). linked and linked_bytes: the posts something else
+        tracked keeps (adapter.linked_video_ids), for the remove dialog."""
         ch = db.get_channel(channel_id)
         if not ch:
             return jsonify({"error": "Not found"}), 404
+        linked = adapter.linked_video_ids(engine, channel_id) if adapter.linked_video_ids else set()
+        linked_bytes = sum(video_bytes(v) for v in db.get_videos_for_channel(channel_id)
+                           if v["video_id"] in linked) if linked else 0
         folder = os.path.join(MEDIA_DIR, platform, f"@{ch['handle']}")
         total = photos = videos = 0
         for dirpath, _dirs, files in os.walk(folder):
@@ -459,7 +477,8 @@ def create_channel_blueprint(engine) -> Blueprint:
                     photos += 1
                 elif ext in _VIDEO_EXTS:
                     videos += 1
-        return jsonify({"bytes": total, "photo_files": photos, "video_files": videos})
+        return jsonify({"bytes": total, "photo_files": photos, "video_files": videos,
+                        "linked": len(linked), "linked_bytes": linked_bytes})
 
     @bp.route("/channels/<channel_id>/videos", methods=["GET"])
     def channel_videos(channel_id: str):

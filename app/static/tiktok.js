@@ -1217,8 +1217,35 @@ async function loadSounds() {
 async function removeSound(soundId) {
   const s = sounds.find(x => x.sound_id === soundId);
   const label = s ? (s.label || s.sound_id) : soundId;
-  if (!await openConfirm({ title: `Remove sound "${label}"?`, message: `${soundId}\n\nVideos already downloaded will not be deleted.`, confirmLabel: 'Remove', danger: true })) return;
-  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
+  // Same shape as the creator dialog: the sound's own videos go (files too
+  // on request), videos of a tracked creator stay unless the second box is
+  // ticked, videos another sound links stay regardless
+  const { ok: szOk, data: sz } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}/storage`);
+  const bytes = szOk ? (sz.bytes || 0) : 0, linked = szOk ? (sz.linked || 0) : 0, linkedBytes = szOk ? (sz.linked_bytes || 0) : 0;
+  const n = szOk ? (sz.exclusive || 0) : 0;
+  const res = await openConfirmOption({
+    title:   `Remove sound "${label}"?`,
+    message: `${soundId}\n\nThis stops tracking the sound and removes its ${n} video${n === 1 ? '' : 's'} from the app. Downloaded files are kept unless you choose otherwise.`
+             + (linked ? ` ${linked} video${linked === 1 ? '' : 's'} also belong${linked === 1 ? 's' : ''} to a tracked user and will stay unless you choose otherwise.` : ''),
+    confirmLabel: 'Remove',
+    danger:       true,
+    checkboxLabel: 'Also delete downloaded media files',
+    checkboxWarn:  `${_fmtBytes(bytes)} of downloaded media will be permanently deleted from disk.`,
+    checkbox2Label: linked ? `Also delete the ${linked} video${linked === 1 ? '' : 's'} belonging to tracked users` : '',
+  });
+  if (!res.confirmed) return;
+  if (res.checked) {
+    const sizeStr = _fmtBytes(res.checked2 ? bytes + linkedBytes : bytes);
+    const sure = await openConfirm({
+      title:        `Permanently delete ${sizeStr}?`,
+      message:      `The sound's ${sizeStr} of downloaded files will be erased from disk. This cannot be undone.`,
+      confirmLabel: 'Delete everything',
+      danger:       true,
+    });
+    if (!sure) return;
+  }
+  const q = [res.checked ? 'delete_media=1' : '', res.checked2 ? 'delete_linked=1' : ''].filter(Boolean).join('&');
+  const { ok, data } = await apiJSON(`/api/tiktok/sounds/${encodeURIComponent(soundId)}${q ? '?' + q : ''}`, { method: 'DELETE' });
   if (!ok) { showToast(data.error || 'Could not remove sound', { type: 'error' }); return; }
   if (_soundModalId === soundId) closeSoundModal();
   loadSounds();

@@ -10,7 +10,7 @@ GET  /logout                      clears session; redirects to end_session_endpo
 GET/PATCH /api/auth/config        read (public) / write (protected when OAuth active) OAuth config
 
 TikTok extras on its engine blueprint:
-/api/tiktok/sounds                sound tracking
+/api/tiktok/sounds                sound tracking; DELETE /<id> removes the sound and its exclusive videos (?delete_media=1 erases their files, ?delete_linked=1 also deletes the videos of tracked users, which otherwise stay); GET /<id>/storage sizes both sets for the dialog
 /api/tiktok/trigger/sounds        fire the sound loop
 /api/tiktok/channels/<id>/track   track a sound-discovered user (enabled=1)
 /api/tiktok/videos/direct         POST a post URL; saves one post, exempt from deletion checks
@@ -35,7 +35,7 @@ Engine blueprint, shared by every platform ({p} = tiktok|youtube|twitter|instagr
 /api/{p}/queue                         add-queue state: newest row per handle, pending + recently resolved
 /api/{p}/add-history                   persistent add attempts, newest first; ?before=<id>&limit= keyset
 /api/{p}/add-history/<id>              DELETE discards a resolved entry (409 while pending)
-/api/{p}/channels/<id>                 DELETE removes the creator; a check on it is cancelled first (waits up to 30 s for the in-flight item, else 409 to retry), a queued manual run is dropped
+/api/{p}/channels/<id>                 DELETE removes the creator; ?delete_media=1 erases its files, ?delete_linked=1 also deletes the posts another tracked thing keeps (adapter linked_video_ids, TikTok sounds; without it they stay and the row becomes an enabled = 0 stub). A check on it is cancelled first (waits up to 30 s for the in-flight item, else 409 to retry), a queued manual run is dropped
 /api/{p}/channels/<id>/videos          list for the detail modal
 /api/{p}/channels/<id>/run             manual run; ?mode=quick|full|quick-nocache|full-nocache (default full; the -nocache variants ignore the listing cache)
 /api/{p}/channels/<id>/run-profile     profile-only run
@@ -50,7 +50,7 @@ Engine blueprint, shared by every platform ({p} = tiktok|youtube|twitter|instagr
 /api/{p}/channels/<id>/connections     GET list, POST {handle} links, DELETE /<other_id> unlinks
 /api/{p}/channels/<id>/avatar|banner   cached images; avatar takes ?size=thumb
 /api/{p}/channels/<id>/avatar-history/<filename>   an archived previous avatar
-/api/{p}/channels/<id>/storage         media folder size for the Storage chip
+/api/{p}/channels/<id>/storage         media folder size for the Storage chip, plus linked / linked_bytes (posts kept by sounds) for the remove dialog
 /api/{p}/channels/<id>/stories         saved stories (live flag from expires_at)
 /api/{p}/channels/<id>/stories/calendar  {YYYY-MM-DD: count}
 /api/{p}/videos/<id>/thumbnail|file    media serving (mimetype from extension)

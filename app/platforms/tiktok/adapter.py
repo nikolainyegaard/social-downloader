@@ -148,4 +148,5 @@ tiktok_adapter = ChannelAdapter(
     },
     on_settings_changed=_on_settings_changed,
     fetch_comments=_fetch_comments,
+    linked_video_ids=lambda engine, channel_id: TikTokStore(engine.db).get_channel_sound_video_ids(channel_id),
 )

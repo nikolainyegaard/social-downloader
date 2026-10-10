@@ -128,6 +128,7 @@ Per-user flow:
 Sound tracking details:
 - `get_video_details` is called with `username="user"`: TikTok redirects `/@user/video/{id}` to the canonical URL and curl_cffi follows it
 - `ensure_sound_channel()` inserts sound-discovered users with `enabled=0`, and the channel queries filter `WHERE enabled = 1`. To fully track one: remove the row, then add via the UI. Their videos stay on disk
+- Removing a sound or a user shares one rule: a video survives while something tracked still claims it. `get_sound_video_split` sorts a sound's videos into exclusive (untracked author, no other sound; deleted with the sound, files on request) and linked (a tracked user's; kept unless the dialog's second box is ticked); videos another sound links stay either way. The reverse direction is the engine's `linked_video_ids` hook (`get_channel_sound_video_ids`): removing a user keeps its sound videos and demotes the row to a stub. `prune_sound_links` afterwards drops dangling `sound_videos` rows and stubs left without videos; `get_all_sounds` counts `v.video_id`, not the link, so a dangling link never inflates a count
 
 ---
 

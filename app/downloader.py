@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import json
 import os
 import subprocess
@@ -551,6 +552,37 @@ def rename_creator_folder(platform: str, old_username: str, new_username: str) -
     except Exception as e:
         print(f"[{_ts()}] Failed to rename folder @{old_username} -> @{new_username}: {e}")
         return False
+
+
+def video_files(video: dict) -> list[str]:
+    """Every file on disk belonging to one post: file_path, the numbered
+    carousel siblings next to it ({id}_NN.ext) and its thumbnail."""
+    fp, vid = video.get("file_path"), str(video.get("video_id") or "")
+    if not fp:
+        return []
+    folder = os.path.dirname(fp)
+    found  = {fp} if os.path.exists(fp) else set()
+    if vid:
+        found.update(glob.glob(os.path.join(folder, glob.escape(vid) + "_*")))
+        found.update(glob.glob(os.path.join(folder, "thumbs", glob.escape(vid) + ".*")))
+    return sorted(found)
+
+
+def video_bytes(video: dict) -> int:
+    return sum(os.path.getsize(p) for p in video_files(video) if os.path.exists(p))
+
+
+def remove_video_files(video: dict) -> int:
+    """Delete video_files(video) from disk. Returns the bytes freed."""
+    freed = 0
+    for path in video_files(video):
+        try:
+            size = os.path.getsize(path)
+            os.remove(path)
+            freed += size
+        except OSError:
+            pass
+    return freed
 
 
 _VIDEO_EXTS = (".mp4", ".mkv", ".webm", ".mov")

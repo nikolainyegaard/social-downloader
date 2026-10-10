@@ -19,7 +19,7 @@ Shared across all platform apps.
 - `_makeJobWidget(id)`, `_makeReportWidget(id, reportsApiPath)`, `openReportView(filename, title, apiBase)` / `closeReportView()`
 - `_triggerLoop(btnId, url, errMsg)`, `_renderSessionPills(el, sessions, running, manualRun)`, `_makeTriggerToast(noun)`
 - `_renderStatGrid(gridId, items)`: stat grid from `[{label, value}]`
-- `_creatorRun(apiPath, id, getQueue, setQueue, render, mode?)` / `_creatorRunProfile(...)` / `_creatorRemove(apiPath, id, label, load)` / `_creatorToggleStar(apiPath, id, items, idField, render)` / `_saveCreatorComment(apiPath, id, value, items, idField)`
+- `_creatorRun(apiPath, id, getQueue, setQueue, render, mode?)` / `_creatorRunProfile(...)` / `_creatorRemove(apiPath, id, label, load)` (asks `/storage` first; a second checkbox for the posts tracked sounds keep appears only when there are any, see `openConfirmOption`'s `checkbox2Label`) / `_creatorToggleStar(apiPath, id, items, idField, render)` / `_saveCreatorComment(apiPath, id, value, items, idField)`
 - `_placeGlider(container)` / `_initAllGliders()` (call after rendering filter pill containers), `_placeTabGlider`
 - `_lockScroll()` / `_unlockScroll()`: ref-counted body scroll lock
 - `openImgModalUrl(url)` / `closeImgModal()`

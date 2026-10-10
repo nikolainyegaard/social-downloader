@@ -2464,6 +2464,14 @@ function _openDialog(o) {
       chkWrap.style.display = 'none';
       warn.style.display    = 'none';
     }
+    // Optional second opt-in under the first (checkbox2: {label}); no warning line
+    const chkWrap2 = document.getElementById('confirmCheckWrap2');
+    const chk2     = document.getElementById('confirmCheck2');
+    chkWrap2.style.display = o.checkbox2 ? '' : 'none';
+    if (o.checkbox2) {
+      document.getElementById('confirmCheckLabel2').textContent = o.checkbox2.label || '';
+      chk2.checked = false;
+    }
 
     // Prompts use the single-line input by default; multiline prompts (notes)
     // swap in the textarea so Enter inserts a newline instead of accepting.
@@ -2497,7 +2505,7 @@ function _openDialog(o) {
       document.getElementById('confirmSuggest').style.display = 'none';
       document.getElementById('confirmInput').oninput = null;
       if (s.result !== undefined) s.resolve(s.result);
-      else s.resolve(s.hasCheckbox ? { confirmed: false, checked: false } : (s.isPrompt ? null : false));
+      else s.resolve(s.hasCheckbox ? { confirmed: false, checked: false, checked2: false } : (s.isPrompt ? null : false));
     });
     _dlgOpen('confirmModal');
     (o.isPrompt ? field : ok).focus();
@@ -2512,16 +2520,19 @@ function openPrompt({ title = '', message = '', value = '', placeholder = '', co
   return _openDialog({ title, message, value, placeholder, confirmLabel, multiline, suggest, danger: false, isPrompt: true });
 }
 
-// Confirm with an extra opt-in checkbox. Resolves { confirmed, checked }.
-// checkboxWarn is shown in red only while the box is ticked.
-function openConfirmOption({ title = 'Are you sure?', message = '', confirmLabel = 'Confirm', danger = false, checkboxLabel = '', checkboxWarn = '' } = {}) {
-  return _openDialog({ title, message, confirmLabel, danger, checkbox: { label: checkboxLabel, warn: checkboxWarn } });
+// Confirm with an extra opt-in checkbox. Resolves { confirmed, checked, checked2 }.
+// checkboxWarn is shown in red only while the box is ticked. checkbox2Label
+// adds a second opt-in below it (checked2), without a warning line.
+function openConfirmOption({ title = 'Are you sure?', message = '', confirmLabel = 'Confirm', danger = false, checkboxLabel = '', checkboxWarn = '', checkbox2Label = '' } = {}) {
+  return _openDialog({ title, message, confirmLabel, danger, checkbox: { label: checkboxLabel, warn: checkboxWarn },
+                       checkbox2: checkbox2Label ? { label: checkbox2Label } : null });
 }
 
 function _confirmAccept() {
   const s = _confirmState;
   if (!s) return;
-  if (s.hasCheckbox)    s.result = { confirmed: true, checked: document.getElementById('confirmCheck').checked };
+  if (s.hasCheckbox)    s.result = { confirmed: true, checked: document.getElementById('confirmCheck').checked,
+                                     checked2: document.getElementById('confirmCheck2').checked };
   else if (s.isPrompt)  s.result = document.getElementById(s.multiline ? 'confirmTextarea' : 'confirmInput').value;
   else                  s.result = true;
   _dlgClose('confirmModal');
@@ -4882,20 +4893,27 @@ async function _creatorRunProfile(apiPath, id, getQueue, setQueue, render) {
 }
 
 async function _creatorRemove(apiPath, id, label, load) {
-  // Size the media folder up front so the opt-in warning can quote a real figure.
+  // Size the media folder up front so the opt-in warning can quote a real
+  // figure. linked: posts something else tracked keeps (TikTok sounds); they
+  // survive the removal unless the second box is ticked, so the quoted size
+  // excludes them until then.
   const { ok: szOk, data: szData } = await apiJSON(`${apiPath}/${id}/storage`);
-  const bytes   = szOk && szData ? (szData.bytes || 0) : 0;
-  const sizeStr = _fmtBytes(bytes);
+  const bytes       = szOk && szData ? (szData.bytes || 0) : 0;
+  const linked      = szOk && szData ? (szData.linked || 0) : 0;
+  const linkedBytes = szOk && szData ? (szData.linked_bytes || 0) : 0;
 
   const res = await openConfirmOption({
     title:        `Remove ${label}?`,
-    message:      `This stops tracking and removes ${label} from your list. Downloaded media is kept unless you choose otherwise.`,
+    message:      `This stops tracking and removes ${label} from your list. Downloaded media is kept unless you choose otherwise.`
+                  + (linked ? ` ${linked} post${linked === 1 ? '' : 's'} also belong${linked === 1 ? 's' : ''} to a tracked sound and will stay unless you choose otherwise.` : ''),
     confirmLabel: 'Remove',
     danger:       true,
     checkboxLabel: 'Also delete downloaded media files',
-    checkboxWarn:  `${sizeStr} of downloaded media will be permanently deleted from disk.`,
+    checkboxWarn:  `${_fmtBytes(linked ? bytes - linkedBytes : bytes)} of downloaded media will be permanently deleted from disk.`,
+    checkbox2Label: linked ? `Also delete the ${linked} post${linked === 1 ? '' : 's'} belonging to tracked sounds` : '',
   });
   if (!res.confirmed) return;
+  const sizeStr = _fmtBytes(res.checked2 || !linked ? bytes : bytes - linkedBytes);
 
   // A second, unambiguous gate only when media is actually being destroyed.
   if (res.checked) {
@@ -4908,7 +4926,8 @@ async function _creatorRemove(apiPath, id, label, load) {
     if (!sure) return;
   }
 
-  const { ok, data } = await apiJSON(`${apiPath}/${id}${res.checked ? '?delete_media=1' : ''}`, { method: 'DELETE' });
+  const q = [res.checked ? 'delete_media=1' : '', res.checked2 ? 'delete_linked=1' : ''].filter(Boolean).join('&');
+  const { ok, data } = await apiJSON(`${apiPath}/${id}${q ? '?' + q : ''}`, { method: 'DELETE' });
   if (!ok) { showToast(data.error || `Could not remove ${label}`, { type: 'error' }); return; }
   load();
 }

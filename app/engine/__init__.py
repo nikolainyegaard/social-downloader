@@ -77,6 +77,11 @@ class ChannelAdapter:
     # parent_id. Platforms without it never enter the comments queue.
     fetch_comments: Callable | None = None          # (engine, video: dict, max_count: int) -> list[dict]
 
+    # Posts of a creator that something else tracked keeps alive (TikTok: a
+    # tracked sound). Removing the creator keeps them and demotes the row to
+    # a stub unless the request says to delete them too.
+    linked_video_ids: Callable | None = None        # (engine, channel_id: str) -> set[str]
+
 
 class ChannelEngine:
     def __init__(self, adapter: ChannelAdapter):

@@ -27,6 +27,7 @@ from platforms.tiktok.store import TikTokStore
 from platforms.tiktok.sounds import get_sound_loop
 from thumbnailer import AVATARS_DIR
 from engine.web import _write_report
+from downloader import remove_video_files, video_bytes
 
 
 def _annotate_photo_multi(videos: list[dict]) -> list[dict]:
@@ -848,12 +849,34 @@ def register_tiktok_routes(bp, engine) -> None:
         store.update_sound_label(sound_id, label)
         return jsonify({"ok": True})
 
-    @bp.route("/sounds/<sound_id>", methods=["DELETE"])
-    def remove_sound(sound_id: str):
+    @bp.route("/sounds/<sound_id>/storage", methods=["GET"])
+    def sound_storage(sound_id: str):
+        """What removing the sound would touch: its exclusive posts (untracked
+        author, no other sound) with their size, and the posts a tracked
+        creator keeps, for the remove dialog."""
         if not store.get_sound(sound_id):
             return jsonify({"error": "Sound not found"}), 404
+        exclusive, linked = store.get_sound_video_split(sound_id)
+        return jsonify({"bytes": sum(video_bytes(v) for v in exclusive), "exclusive": len(exclusive),
+                        "linked": len(linked), "linked_bytes": sum(video_bytes(v) for v in linked)})
+
+    @bp.route("/sounds/<sound_id>", methods=["DELETE"])
+    def remove_sound(sound_id: str):
+        # Mirrors the creator delete: exclusive posts go (files too with
+        # ?delete_media=1), posts of a tracked creator stay unless
+        # ?delete_linked=1, posts another sound links stay regardless
+        if not store.get_sound(sound_id):
+            return jsonify({"error": "Sound not found"}), 404
+        delete_media  = request.args.get("delete_media") == "1"
+        delete_linked = request.args.get("delete_linked") == "1"
+        exclusive, linked = store.get_sound_video_split(sound_id)
+        for v in exclusive + (linked if delete_linked else []):
+            db.delete_video(v["video_id"])
+            if delete_media:
+                remove_video_files(v)
         store.remove_sound(sound_id)
-        return jsonify({"ok": True})
+        store.prune_sound_links()
+        return jsonify({"ok": True, "kept": 0 if delete_linked else len(linked)})
 
     @bp.route("/sounds/<sound_id>/star", methods=["PATCH"])
     def set_sound_star(sound_id: str):

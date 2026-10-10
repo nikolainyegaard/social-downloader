@@ -620,6 +620,17 @@ class ChannelDB:
             conn.execute("DELETE FROM comments WHERE channel_id = ?", (channel_id,))
 
 
+    def demote_channel(self, channel_id: str) -> None:
+        """Keep the row for the posts something else still tracks, but drop it
+        out of the creator list: the same enabled = 0 stub a sound-discovered
+        author gets. Flags and connections go, the profile rows stay."""
+        with self.get_db() as conn:
+            conn.execute("UPDATE channels SET enabled = 0, starred = 0, bookmarked = 0, pinned_at = NULL "
+                         "WHERE channel_id = ?", (channel_id,))
+            conn.execute("DELETE FROM channel_connections WHERE ? IN (channel_a, channel_b)", (channel_id,))
+            conn.execute("DELETE FROM media_text WHERE item_type = 'channel' AND channel_id = ?", (channel_id,))
+
+
     def get_all_channels(self) -> list[dict]:
         with self.get_db() as conn:
             return [dict(r) for r in conn.execute(
