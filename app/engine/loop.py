@@ -23,6 +23,25 @@ from collections import deque
 from datetime import datetime, timezone
 
 
+class _StopSignal:
+    """What the trackers get as stop_event: set when the loop stop is
+    requested or when the creator being checked is cancelled (removed)."""
+    def __init__(self, *events: threading.Event):
+        self._events = events
+
+    def is_set(self) -> bool:
+        return any(e.is_set() for e in self._events)
+
+    def wait(self, timeout: float | None = None) -> bool:
+        end = None if timeout is None else time.monotonic() + timeout
+        while not self.is_set():
+            left = 0.25 if end is None else min(0.25, end - time.monotonic())
+            if left <= 0:
+                return False
+            time.sleep(left)
+        return True
+
+
 class ChannelLoop:
 
     def __init__(self, engine):
@@ -71,6 +90,8 @@ class ChannelLoop:
 
         self.trigger_event    = threading.Event()
         self._stop_event      = threading.Event()
+        self._cancel_event    = threading.Event()   # the creator being checked was removed
+        self.stop_signal      = _StopSignal(self._stop_event, self._cancel_event)
         self._reschedule_flag = False
         self._rflag_lock      = threading.Lock()
 
@@ -288,6 +309,7 @@ class ChannelLoop:
         with self._state_lock:
             self.loop_state["current_channel"] = handle
             self.loop_state["current_stage"]   = None  # stage always belongs to one creator
+        self._cancel_event.clear()   # a cancel belongs to the creator it was set for
 
     def _set_stage(self, text: str | None) -> None:
         """What the current check is doing right now ("fetching videos",
@@ -337,6 +359,31 @@ class ChannelLoop:
         channel = self.db.get_channel(channel_id)
         label   = f"@{channel['handle']}" if channel else channel_id
         self._log(f"  Large deletion spike: isolated full re-scan for {label} in {mins}m")
+
+    def is_checking(self, channel_id: str, handle: str | None) -> bool:
+        """True while a manual run or a session is on this creator."""
+        with self._run_state_lock:
+            if self._run_state["current"] == channel_id:
+                return True
+        with self._state_lock:
+            return bool(handle) and self.loop_state["current_channel"] == handle
+
+    def cancel_channel(self, channel_id: str, handle: str | None) -> bool:
+        """Stop the check on this creator at its next safe point (the stop
+        points request_stop uses), leaving the session running. True when a
+        check was on it."""
+        if not self.is_checking(channel_id, handle):
+            return False
+        self._cancel_event.set()
+        self._log(f"@{handle} is being removed: stopping its check after the in-flight item...")
+        return True
+
+    def drop_queued_run(self, channel_id: str) -> None:
+        """Forget a queued manual run (the creator is being removed)."""
+        with self._run_state_lock:
+            if channel_id in self._run_state["queue"]:
+                self._run_state["queue"].remove(channel_id)
+            self._run_pending = deque(e for e in self._run_pending if e[0] != channel_id)
 
     def has_pending_manual(self) -> bool:
         with self._run_state_lock:
@@ -422,11 +469,13 @@ class ChannelLoop:
                     if self.adapter.process_single:
                         self.adapter.process_single(self.engine, channel, self._log,
                                                     self._set_current_channel,
-                                                    profile_only=profile_only, mode=mode)
+                                                    profile_only=profile_only, mode=mode,
+                                                    stop_event=self.stop_signal)
                     else:
                         from engine.tracker import process_single_channel
                         process_single_channel(self.engine, channel, self._log, self._set_current_channel,
-                                               profile_only=profile_only, mode=mode)
+                                               profile_only=profile_only, mode=mode,
+                                               stop_event=self.stop_signal)
                     self._log(f"=== Manual {kind} run complete: {label} ===")
                 except Exception as e:
                     error = e
@@ -483,11 +532,11 @@ class ChannelLoop:
                 if self.adapter.process_session:
                     _completed = self.adapter.process_session(
                         self.engine, channels, self._log, self._set_current_channel,
-                        self._stop_event, set_sleep=self._set_sleep,
+                        self.stop_signal, set_sleep=self._set_sleep,
                         on_large_deletion=self.schedule_midpoint_run) or 0
                 else:
                     _completed = process_all_channels(self.engine, channels, self._log,
-                                                      self._set_current_channel, self._stop_event,
+                                                      self._set_current_channel, self.stop_signal,
                                                       set_sleep=self._set_sleep) or 0
             except Exception as e:
                 self._log(f"Unhandled {self.engine.label} loop error: {e}")

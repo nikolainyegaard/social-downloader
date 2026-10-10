@@ -161,7 +161,8 @@ def drain_manual_runs(engine, log, set_current=None) -> set:
         log(f"=== Manual {kind} run (inserted): @{channel['handle']} ===")
         try:
             process_single_channel(engine, channel, log, set_current,
-                                   profile_only=profile_only, mode=mode)
+                                   profile_only=profile_only, mode=mode,
+                                   stop_event=getattr(getattr(engine, "loop", None), "stop_signal", None))
             log(f"=== Manual {kind} run complete: @{channel['handle']} ===")
         except Exception as e:
             error = e
@@ -245,6 +246,9 @@ def process_all_channels(
         if channel["channel_id"] in drained:
             log(f"Skipping @{channel.get('handle', '?')}: already checked by an inserted manual run")
             completed += 1
+            continue
+        if not engine.db.get_channel(channel["channel_id"]):
+            log(f"Skipping @{channel.get('handle', '?')}: removed while the session was running")
             continue
         now       = int(time.time())
         last_full = channel.get("last_full_refresh_at")

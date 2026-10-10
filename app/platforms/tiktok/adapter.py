@@ -87,13 +87,14 @@ def _process_session(engine, channels, log, set_current, stop_event,
         browser_gate.turn.release()
 
 
-def _process_single(engine, channel, log, set_current, profile_only=False, mode="full") -> None:
+def _process_single(engine, channel, log, set_current, profile_only=False, mode="full",
+                    stop_event=None) -> None:
     from platforms.tiktok.api import browser_gate
     browser_gate.turn.acquire()
     try:
         asyncio.run(tracker.run_single_user_with_session(
             engine, channel, log, _logd, profile_only=profile_only, mode=mode,
-            set_current_user=set_current))
+            set_current_user=set_current, stop_event=stop_event))
     finally:
         browser_gate.turn.release()
 

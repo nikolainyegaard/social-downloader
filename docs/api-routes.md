@@ -35,7 +35,7 @@ Engine blueprint, shared by every platform ({p} = tiktok|youtube|twitter|instagr
 /api/{p}/queue                         add-queue state: newest row per handle, pending + recently resolved
 /api/{p}/add-history                   persistent add attempts, newest first; ?before=<id>&limit= keyset
 /api/{p}/add-history/<id>              DELETE discards a resolved entry (409 while pending)
-/api/{p}/channels/<id>                 DELETE removes the creator
+/api/{p}/channels/<id>                 DELETE removes the creator; a check on it is cancelled first (waits up to 30 s for the in-flight item, else 409 to retry), a queued manual run is dropped
 /api/{p}/channels/<id>/videos          list for the detail modal
 /api/{p}/channels/<id>/run             manual run; ?mode=quick|full|quick-nocache|full-nocache (default full; the -nocache variants ignore the listing cache)
 /api/{p}/channels/<id>/run-profile     profile-only run

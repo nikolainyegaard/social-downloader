@@ -417,7 +417,19 @@ def create_channel_blueprint(engine) -> Blueprint:
         # ?delete_media=1 also deletes the creator's media folder from disk.
         # Default (no flag) keeps the files, matching the historical behaviour.
         delete_media = request.args.get("delete_media") == "1"
-        ch = db.get_channel(channel_id) if delete_media else None
+        ch = db.get_channel(channel_id)
+        if not ch:
+            return jsonify({"error": "Not found"}), 404
+        # A check in flight would keep downloading, then writing rows and
+        # files for a creator that no longer exists: cancel it and wait for
+        # the in-flight item, so the delete lands on a quiet creator
+        loop.drop_queued_run(channel_id)
+        if loop.cancel_channel(channel_id, ch.get("handle")):
+            deadline = time.monotonic() + 30
+            while loop.is_checking(channel_id, ch.get("handle")) and time.monotonic() < deadline:
+                time.sleep(0.25)
+            if loop.is_checking(channel_id, ch.get("handle")):
+                return jsonify({"error": f"Stopping the check on @{ch['handle']}; try again in a moment"}), 409
         db.remove_channel(channel_id)
         if delete_media and ch and ch.get("handle"):
             shutil.rmtree(os.path.join(MEDIA_DIR, platform, f"@{ch['handle']}"), ignore_errors=True)

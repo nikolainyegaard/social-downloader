@@ -892,7 +892,8 @@ async def _drain_manual_runs_inline(engine, api, cookies, log, logd, set_current
         try:
             await process_single_user(user, api, cookies,
                                       fetch_videos=not profile_only, mode=mode,
-                                      log=log, logd=logd, set_current_user=set_current_user)
+                                      log=log, logd=logd, set_current_user=set_current_user,
+                                      stop_event=getattr(getattr(engine, "loop", None), "stop_signal", None))
             log(f"=== Manual {kind} run complete: @{user['handle']} ===")
         except Exception as e:
             error = e
@@ -1072,6 +1073,9 @@ async def process_user_session(
                     log(f"  [{idx + 1}/{total}] @{user['handle']}: already checked by an inserted manual run")
                     completed += 1
                     continue
+                if not engine.db.get_channel(user["channel_id"]):
+                    log(f"  [{idx + 1}/{total}] @{user['handle']}: removed while the session was running")
+                    continue
                 fetch_videos    = bool(user.get("tracking_enabled", 1))
                 progress        = f"{idx + 1}/{total}"
                 _now_ts         = int(time.time())
@@ -1178,6 +1182,7 @@ async def run_single_user_with_session(
     profile_only: bool = False,
     mode: str = "full",
     set_current_user: Callable[[str | None], None] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> None:
     """Create a dedicated session and process a single user. Used by the manual run worker."""
     _bind(engine)
@@ -1202,7 +1207,7 @@ async def run_single_user_with_session(
         await asyncio.sleep(3)
         await process_single_user(user, api, cookies, log=log, logd=logd,
                                   fetch_videos=not profile_only, mode=mode,
-                                  set_current_user=set_current_user)
+                                  set_current_user=set_current_user, stop_event=stop_event)
 
 
 # ── Sound tracking ────────────────────────────────────────────────────────────
